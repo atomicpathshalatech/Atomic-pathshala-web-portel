@@ -8,6 +8,8 @@ import { computeDeadlineMs } from "@/lib/test-engine/scoring";
 import { testAnswerUpsertSchema } from "@/lib/validation/test";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
+const ANSWER_GRACE_MS = 30_000;
+
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -32,7 +34,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (attempt.status !== "IN_PROGRESS") return apiError("This attempt is already finalized.", 409);
 
     const deadlineMs = computeDeadlineMs(attempt.startedAt, test.durationMin, test.batchSchedule?.endsAt);
-    if (Date.now() > deadlineMs) return apiError("Time's up — this attempt is being finalized.", 409);
+    // A few seconds of grace for a choice made just before time ran out.
+    if (Date.now() > deadlineMs + ANSWER_GRACE_MS) return apiError("Time's up — this attempt is being finalized.", 409);
 
     const input = testAnswerUpsertSchema.parse(await request.json());
 
@@ -48,11 +51,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return apiSuccess({ saved: true, cleared: true });
     }
 
-    await prisma.attemptAnswer.upsert({
-      where: { attemptId_questionId: { attemptId: attempt.id, questionId: input.questionId } },
-      create: { attemptId: attempt.id, questionId: input.questionId, selectedOptionIds: [input.selectedOption] },
-      update: { selectedOptionIds: [input.selectedOption] },
-    });
+    const where = { attemptId_questionId: { attemptId: attempt.id, questionId: input.questionId } };
+    try {
+      await prisma.attemptAnswer.upsert({
+        where,
+        create: { attemptId: attempt.id, questionId: input.questionId, selectedOptionIds: [input.selectedOption] },
+        update: { selectedOptionIds: [input.selectedOption] },
+      });
+    } catch (err) {
+      // Two saves for a question answered for the first time can race; the row now exists.
+      if ((err as { code?: string })?.code !== "P2002") throw err;
+      await prisma.attemptAnswer.update({ where, data: { selectedOptionIds: [input.selectedOption] } });
+    }
 
     return apiSuccess({ saved: true, cleared: false });
   } catch (error) {

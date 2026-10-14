@@ -61,8 +61,49 @@ function clearProgress(attemptId: string | undefined) {
   if (!attemptId) return;
   try {
     window.localStorage.removeItem(progressKey(attemptId));
+    window.localStorage.removeItem(unsavedKey(attemptId));
   } catch {}
 }
+
+/**
+ * Answers chosen on this device that the server has not confirmed yet. Kept
+ * on the device so a refresh or a dropped connection does not lose them; they
+ * are sent again until the server says it has them.
+ */
+const unsavedKey = (attemptId: string) => `ap:exam-unsaved:${attemptId}`;
+
+function readUnsaved(attemptId: string): Record<string, string | null> {
+  try {
+    const raw = window.localStorage.getItem(unsavedKey(attemptId));
+    return raw ? (JSON.parse(raw) as Record<string, string | null>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeUnsaved(attemptId: string, unsaved: Record<string, string | null>) {
+  try {
+    if (Object.keys(unsaved).length === 0) window.localStorage.removeItem(unsavedKey(attemptId));
+    else window.localStorage.setItem(unsavedKey(attemptId), JSON.stringify(unsaved));
+  } catch {}
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Waits up to ms, or until wakeSavers() is called (the connection came back). */
+const sleepers = new Set<() => void>();
+function sleepUnlessWoken(ms: number) {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      sleepers.delete(done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    sleepers.add(done);
+  });
+}
+const wakeSavers = () => [...sleepers].forEach((wake) => wake());
 
 /** Palette states from the server's answers, keeping this device's visited / marked flags. */
 function initialStates(d: ExamAttemptData, saved: SavedProgress | null): Record<string, QuestionState> {
@@ -125,15 +166,30 @@ export function ExamRunner({
   const [violationsCount, setViolationsCount] = useState(0);
   const submittedRef = useRef(false);
 
+  // Answer saving: every choice is sent to the server and sent again until the
+  // server confirms it. Only the latest choice per question is ever sent.
+  const answersRef = useRef<Record<string, string | null>>({});
+  const unsavedRef = useRef<Record<string, string | null>>({});
+  const sendingRef = useRef<Set<string>>(new Set());
+  const stopSavingRef = useRef(false);
+  const [unsavedCount, setUnsavedCount] = useState(0);
+
   // Answers from the server; after a refresh, the same question, language and marks as before.
   const startFrom = useCallback((d: ExamAttemptData) => {
     const saved = typeof window === "undefined" ? null : readProgress(d.attempt.id);
+    const unsaved = typeof window === "undefined" ? {} : readUnsaved(d.attempt.id);
     const ans: Record<string, string | null> = {};
     d.questions.forEach((q) => {
-      ans[q.id] = q.mySelection;
+      ans[q.id] = q.id in unsaved ? unsaved[q.id] ?? null : q.mySelection;
     });
+    answersRef.current = ans;
     setAnswers(ans);
-    setQuestionStates(initialStates(d, saved));
+    // Choices made on this device before a refresh that never reached the server.
+    const pending = Object.fromEntries(Object.entries(unsaved).filter(([id]) => d.questions.some((q) => q.id === id)));
+    unsavedRef.current = pending;
+    setUnsavedCount(Object.keys(pending).length);
+    const withLocal = { ...d, questions: d.questions.map((q) => ({ ...q, mySelection: ans[q.id] ?? null })) };
+    setQuestionStates(initialStates(withLocal, saved));
     const index = saved && saved.index >= 0 && saved.index < d.questions.length ? saved.index : 0;
     setCurrentIndex(index);
     const subject = d.questions[index]?.subject || d.questions[0]?.subject;
@@ -304,21 +360,77 @@ export function ExamRunner({
     };
   }, [phase, logViolation]);
 
-  // 6. Save Answer API Call
-  const persistAnswerToServer = async (questionId: string, selectedOption: string | null) => {
-    try {
-      await fetch(`/api/tests/${testId}/attempts/my/answers`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          questionId,
-          selectedOption,
-        }),
-      });
-    } catch {
-      toast.error("Network sync issue. Retrying...", { duration: 2000 });
-    }
+  // 6. Save Answer API Call — retried until the server confirms it.
+  const markUnsaved = useCallback(() => {
+    const id = data?.attempt?.id;
+    if (id) writeUnsaved(id, unsavedRef.current);
+    setUnsavedCount(Object.keys(unsavedRef.current).length);
+  }, [data?.attempt?.id]);
+
+  const sendLatest = useCallback(
+    async (questionId: string) => {
+      if (sendingRef.current.has(questionId)) return; // the running loop picks up the newest choice
+      sendingRef.current.add(questionId);
+      let delay = 1000;
+      try {
+        while (questionId in unsavedRef.current && !stopSavingRef.current) {
+          const value = unsavedRef.current[questionId] ?? null;
+          let outcome: "saved" | "retry" | "give-up" = "retry";
+          try {
+            const res = await fetch(`/api/tests/${testId}/attempts/my/answers`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ questionId, selectedOption: value }),
+            });
+            if (res.ok) outcome = "saved";
+            // Time is up / already submitted / not part of the test: sending again cannot help.
+            // The answer still goes with the final submit.
+            else if (res.status === 400 || res.status === 404 || res.status === 409) outcome = "give-up";
+          } catch {
+            outcome = "retry";
+          }
+          if (outcome === "saved") {
+            // Done only if the student did not pick something else meanwhile.
+            if (unsavedRef.current[questionId] === value) {
+              delete unsavedRef.current[questionId];
+              markUnsaved();
+            }
+            delay = 1000;
+            continue;
+          }
+          if (outcome === "give-up") break;
+          await sleepUnlessWoken(delay);
+          delay = Math.min(delay * 2, 10_000);
+        }
+      } finally {
+        sendingRef.current.delete(questionId);
+      }
+    },
+    [testId, markUnsaved]
+  );
+
+  const persistAnswerToServer = (questionId: string, selectedOption: string | null) => {
+    answersRef.current = { ...answersRef.current, [questionId]: selectedOption };
+    unsavedRef.current[questionId] = selectedOption;
+    markUnsaved();
+    void sendLatest(questionId);
   };
+
+  // Resume sending what a previous page load could not save.
+  useEffect(() => {
+    if (phase !== "RUNNING") return;
+    for (const id of Object.keys(unsavedRef.current)) void sendLatest(id);
+  }, [phase, sendLatest]);
+
+  // Coming back online: retry at once instead of waiting for the back-off.
+  useEffect(() => {
+    const retryAll = () => {
+      wakeSavers();
+      for (const id of Object.keys(unsavedRef.current)) void sendLatest(id);
+    };
+    window.addEventListener("online", retryAll);
+    return () => window.removeEventListener("online", retryAll);
+  }, [sendLatest]);
 
   // 7. Actions: Save & Next, Clear, Save & Mark, Mark & Next
   const currentQ = data?.questions[currentIndex];
@@ -423,8 +535,14 @@ export function ExamRunner({
     setSubmitError(null);
 
     try {
+      // Give answers still on their way a moment to arrive.
+      for (let i = 0; i < 20 && sendingRef.current.size > 0 && Object.keys(unsavedRef.current).length > 0; i++) await wait(250);
+      // The submit carries every answer shown on this screen, so nothing the
+      // student chose is lost even if a save above never got through.
       const res = await fetch(`/api/tests/${testId}/attempts/my/submit`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: answersRef.current }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
@@ -434,6 +552,8 @@ export function ExamRunner({
         return;
       }
 
+      stopSavingRef.current = true;
+      unsavedRef.current = {};
       clearProgress(data?.attempt?.id);
       toast.success(auto ? "Time expired. Test auto-submitted!" : "Test submitted successfully!");
       if (document.fullscreenElement) {
@@ -619,6 +739,16 @@ export function ExamRunner({
                 <span>{currentQuestionLang === "hi" ? "🌐 हिंदी ▾" : "🌐 English ▾"}</span>
               </button>
             </div>
+
+            {/* Answers not yet confirmed by the server */}
+            {unsavedCount > 0 && (
+              <span
+                className="px-2 py-1 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold"
+                title="These answers are kept on this device and are being sent again. They are also sent when you submit."
+              >
+                Saving {unsavedCount} answer{unsavedCount === 1 ? "" : "s"}…
+              </span>
+            )}
 
             {/* Time Left Clock */}
             <div className="text-right">

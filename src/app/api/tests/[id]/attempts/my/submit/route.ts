@@ -6,9 +6,15 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveStudentForTest } from "@/lib/test-series/access";
 import { computeDeadlineMs, finalizeAttempt } from "@/lib/test-engine/scoring";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { z } from "zod";
+
+// The answers on the student's screen at submit time (question id → option, or null for none).
+const submitSchema = z.object({ answers: z.record(z.string().min(1), z.string().min(1).max(20).nullable()).optional() });
+// Answers sent with a submit are accepted up to this long after the deadline (slow networks at auto-submit).
+const SUBMIT_GRACE_MS = 2 * 60_000;
 import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
 
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
@@ -42,6 +48,33 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     const deadlineMs = computeDeadlineMs(attempt.startedAt, test.durationMin, test.batchSchedule?.endsAt);
     const isLate = Date.now() > deadlineMs;
 
+    // Bring the stored answers in line with what the student saw, so an answer
+    // whose save never got through is not counted as skipped.
+    const body = submitSchema.safeParse(await request.json().catch(() => ({})));
+    const sent = body.success ? body.data.answers : undefined;
+    let reconciled = 0;
+    if (sent && Date.now() <= deadlineMs + SUBMIT_GRACE_MS) {
+      const inTest = await prisma.sectionQuestion.findMany({ where: { section: { testId: test.id } }, select: { questionId: true } });
+      const valid = new Set(inTest.map((q) => q.questionId));
+      const stored = await prisma.attemptAnswer.findMany({ where: { attemptId: attempt.id }, select: { questionId: true, selectedOptionIds: true } });
+      const storedBy = new Map(stored.map((s) => [s.questionId, Array.isArray(s.selectedOptionIds) ? ((s.selectedOptionIds as string[])[0] ?? null) : null]));
+      const changes = Object.entries(sent).filter(([qid, value]) => valid.has(qid) && (storedBy.get(qid) ?? null) !== value);
+      if (changes.length) {
+        await prisma.$transaction(
+          changes.map(([questionId, value]) =>
+            value === null
+              ? prisma.attemptAnswer.deleteMany({ where: { attemptId: attempt.id, questionId } })
+              : prisma.attemptAnswer.upsert({
+                  where: { attemptId_questionId: { attemptId: attempt.id, questionId } },
+                  create: { attemptId: attempt.id, questionId, selectedOptionIds: [value] },
+                  update: { selectedOptionIds: [value] },
+                })
+          )
+        );
+        reconciled = changes.length;
+      }
+    }
+
     const finalized = await finalizeAttempt(attempt.id, isLate);
 
     await prisma.auditLog.create({
@@ -50,7 +83,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         action: "TEST_ATTEMPT_SUBMITTED",
         entityType: "Test",
         entityId: test.id,
-        metadata: { attemptId: attempt.id, auto: isLate, score: finalized?.score },
+        metadata: { attemptId: attempt.id, auto: isLate, score: finalized?.score, answersRecoveredAtSubmit: reconciled },
       },
     });
 
