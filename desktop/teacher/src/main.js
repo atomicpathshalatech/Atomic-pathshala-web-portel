@@ -24,6 +24,20 @@ const path = require("node:path");
 const { appUrl, isTrustedUrl } = require("./config");
 const { registerEncoderIpc } = require("./encoder-ipc");
 const { registerStageIpc, closeStage } = require("./stage-window");
+const { startSilentUpdates } = require("./updater");
+
+// Shown instead of Chromium's bare error page when the site cannot be
+// reached (no internet, Wi-Fi still connecting at start-up). It retries by
+// itself, so the app opens as soon as the connection is back.
+function offlinePage(target) {
+  const html = `<!doctype html><meta charset="utf-8"><title>Atomic Pathshala Teacher</title>
+<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0d14;color:#e5e7eb;font-family:Segoe UI,system-ui,sans-serif;text-align:center">
+<div><h2 style="margin:0 0 8px">Connecting to Atomic Pathshala…</h2>
+<p style="color:#9ca3af;margin:0 0 16px">Check the internet connection. The app opens by itself as soon as it is back.</p>
+<button onclick="location.href=${JSON.stringify(target)}" style="padding:10px 18px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-size:14px;cursor:pointer">Try again</button></div>
+<script>setTimeout(function(){location.href=${JSON.stringify(target)}},8000)</script></body>`;
+  return "data:text/html;charset=utf-8," + encodeURIComponent(html);
+}
 
 const SMOKE = process.argv.includes("--smoke") || process.argv.includes("--smoke-untrusted");
 // --smoke-untrusted: loads a page from another origin and passes only if the
@@ -108,6 +122,12 @@ function createWindow() {
     }
   });
   wc.on("will-attach-webview", (event) => event.preventDefault());
+  // No connection: a friendly page that retries, not a blank error screen.
+  wc.on("did-fail-load", (_event, code, _desc, url, isMainFrame) => {
+    if (SMOKE || !isMainFrame || code === -3 /* aborted by a new navigation */) return;
+    if (!isTrustedUrl(url)) return;
+    wc.loadURL(offlinePage(url));
+  });
 
   mainWindow.loadURL(start);
   mainWindow.on("closed", () => {
@@ -185,6 +205,7 @@ app.whenReady().then(() => {
     return;
   }
   createWindow();
+  startSilentUpdates();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

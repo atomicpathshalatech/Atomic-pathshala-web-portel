@@ -105,7 +105,7 @@ export function DownloadWindowsAppModal({
                   2
                 </span>
                 <p className="text-on-surface">
-                  डाउनलोड हुई फाइल पर डबल-क्लिक करके <strong>Install</strong> करें।
+                  डाउनलोड हुई फाइल पर डबल-क्लिक करें — ऐप अपने आप इनस्टॉल होकर खुल जाएगा (कोई सवाल नहीं, एडमिन पासवर्ड नहीं), डेस्कटॉप पर <strong>Atomic Pathshala Teacher</strong> आइकॉन बन जाएगा।
                 </p>
               </div>
               <div className="flex items-start gap-2.5">
@@ -117,6 +117,20 @@ export function DownloadWindowsAppModal({
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Windows SmartScreen: the installer is not code-signed yet */}
+          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
+            <p className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-base">shield</span>
+              अगर Windows “Windows protected your PC” दिखाए
+            </p>
+            <p className="text-on-surface">
+              <strong>More info</strong> पर क्लिक करें, फिर <strong>Run anyway</strong>। ब्राउज़र “uncommon download” बोले तो <strong>Keep</strong> चुनें। फाइल WhatsApp से न भेजें — हर टीचर इसी बटन से डाउनलोड करे।
+            </p>
+            <p className="text-on-surface-variant">
+              एक बार इनस्टॉल होने के बाद ऐप नए वर्ज़न अपने आप ले लेता है — ऐप बंद करने पर चुपचाप अपडेट, क्लास के बीच कभी नहीं।
+            </p>
           </div>
 
           {/* System Info */}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { isNativeApp } from "@/lib/platform";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -24,7 +23,9 @@ function isStandalone(): boolean {
 /**
  * Owns the PWA lifecycle on the web:
  *   - registers /sw.js (never inside the Capacitor WebView, never on http)
- *   - surfaces a real "New version available" prompt when a new SW is waiting
+ *   - takes a new version silently: no "update now" prompt and no forced reload
+ *     (pages load network-first, so the next page a student opens is already
+ *     the new version; a test or class on screen is never interrupted)
  *   - captures beforeinstallprompt and renders an install card that calls
  *     the browser's actual prompt() — no fake button
  */
@@ -53,20 +54,8 @@ export function PwaProvider() {
         function trackWaiting(sw: ServiceWorker | null) {
           if (!sw) return;
           waitingRef.current = sw;
-          // Only tell the user about an update if a controller already
-          // exists (i.e. this isn't the very first install).
-          if (navigator.serviceWorker.controller) {
-            toast("New version available.", {
-              duration: Infinity,
-              id: "pwa-update",
-              action: {
-                label: "Update Now",
-                onClick: () => {
-                  waitingRef.current?.postMessage("SKIP_WAITING");
-                },
-              },
-            });
-          }
+          // Activate the new worker quietly — no prompt to the student.
+          sw.postMessage("SKIP_WAITING");
         }
 
         trackWaiting(reg.waiting);
@@ -81,13 +70,9 @@ export function PwaProvider() {
         console.warn("[pwa] service worker registration failed:", err);
       });
 
-    // When the new SW takes control, reload once so the fresh assets load.
-    let refreshed = false;
-    const onControllerChange = () => {
-      if (refreshed) return;
-      refreshed = true;
-      window.location.reload();
-    };
+    // No reload when the new worker takes over: the page on screen (a test,
+    // a live class) keeps running; the next page opened is the new version.
+    const onControllerChange = () => {};
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
 
     return () => {
