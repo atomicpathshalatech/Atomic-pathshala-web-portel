@@ -34,6 +34,7 @@ import { PreFlightSetupWizard, type PreFlightConfig } from "@/components/live-cl
 import { TeacherPostClassModal } from "@/components/live-class/TeacherPostClassModal";
 import { SlideTemplatesModal } from "@/components/live-class/SlideTemplatesModal";
 import { CanvasCursor, type CanvasCursorHandle } from "@/components/live-class/CanvasCursor";
+import { backupBaseKey, getHydratedObjects } from "@/lib/whiteboard/board-backup";
 import { BoardHistory, type BoardHistoryOps, type BoardStep, type SlideSnapshot as BoardSlideSnapshot } from "@/lib/whiteboard/board-history";
 import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
@@ -263,22 +264,6 @@ function slideBackgroundStyle(background: string | undefined): React.CSSProperti
   }
 }
 
-function getHydratedObjects(sessionId?: string | null, pageId?: string | null, serverObjects?: any[] | null): any[] {
-  const fallback = Array.isArray(serverObjects) ? serverObjects : [];
-  if (typeof window === "undefined" || !sessionId || !pageId) return fallback;
-  try {
-    const raw = localStorage.getItem(`atomic_wb_backup_${sessionId}_${pageId}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        if (fallback.length === 0 || parsed.length >= fallback.length) {
-          return parsed;
-        }
-      }
-    }
-  } catch {}
-  return fallback;
-}
 
 type SlideSnapshot = BoardSlideSnapshot<StrokeObject>;
 
@@ -380,6 +365,8 @@ export function TeacherLiveClassRoom({
   const saveQueueRef = useRef<BoardSaveQueue<StrokeObject> | null>(null);
   const latestPagesRef = useRef<WhiteboardPage[]>([]);
   const activePageNumberRef = useRef(1);
+  // Slides whose ink came back from this device's backup and still has to be saved.
+  const recoveredInkRef = useRef(new Map<string, StrokeObject[]>());
   // Board history (src/lib/whiteboard/board-history.ts), and each slide's own
   // ink undo steps while that slide is not on the board.
   const boardHistoryRef = useRef(new BoardHistory<StrokeObject>());
@@ -1180,10 +1167,16 @@ export function TeacherLiveClassRoom({
             sess.pages = [{ id: "temp-p1", pageNumber: 1, objects: [], background: "blank" }];
           }
           if (sess?.pages && sess?.id) {
-            sess.pages = sess.pages.map((p: any) => ({
-              ...p,
-              objects: getHydratedObjects(sess.id, p.id, p.objects),
-            }));
+            sess.pages = sess.pages.map((p: any) => {
+              const objects = getHydratedObjects(sess.id, p.id, p.objects, typeof p.version === "number" ? p.version : undefined);
+              // Ink only this device had (e.g. drawn offline, then the page was
+              // reloaded) is sent to the server again — before, it showed here
+              // but never reached the students or the class PDF.
+              if (objects !== p.objects && sess.status !== "ENDED" && JSON.stringify(objects) !== JSON.stringify(p.objects ?? [])) {
+                recoveredInkRef.current.set(p.id, objects);
+              }
+              return { ...p, objects };
+            });
           }
           setWbSession(sess);
           if (
@@ -1379,6 +1372,7 @@ export function TeacherLiveClassRoom({
         const body = JSON.stringify({ objects, ...(baseVersion !== undefined && { baseVersion }) });
         try {
           localStorage.setItem(`atomic_wb_backup_${wbSessionId}_${pageId}`, JSON.stringify(objects));
+          if (baseVersion !== undefined) localStorage.setItem(backupBaseKey(wbSessionId, pageId), String(baseVersion));
         } catch {}
         const res = await fetch(`/api/whiteboard/sessions/${wbSessionId}/pages/${pageId}`, {
           method: "PATCH",
@@ -1406,6 +1400,11 @@ export function TeacherLiveClassRoom({
       baseVersionOf: (pageId) => latestPagesRef.current.find((pg) => pg.id === pageId)?.version,
     });
     saveQueueRef.current = queue;
+    if (recoveredInkRef.current.size > 0) {
+      recoveredInkRef.current.forEach((objects, pageId) => queue.markDirty(pageId, objects));
+      recoveredInkRef.current.clear();
+      void queue.flush();
+    }
     const onOnline = () => void queue.flush();
     window.addEventListener("online", onOnline);
     return () => {

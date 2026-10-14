@@ -102,6 +102,7 @@ async function run() {
   const { BoardHistory } = await import("../src/lib/whiteboard/board-history");
   const { rankLeaderboard } = await import("../src/lib/whiteboard/quiz-leaderboard");
   const { whiteboardPageCreateSchema } = await import("../src/lib/validation/whiteboard");
+  const { getHydratedObjects, backupBaseKey } = await import("../src/lib/whiteboard/board-backup");
 
   // ---- 1. Canvas engine -----------------------------------------------------
   console.log("Canvas engine");
@@ -321,6 +322,20 @@ async function run() {
   assert(!whiteboardPageCreateSchema.safeParse({ afterPageNumber: -1 }).success, "A negative position is refused");
   assert(!whiteboardPageCreateSchema.safeParse({ objects: Array.from({ length: 5001 }, () => ({})) }).success, "A runaway restore payload is refused");
 
+  // ---- 4b. Offline backup after a reload --------------------------------------
+  console.log("Offline backup");
+  const store = new Map<string, string>();
+  Object.assign(globalThis, { localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) } });
+  const server = [{ id: "a" }];
+  const local = [{ id: "a" }, { id: "drawn-offline" }];
+  store.set("atomic_wb_backup_S_P", JSON.stringify(local));
+  store.set(backupBaseKey("S", "P"), "7");
+  assert(getHydratedObjects("S", "P", server, 7).length === 2, "Ink drawn offline comes back after a reload (server still on the same version)");
+  assert(getHydratedObjects("S", "P", server, 8) === server, "If the slide was saved since (another device), the newer server copy wins");
+  store.delete(backupBaseKey("S", "P"));
+  assert(getHydratedObjects("S", "P", server, 8).length === 2, "An older backup without a version still works as before");
+  assert(getHydratedObjects("S", "Q", server, 1) === server, "No backup: the server copy");
+
   // ---- 5. Source checks ---------------------------------------------------------
   console.log("Source checks");
   const room = read("src/components/live-class/TeacherLiveClassRoom.tsx");
@@ -339,6 +354,7 @@ async function run() {
   assert(lb.includes("setMinimized(true)") && !lb.includes("fixed inset-0"), "Leaderboard is a corner card that can be minimized (no full-screen cover)");
   const participants = read("src/app/api/whiteboard/sessions/[id]/participants/route.ts");
   assert(participants.includes("wbSession.attendances") && participants.includes("participants: joinedStudents"), "Participants = students who joined");
+  assert(room.includes("recoveredInkRef.current.forEach((objects, pageId) => queue.markDirty(pageId, objects))"), "Recovered offline ink is sent to the server again");
   const chat = read("src/components/live-class/MessagesPanel.tsx");
   assert(chat.includes('"YouTube chat"') && chat.includes('"App chat"'), "Chat can show App chat and YouTube chat separately");
 
