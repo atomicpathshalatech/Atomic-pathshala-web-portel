@@ -47,7 +47,6 @@ async function handleReorder(request: NextRequest, params: { id: string }) {
           data: { pageNumber: -(index + 1000) },
         })
       );
-      await prisma.$transaction(tempUpdates);
 
       // Step 2: Assign final 1-based pageNumbers
       const finalUpdates = validIds.map((id, index) =>
@@ -56,7 +55,8 @@ async function handleReorder(request: NextRequest, params: { id: string }) {
           data: { pageNumber: index + 1 },
         })
       );
-      await prisma.$transaction(finalUpdates);
+      // One transaction: a failure half-way must not leave slides with the temporary numbers.
+      await prisma.$transaction([...tempUpdates, ...finalUpdates]);
 
       // Find current active page id and map to new pageNumber
       const activePage = allPages.find((p) => p.pageNumber === wbSession.activePageNumber);

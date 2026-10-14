@@ -42,9 +42,13 @@ export function isPublishedLeaderboard(data: unknown): data is PublishedLeaderbo
   return Boolean(data && Array.isArray((data as PublishedLeaderboard).rankings));
 }
 
+const MEDALS = ["🥇", "🥈", "🥉"];
+
 /**
- * The quiz leaderboard the teacher publishes — shown as the same popup to
- * the students AND the teacher, closing itself after `durationSec`.
+ * The quiz leaderboard the teacher publishes — shown to the students AND the
+ * teacher, closing itself after `durationSec`. A compact card in the corner
+ * (it used to darken the whole screen and hide the board), which can be
+ * folded down to a small chip and opened again.
  */
 export function LeaderboardPopup({
   leaderboard,
@@ -55,10 +59,12 @@ export function LeaderboardPopup({
 }) {
   const duration = typeof leaderboard.durationSec === "number" && leaderboard.durationSec > 0 ? leaderboard.durationSec : 30;
   const [left, setLeft] = useState(duration);
+  const [minimized, setMinimized] = useState(false);
 
   // Restart the countdown for every new publish (a re-publish replaces the old one).
   useEffect(() => {
     setLeft(duration);
+    setMinimized(false);
     const timer = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(timer);
   }, [leaderboard, duration]);
@@ -67,98 +73,91 @@ export function LeaderboardPopup({
     if (left <= 0) onClose();
   }, [left, onClose]);
 
+  if (minimized) {
+    return (
+      <button
+        type="button"
+        onClick={() => setMinimized(false)}
+        className="fixed bottom-4 right-4 z-[70] flex items-center gap-2 px-3 py-2 rounded-full bg-[#121420] border border-amber-500/40 text-white text-xs font-bold shadow-xl hover:bg-[#1a1d2e] transition"
+        title="Show the leaderboard"
+      >
+        <span className="material-symbols-outlined text-base text-amber-400">military_tech</span>
+        Leaderboard
+        <span className="font-mono text-blue-300">{left}s</span>
+      </button>
+    );
+  }
+
+  const top = leaderboard.rankings.slice(0, 3);
+  const rest = leaderboard.rankings.slice(3);
+
   return (
     <div
-      className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+      className="fixed bottom-4 right-4 z-[70] w-[min(22rem,calc(100vw-2rem))] bg-[#121420] border border-[#2b3046] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[60vh] text-white animate-in fade-in slide-in-from-bottom-2 duration-200"
       role="dialog"
       aria-label="Class quiz leaderboard"
     >
-      <div className="bg-[#121420] border border-[#2b3046] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] text-white">
-        <div className="px-5 py-4 bg-gradient-to-r from-blue-950 via-[#171a2b] to-[#121420] border-b border-[#25283a] flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shadow">
-              <span className="material-symbols-outlined text-xl">military_tech</span>
-            </div>
-            <div>
-              <h3 className="font-bold text-sm text-white">Class Quiz Leaderboard</h3>
-              <p className="text-[11px] text-slate-400">
-                {leaderboard.scope === "chapter" ? "Chapter Progression" : "Live Session Performance"}
+      <div className="px-3 py-2.5 bg-gradient-to-r from-blue-950 via-[#171a2b] to-[#121420] border-b border-[#25283a] flex items-center gap-2">
+        <span className="material-symbols-outlined text-lg text-amber-400">military_tech</span>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-xs text-white leading-tight">Class Quiz Leaderboard</h3>
+          <p className="text-[10px] text-slate-400 leading-tight">
+            {leaderboard.scope === "chapter" ? "Chapter" : "This class"}
+            {leaderboard.stats &&
+              ` · ${leaderboard.stats.totalParticipants} students · ${leaderboard.stats.totalPolls} questions · ${leaderboard.stats.averageAccuracy}% avg`}
+          </p>
+        </div>
+        <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[10px] font-mono font-bold">{left}s</span>
+        <button
+          type="button"
+          onClick={() => setMinimized(true)}
+          className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          title="Minimize"
+        >
+          <span className="material-symbols-outlined text-base">remove</span>
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          title="Close Leaderboard"
+        >
+          <span className="material-symbols-outlined text-base">close</span>
+        </button>
+      </div>
+
+      <div className="p-2.5 space-y-1.5 overflow-y-auto text-xs">
+        {leaderboard.rankings.length === 0 && <p className="text-center text-slate-400 py-4">No answers yet.</p>}
+        {top.map((student, i) => (
+          <div
+            key={student.studentId}
+            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border ${
+              i === 0 ? "bg-amber-500/10 border-amber-500/40" : i === 1 ? "bg-slate-400/10 border-slate-400/30" : "bg-amber-700/10 border-amber-700/30"
+            }`}
+          >
+            <span className="text-lg leading-none shrink-0" aria-label={`Rank ${student.rank}`}>{MEDALS[i]}</span>
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-white truncate flex items-center gap-1.5">
+                <span className="truncate">{student.name}</span>
+                {student.source === "YOUTUBE" && <YouTubeBadge />}
+              </p>
+              <p className="text-[10px] text-slate-400 font-mono">
+                {student.correctCount}/{student.totalAttempted} correct · {(student.avgResponseTimeMs / 1000).toFixed(1)}s avg
               </p>
             </div>
+            <span className="font-mono font-black text-emerald-400 shrink-0">{student.accuracyPct}%</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-mono font-bold">
-              <span className="material-symbols-outlined text-xs">timelapse</span>
-              <span>{left}s</span>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-              title="Close Leaderboard"
-            >
-              <span className="material-symbols-outlined text-lg">close</span>
-            </button>
+        ))}
+        {rest.map((student) => (
+          <div key={student.studentId} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-[#161826]">
+            <span className="w-5 text-center font-mono font-bold text-slate-400 shrink-0">{student.rank}</span>
+            <span className="flex-1 min-w-0 truncate text-slate-200 flex items-center gap-1.5">
+              <span className="truncate">{student.name}</span>
+              {student.source === "YOUTUBE" && <YouTubeBadge />}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono shrink-0">{student.correctCount}/{student.totalAttempted}</span>
           </div>
-        </div>
-
-        {leaderboard.stats && (
-          <div className="px-5 py-2 bg-[#0c0d15] border-b border-[#1f2233] flex items-center justify-between text-xs text-slate-400">
-            <span>{leaderboard.stats.totalParticipants} Students</span>
-            <span>{leaderboard.stats.totalPolls} Questions</span>
-            <span className="text-emerald-400 font-bold">{leaderboard.stats.averageAccuracy}% Class Avg</span>
-          </div>
-        )}
-
-        <div className="p-4 space-y-2 overflow-y-auto flex-1 text-xs">
-          {leaderboard.rankings.length === 0 && (
-            <p className="text-center text-slate-400 py-6">No answers yet.</p>
-          )}
-          {leaderboard.rankings.map((student) => {
-            const medal = student.rank === 1 ? "🥇" : student.rank === 2 ? "🥈" : student.rank === 3 ? "🥉" : null;
-            return (
-              <div
-                key={student.studentId}
-                className={`flex items-center justify-between p-3 rounded-xl border transition ${
-                  student.rank === 1
-                    ? "bg-gradient-to-r from-amber-500/15 via-[#181a28] to-[#121420] border-amber-500/40 shadow-sm"
-                    : student.rank === 2
-                    ? "bg-gradient-to-r from-slate-400/10 via-[#181a28] to-[#121420] border-slate-400/30"
-                    : student.rank === 3
-                    ? "bg-gradient-to-r from-amber-700/10 via-[#181a28] to-[#121420] border-amber-700/30"
-                    : "bg-[#161826] border-[#25283a]"
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-7 h-7 rounded-full flex items-center justify-center font-black font-mono text-xs shrink-0 bg-black/40 border border-white/10">
-                    {medal || student.rank}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-bold text-white text-xs truncate flex items-center gap-1.5">
-                      <span className="truncate">{student.name}</span>
-                      {student.source === "YOUTUBE" && <YouTubeBadge />}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-mono">
-                      {student.correctCount}/{student.totalAttempted} correct · {(student.avgResponseTimeMs / 1000).toFixed(1)}s avg
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs font-mono font-black text-emerald-400 shrink-0">{student.accuracyPct}%</span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="p-3 bg-[#0d0f17] border-t border-[#1f2233] flex items-center justify-between">
-          <span className="text-[11px] text-slate-400">Auto-closing in {left}s</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer"
-          >
-            Dismiss
-          </button>
-        </div>
+        ))}
       </div>
     </div>
   );

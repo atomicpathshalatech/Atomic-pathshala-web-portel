@@ -17,6 +17,8 @@ export type Participant = {
   reconnectCount: number;
   interactionCount: number;
   isRecentlyActive: boolean;
+  /** False for someone who joined but is not (or no longer) in this batch. */
+  enrolled?: boolean;
 };
 
 export type TeacherInfo = {
@@ -64,6 +66,7 @@ export function ParticipantsPanel({
   theme?: "light" | "dark";
 }) {
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [totalEnrolled, setTotalEnrolled] = useState<number | null>(null);
   const [teacher, setTeacher] = useState<TeacherInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +78,8 @@ export function ParticipantsPanel({
     try {
       const data = await getJson(`/api/whiteboard/sessions/${whiteboardSessionId}/participants`);
       setParticipants(data.participants || []);
+      setTotalEnrolled(typeof data.totalEnrolled === "number" ? data.totalEnrolled : null);
+      setError(null);
       setTeacher(data.teacher || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load participants roster");
@@ -100,7 +105,7 @@ export function ParticipantsPanel({
   useEffect(() => {
     loadData();
     loadConnections();
-    const interval = setInterval(loadData, 30_000);
+    const interval = setInterval(loadData, 15_000);
     return () => clearInterval(interval);
   }, [whiteboardSessionId]);
 
@@ -181,7 +186,8 @@ export function ParticipantsPanel({
       <div className="space-y-2 mb-3 shrink-0">
         <div className="flex items-center justify-between text-xs font-semibold">
           <span className={isDark ? "text-slate-300" : "text-slate-700"}>
-            Enrolled Students ({participants.length})
+            Joined {participants.length}
+            {totalEnrolled !== null && <span className="text-slate-500 font-normal"> of {totalEnrolled} enrolled</span>}
           </span>
           <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full text-[10px] font-bold">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -246,16 +252,29 @@ export function ParticipantsPanel({
           <p className="text-xs text-center py-6 text-red-400">{error}</p>
         ) : filtered.length === 0 ? (
           <p className="text-xs text-center py-6 text-gray-400">
-            {searchQuery ? "No matching students found." : "No enrolled students."}
+            {searchQuery ? "No matching students found." : "No student has joined this class yet."}
           </p>
         ) : (
-          filtered.map((p) => {
+          [...filtered]
+            .sort((x, y) => Number(y.isRecentlyActive) - Number(x.isRecentlyActive))
+            .map((p, i, list) => {
             const isOnline = p.isRecentlyActive;
             const initial = p.name.charAt(0).toUpperCase();
+            const heading =
+              i === 0 || list[i - 1]!.isRecentlyActive !== isOnline
+                ? isOnline
+                  ? `Online now (${list.filter((x) => x.isRecentlyActive).length})`
+                  : `Left the class (${list.filter((x) => !x.isRecentlyActive).length})`
+                : null;
 
             return (
+              <div key={p.id}>
+              {heading && (
+                <p className={`px-1 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider ${isOnline ? "text-emerald-400" : "text-slate-500"}`}>
+                  {heading}
+                </p>
+              )}
               <div
-                key={p.id}
                 className={`flex items-center gap-2.5 p-2 rounded-xl border transition-colors ${
                   isDark
                     ? "bg-[#141622] border-[#2d2e3b] hover:border-slate-700"
@@ -301,22 +320,19 @@ export function ParticipantsPanel({
                           : "bg-slate-800 text-slate-400"
                       }`}
                     >
-                      {isOnline ? "ONLINE" : p.hasJoined ? "ATTENDED" : "ABSENT"}
+                      {isOnline ? "ONLINE" : "OFFLINE"}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                    {p.hasJoined ? (
-                      <span>Time in class: {formatDuration(p.activeDurationSec)}</span>
-                    ) : (
-                      <span>Has not entered room yet</span>
-                    )}
+                    <span>Time in class: {formatDuration(p.activeDurationSec)}</span>
+                    {p.enrolled === false && <span className="text-amber-400/80">not in this batch</span>}
                     {p.reconnectCount > 0 && (
                       <span className="text-amber-400/80">({p.reconnectCount} reconnects)</span>
                     )}
                   </div>
 
-                  {p.hasJoined && (
+                  {isOnline && (
                     <MediaConnectRow
                       studentId={p.id}
                       state={connections[p.id] ?? { audioConnected: false, videoConnected: false }}
@@ -327,6 +343,7 @@ export function ParticipantsPanel({
                     />
                   )}
                 </div>
+              </div>
               </div>
             );
           })

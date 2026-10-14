@@ -33,6 +33,8 @@ import { ScienceLabsModal } from "@/components/live-class/ScienceLabsModal";
 import { PreFlightSetupWizard, type PreFlightConfig } from "@/components/live-class/PreFlightSetupWizard";
 import { TeacherPostClassModal } from "@/components/live-class/TeacherPostClassModal";
 import { SlideTemplatesModal } from "@/components/live-class/SlideTemplatesModal";
+import { CanvasCursor, type CanvasCursorHandle } from "@/components/live-class/CanvasCursor";
+import { BoardHistory, type BoardHistoryOps, type BoardStep, type SlideSnapshot as BoardSlideSnapshot } from "@/lib/whiteboard/board-history";
 import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
@@ -278,6 +280,8 @@ function getHydratedObjects(sessionId?: string | null, pageId?: string | null, s
   return fallback;
 }
 
+type SlideSnapshot = BoardSlideSnapshot<StrokeObject>;
+
 const TEACHER_APP_NEEDED =
   "Class started, but nothing is being sent: open this class in the Atomic Pathshala Teacher app (team sidebar → Download App) — it sends the class to YouTube.";
 
@@ -375,6 +379,12 @@ export function TeacherLiveClassRoom({
   // (src/lib/whiteboard/board-save-queue.ts).
   const saveQueueRef = useRef<BoardSaveQueue<StrokeObject> | null>(null);
   const latestPagesRef = useRef<WhiteboardPage[]>([]);
+  const activePageNumberRef = useRef(1);
+  // Board history (src/lib/whiteboard/board-history.ts), and each slide's own
+  // ink undo steps while that slide is not on the board.
+  const boardHistoryRef = useRef(new BoardHistory<StrokeObject>());
+  const slideInkHistoryRef = useRef(new Map<string, { undo: StrokeObject[][]; redo: StrokeObject[][] }>());
+  const engineLoadedPageRef = useRef<string | null>(null);
   const activeQuizIdRef = useRef<string | null>(null);
   // The canvas engine (and its onCommit closure) is created once per
   // session and persists across page switches — it must always call the
@@ -421,7 +431,7 @@ export function TeacherLiveClassRoom({
   // exported PDF, and out of the persisted board state: none of those read
   // from anything but the canvas engine's own `objects` array, which this
   // never touches.
-  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const cursorRef = useRef<CanvasCursorHandle>(null);
   // Read inside the canvas engine's onTextRequested callback (bound once
   // per session in the canvas-lifecycle effect below), which needs the
   // CURRENT color/size, not a stale one captured when the engine was
@@ -1223,11 +1233,9 @@ export function TeacherLiveClassRoom({
         pendingPageIdRef.current = targetPageId;
         if (targetPageId) saveQueueRef.current?.markDirty(targetPageId, objects);
         postBoardToStageRef.current();
-        if (typeof window !== "undefined" && wbSession?.id && targetPageId) {
-          try {
-            localStorage.setItem(`atomic_wb_backup_${wbSession.id}_${targetPageId}`, JSON.stringify(objects));
-          } catch {}
-        }
+        // The local backup copy is written by the save queue right before each
+        // save goes out (its send()) — writing it here as well turned the whole
+        // slide into text twice at every pen-up.
         setSaveState("saving");
         if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
         autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 50);
@@ -1278,10 +1286,15 @@ export function TeacherLiveClassRoom({
         body: JSON.stringify({ points, phase: "end" }),
       }).catch(() => {});
     };
+    engine.onHistoryPush = () => {
+      const pageId = enginePageIdRef.current;
+      if (pageId) recordBoardStep({ kind: "ink", pageId });
+    };
+    engineLoadedPageRef.current = null;
+    slideInkHistoryRef.current.clear();
+    boardHistoryRef.current.clear();
     if (currentPage) {
-      enginePageIdRef.current = currentPage.id;
-      const initialObjs = getHydratedObjects(wbSession.id, currentPage.id, currentPage.objects);
-      engine.loadObjects(initialObjs);
+      showPageInEngine(currentPage, getHydratedObjects(wbSession.id, currentPage.id, currentPage.objects));
     }
 
     // Keep the canvas backing store's pixel size synced to its actual
@@ -1315,10 +1328,7 @@ export function TeacherLiveClassRoom({
     if (!engineRef.current) return;
     engineRef.current.syncSize();
     if (currentPage && currentPage.id !== lastLoadedPageIdRef.current) {
-      lastLoadedPageIdRef.current = currentPage.id;
-      enginePageIdRef.current = currentPage.id;
-      const objs = getHydratedObjects(wbSession?.id, currentPage.id, currentPage.objects);
-      engineRef.current.loadObjects(objs);
+      showPageInEngine(currentPage, getHydratedObjects(wbSession?.id, currentPage.id, currentPage.objects));
     }
   }, [stageDimensions, currentPage?.id, wbSession?.id]);
 
@@ -1360,6 +1370,7 @@ export function TeacherLiveClassRoom({
   // the slide moved on elsewhere (e.g. a second tab): the queue adopts the
   // server version and resends what this teacher is actually looking at.
   latestPagesRef.current = wbSession?.pages ?? latestPagesRef.current;
+  activePageNumberRef.current = wbSession?.activePageNumber ?? activePageNumberRef.current;
   const wbSessionId = wbSession?.id ?? null;
   useEffect(() => {
     if (!wbSessionId) return;
@@ -1476,12 +1487,9 @@ export function TeacherLiveClassRoom({
     [tool]
   );
 
-  // Throttled to once per animation frame: this fires on every native
-  // pointermove (including every event coalesced during a fast drag), and
-  // an unthrottled setCursorPos was forcing a full React re-render of this
-  // whole component on each one - in parallel with the canvas engine's own
-  // per-frame drag/resize work, this doubled up the cost that was freezing
-  // the tab during a multi-object drag.
+  // Moves the pen dot / eraser circle once per animation frame. It never
+  // touches React state (see CanvasCursor): a state update here re-rendered
+  // this whole room on every pointer move while the teacher was writing.
   const cursorRafPending = useRef(false);
   const latestCursorPos = useRef<{ x: number; y: number } | null>(null);
   const handleCanvasPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1494,11 +1502,14 @@ export function TeacherLiveClassRoom({
     cursorRafPending.current = true;
     requestAnimationFrame(() => {
       cursorRafPending.current = false;
-      setCursorPos(latestCursorPos.current);
+      cursorRef.current?.move(latestCursorPos.current);
     });
   }, []);
 
-  const handleCanvasPointerLeave = useCallback(() => setCursorPos(null), []);
+  const handleCanvasPointerLeave = useCallback(() => {
+    latestCursorPos.current = null;
+    cursorRef.current?.move(null);
+  }, []);
 
   // Notification chimes (hand-raise, chat, call-connected) fire from
   // realtime events, not a user gesture — browser autoplay policy keeps
@@ -1738,15 +1749,15 @@ export function TeacherLiveClassRoom({
     await flushAutosave();
     pendingObjectsRef.current = null;
     pendingPageIdRef.current = null;
-    const target = wbSession.pages.find((p) => p.pageNumber === pageNumber);
+    // latestPagesRef, not this render's wbSession: an undo can switch slides
+    // right after another step changed them.
+    const target = latestPagesRef.current.find((p) => p.pageNumber === pageNumber);
     if (!target) return;
     try {
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber });
+      activePageNumberRef.current = pageNumber;
       setWbSession((prev) => (prev ? { ...prev, activePageNumber: pageNumber } : prev));
-      enginePageIdRef.current = target.id;
-      lastLoadedPageIdRef.current = target.id;
-      const objs = getHydratedObjects(wbSession.id, target.id, target.objects);
-      engineRef.current.loadObjects(objs);
+      showPageInEngine(target, getHydratedObjects(wbSession.id, target.id, target.objects));
     } catch (err) {
       // Was previously silent apart from the generic "offline" indicator -
       // logged now so a stale/ended-session 409 (or any other switchToPage
@@ -1766,19 +1777,162 @@ export function TeacherLiveClassRoom({
     });
   }
 
-  // A new slide goes right after the one on screen (not to the end).
+  // ---- One undo/redo history for the whole board ---------------------------
+  // See src/lib/whiteboard/board-history.ts. Every engine change (onHistoryPush)
+  // and every slide change is recorded; Ctrl+Z / Ctrl+Y step through them.
+  function recordBoardStep(step: BoardStep<StrokeObject>) {
+    boardHistoryRef.current.record(step);
+    setUndoRedoTick((t) => t + 1);
+  }
+
+  function sortedPageIds(): string[] {
+    return [...latestPagesRef.current].sort((a, b) => a.pageNumber - b.pageNumber).map((p) => p.id);
+  }
+
+  function setPages(pages: WhiteboardPage[], activePageNumber: number) {
+    latestPagesRef.current = pages;
+    activePageNumberRef.current = activePageNumber;
+    setWbSession((prev) => (prev ? { ...prev, pages, activePageNumber } : prev));
+  }
+
+  /** Puts a slide into the canvas engine, keeping each slide's own undo steps. */
+  function showPageInEngine(page: { id: string } | null | undefined, objects: StrokeObject[]) {
+    const pageId = page?.id ?? null;
+    enginePageIdRef.current = pageId;
+    lastLoadedPageIdRef.current = pageId;
+    const engine = engineRef.current;
+    if (!engine) return;
+    const prev = engineLoadedPageRef.current;
+    if (prev && prev !== pageId) slideInkHistoryRef.current.set(prev, engine.getHistory());
+    const history = prev === pageId ? engine.getHistory() : pageId ? slideInkHistoryRef.current.get(pageId) : undefined;
+    engine.loadObjects(objects);
+    engine.setHistory(history);
+    engineLoadedPageRef.current = pageId;
+  }
+
+  async function settleSaves() {
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    await flushAutosave();
+    pendingObjectsRef.current = null;
+    pendingPageIdRef.current = null;
+  }
+
+  /** A new slide on the server, opened on the board. */
+  async function createSlide(body: { afterPageNumber?: number; duplicateOfPageId?: string; background?: string; objects?: StrokeObject[] }) {
+    if (!wbSession) throw new Error("The class is not open.");
+    await settleSaves();
+    const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, body);
+    const page = data.page as WhiteboardPage;
+    const pages = mergeInsertedPage(latestPagesRef.current, data).map((p) => (p.id === page.id ? page : p));
+    setPages(pages, page.pageNumber);
+    showPageInEngine(page, (Array.isArray(page.objects) ? page.objects : []) as StrokeObject[]);
+    return page;
+  }
+
+  /** Deletes a slide and returns what is needed to bring it back. */
+  async function removeSlide(pageId: string): Promise<SlideSnapshot | null> {
+    if (!wbSession || latestPagesRef.current.length <= 1) return null;
+    await settleSaves();
+    const page = latestPagesRef.current.find((p) => p.id === pageId);
+    if (!page) return null;
+    const objects =
+      enginePageIdRef.current === pageId && engineRef.current
+        ? engineRef.current.getObjects()
+        : ((Array.isArray(page.objects) ? page.objects : []) as StrokeObject[]);
+    const snapshot: SlideSnapshot = {
+      pageNumber: page.pageNumber,
+      // A pasted picture (data: link) is too big to send back; such a slide returns plain.
+      background: page.background && page.background.length <= 2000 ? page.background : undefined,
+      objects: JSON.parse(JSON.stringify(objects)) as StrokeObject[],
+    };
+    const data = await deleteJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${pageId}`);
+    const pages = data.pages as WhiteboardPage[];
+    setPages(pages, data.activePageNumber);
+    const nextActive = pages.find((pg) => pg.pageNumber === data.activePageNumber);
+    showPageInEngine(nextActive, nextActive ? getHydratedObjects(wbSession.id, nextActive.id, nextActive.objects) : []);
+    return snapshot;
+  }
+
+  /** Brings a deleted slide back at its old place (with its ink and its undo steps). */
+  async function restoreSlide(snap: SlideSnapshot, oldId: string) {
+    const page = await createSlide({
+      afterPageNumber: Math.max(0, snap.pageNumber - 1),
+      background: snap.background,
+      objects: snap.objects,
+    });
+    const ink = slideInkHistoryRef.current.get(oldId);
+    if (ink) {
+      slideInkHistoryRef.current.delete(oldId);
+      engineRef.current?.setHistory(ink);
+    }
+    return page.id;
+  }
+
+  async function applySlideOrder(orderedIds: string[]) {
+    if (!wbSession) return;
+    await settleSaves();
+    const data = await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/reorder`, { orderedPageIds: orderedIds });
+    if (!data?.pages) return;
+    const sorted = (data.pages as WhiteboardPage[])
+      .map((sp) => {
+        const local = latestPagesRef.current.find((p) => p.id === sp.id);
+        return local ? { ...local, pageNumber: sp.pageNumber } : sp;
+      })
+      .sort((a, b) => a.pageNumber - b.pageNumber);
+    const active = data.activePageNumber ?? activePageNumberRef.current;
+    setPages(sorted, active);
+    const activePg = sorted.find((p) => p.pageNumber === active);
+    if (activePg && activePg.id !== enginePageIdRef.current) {
+      showPageInEngine(activePg, getHydratedObjects(wbSession.id, activePg.id, activePg.objects));
+    }
+  }
+
+  const boardHistoryOps: BoardHistoryOps<StrokeObject> = {
+    async inkStep(pageId, dir) {
+      const engine = engineRef.current;
+      const page = latestPagesRef.current.find((p) => p.id === pageId);
+      if (!engine || !page) return false;
+      if (enginePageIdRef.current !== pageId) await switchToPage(page.pageNumber);
+      if (enginePageIdRef.current !== pageId) return false;
+      if (dir === "undo" ? !engine.canUndo() : !engine.canRedo()) return false;
+      if (dir === "undo") engine.undo();
+      else engine.redo();
+      return true;
+    },
+    removeSlide,
+    restoreSlide,
+    currentOrder: sortedPageIds,
+    applyOrder: applySlideOrder,
+    hasSlide: (pageId) => latestPagesRef.current.some((p) => p.id === pageId),
+  };
+
+  async function stepBoardHistory(dir: "undo" | "redo") {
+    try {
+      await boardHistoryRef.current.step(dir, boardHistoryOps);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : dir === "undo" ? "Could not undo that." : "Could not redo that.");
+    } finally {
+      setUndoRedoTick((t) => t + 1);
+    }
+  }
+
+  /** A new slide follows the look of the one on screen (dark stays dark); after a PPT/PDF slide, the last themed slide before it. */
+  function themeForNewSlide(): string | undefined {
+    const isTheme = (b: string | undefined) => typeof b === "string" && b.length > 0 && !/^(https?:|data:|blob:)/.test(b);
+    const sorted = [...latestPagesRef.current].sort((a, b) => a.pageNumber - b.pageNumber);
+    const idx = sorted.findIndex((p) => p.pageNumber === activePageNumberRef.current);
+    for (let i = idx; i >= 0; i--) {
+      if (isTheme(sorted[i]?.background)) return sorted[i]!.background;
+    }
+    return undefined;
+  }
+
+  // New blank slide, right after the one on screen (not at the end).
   async function addPage() {
     if (!wbSession) return;
     try {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-      await flushAutosave();
-      pendingObjectsRef.current = null;
-      pendingPageIdRef.current = null;
-      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, { afterPageNumber: wbSession.activePageNumber });
-      setWbSession((prev) => (prev ? { ...prev, pages: mergeInsertedPage(prev.pages, data), activePageNumber: data.page.pageNumber } : prev));
-      enginePageIdRef.current = data.page.id;
-      lastLoadedPageIdRef.current = data.page.id;
-      engineRef.current?.loadObjects([]);
+      const page = await createSlide({ afterPageNumber: activePageNumberRef.current, background: themeForNewSlide() });
+      recordBoardStep({ kind: "slide-add", pageId: page.id });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not add a page.");
     }
@@ -1787,29 +1941,8 @@ export function TeacherLiveClassRoom({
   async function handleAddPageWithTemplate(bgValue: string) {
     if (!wbSession) return;
     try {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-      await flushAutosave();
-      pendingObjectsRef.current = null;
-      pendingPageIdRef.current = null;
-      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, { afterPageNumber: wbSession.activePageNumber });
-      const newPage = data.page as WhiteboardPage;
-      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${newPage.id}`, {
-        background: bgValue,
-        objects: [],
-      });
-      const updatedPage = { ...newPage, background: bgValue };
-      setWbSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              pages: mergeInsertedPage(prev.pages, { ...data, page: updatedPage }).map((p) => (p.id === updatedPage.id ? updatedPage : p)),
-              activePageNumber: updatedPage.pageNumber,
-            }
-          : prev
-      );
-      enginePageIdRef.current = updatedPage.id;
-      lastLoadedPageIdRef.current = updatedPage.id;
-      engineRef.current?.loadObjects([]);
+      const page = await createSlide({ afterPageNumber: activePageNumberRef.current, background: bgValue });
+      recordBoardStep({ kind: "slide-add", pageId: page.id });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not add template page.");
     }
@@ -1844,21 +1977,24 @@ export function TeacherLiveClassRoom({
         return;
       }
 
-      // Ctrl+D or Cmd+D -> Open Inbuilt Slide Templates
+      // Ctrl+D -> Duplicate: the selected ink if something is selected,
+      // otherwise the whole slide (placed right after it), like PowerPoint.
       if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
         e.preventDefault();
         e.stopPropagation();
-        setSlideTemplatesOpen((prev) => !prev);
+        if (engineRef.current?.getSelectionCount()) {
+          engineRef.current.duplicateSelected();
+        } else {
+          const page = latestPagesRef.current.find((p) => p.pageNumber === activePageNumberRef.current);
+          if (page) void duplicatePage(page);
+        }
         return;
       }
 
-      // Ctrl+Z -> Undo
+      // Ctrl+Z -> Undo (one action per press, slides included — see recordBoardStep)
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
         e.preventDefault();
-        if (engineRef.current?.canUndo()) {
-          engineRef.current.undo();
-          setUndoRedoTick((t) => t + 1);
-        }
+        void stepBoardHistory("undo");
         return;
       }
 
@@ -1868,10 +2004,7 @@ export function TeacherLiveClassRoom({
         ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "z" || e.key === "Z"))
       ) {
         e.preventDefault();
-        if (engineRef.current?.canRedo()) {
-          engineRef.current.redo();
-          setUndoRedoTick((t) => t + 1);
-        }
+        void stepBoardHistory("redo");
         return;
       }
 
@@ -1947,27 +2080,12 @@ export function TeacherLiveClassRoom({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [wbSession?.id, wbSession?.activePageNumber, wbSession?.pages.length]);
 
-  // Copy of a slide, placed right after it (from the slide panel).
+  // Copy of a slide (its background and ink), placed right after it.
   async function duplicatePage(page: WhiteboardPage) {
     if (!wbSession) return;
     try {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-      await flushAutosave();
-      pendingObjectsRef.current = null;
-      pendingPageIdRef.current = null;
-      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, {
-        afterPageNumber: page.pageNumber,
-        duplicateOfPageId: page.id,
-      });
-      const copy = data.page as WhiteboardPage;
-      setWbSession((prev) =>
-        prev
-          ? { ...prev, pages: mergeInsertedPage(prev.pages, data).map((pg) => (pg.id === copy.id ? copy : pg)), activePageNumber: copy.pageNumber }
-          : prev
-      );
-      enginePageIdRef.current = copy.id;
-      lastLoadedPageIdRef.current = copy.id;
-      engineRef.current?.loadObjects(copy.objects ?? []);
+      const copy = await createSlide({ afterPageNumber: page.pageNumber, duplicateOfPageId: page.id });
+      recordBoardStep({ kind: "slide-add", pageId: copy.id });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not duplicate this slide.");
     }
@@ -1976,79 +2094,32 @@ export function TeacherLiveClassRoom({
   // Delete any slide from the slide panel (not only the one on screen).
   async function deletePageById(page: WhiteboardPage) {
     if (!wbSession || wbSession.pages.length <= 1) return;
-    if (!window.confirm(`Delete slide ${page.pageNumber}? This cannot be undone.`)) return;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    if (!window.confirm(`Delete slide ${page.pageNumber}? (Ctrl+Z brings it back.)`)) return;
     try {
-      await flushAutosave();
-      pendingObjectsRef.current = null;
-      pendingPageIdRef.current = null;
-      const data = await deleteJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${page.id}`);
-      setWbSession((prev) => (prev ? { ...prev, pages: data.pages, activePageNumber: data.activePageNumber } : prev));
-      const nextActive = (data.pages as WhiteboardPage[]).find((pg) => pg.pageNumber === data.activePageNumber);
-      enginePageIdRef.current = nextActive?.id ?? null;
-      lastLoadedPageIdRef.current = nextActive?.id ?? null;
-      engineRef.current?.loadObjects(nextActive?.objects ?? []);
+      const snapshot = await removeSlide(page.id);
+      if (snapshot) recordBoardStep({ kind: "slide-delete", pageId: page.id, snapshot });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not delete this slide.");
     }
   }
 
   async function deleteCurrentPage() {
-    if (!wbSession || !currentPage || wbSession.pages.length <= 1) return;
-    if (!window.confirm("Delete this page? This can't be undone.")) return;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    try {
-      await flushAutosave();
-      pendingObjectsRef.current = null;
-      pendingPageIdRef.current = null;
-      const data = await deleteJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${currentPage.id}`);
-      setWbSession((prev) =>
-        prev ? { ...prev, pages: data.pages, activePageNumber: data.activePageNumber } : prev
-      );
-      const nextActive = (data.pages as WhiteboardPage[]).find(
-        (p) => p.pageNumber === data.activePageNumber
-      );
-      enginePageIdRef.current = nextActive?.id ?? null;
-      lastLoadedPageIdRef.current = nextActive?.id ?? null;
-      engineRef.current?.loadObjects(nextActive?.objects ?? []);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not delete this page.");
-    }
+    if (!currentPage) return;
+    await deletePageById(currentPage);
   }
 
   async function movePage(page: WhiteboardPage, direction: "up" | "down") {
     if (!wbSession) return;
-    const targetPageNumber = direction === "up" ? page.pageNumber - 1 : page.pageNumber + 1;
-    if (targetPageNumber < 1 || targetPageNumber > wbSession.pages.length) return;
+    const before = sortedPageIds();
+    const from = before.indexOf(page.id);
+    const to = direction === "up" ? from - 1 : from + 1;
+    if (from < 0 || to < 0 || to >= before.length) return;
+    const after = [...before];
+    after.splice(from, 1);
+    after.splice(to, 0, page.id);
     try {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-      await flushAutosave();
-      pendingObjectsRef.current = null;
-      pendingPageIdRef.current = null;
-      const data = await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/reorder`, {
-        pageId: page.id,
-        direction,
-      });
-      if (data?.pages) {
-        const sorted = (data.pages as WhiteboardPage[]).sort((a, b) => a.pageNumber - b.pageNumber);
-        const newActive = data.activePageNumber ?? wbSession.activePageNumber;
-        setWbSession((prev) =>
-          prev
-            ? {
-                ...prev,
-                pages: sorted,
-                activePageNumber: newActive,
-              }
-            : prev
-        );
-        const activePg = sorted.find((p) => p.pageNumber === newActive);
-        if (activePg) {
-          enginePageIdRef.current = activePg.id;
-          lastLoadedPageIdRef.current = activePg.id;
-          const objs = getHydratedObjects(wbSession.id, activePg.id, activePg.objects);
-          engineRef.current?.loadObjects(objs);
-        }
-      }
+      await applySlideOrder(after);
+      recordBoardStep({ kind: "slide-order", before, after });
     } catch (err) {
       console.error("[movePage error]", err);
       setLoadError(err instanceof Error ? err.message : "Could not reorder slides.");
@@ -2083,51 +2154,16 @@ export function TeacherLiveClassRoom({
     }
 
     // Optimistic UI update for instantaneous fluid feel
-    setWbSession((prev) =>
-      prev
-        ? {
-            ...prev,
-            pages: updatedSorted,
-            activePageNumber: newActiveNumber,
-          }
-        : prev
-    );
+    setPages(updatedSorted, newActiveNumber);
     setDraggedSlideId(null);
     setDragOverSlideIndex(null);
 
     try {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-      await flushAutosave();
-      pendingObjectsRef.current = null;
-      pendingPageIdRef.current = null;
-
-      const data = await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/reorder`, {
-        orderedPageIds: orderedIds,
-      });
-
-      if (data?.pages) {
-        const serverSorted = (data.pages as WhiteboardPage[]).sort((a, b) => a.pageNumber - b.pageNumber);
-        const serverActive = data.activePageNumber ?? newActiveNumber;
-        setWbSession((prev) =>
-          prev
-            ? {
-                ...prev,
-                pages: serverSorted,
-                activePageNumber: serverActive,
-              }
-            : prev
-        );
-        const activePg = serverSorted.find((p) => p.pageNumber === serverActive);
-        if (activePg) {
-          enginePageIdRef.current = activePg.id;
-          lastLoadedPageIdRef.current = activePg.id;
-          const objs = getHydratedObjects(wbSession.id, activePg.id, activePg.objects);
-          engineRef.current?.loadObjects(objs);
-        }
-      }
+      await applySlideOrder(orderedIds);
+      recordBoardStep({ kind: "slide-order", before: sorted.map((p) => p.id), after: orderedIds });
     } catch (err) {
       console.error("[reorder error]", err);
-      setWbSession((prev) => (prev ? { ...prev, pages: sorted } : prev));
+      setPages(sorted, wbSession.activePageNumber);
       setLoadError("Could not reorder slides. Please try again.");
     }
   }
@@ -2548,6 +2584,13 @@ export function TeacherLiveClassRoom({
 
   async function setSlideTheme(theme: SlideTheme) {
     if (!wbSession || !currentPage) return;
+    // An imported PPT/PDF page is the slide's own picture — a theme would replace it.
+    if (
+      isBackgroundImageUrl(currentPage.background) &&
+      !window.confirm("This slide shows a page of your PPT/PDF. Replace that page with the theme?")
+    ) {
+      return;
+    }
     setOpenPopup(null);
 
     // 1. INSTANT OPTIMISTIC LOCAL UPDATE (0ms delay)
@@ -2661,22 +2704,11 @@ export function TeacherLiveClassRoom({
         (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
       if (isTyping) return;
 
+      // Undo/redo, Shift+N and Shift+C live in the board shortcut handler
+      // above. They used to be handled here as well, so one Ctrl+Z undid two
+      // actions and one Shift+N added two slides.
       const key = e.key.toLowerCase();
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === "z") {
-        e.preventDefault();
-        engineRef.current?.undo();
-        setUndoRedoTick((t) => t + 1);
-      } else if ((e.ctrlKey || e.metaKey) && (key === "y" || (e.shiftKey && key === "z"))) {
-        e.preventDefault();
-        engineRef.current?.redo();
-        setUndoRedoTick((t) => t + 1);
-      } else if (e.shiftKey && key === "n") {
-        e.preventDefault();
-        addPage();
-      } else if (e.shiftKey && key === "c") {
-        e.preventDefault();
-        engineRef.current?.clearInk();
-      } else if (e.shiftKey && key === "m") {
+      if (e.shiftKey && key === "m") {
         e.preventDefault();
         setRightTab("messages");
         setUnreadMessages(0);
@@ -3065,9 +3097,7 @@ export function TeacherLiveClassRoom({
             }
           : prev
       );
-      enginePageIdRef.current = newPage.id;
-      lastLoadedPageIdRef.current = newPage.id;
-      engineRef.current?.loadObjects(objects);
+      showPageInEngine(newPage, objects);
       await handleDeleteHandRaise(item.id);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not pick that doubt onto the board.");
@@ -4150,47 +4180,8 @@ export function TeacherLiveClassRoom({
               onPointerMove={handleCanvasPointerMove}
               onPointerLeave={handleCanvasPointerLeave}
             />
-            {/* Cursor-following pen dot / eraser-size circle — UI overlay
-                only, see the cursorPos state comment above for why this
-                never touches undo/export/persistence. Hidden for every tool
-                that isn't pen/highlighter/eraser (select, text, fill, shapes,
-                laser — laser has its own on-canvas transient render inside
-                the engine, not this overlay). */}
-            {cursorPos &&
-              (tool === "pen" || tool === "highlighter" || tool === "highlighter-fade" || tool === "stroke-eraser" || tool === "object-eraser") &&
-              (() => {
-                const isEraser = tool === "stroke-eraser" || tool === "object-eraser";
-                // Highlighter renders at a fixed 3.5x `size` (see canvas-
-                // engine.ts's strokePath) — reflected here so the dot isn't
-                // misleadingly thin for that tool. Plain pen width varies
-                // slightly by pen style/pressure at draw time, so `size`
-                // alone is the deliberately-approximate stand-in the spec
-                // asks for.
-                const diameterVirtualPx = isEraser
-                  ? eraserRadius * 2
-                  : tool === "highlighter" || tool === "highlighter-fade"
-                  ? size * 3.5
-                  : Math.max(3, size * 2);
-                return (
-                  <div
-                    className="absolute rounded-full pointer-events-none"
-                    style={{
-                      left: `${(cursorPos.x / VIRTUAL_WIDTH) * 100}%`,
-                      top: `${(cursorPos.y / VIRTUAL_HEIGHT) * 100}%`,
-                      width: isEraser ? `${(diameterVirtualPx / VIRTUAL_WIDTH) * 100}%` : Math.max(3, Math.min(10, size * 2.5)),
-                      height: isEraser ? `${(diameterVirtualPx / VIRTUAL_HEIGHT) * 100}%` : Math.max(3, Math.min(10, size * 2.5)),
-                      minWidth: isEraser ? 14 : 3,
-                      minHeight: isEraser ? 14 : 3,
-                      transform: "translate(-50%, -50%)",
-                      border: isEraser ? "1.5px solid rgba(30,30,30,0.65)" : "none",
-                      backgroundColor: isEraser ? "rgba(255,255,255,0.35)" : color,
-                      boxShadow: isEraser
-                        ? "0 0 0 1px rgba(255,255,255,0.5)"
-                        : "0 0 0 0.75px rgba(0,0,0,0.7), 0 0 0 1.5px rgba(255,255,255,0.85)",
-                    }}
-                  />
-                );
-              })()}
+            {/* Pen dot / eraser circle at the real size of the tool (CanvasCursor). */}
+            <CanvasCursor ref={cursorRef} tool={tool} size={size} color={color} eraserRadius={eraserRadius} />
             {textEditor && (
               <div
                 className="absolute z-30"
@@ -4974,25 +4965,19 @@ export function TeacherLiveClassRoom({
           </button>
           <button
             type="button"
-            disabled={!engineRef.current?.canUndo()}
-            onClick={() => {
-              engineRef.current?.undo();
-              setUndoRedoTick((t) => t + 1);
-            }}
+            disabled={!boardHistoryRef.current.canUndo}
+            onClick={() => void stepBoardHistory("undo")}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
-            title="Undo"
+            title="Undo (Ctrl+Z)"
           >
             <span className="material-symbols-outlined text-lg">undo</span>
           </button>
           <button
             type="button"
-            disabled={!engineRef.current?.canRedo()}
-            onClick={() => {
-              engineRef.current?.redo();
-              setUndoRedoTick((t) => t + 1);
-            }}
+            disabled={!boardHistoryRef.current.canRedo}
+            onClick={() => void stepBoardHistory("redo")}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
-            title="Redo"
+            title="Redo (Ctrl+Y)"
           >
             <span className="material-symbols-outlined text-lg">redo</span>
           </button>
@@ -5167,15 +5152,37 @@ export function TeacherLiveClassRoom({
                     );
                   })}
                 </div>
-                <button
-                  type="button"
-                  onClick={addPage}
-                  className="m-2 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg transition"
-                  title="New blank slide after the current one"
-                >
-                  <span className="material-symbols-outlined text-base">add</span>
-                  New slide
-                </button>
+                <div className="m-2 flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={addPage}
+                    className="h-9 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg transition"
+                    title="New blank slide after the current one, in the same theme (Shift+N)"
+                  >
+                    <span className="material-symbols-outlined text-base">add</span>
+                    New blank slide
+                  </button>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => currentPage && void duplicatePage(currentPage)}
+                      className="flex-1 h-8 rounded-lg bg-[#1d2030] hover:bg-[#262a3d] border border-[#2d2e3b] text-gray-200 text-[11px] font-semibold flex items-center justify-center gap-1 transition"
+                      title="Copy of this slide, right after it (Ctrl+D)"
+                    >
+                      <span className="material-symbols-outlined text-sm">content_copy</span>
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSlideTemplatesOpen(true)}
+                      className="flex-1 h-8 rounded-lg bg-[#1d2030] hover:bg-[#262a3d] border border-[#2d2e3b] text-gray-200 text-[11px] font-semibold flex items-center justify-center gap-1 transition"
+                      title="Slide templates"
+                    >
+                      <span className="material-symbols-outlined text-sm">dashboard</span>
+                      Templates
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -5389,6 +5396,21 @@ export function TeacherLiveClassRoom({
           togglingChat={togglingChat}
           togglingHandRaise={togglingHandRaise}
           settingsPortalRef={settingsPortalRef}
+        />
+      )}
+
+      {slideTemplatesOpen && (
+        <SlideTemplatesModal
+          currentBackground={currentPage?.background}
+          onApplyCurrent={(bg) => {
+            setSlideTemplatesOpen(false);
+            void setSlideTheme(bg);
+          }}
+          onAddNewPageWithTemplate={(bg) => {
+            setSlideTemplatesOpen(false);
+            void handleAddPageWithTemplate(bg);
+          }}
+          onClose={() => setSlideTemplatesOpen(false)}
         />
       )}
 

@@ -614,6 +614,12 @@ const INK_MIN_STEP = 0.2;
  * from INK_SMOOTHING for a barely-moving pen up to 0.9 for a fast one. `step`
  * is the distance from the last ink point to the pointer, in virtual px.
  */
+/** Repeatable 0..1 "grain" for segment i (graphite pen texture). */
+function grain(i: number): number {
+  const v = Math.sin(i * 12.9898) * 43758.5453;
+  return v - Math.floor(v);
+}
+
 export function inkSmoothingFor(step: number): number {
   const t = Math.min(1, Math.max(0, (step - 2) / 26));
   return INK_SMOOTHING + (0.9 - INK_SMOOTHING) * t;
@@ -671,6 +677,9 @@ export class CanvasEngine {
    * boundary) — never thrown, so a slow/failed listener can't break
    * drawing. */
   public onNotice?: (message: string) => void;
+  /** Called once for every new undoable change (not for undo/redo themselves) —
+   * the live room keeps one history across slides from this. */
+  public onHistoryPush?: () => void;
   /** Set by the host component. The laser pointer is intentionally
    * local-only (never enters `objects`/autosave/undo — see the comment on
    * laserStrokes below), so it never reaches anyone but the person drawing
@@ -794,8 +803,12 @@ export class CanvasEngine {
     this.renderBase();
   }
 
+  // The canvas box, read once when the pen goes down: reading it for every
+  // coalesced pointer event forced the browser to re-check the layout each time.
+  private strokeRect: DOMRect | null = null;
+
   private getPoint(e: PointerEvent): StrokePoint {
-    const rect = this.activeCanvas.getBoundingClientRect();
+    const rect = (this.isPointerDown && this.strokeRect) || this.activeCanvas.getBoundingClientRect();
     const relX = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
     const relY = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
     return {
@@ -821,6 +834,7 @@ export class CanvasEngine {
     } catch {
       // Ignored if capture unsupported
     }
+    this.strokeRect = this.activeCanvas.getBoundingClientRect();
     this.isPointerDown = true;
     this.activePointerId = e.pointerId;
     this.activePointerType = e.pointerType;
@@ -1094,7 +1108,7 @@ export class CanvasEngine {
           fadeExpiresAt,
         };
         this.objects.push(stroke);
-        this.renderBase();
+        this.drawNewestOnBase();
         this.onCommit?.(this.objects);
         if (isFading) this.startFadeLoopIfNeeded();
       } else if (this.activePoints.length > 1) {
@@ -1110,7 +1124,7 @@ export class CanvasEngine {
           fadeExpiresAt,
         };
         this.objects.push(stroke);
-        this.renderBase();
+        this.drawNewestOnBase();
         this.onCommit?.(this.objects);
         if (isFading) this.startFadeLoopIfNeeded();
       }
@@ -1129,7 +1143,7 @@ export class CanvasEngine {
           end: this.shapeEnd,
         };
         this.objects.push(shape);
-        this.renderBase();
+        this.drawNewestOnBase();
         this.onCommit?.(this.objects);
       }
     }
@@ -1357,7 +1371,9 @@ export class CanvasEngine {
         alpha = 0.85;
       } else if (penStyle === "graphite") {
         lineWidth = Math.max(0.4, size * (0.5 + pressure * 0.7));
-        alpha = 0.75 + Math.random() * 0.25;
+        // Fixed per segment: a fresh random value on every repaint made the
+        // line shimmer while it was being drawn.
+        alpha = 0.75 + 0.25 * grain(i);
       } else {
         lineWidth = Math.max(0.5, size);
       }
@@ -1529,20 +1545,37 @@ export class CanvasEngine {
     ctx.stroke();
   }
 
+  /** A new object goes on top of everything, so drawing just it onto the
+   * board gives the same picture as redrawing the whole board — without
+   * repainting every earlier stroke at each pen-up. Falls back to a full
+   * redraw while a selection outline is showing. */
+  private drawNewestOnBase(): void {
+    const obj = this.objects[this.objects.length - 1];
+    if (!obj || this.selectedIds.size > 0) {
+      this.renderBase();
+      return;
+    }
+    this.drawObject(obj, Date.now());
+  }
+
+  private drawObject(obj: StrokeObject, now: number): void {
+    if (obj.type === "stroke") {
+      const extraAlpha = obj.fadeExpiresAt ? fadeHighlighterOpacityAt(obj.fadeExpiresAt, now) : 1;
+      this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter", obj.penStyle, extraAlpha);
+    } else if (obj.type === "text") {
+      this.drawText(this.baseCtx, obj);
+    } else if (obj.type === "raster") {
+      this.drawRaster(obj);
+    } else {
+      drawShape(this.baseCtx, obj);
+    }
+  }
+
   public renderBase(): void {
     this.baseCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     const now = Date.now();
     for (const obj of this.objects) {
-      if (obj.type === "stroke") {
-        const extraAlpha = obj.fadeExpiresAt ? fadeHighlighterOpacityAt(obj.fadeExpiresAt, now) : 1;
-        this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter", obj.penStyle, extraAlpha);
-      } else if (obj.type === "text") {
-        this.drawText(this.baseCtx, obj);
-      } else if (obj.type === "raster") {
-        this.drawRaster(obj);
-      } else {
-        drawShape(this.baseCtx, obj);
-      }
+      this.drawObject(obj, now);
       if (this.selectedIds.has(obj.id)) {
         this.drawSelectionBox(obj);
       }
@@ -1994,6 +2027,18 @@ export class CanvasEngine {
     this.undoStack.push(snapshot ?? this.cloneObjects());
     if (this.undoStack.length > 100) this.undoStack.shift();
     this.redoStack = [];
+    this.onHistoryPush?.();
+  }
+
+  /** This slide's undo/redo steps — kept by the live room while another slide is open. */
+  public getHistory(): { undo: StrokeObject[][]; redo: StrokeObject[][] } {
+    return { undo: this.undoStack, redo: this.redoStack };
+  }
+
+  /** Gives back a slide's undo/redo steps after loadObjects() (which starts empty). */
+  public setHistory(history: { undo: StrokeObject[][]; redo: StrokeObject[][] } | undefined): void {
+    this.undoStack = history ? [...history.undo] : [];
+    this.redoStack = history ? [...history.redo] : [];
   }
 
   public undo(): void {

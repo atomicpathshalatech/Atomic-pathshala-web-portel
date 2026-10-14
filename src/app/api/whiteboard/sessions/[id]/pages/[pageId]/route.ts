@@ -66,8 +66,13 @@ export async function PATCH(
     const updated = saved.page;
 
     if (input.background !== undefined && input.background !== page.background) {
+      // A duplicated slide shares its PPT/PDF image with the original — the
+      // file goes only when no other slide still shows it.
       const oldKey = keyFromPublicUrl(page.background);
-      if (oldKey) deleteFile(oldKey).catch(() => undefined);
+      const stillUsed = oldKey
+        ? await prisma.whiteboardPage.count({ where: { sessionId: params.id, background: page.background, id: { not: page.id } } })
+        : 0;
+      if (oldKey && stillUsed === 0) deleteFile(oldKey).catch(() => undefined);
     }
 
     // Board mirroring: only broadcast when this is the page students are
@@ -125,8 +130,8 @@ export async function DELETE(
       return apiError("A live board needs at least one page — you can't delete the last one.", 400);
     }
 
-    const oldKey = keyFromPublicUrl(page.background);
-    if (oldKey) deleteFile(oldKey).catch(() => undefined);
+    // The slide's PPT/PDF image is kept: a duplicate of this slide may still
+    // show it, and Ctrl+Z brings a deleted slide back with the same image.
 
     const remaining = await prisma.whiteboardPage.findMany({
       where: { sessionId: params.id, id: { not: params.pageId } },

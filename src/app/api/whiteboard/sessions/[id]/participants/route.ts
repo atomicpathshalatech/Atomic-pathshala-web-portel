@@ -28,16 +28,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
           include: {
             batch: {
               include: {
-                enrollments: {
-                  where: { status: "ACTIVE" },
-                  include: {
-                    student: {
-                      include: {
-                        user: { select: { id: true, name: true, photoUrl: true, email: true } },
-                      },
-                    },
-                  },
-                },
+                enrollments: { where: { status: "ACTIVE" }, select: { studentId: true } },
               },
             },
           },
@@ -56,30 +47,37 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
     if (!wbSession) return apiError("Whiteboard session not found", 404);
 
-    const attendanceMap = new Map(
-      wbSession.attendances.map((a) => [a.studentId, a])
-    );
-
-    const enrolledStudents = wbSession.batchSchedule.batch.enrollments.map((e) => {
-      const att = attendanceMap.get(e.studentId);
-      const isRecentlyActive =
-        att && att.lastSeenAt && Date.now() - new Date(att.lastSeenAt).getTime() < ONLINE_WINDOW_MS;
-
-      return {
-        id: e.student.id,
-        userId: e.student.user.id,
-        name: e.student.user.name,
-        photoUrl: e.student.user.photoUrl,
-        email: e.student.user.email,
-        hasJoined: !!att,
-        joinedAt: att?.joinedAt ? att.joinedAt.toISOString() : null,
-        lastSeenAt: att?.lastSeenAt ? att.lastSeenAt.toISOString() : null,
-        activeDurationSec: att?.activeDurationSec ?? 0,
-        reconnectCount: att?.reconnectCount ?? 0,
-        interactionCount: att?.interactionCount ?? 0,
-        isRecentlyActive: !!isRecentlyActive,
-      };
-    });
+    // Only students who actually came into this class (an attendance row),
+    // one row each — the list used to show every enrolled student, so the
+    // teacher could not tell who was really there. Online = a heartbeat in
+    // the last ONLINE_WINDOW_MS; the rest joined and left (offline).
+    const enrolledIds = new Set(wbSession.batchSchedule.batch.enrollments.map((e) => e.studentId));
+    const seen = new Set<string>();
+    const joinedStudents = wbSession.attendances
+      .filter((att) => {
+        if (seen.has(att.studentId)) return false;
+        seen.add(att.studentId);
+        return true;
+      })
+      .map((att) => {
+        const isRecentlyActive = !!att.lastSeenAt && Date.now() - new Date(att.lastSeenAt).getTime() < ONLINE_WINDOW_MS;
+        return {
+          id: att.student.id,
+          userId: att.student.user.id,
+          name: att.student.user.name,
+          photoUrl: att.student.user.photoUrl,
+          email: att.student.user.email,
+          hasJoined: true,
+          enrolled: enrolledIds.has(att.studentId),
+          joinedAt: att.joinedAt ? att.joinedAt.toISOString() : null,
+          lastSeenAt: att.lastSeenAt ? att.lastSeenAt.toISOString() : null,
+          activeDurationSec: att.activeDurationSec ?? 0,
+          reconnectCount: att.reconnectCount ?? 0,
+          interactionCount: att.interactionCount ?? 0,
+          isRecentlyActive,
+        };
+      })
+      .sort((x, y) => Number(y.isRecentlyActive) - Number(x.isRecentlyActive) || x.name.localeCompare(y.name));
 
     return apiSuccess({
       teacher: {
@@ -88,9 +86,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         name: wbSession.teacher.user.name,
         photoUrl: wbSession.teacher.user.photoUrl,
       },
-      participants: enrolledStudents,
-      totalEnrolled: enrolledStudents.length,
-      totalAttended: wbSession.attendances.length,
+      participants: joinedStudents,
+      totalEnrolled: enrolledIds.size,
+      totalAttended: joinedStudents.length,
+      onlineCount: joinedStudents.filter((p) => p.isRecentlyActive).length,
     });
   } catch (error) {
     return handleApiError(error);

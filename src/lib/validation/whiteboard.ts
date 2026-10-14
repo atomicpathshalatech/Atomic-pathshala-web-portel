@@ -54,6 +54,18 @@ export const whiteboardPageAutosaveSchema = z.object({
   baseVersion: z.number().int().min(0).optional(),
 });
 
+/**
+ * New slide (POST .../pages). afterPageNumber 0 puts it first; no number puts
+ * it last. duplicateOfPageId copies that slide. background/objects give the
+ * new slide its theme, or bring back a slide that was deleted (undo).
+ */
+export const whiteboardPageCreateSchema = z.object({
+  afterPageNumber: z.number().int().min(0).optional(),
+  duplicateOfPageId: z.string().min(1).max(100).optional(),
+  background: z.string().min(1).max(2000).optional(),
+  objects: whiteboardPageAutosaveSchema.shape.objects.optional(),
+});
+
 export const quizOptionSchema = z.object({
   key: z.string().min(1).max(4),
   label: z.string().min(1).max(300),

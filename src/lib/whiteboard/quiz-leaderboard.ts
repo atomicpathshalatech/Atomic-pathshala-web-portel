@@ -23,7 +23,12 @@ export interface QuizLeaderboard {
 
 type Tally = Omit<LeaderboardEntry, "accuracyPct" | "avgResponseTimeMs" | "rank"> & { totalResponseTimeMs: number };
 
-/** Pure ranking: accuracy, then correct count, then speed, then attempts. */
+/**
+ * Pure ranking: most correct answers first, then accuracy, then the faster
+ * average answer, then name — so every place (1st, 2nd, 3rd…) goes to one
+ * person. Correct answers come first: ranking by accuracy alone put someone
+ * who answered 1 of 10 polls (1/1 = 100%) above someone with 9 of 10 right.
+ */
 export function rankLeaderboard(tallies: Tally[]): LeaderboardEntry[] {
   return tallies
     .map((s) => ({
@@ -38,10 +43,10 @@ export function rankLeaderboard(tallies: Tally[]): LeaderboardEntry[] {
       source: s.source,
     }))
     .sort((a, b) => {
-      if (b.accuracyPct !== a.accuracyPct) return b.accuracyPct - a.accuracyPct;
       if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+      if (b.accuracyPct !== a.accuracyPct) return b.accuracyPct - a.accuracyPct;
       if (a.avgResponseTimeMs !== b.avgResponseTimeMs) return a.avgResponseTimeMs - b.avgResponseTimeMs;
-      return b.totalAttempted - a.totalAttempted;
+      return a.name.localeCompare(b.name) || a.studentId.localeCompare(b.studentId);
     })
     .map((e, i) => ({ ...e, rank: i + 1 }));
 }

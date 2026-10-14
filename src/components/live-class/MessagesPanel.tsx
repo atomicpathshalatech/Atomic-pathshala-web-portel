@@ -115,6 +115,8 @@ export function MessagesPanel({
 }) {
   const t = THEME[theme];
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // App chat and YouTube chat side by side in one list, or one of them alone.
+  const [sourceFilter, setSourceFilter] = useState<"ALL" | "APP" | "YOUTUBE">("ALL");
   const [chatEnabled, setChatEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
@@ -382,13 +384,48 @@ export function MessagesPanel({
         </button>
       )}
 
+      {messages.some((m) => m.source === "YOUTUBE") && (
+        <div className="flex gap-1 mb-2 shrink-0" role="tablist" aria-label="Chat source">
+          {(
+            [
+              ["ALL", "All"],
+              ["APP", "App chat"],
+              ["YOUTUBE", "YouTube chat"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={sourceFilter === value}
+              onClick={() => setSourceFilter(value)}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition ${
+                sourceFilter === value
+                  ? value === "YOUTUBE"
+                    ? "bg-red-600 text-white border-red-600"
+                    : "bg-blue-600 text-white border-blue-600"
+                  : theme === "dark"
+                  ? "border-[#2d2e3b] text-slate-400 hover:text-white"
+                  : "border-slate-200 text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div ref={listRef} className="flex-1 overflow-y-auto space-y-1 min-h-0 pr-1">
         {loading ? (
           <p className={`text-sm text-center mt-8 ${t.loading}`}>Loading chat…</p>
         ) : messages.length === 0 ? (
           <p className={`text-sm text-center mt-8 ${t.empty}`}>No messages yet.</p>
         ) : (
-          messages.map((m) => {
+          messages
+            .filter((m) =>
+              sourceFilter === "ALL" ? true : sourceFilter === "YOUTUBE" ? m.source === "YOUTUBE" : m.source !== "YOUTUBE"
+            )
+            .map((m) => {
             if (m.isSystemMessage) {
               const isJoin = m.body.toLowerCase().includes("joined");
               const joinedAt = m.createdAt
