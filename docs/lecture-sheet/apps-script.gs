@@ -62,3 +62,26 @@ function sendRow(sheet, row) {
   sheet.getRange(row, 20).setValue(message);
   sheet.getRange(row, 21).setValue(new Date());
 }
+
+/**
+ * Every 30 minutes (Triggers → Add trigger: syncEvery30Minutes, Time-driven,
+ * Minutes timer, Every 30 minutes): asks Atomic Pathshala to write new and
+ * edited classes into this Sheet and to apply any links typed here.
+ */
+function syncEvery30Minutes() {
+  const secret = PropertiesService.getScriptProperties().getProperty("LECTURE_SHEET_WEBHOOK_SECRET");
+  if (!secret) return;
+  const body = JSON.stringify({ action: "sync" });
+  const ts = String(Math.floor(Date.now() / 1000));
+  const sig = Utilities.computeHmacSha256Signature(ts + "." + body, secret)
+    .map(function (b) { return ("0" + (b & 0xff).toString(16)).slice(-2); })
+    .join("");
+  const res = UrlFetchApp.fetch(ENDPOINT, {
+    method: "post",
+    contentType: "application/json",
+    payload: body,
+    headers: { "x-atomic-timestamp": ts, "x-atomic-signature": sig },
+    muteHttpExceptions: true,
+  });
+  console.log("sync:", res.getResponseCode(), res.getContentText().slice(0, 300));
+}

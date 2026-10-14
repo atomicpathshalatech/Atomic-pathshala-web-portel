@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { applyVideoMapping, pushLectures } from "@/lib/lecture-sheet/sync";
+import { applyVideoMapping, pushLectures, syncLectureSheet } from "@/lib/lecture-sheet/sync";
 import { verifySignedRequest } from "@/lib/lecture-sheet/signature";
 import { googleSheetsClient, SheetsNotConfiguredError } from "@/lib/lecture-sheet/sheets-client";
 import { sheetId } from "@/lib/lecture-sheet/columns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 /**
  * Called by the lecture Sheet's Apps Script when someone fills a YouTube link
@@ -44,9 +45,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: verified.reason }, { status: 401 });
   }
 
+  // {"action":"sync"} from the Sheet's 30-minute timer: the full round (classes → Sheet, links → classes).
+  // (Vercel runs our own cron only once a day on this plan.)
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ ok: false, error: "invalid request" }, { status: 400 });
+  }
+  if ((parsed as { action?: string })?.action === "sync") {
+    if (!sheetId()) return NextResponse.json({ ok: false, error: "LECTURE_SHEET_ID is not set on the server" }, { status: 400 });
+    try {
+      return NextResponse.json({ ok: true, ...(await syncLectureSheet(googleSheetsClient(sheetId()))) });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[lecture_sheet_sync_failed]", message);
+      return NextResponse.json({ ok: false, error: message }, { status: err instanceof SheetsNotConfiguredError ? 400 : 500 });
+    }
+  }
+
   let body: z.infer<typeof bodySchema>;
   try {
-    body = bodySchema.parse(JSON.parse(rawBody));
+    body = bodySchema.parse(parsed);
   } catch {
     return NextResponse.json({ ok: false, error: "invalid request" }, { status: 400 });
   }

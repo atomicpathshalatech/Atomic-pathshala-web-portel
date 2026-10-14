@@ -12,7 +12,7 @@ the YouTube link; the app checks the link and links the video to that class.
 
 ## How it syncs (not instant)
 
-* **App → Sheet:** every 30 minutes (`/api/cron/lecture-sheet`) new and edited
+* **App → Sheet:** every 30 minutes (the Sheet's Apps Script timer `syncEvery30Minutes`, plus a once-a-day Vercel cron `/api/cron/lecture-sheet` as a backup — this Vercel plan allows only daily crons) new and edited
   classes (last 90 days and future) are written; a row is found again by
   `lecture_id`, so an edit updates the same row. Failed rows are retried.
   Team users can also run it at once: `POST /api/team/lecture-sheet`.
@@ -47,7 +47,7 @@ the YouTube link; the app checks the link and links the video to that class.
 5. **Apps Script:** in the Sheet, Extensions → Apps Script → paste
    `docs/lecture-sheet/apps-script.gs` → Project Settings → Script properties →
    `LECTURE_SHEET_WEBHOOK_SECRET` = the same value → Triggers → Add trigger →
-   `onLectureEdit`, From spreadsheet, On edit → allow the permissions it asks for.
+   `onLectureEdit`, From spreadsheet, On edit → add a second trigger: `syncEvery30Minutes`, Time-driven, Minutes timer, Every 30 minutes → allow the permissions it asks for.
 6. **Test both directions:**
    * App → Sheet: create or edit a class, then `POST /api/team/lecture-sheet`
      (or wait for the cron); its row appears / updates, no duplicate.

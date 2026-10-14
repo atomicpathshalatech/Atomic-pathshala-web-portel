@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/cron/lecture-sheet",
-      "schedule": "*/30 * * * *"
+      "schedule": "40 2 * * *"
     }
   ]
 }

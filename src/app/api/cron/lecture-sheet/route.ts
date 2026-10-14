@@ -15,7 +15,7 @@ function isAuthorized(req: NextRequest): boolean {
 }
 
 /**
- * Every 30 minutes: new / edited classes go to the lecture Sheet, links typed in
+ * Once a day (Vercel cron on this plan; the Sheet's own timer runs it every 30 minutes): new / edited classes go to the lecture Sheet, links typed in
  * the Sheet go to their classes (this also catches edits the Apps Script missed),
  * failed rows are retried.
  */
