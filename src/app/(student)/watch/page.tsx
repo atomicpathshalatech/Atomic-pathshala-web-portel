@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
@@ -181,6 +182,7 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
     if (!resolvedVideoUrl && pendingSessionStatus) {
       return <RecordingNotReady title={lecture.title} status={pendingSessionStatus} />;
     }
+    if (!resolvedVideoUrl) return <RecordingNotReady title={lecture.title} />;
 
     return (
       <AtomicVideoPlayer
@@ -189,23 +191,13 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
         subjectTitle={lecture.chapter.subject.title}
         chapterTitle={lecture.chapter.title}
         educatorName={lecture.teacher.user.name || "Sonu Bhaiya"}
-        videoUrl={resolvedVideoUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ"}
+        videoUrl={resolvedVideoUrl}
         educatorVideoUrl={lecture.educatorVideoUrl}
         slidesUrl={lecture.slidesUrl}
       />
     );
   }
 
-  // Fallback / Demo video lecture player
-  return (
-    <AtomicVideoPlayer
-      lectureId={targetId}
-      title="NEET Chemistry: Chemical Bonding & Molecular Structure (Lec 01)"
-      subtitle="Complete hybridization theory, VSEPR model & molecular orbital theory with NCERT deep dive."
-      subjectTitle="Chemistry"
-      chapterTitle="Chemical Bonding"
-      educatorName="Sonu Bhaiya"
-      videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ"
-    />
-  );
+  // Nothing with this id: back to the schedule (this used to play a demo video).
+  redirect("/schedule");
 }

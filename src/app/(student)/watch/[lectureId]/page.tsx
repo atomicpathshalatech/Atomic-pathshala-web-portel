@@ -12,6 +12,55 @@ export const metadata: Metadata = {
 };
 
 /**
+ * Shown when a class / lecture has no video to play yet. It used to play a
+ * placeholder YouTube video instead — students saw an unrelated video where
+ * the class should be.
+ */
+function NoVideoYet({ title }: { title: string }) {
+  return (
+    <div className="min-h-screen-safe w-full bg-[#031635] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
+      <span className="material-symbols-outlined text-5xl text-blue-400">hourglass_top</span>
+      <h1 className="text-lg font-bold">{title}</h1>
+      <p className="text-sm text-slate-300 max-w-md">The video of this class is not available yet. Please check back later.</p>
+      <Link href="/schedule" className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition">
+        Back to Schedule
+      </Link>
+    </div>
+  );
+}
+
+type ClassVideoSource = {
+  youtubeUrl?: string | null;
+  liveWhiteboardSession?: {
+    youtubeArchiveStatus?: string | null;
+    youtubeArchiveVideoUrl?: string | null;
+    youtubeVideoId?: string | null;
+    recordingStatus?: string | null;
+    recordingStorageKey?: string | null;
+  } | null;
+};
+
+/** The video of a class that was held for a lecture: its YouTube video, archive or recording. */
+async function videoFromClasses(classes: ClassVideoSource[] | undefined): Promise<string | null> {
+  for (const c of classes ?? []) {
+    const wb = c.liveWhiteboardSession;
+    if (wb?.youtubeArchiveStatus === "COMPLETED" && wb.youtubeArchiveVideoUrl) return wb.youtubeArchiveVideoUrl;
+    if (wb?.youtubeVideoId) return `https://www.youtube.com/watch?v=${wb.youtubeVideoId}`;
+  }
+  for (const c of classes ?? []) {
+    const wb = c.liveWhiteboardSession;
+    if (wb?.recordingStatus === "READY" && wb.recordingStorageKey) {
+      try {
+        return await createPresignedDownloadUrl({ key: wb.recordingStorageKey, expiresInSeconds: 7200 });
+      } catch (e) {
+        console.error("Failed to create presigned download URL for recording", e);
+      }
+    }
+  }
+  return classes?.find((c) => c.youtubeUrl)?.youtubeUrl ?? null;
+}
+
+/**
  * This route used to have ZERO entitlement checks — any logged-in student
  * could watch any batch's lecture (or mint a signed recording URL for any
  * class) just by navigating here with a guessed/shared id, bypassing the
@@ -175,7 +224,7 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
         } else if (schedule.lecture?.videoUrl) {
           resolvedRecUrl = schedule.lecture.videoUrl;
         } else {
-          resolvedRecUrl = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+          return <NoVideoYet title={schedule.title} />;
         }
       }
 
@@ -196,6 +245,10 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
   }
 
   if (lecture) {
+    // A lecture without a video link of its own plays the video of the class
+    // held for it (the YouTube class) — never a placeholder.
+    const lectureVideo = lecture.videoUrl || (await videoFromClasses(lecture.batchSchedules));
+    if (!lectureVideo) return <NoVideoYet title={lecture.title} />;
     return (
       <AtomicVideoPlayer
         lectureId={lecture.id}
@@ -205,22 +258,12 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
         subjectTitle={lecture.chapter?.subject?.title || "Lecture"}
         chapterTitle={lecture.chapter?.title || "Chapter"}
         educatorName={lecture.teacher?.user?.name || "Atomic Faculty"}
-        videoUrl={lecture.videoUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ"}
+        videoUrl={lectureVideo}
         slidesUrl={lecture.slidesUrl}
       />
     );
   }
 
-  // Fallback / Demo video lecture player
-  return (
-    <AtomicVideoPlayer
-      lectureId={targetId}
-      title="NEET Lecture — Atomic Pathshala"
-      subtitle="Complete conceptual coverage with NCERT deep dive and high-yield problems."
-      subjectTitle="Comprehensive"
-      chapterTitle="Master Class"
-      educatorName="Atomic Faculty"
-      videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ"
-    />
-  );
+  // Nothing with this id: back to the schedule (this used to play a demo video).
+  redirect("/schedule");
 }
