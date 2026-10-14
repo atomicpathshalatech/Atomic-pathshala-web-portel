@@ -57,7 +57,12 @@ export function isDeadKeyError(err: unknown): boolean {
     m.includes("permission_denied") ||
     m.includes("unauthenticated") ||
     m.includes("[401") ||
-    m.includes("[403")
+    m.includes("[403") ||
+    // The key's prepaid balance is finished (402). It used to count as a
+    // plain error, so a quiz stopped at the first such key instead of moving
+    // on to the keys that still work — every quiz failed.
+    m.includes("[402") ||
+    m.includes("prepayment credits are depleted")
   );
 }
 

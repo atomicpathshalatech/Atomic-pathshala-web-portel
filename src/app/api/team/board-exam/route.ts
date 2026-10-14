@@ -3,11 +3,16 @@ import { BOARDS, CLASSES, SUBJECTS_BY_CLASS, YEARS, MODES } from "@/lib/ai-chat/
 import { requireTeamSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { prisma } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    // Signed out: answer 401 (requireTeamSession would redirect, which this catch turned into a 500).
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { permissions } = await requireTeamSession();
     if (!permissions.has(PERMISSIONS.CHAPTER_READ)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
