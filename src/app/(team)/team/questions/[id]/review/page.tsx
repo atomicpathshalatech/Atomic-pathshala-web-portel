@@ -41,6 +41,10 @@ export default async function QuestionReviewPage({
       translations: true,
       assets: true,
       createdBy: { select: { id: true, name: true, email: true } },
+      editedBy: { select: { name: true } },
+      review1By: { select: { name: true } },
+      review2By: { select: { name: true } },
+      _count: { select: { sectionLinks: true, dppLinks: true, reports: true, bookmarks: true, answers: true } },
       auditLogs: {
         orderBy: { createdAt: "desc" },
         take: 20,
@@ -49,6 +53,22 @@ export default async function QuestionReviewPage({
   });
 
   if (!question) notFound();
+
+  // Questions that look like this one (Question QC → Duplicate questions).
+  const duplicatePairs = await prisma.questionDuplicateCandidate.findMany({
+    where: { OR: [{ questionAId: question.id }, { questionBId: question.id }] },
+    orderBy: { score: "desc" },
+    take: 15,
+    select: {
+      id: true, category: true, score: true, sameAnswer: true, status: true, note: true,
+      questionA: { select: { id: true, questionCode: true, status: true } },
+      questionB: { select: { id: true, questionCode: true, status: true } },
+    },
+  }).catch(() => []);
+  const similar = duplicatePairs.map((d) => {
+    const other = d.questionA.id === question.id ? d.questionB : d.questionA;
+    return { pairId: d.id, id: other.id, questionCode: other.questionCode, questionStatus: other.status, category: d.category, score: d.score, sameAnswer: d.sameAnswer, decision: d.status, note: d.note };
+  });
 
   // Query sibling questions for sequential next/preview navigation
   const siblingWhere: any = {};
@@ -225,6 +245,7 @@ export default async function QuestionReviewPage({
         nextQuestionId={nextQuestion?.id || null}
         siblingQuestions={formattedSiblings}
         queryParamsString={queryParamsString}
+        similar={similar}
       />
     </div>
   );

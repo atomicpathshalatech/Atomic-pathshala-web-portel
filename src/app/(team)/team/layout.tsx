@@ -20,7 +20,6 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     title: "Teaching",
     items: [
       { href: "/team/my-schedule", label: "My Schedule", icon: "calendar_month", permission: PERMISSIONS.WHITEBOARD_ACCESS },
-      { href: "/team/my-question-bank", label: "My Question Bank", icon: "inventory_2", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/doubt-booking", label: "Doubt Book Session", icon: "event_available", permission: PERMISSIONS.WHITEBOARD_ACCESS },
       { href: "/team/batches", label: "Batches", icon: "groups", permission: PERMISSIONS.BATCH_READ },
       { href: "/team/chapters", label: "Chapters", icon: "auto_stories", permission: PERMISSIONS.CHAPTER_READ },
@@ -28,16 +27,23 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/tests", label: "Tests", icon: "quiz", permission: PERMISSIONS.TEST_READ },
       { href: "/team/test-series", label: "Test Series", icon: "collections_bookmark", permission: PERMISSIONS.TEST_READ },
       { href: "/team/whiteboard", label: "Whiteboard", icon: "draw", permission: PERMISSIONS.WHITEBOARD_ACCESS },
-      { href: "/team/questions", label: "Question Bank", icon: "database", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/questions/reports", label: "Question Reports", icon: "flag", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/qc", label: "Question QC", icon: "verified_user", permission: PERMISSIONS.QUESTION_VERIFY },
-      { href: "/team/questions/ai-generated", label: "AI Generated Questions", icon: "psychology", permission: PERMISSIONS.QUESTION_CREATE },
-      { href: "/team/question-extract", label: "Question Extract", icon: "document_scanner", permission: PERMISSIONS.QUESTION_CREATE },
       { href: "/team/dpp", label: "DPP", icon: "task_alt", permission: PERMISSIONS.DPP_READ },
       { href: "/team/ncert", label: "NCERT Practice Hub", icon: "menu_book", permission: PERMISSIONS.CHAPTER_READ },
       { href: "/team/board-exam", label: "Board Exam Hub", icon: "school", permission: PERMISSIONS.CHAPTER_READ },
       { href: "/team/download-center", label: "Download Center", icon: "download_for_offline", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
       { href: "/team/doubts", label: "Doubt Desk", icon: "live_help", permission: PERMISSIONS.DOUBT_READ },
+    ],
+  },
+  {
+    // Everything about questions in one place (it used to be mixed into Teaching).
+    title: "Question Bank",
+    items: [
+      { href: "/team/questions", label: "Question Bank", icon: "database", permission: PERMISSIONS.QUESTION_READ },
+      { href: "/team/my-question-bank", label: "My Question Bank", icon: "inventory_2", permission: PERMISSIONS.QUESTION_READ },
+      { href: "/team/questions/reports", label: "Question Reports", icon: "flag", permission: PERMISSIONS.QUESTION_READ },
+      { href: "/team/qc", label: "Question QC", icon: "verified_user", permission: PERMISSIONS.QUESTION_VERIFY },
+      { href: "/team/questions/ai-generated", label: "AI Generated Questions", icon: "psychology", permission: PERMISSIONS.QUESTION_CREATE },
+      { href: "/team/question-extract", label: "Question Extract", icon: "document_scanner", permission: PERMISSIONS.QUESTION_CREATE },
     ],
   },
   {
