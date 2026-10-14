@@ -791,6 +791,8 @@ model BatchSchedule {
   videoWatches          VideoWatch[]
   doubts                Doubt[]
   test                  Test?
+  sheetRow              LectureSheetRow?
+  videoMappings         LectureVideoMapping[]
 
   @@index([batchId])
   @@index([chapterId])
@@ -6862,4 +6864,42 @@ model QuestionDuplicateCandidate {
   @@index([status, category])
   @@index([questionBId])
   @@map("question_duplicate_candidates")
+}
+
+// One row of the lecture-mapping Google Sheet per scheduled class
+// (src/lib/lecture-sheet). The class id is the sheet's lecture_id.
+model LectureSheetRow {
+  scheduleId   String    @id
+  rowNumber    Int?
+  status       String    @default("PENDING") // PENDING | SYNCED | FAILED
+  lastSyncedAt DateTime?
+  lastError    String?
+  attempts     Int       @default(0)
+  updatedAt    DateTime  @updatedAt
+
+  schedule BatchSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("lecture_sheet_rows")
+}
+
+// Every attempt to attach a YouTube video to a class from the Sheet — applied
+// or rejected, with the reason — so nothing is changed silently.
+model LectureVideoMapping {
+  id          String   @id @default(cuid())
+  scheduleId  String?
+  lectureRef  String // the lecture_id as written in the Sheet
+  input       String // what was typed in the Sheet
+  videoId     String?
+  status      String // APPLIED | UNCHANGED | REJECTED
+  reason      String?
+  source      String // SHEET_WEBHOOK | SHEET_PULL
+  previousUrl String?
+  createdAt   DateTime @default(now())
+
+  schedule BatchSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  @@index([scheduleId])
+  @@index([createdAt])
+  @@map("lecture_video_mappings")
 }

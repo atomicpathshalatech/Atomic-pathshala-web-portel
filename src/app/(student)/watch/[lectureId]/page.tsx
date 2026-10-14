@@ -154,7 +154,9 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
       (schedule?.liveWhiteboardSession?.youtubeArchiveStatus === "COMPLETED" &&
         schedule.liveWhiteboardSession.youtubeArchiveVideoUrl) ||
         schedule?.liveWhiteboardSession?.youtubeVideoId ||
-        schedule?.liveWhiteboardSession?.recordingStorageKey
+        schedule?.liveWhiteboardSession?.recordingStorageKey ||
+        // A YouTube video linked to the class from the lecture Sheet.
+        schedule?.youtubeUrl
     );
     if (schedule?.lecture && !sessionHasRecording) {
       lecture = schedule.lecture;
