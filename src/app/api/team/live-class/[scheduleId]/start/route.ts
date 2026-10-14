@@ -77,6 +77,15 @@ export async function POST(
     const bodyYouTubeId = body?.youtubeVideoId ? extractYouTubeVideoId(String(body.youtubeVideoId)) : null;
     const requestedYouTubeId = bodyYouTubeId ?? (isNewOccurrence ? null : existingSession?.youtubeVideoId ?? null);
 
+    // The delivery mode chosen when the class was scheduled (null: teacher's choice).
+    const classMode = (schedule as { classMode?: string | null }).classMode ?? null;
+    if (classMode === "APP_ONLY" && bodyYouTubeId) {
+      return apiError("This class is scheduled as an App-only class (its own unlisted stream); a public YouTube link cannot be used. Change the class to App + public YouTube in the schedule first.", 400, { code: "CLASS_MODE_APP_ONLY" });
+    }
+    if (classMode === "APP_AND_YOUTUBE" && !requestedYouTubeId) {
+      return apiError("This class is scheduled as App + public YouTube: enter the YouTube live link (and stream key), then press Start.", 400, { code: "CLASS_MODE_NEEDS_LINK" });
+    }
+
     // Public class: the stream the team scheduled on YouTube themselves. Its
     // stream key (from YouTube Studio) lets the Teacher app send the class to
     // it with the same Start button. Stored sealed, like the pool keys.

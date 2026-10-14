@@ -346,12 +346,15 @@ export function TeacherLiveClassRoom({
   batchName,
   currentUserId,
   endsAt,
+  classMode = null,
 }: {
   batchScheduleId: string;
   scheduleTitle: string;
   batchName: string;
   currentUserId: string;
   endsAt: string;
+  /** Chosen when the class was scheduled: APP_ONLY | APP_AND_YOUTUBE (null: the teacher chooses at Start). */
+  classMode?: string | null;
 }) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -2737,6 +2740,20 @@ export function TeacherLiveClassRoom({
     // YouTube URL/ID (a real mistake worth catching), not just an empty field.
     if (typedLink && !ytId) {
       setYoutubeInputError("Please enter a valid YouTube Live URL or 11-character Video ID, or leave it blank for an App class.");
+      setPublicSetupOpen(true);
+      setStartingClass(false);
+      return;
+    }
+
+    // The delivery mode chosen when the class was scheduled.
+    if (classMode === "APP_AND_YOUTUBE" && !ytId) {
+      setYoutubeInputError("This class is scheduled as App + public YouTube: enter the YouTube live link (and stream key), then press Start.");
+      setPublicSetupOpen(true);
+      setStartingClass(false);
+      return;
+    }
+    if (classMode === "APP_ONLY" && typedLink) {
+      setYoutubeInputError("This class is scheduled as an App-only class (its own unlisted stream). Clear the YouTube link, or change the class to App + public YouTube in the schedule.");
       setPublicSetupOpen(true);
       setStartingClass(false);
       return;

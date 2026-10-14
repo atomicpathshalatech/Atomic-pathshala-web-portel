@@ -749,6 +749,11 @@ model BatchSchedule {
   topic       String?
   durationMinutes Int?
   youtubeUrl  String?
+  // How a live class is delivered, chosen when it is scheduled:
+  // APP_ONLY (its own unlisted stream, app students only) | APP_AND_YOUTUBE
+  // (the team's public YouTube live, also played in the app). Null: chosen by
+  // the teacher at Start (classes made before this setting existed).
+  classMode   String?
   type        ScheduleSessionType   @default(LIVE_CLASS)
   status      ScheduleSessionStatus @default(SCHEDULED)
   teacherId   String?

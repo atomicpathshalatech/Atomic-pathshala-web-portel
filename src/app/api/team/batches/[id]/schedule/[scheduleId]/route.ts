@@ -80,7 +80,10 @@ export async function PATCH(
         subject: input.subject || null,
         topic: input.topic || null,
         durationMinutes: input.durationMinutes || null,
-        youtubeUrl: input.youtubeUrl || null,
+        // Kept unless the form sends a link: a video linked from the lecture
+        // Sheet used to be wiped by any edit of the class.
+        ...(input.youtubeUrl ? { youtubeUrl: input.youtubeUrl } : {}),
+        ...(input.classMode !== undefined ? { classMode: input.classMode } : {}),
         type: input.type,
         status: input.status,
         teacherId: input.teacherId || null,

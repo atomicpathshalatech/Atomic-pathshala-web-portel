@@ -35,6 +35,7 @@ const SCHEDULE_SELECT = {
   startsAt: true,
   updatedAt: true,
   youtubeUrl: true,
+  classMode: true,
   batchId: true,
   batch: { select: { name: true } },
   chapterId: true,
@@ -60,6 +61,7 @@ export function classVideoId(s: { youtubeUrl: string | null; liveWhiteboardSessi
 }
 
 function classMode(s: ScheduleForSheet): string {
+  if (s.classMode) return s.classMode; // chosen when the class was scheduled
   const wb = s.liveWhiteboardSession;
   if (wb?.youtubeBroadcastId) return "APP_ONLY"; // the class's own unlisted broadcast
   if (wb?.youtubeVideoId || s.youtubeUrl) return "APP_AND_YOUTUBE"; // a public YouTube video, also played in the app

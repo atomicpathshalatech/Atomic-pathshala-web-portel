@@ -30,11 +30,14 @@ type ScheduleEntry = {
     livePhase?: string;
     videoTransport?: string | null;
     youtubeVideoId?: string | null;
+    youtubeBroadcastId?: string | null;
     actualStartedAt?: string | null;
     actualEndedAt?: string | null;
   } | null;
   /** YouTube id of the link the chapter's lecture already has. */
   lectureYoutubeId?: string | null;
+  /** APP_ONLY | APP_AND_YOUTUBE, chosen when the class was scheduled. */
+  classMode?: string | null;
 };
 
 type TeacherOption = { id: string; user: { name: string } };
@@ -152,10 +155,18 @@ export function BatchScheduleManager({
     const diffMins = Math.max(15, Math.round((end.getTime() - start.getTime()) / (1000 * 60)));
     const isCommon = COMMON_DURATIONS.some((d) => d.minutes === diffMins);
     const isYt = entry.liveWhiteboardSession?.videoTransport === "YOUTUBE" || entry.liveWhiteboardSession?.videoTransport === "BOTH";
-    // The class's own link, else the one already added on the chapter's lecture.
-    const ytId = entry.liveWhiteboardSession?.youtubeVideoId || entry.lectureYoutubeId || "";
+    // A public link: the class's own one, else the one already added on the chapter's
+    // lecture. An App class's own unlisted broadcast is NOT a public link (opening
+    // such a class for editing used to turn it into a public YouTube class).
+    const sessionVideo = entry.liveWhiteboardSession?.youtubeVideoId;
+    const ownBroadcast = Boolean(entry.liveWhiteboardSession?.youtubeBroadcastId);
+    const ytId = (sessionVideo && !ownBroadcast ? sessionVideo : "") || entry.lectureYoutubeId || "";
 
-    if (ytId) {
+    if (entry.classMode === "APP_AND_YOUTUBE") {
+      setTeachingModel("MODEL_2_DUAL");
+    } else if (entry.classMode === "APP_ONLY") {
+      setTeachingModel("MODEL_1_APP");
+    } else if (ytId) {
       setTeachingModel("MODEL_2_DUAL");
     } else if (isYt) {
       setTeachingModel("MODEL_1_APP");
@@ -170,7 +181,7 @@ export function BatchScheduleManager({
       status: entry.status,
       teacherId: entry.teacherId ?? "",
       videoTransport: isYt || ytId ? "YOUTUBE" : "LIVEKIT",
-      youtubeVideoId: ytId,
+      youtubeVideoId: entry.classMode === "APP_ONLY" ? "" : ytId,
       startsAt: toISTDateTimeLocal(entry.startsAt),
       durationMinutes: isCommon ? diffMins : 60,
       isCustomDuration: !isCommon,
@@ -216,6 +227,8 @@ export function BatchScheduleManager({
         type: form.type,
         ...(editingId ? { status: form.status } : {}),
         teacherId: form.teacherId || undefined,
+        classMode:
+          form.type === "LIVE_CLASS" ? (teachingModel === "MODEL_2_DUAL" ? "APP_AND_YOUTUBE" : "APP_ONLY") : undefined,
         videoTransport:
           form.type === "LIVE_CLASS"
             ? teachingModel === "PURE_LIVEKIT"
@@ -353,7 +366,7 @@ export function BatchScheduleManager({
                           <span className="material-symbols-outlined text-xs">
                             {s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH" ? "smart_display" : "draw"}
                           </span>
-                          {s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH" ? "YouTube Live" : "App Class"}
+                          {s.classMode === "APP_AND_YOUTUBE" ? "App + Public YouTube" : s.classMode === "APP_ONLY" ? "App Only (unlisted)" : s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH" ? "YouTube Live" : "App Class"}
                         </span>
 
                         {isCompleted ? (
@@ -376,9 +389,13 @@ export function BatchScheduleManager({
                             }`}
                           >
                             <span className="material-symbols-outlined text-base">sensors</span>
-                            {s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH"
-                              ? "Start YouTube Class"
-                              : "Start App Class"}
+                            {s.classMode === "APP_AND_YOUTUBE"
+                              ? "Start Public YouTube Class"
+                              : s.classMode === "APP_ONLY"
+                                ? "Start App Class"
+                                : s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH"
+                                  ? "Start YouTube Class"
+                                  : "Start App Class"}
                           </Link>
                         ) : (
                           <span className="flex items-center gap-1 text-on-surface-variant/50 font-medium text-[11px] select-none">

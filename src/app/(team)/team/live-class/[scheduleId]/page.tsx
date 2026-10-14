@@ -102,6 +102,7 @@ export default async function TeacherLiveClassPage({
         batchScheduleId={schedule.id}
         scheduleTitle={schedule.title}
         batchName={schedule.batch?.name || "Whiteboard Test Lab"}
+        classMode={(schedule as { classMode?: string | null }).classMode ?? null}
         currentUserId={session.user.id}
         endsAt={schedule.endsAt.toISOString()}
       />
@@ -143,6 +144,7 @@ export default async function TeacherLiveClassPage({
       batchScheduleId={schedule.id}
       scheduleTitle={schedule.title}
       batchName={schedule.batch?.name || "Live Classroom"}
+      classMode={(schedule as { classMode?: string | null }).classMode ?? null}
       currentUserId={session.user.id}
       endsAt={schedule.endsAt.toISOString()}
     />

@@ -208,6 +208,7 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         notes: s.notes,
         teacherId: s.teacherId,
         teacher: s.teacher ? { user: { name: s.teacher.user.name } } : null,
+        classMode: s.classMode,
         liveWhiteboardSession: s.liveWhiteboardSession
           ? {
               id: s.liveWhiteboardSession.id,
@@ -217,6 +218,7 @@ export default async function BatchDetailPage({ params }: { params: { id: string
               actualEndedAt: s.liveWhiteboardSession.actualEndedAt?.toISOString() ?? null,
               videoTransport: s.liveWhiteboardSession.videoTransport,
               youtubeVideoId: s.liveWhiteboardSession.youtubeVideoId,
+              youtubeBroadcastId: s.liveWhiteboardSession.youtubeBroadcastId,
             }
           : null,
         // The YouTube link the chapter's lecture already has — editing the
