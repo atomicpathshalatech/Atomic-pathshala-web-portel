@@ -1400,6 +1400,9 @@ export function StudentLiveClassRoom({
   const isYouTube =
     (wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") &&
     Boolean(wbSession?.youtubeVideoId);
+  // A class that had to run in the app's own video room (YouTube could not be
+  // used): the teacher's camera is the class video, shown to every student.
+  const isAppVideoClass = wbSession?.videoTransport === "LIVEKIT" && wbSession?.livePhase === "LIVE";
 
   // ---------------- CLASS ENDED ----------------
   // Students see ONLY "Class Ended" + Student Learning Feedback.
@@ -1744,7 +1747,7 @@ export function StudentLiveClassRoom({
         <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
           {/* Every class is a YouTube class now: there is no LiveKit class video. This
               tile exists only while this student is on a call with the teacher. */}
-          {!isYouTube && (isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) ? (
+          {!isYouTube && (isAppVideoClass || isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) ? (
             <div className="w-full shrink-0 border-b border-[#2d2e3b] p-3 bg-[#13151f]">
               <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-slate-700/80 bg-black shadow-lg">
                 <VideoStrip
@@ -1915,7 +1918,7 @@ export function StudentLiveClassRoom({
                 objects={boardObjects}
               />
               {/* Only while this student is on a call with the teacher (no LiveKit class video). */}
-              {!isYouTube && (isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
+              {!isYouTube && (isAppVideoClass || isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
                 <div
                   className={`absolute ${
                     mobileCamCorner === "top-right"

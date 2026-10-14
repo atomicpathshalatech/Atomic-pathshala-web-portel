@@ -358,7 +358,21 @@ export async function POST(
       // up, no free stream slot, YouTube down) does NOT start: there is no
       // other way to run a class. The start is undone so the teacher can
       // press Start again, or enter a YouTube link + stream key instead.
+      // When YouTube cannot be used (sign-in expired, quota used up, no
+      // stream slot), the class still runs: in the app's own video room
+      // (LiveKit) — students watch the teacher's camera and the board in the
+      // app. Only when that room is not set up either is the start undone.
+      const livekitReady = Boolean((process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL) && process.env.NEXT_PUBLIC_LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET);
+      const runInAppRoom = async (reason: string) => {
+        console.warn("[live_class_youtube_fallback_to_app_room]", reason);
+        effectiveTransport = "LIVEKIT";
+        wbSession.videoTransport = "LIVEKIT";
+        await prisma.whiteboardSession.update({ where: { id: wbSession.id }, data: { videoTransport: "LIVEKIT" } }).catch(() => null);
+        youtubeSimulcastWarning = `YouTube could not be used for this class (${reason}). The class is running in the app's own video room instead — students see your camera and board in the app.`;
+        return null;
+      };
       const undoStart = async (reason: string) => {
+        if (livekitReady) return runInAppRoom(reason);
         const neverRan = !existingSession?.actualStartedAt || isNewOccurrence;
         await prisma
           .$transaction([
@@ -378,9 +392,10 @@ export async function POST(
         const { youtubeLiveClassConfigured } = await import("@/lib/live-class/youtube-broadcast");
         const { appYoutubePoolConfigured, beginAppYoutubeStart } = await import("@/lib/live-session/app-youtube");
         if (!youtubeLiveClassConfigured() || !(await appYoutubePoolConfigured())) {
-          return await undoStart(
+          const stopped = await undoStart(
             "The class could not start: YouTube class streaming isn't set up on this server (no stream slots). For a public class, enter the YouTube link and stream key, then press Start again."
           );
+          if (stopped) return stopped;
         } else {
           const teacherName = (await prisma.user.findFirst({ where: { teacher: { id: teacher.id } }, select: { name: true } }))?.name;
           const began = await beginAppYoutubeStart({
@@ -404,9 +419,10 @@ export async function POST(
         const { NoIngestCapacityError } = await import("@/lib/youtube/stream-pool");
         const reason =
           youtubeError instanceof NoIngestCapacityError ? youtubeError.message : describeYoutubeError(youtubeError);
-        return await undoStart(
+        const stopped = await undoStart(
           `The class could not start: the YouTube broadcast could not be set up. ${reason} Press Start again in a moment — or, for a public class, enter the YouTube link and stream key.`
         );
+        if (stopped) return stopped;
       }
     }
     // Public class: the team's own YouTube video must allow embedding, or
