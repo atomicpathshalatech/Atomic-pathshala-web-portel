@@ -165,6 +165,12 @@ To enable direct opening of web links inside the app without browser prompts:
 
 ## 🔐 Production Release & Google Play Store Deployment
 
+> **Java version matters.** Capacitor 8 needs **Java 21**. Java 17 fails with `invalid source release: 21`, and Java 25 (bundled with the newest Android Studio) fails with `Unsupported class file major version 69`. `androiduild-release.cmd` picks a Java 21 by itself (from `%USERPROFILE%.jdks`, Adoptium or Microsoft JDK); in Android Studio set *Settings → Build Tools → Gradle → Gradle JDK* to a 21.
+>
+> **Version code:** every build gets a new `versionCode` from the date and hour (Google Play refuses one it has seen). Override with `-PversionCode=<n> -PversionName=<x.y>`.
+>
+> **Without `android/keystore.properties` a release build now stops** with a message, instead of producing an unsigned `.aab` that Play rejects.
+
 ### Step 1: Generate a Production Keystore
 Run the following keytool command (keep this keystore safe and backed up!):
 ```bash

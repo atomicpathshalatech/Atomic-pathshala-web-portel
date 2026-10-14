@@ -16,8 +16,11 @@ android {
         applicationId "com.atomicpathshala.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Google Play refuses a build whose versionCode it has already seen: by default
+        // every build gets a new one from the date and hour (yyMMddHH), or pass
+        // -PversionCode=<n> / -PversionName=<x.y> to set them yourself.
+        versionCode project.hasProperty("versionCode") ? Integer.parseInt(project.property("versionCode").toString()) : Integer.parseInt(java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyMMddHH")))
+        versionName project.hasProperty("versionName") ? project.property("versionName").toString() : "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -43,6 +46,14 @@ android {
                 signingConfig signingConfigs.release
             }
         }
+    }
+}
+
+// A release without the upload key is unsigned and Google Play rejects it: stop
+// with a clear message instead of quietly producing an unusable file.
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name.toLowerCase().contains("release") && (it.name.startsWith("bundle") || it.name.startsWith("assemble")) } && !keystorePropertiesFile.exists()) {
+        throw new GradleException("Release build needs the Play upload key: create android/keystore.properties (see ANDROID_SETUP.md, Step 1-2). Without it the .aab is unsigned and Google Play rejects it.")
     }
 }
 
