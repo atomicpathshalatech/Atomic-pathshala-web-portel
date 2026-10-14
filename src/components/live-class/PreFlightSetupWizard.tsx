@@ -262,7 +262,8 @@ export function PreFlightSetupWizard({
         onProgress: (p) => setUploadProgress(p),
       });
 
-      setPresentationUrl(result.url || `/api/files/${result.fileAssetId}/access`);
+      // A stable link: each use gets a fresh signed link (a stored signed link expires in 10 minutes).
+      setPresentationUrl(`/api/files/${result.fileAssetId}/open`);
       setPresentationName(result.filename);
       setPresentationType(isPpt ? "PPTX" : "PDF");
       setUploadProgress(100);

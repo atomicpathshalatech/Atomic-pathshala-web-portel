@@ -106,7 +106,8 @@ export async function POST(
       },
     });
 
-    const accessUrl = `/api/files/${fileAsset.id}/access`;
+    // "open" redirects to the file itself (a fresh signed link each time); "access" answers with JSON.
+    const accessUrl = `/api/files/${fileAsset.id}/open`;
 
     return apiSuccess({
       fileAssetId: fileAsset.id,

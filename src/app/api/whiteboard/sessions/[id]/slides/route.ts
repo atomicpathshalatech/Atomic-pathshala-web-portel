@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { storageKeyFromStoredUrl } from "@/lib/storage/stored-file-url";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -14,6 +15,11 @@ async function resolveOriginalDownloadUrl(
   urlOrKey: string,
   fallbackFilename: string
 ): Promise<string> {
+  // Covers keys, /api/files/<id>/access|open and (signed, path-style) R2 links.
+  const key = await storageKeyFromStoredUrl(urlOrKey);
+  if (key) {
+    return createPresignedDownloadUrl({ key, expiresInSeconds: 900, contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"` });
+  }
   // Case 1: Pure R2 storage key (e.g. "modules/live-classes/...")
   if (
     !urlOrKey.startsWith("http://") &&

@@ -36,16 +36,28 @@ export function PrepareSlidesModal({
     setError(null);
     setUploadProgress("Uploading presentation file…");
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch(`/api/team/live-class/${scheduleId}/upload-presentation`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Upload failed.");
+      const isPpt = /\.pptx?$/i.test(file.name) || file.type.includes("presentation");
+      let uploaded: { url: string; filename: string; fileType: "PDF" | "PPTX" };
+      try {
+        // Straight to storage: a file sent through the server is cut off at about 4.5 MB.
+        const { uploadFileToR2 } = await import("@/lib/storage/upload-client");
+        const result = await uploadFileToR2(file, { prefix: "modules", fileType: isPpt ? "DOCUMENT" : "PDF", subPath: `live-classes/${scheduleId}`, visibility: "PROTECTED" });
+        uploaded = { url: `/api/files/${result.fileAssetId}/open`, filename: result.filename, fileType: isPpt ? "PPTX" : "PDF" };
+      } catch (directErr) {
+        console.warn("Direct upload failed, trying the server upload", directErr);
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch(`/api/team/live-class/${scheduleId}/upload-presentation`, {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || (res.status === 413 ? "This file is too large to upload. Try a smaller PDF." : "Upload failed."));
+        }
+        uploaded = { url: data.data.url, filename: data.data.filename, fileType: data.data.fileType };
       }
+      const data = { data: uploaded };
       setFileName(data.data.filename);
       setFileUrl(data.data.url);
       setFileType(data.data.fileType);

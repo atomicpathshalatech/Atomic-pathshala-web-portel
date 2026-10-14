@@ -2401,7 +2401,17 @@ export function TeacherLiveClassRoom({
     pdfConversionInFlightRef.current = true;
 
     try {
-      const fileRes = await fetch(url);
+      // The stored link can be a signed link that has expired (they last 10
+      // minutes); ask the server for one that works now.
+      let downloadUrl = url;
+      try {
+        const fresh = await fetch(`/api/whiteboard/sessions/${sessionId}/presentation`, { cache: "no-store" });
+        const freshJson = await fresh.json().catch(() => null);
+        if (fresh.ok && freshJson?.success && freshJson.data?.url) downloadUrl = freshJson.data.url;
+      } catch {
+        // fall back to the stored link
+      }
+      const fileRes = await fetch(downloadUrl);
       if (!fileRes.ok) throw new Error(`Could not download the presentation file (HTTP ${fileRes.status}).`);
       const arrayBuffer = await fileRes.arrayBuffer();
 

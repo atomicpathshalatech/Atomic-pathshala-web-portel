@@ -821,7 +821,14 @@ export async function loadStudentBatchHome(
     const effectiveStatus = getEffectiveScheduleStatus(s, now);
     const subjName = s.chapter?.subject.title || s.subject || "Class";
     const chTitle = s.chapter?.title || s.topic || null;
-    const notesPdfUrl = s.lecture?.slidesUrl || s.liveWhiteboardSession?.presentationUrl || null;
+    // A stored class PDF can be a signed link that expired 10 minutes after upload; this
+    // stable link gets a fresh one each time it is opened.
+    const wbPdf = s.liveWhiteboardSession?.presentationUrl
+      ? /r2\.cloudflarestorage\.com/.test(s.liveWhiteboardSession.presentationUrl)
+        ? `/api/whiteboard/sessions/${s.liveWhiteboardSession.id}/presentation?open=1`
+        : s.liveWhiteboardSession.presentationUrl
+      : null;
+    const notesPdfUrl = s.lecture?.slidesUrl || wbPdf || null;
 
     return {
       id: s.id,
