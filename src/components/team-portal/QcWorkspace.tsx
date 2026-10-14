@@ -100,19 +100,19 @@ type Detail = {
 };
 
 const STATUS_META: Record<string, { label: string; tone: string }> = {
-  UNREVIEWED: { label: "Not reviewed", tone: "border-slate-700 bg-slate-800/60 text-slate-300" },
-  VERIFIED: { label: "Verified", tone: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" },
-  FAILED: { label: "Failed", tone: "border-rose-500/40 bg-rose-500/10 text-rose-300" },
-  NEEDS_HUMAN_REVIEW: { label: "Needs a person", tone: "border-amber-500/40 bg-amber-500/10 text-amber-300" },
-  ERROR: { label: "Review error", tone: "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300" },
-  EXPERT_DONE: { label: "Expert only", tone: "border-sky-500/40 bg-sky-500/10 text-sky-300" },
+  UNREVIEWED: { label: "Not reviewed", tone: "border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300" },
+  VERIFIED: { label: "Verified", tone: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  FAILED: { label: "Failed", tone: "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300" },
+  NEEDS_HUMAN_REVIEW: { label: "Needs a person", tone: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+  ERROR: { label: "Review error", tone: "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300" },
+  EXPERT_DONE: { label: "Expert only", tone: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300" },
 };
 const STATUS_ORDER = ["UNREVIEWED", "VERIFIED", "NEEDS_HUMAN_REVIEW", "FAILED", "ERROR"];
 const SEVERITY_TONE: Record<string, string> = {
-  CRITICAL: "bg-rose-500/20 text-rose-300 border-rose-500/40",
-  HIGH: "bg-orange-500/20 text-orange-300 border-orange-500/40",
-  MEDIUM: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-  LOW: "bg-slate-700/60 text-slate-300 border-slate-600",
+  CRITICAL: "bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/40",
+  HIGH: "bg-orange-500/20 text-orange-700 dark:text-orange-300 border-orange-500/40",
+  MEDIUM: "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40",
+  LOW: "bg-slate-200 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 border-slate-600",
 };
 
 const FIELD_LABEL: Record<string, string> = { correctAnswer: "Answer key", solution: "Solution", statement: "Question text", options: "Options", topic: "Topic", subTopic: "Sub-topic", microConcept: "Micro concept", difficulty: "Difficulty" };
@@ -120,7 +120,7 @@ const FIELD_LABEL: Record<string, string> = { correctAnswer: "Answer key", solut
 const words = (value: string) => value.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
 function StatusBadge({ status }: { status: string }) {
-  const meta = STATUS_META[status] ?? { label: words(status), tone: "border-slate-700 bg-slate-800 text-slate-300" };
+  const meta = STATUS_META[status] ?? { label: words(status), tone: "border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" };
   return <span className={`inline-flex items-center rounded-lg border px-2 py-0.5 text-[11px] font-semibold ${meta.tone}`}>{meta.label}</span>;
 }
 
@@ -243,14 +243,14 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
   const pages = Math.max(1, Math.ceil(total / 25));
 
   return (
-    <div className="min-h-screen space-y-6 bg-slate-950 p-4 text-slate-100 sm:p-6">
-      <div className="flex flex-col items-start justify-between gap-4 border-b border-slate-800 pb-5 md:flex-row md:items-center">
+    <div className="min-h-screen space-y-6 bg-slate-50 dark:bg-slate-950 p-4 text-slate-800 dark:text-slate-100 sm:p-6">
+      <div className="flex flex-col items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5 md:flex-row md:items-center">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-extrabold text-white">
-            <ShieldCheck className="h-6 w-6 text-emerald-400" />
+          <h1 className="flex items-center gap-2 text-2xl font-extrabold text-slate-900 dark:text-white">
+            <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             Question QC
           </h1>
-          <p className="mt-1 max-w-3xl text-xs text-slate-400">
+          <p className="mt-1 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
             Two reviewers check every question: the QC Expert solves it and looks for errors, then the QC Director solves it again without seeing the stored key or the Expert, and audits the Expert&apos;s findings. A question is
             marked Verified only when both reach the stored answer independently. Nothing is changed in a question until a person approves a correction. This is an AI check — it lowers the number of wrong questions, it does not
             guarantee there are none.
@@ -261,7 +261,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
             void loadOverview();
             void loadQueue();
           }}
-          className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 transition hover:bg-slate-100 dark:hover:bg-slate-800"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           Refresh
@@ -270,7 +270,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
 
       <div className="flex gap-2">
         {(["review", "duplicates"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${tab === t ? "bg-sky-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"}`}>
+          <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${tab === t ? "bg-sky-600 text-white" : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"}`}>
             {t === "review" ? "Answer and solution review" : "Duplicate questions"}
           </button>
         ))}
@@ -298,8 +298,8 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 lg:col-span-2">
-          <div className="text-sm font-bold text-white">Run a review</div>
+        <div className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 lg:col-span-2">
+          <div className="text-sm font-bold text-slate-900 dark:text-white">Run a review</div>
           <div className="flex flex-wrap gap-2">
             <select
               value={subject}
@@ -308,7 +308,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
                 setChapter("");
                 setPage(1);
               }}
-              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200"
+              className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs text-slate-800 dark:text-slate-200"
             >
               <option value="">All subjects</option>
               {subjects.map((s) => (
@@ -323,7 +323,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
                 setChapter(e.target.value);
                 setPage(1);
               }}
-              className="max-w-[16rem] rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200"
+              className="max-w-[16rem] rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs text-slate-800 dark:text-slate-200"
             >
               <option value="">All chapters</option>
               {chapterOptions.map((c) => (
@@ -333,7 +333,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
               ))}
             </select>
             {running ? (
-              <button onClick={() => (stopRef.current = true)} className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300">
+              <button onClick={() => (stopRef.current = true)} className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
                 <Square className="h-3.5 w-3.5" />
                 Stop after this batch
               </button>
@@ -344,7 +344,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
                   Review not-yet-reviewed questions
                 </button>
                 {(counts.ERROR ?? 0) > 0 && (
-                  <button onClick={() => void runBatch("ERROR")} className="rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800">
+                  <button onClick={() => void runBatch("ERROR")} className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800">
                     Retry failed reviews
                   </button>
                 )}
@@ -355,14 +355,14 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
             Scope: {scopeLabel}. Three questions are reviewed at a time and each takes about a minute or two, so a large run takes hours — keep this page open; you can stop any time and continue later (finished questions are not
             repeated).
           </p>
-          <p className="text-[11px] text-amber-300/90">
+          <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
             Each question needs at least three model calls, from the same Gemini keys the rest of the app uses (AI Guru, question tools). Free keys allow only a few calls a day per model, so a big run can use up the day&apos;s
             allowance. Run large batches when students are not using AI Guru, or add a paid key first.
           </p>
           {runLog && (
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-700 dark:text-slate-300">
               <div className="flex items-center gap-2">
-                {running ? <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" /> : <Check className="h-3.5 w-3.5 text-emerald-400" />}
+                {running ? <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600 dark:text-sky-400" /> : <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />}
                 <span>
                   {running ? "Reviewing…" : "Stopped."} {runLog.done} done in this run{running ? `, ${runLog.remaining} left` : ""}.
                 </span>
@@ -374,16 +374,16 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
                   </span>
                 ))}
               </div>
-              {runLog.lastError && <div className="mt-2 break-words text-rose-300">Last error: {runLog.lastError}</div>}
+              {runLog.lastError && <div className="mt-2 break-words text-rose-700 dark:text-rose-300">Last error: {runLog.lastError}</div>}
             </div>
           )}
         </div>
 
-        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-xs text-slate-300">
-          <div className="text-sm font-bold text-white">So far</div>
+        <div className="space-y-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 text-xs text-slate-700 dark:text-slate-300">
+          <div className="text-sm font-bold text-slate-900 dark:text-white">So far</div>
           <div className="flex justify-between">
             <span>Corrections waiting for a decision</span>
-            <span className="font-bold tabular-nums text-amber-300">{overview?.corrections.PROPOSED ?? 0}</span>
+            <span className="font-bold tabular-nums text-amber-700 dark:text-amber-300">{overview?.corrections.PROPOSED ?? 0}</span>
           </div>
           <div className="flex justify-between">
             <span>Corrections applied</span>
@@ -393,7 +393,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
             <span>Corrections rejected</span>
             <span className="font-bold tabular-nums">{overview?.corrections.REJECTED ?? 0}</span>
           </div>
-          <div className="flex justify-between border-t border-slate-800 pt-2">
+          <div className="flex justify-between border-t border-slate-200 dark:border-slate-800 pt-2">
             <span>Model calls made</span>
             <span className="font-bold tabular-nums">
               {calls.toLocaleString("en-IN")}
@@ -405,8 +405,8 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
             <span className="font-bold tabular-nums">{tokens.toLocaleString("en-IN")}</span>
           </div>
           {(overview?.findingCategories.length ?? 0) > 0 && (
-            <div className="border-t border-slate-800 pt-2">
-              <div className="mb-1 text-slate-400">Most common findings</div>
+            <div className="border-t border-slate-200 dark:border-slate-800 pt-2">
+              <div className="mb-1 text-slate-500 dark:text-slate-400">Most common findings</div>
               {overview!.findingCategories.slice(0, 5).map((f) => (
                 <div key={f.category} className="flex justify-between">
                   <span>{words(f.category)}</span>
@@ -418,10 +418,10 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 p-3">
-          <div className="text-sm font-bold text-white">
-            Questions <span className="font-normal text-slate-400">({total.toLocaleString("en-IN")})</span>
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 p-3">
+          <div className="text-sm font-bold text-slate-900 dark:text-white">
+            Questions <span className="font-normal text-slate-500 dark:text-slate-400">({total.toLocaleString("en-IN")})</span>
           </div>
           <select
             value={status}
@@ -429,7 +429,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-200"
+            className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200"
           >
             <option value="">Any QC status</option>
             {STATUS_ORDER.map((s) => (
@@ -447,33 +447,33 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
                 setPage(1);
               }}
               placeholder="Question code"
-              className="w-44 rounded-xl border border-slate-700 bg-slate-950 py-1.5 pl-8 pr-3 text-xs text-slate-200 placeholder:text-slate-600"
+              className="w-44 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 py-1.5 pl-8 pr-3 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600"
             />
           </div>
         </div>
         {loading && items.length === 0 ? (
-          <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-400">
+          <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500 dark:text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
         ) : items.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-400">No questions match these filters.</div>
+          <div className="p-10 text-center text-sm text-slate-500 dark:text-slate-400">No questions match these filters.</div>
         ) : (
-          <ul className="divide-y divide-slate-800">
+          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
             {items.map((q) => (
               <li key={q.id}>
-                <button onClick={() => setOpenId(q.id)} className="flex w-full flex-col gap-1.5 p-3 text-left transition hover:bg-slate-800/50 sm:flex-row sm:items-center sm:gap-3">
+                <button onClick={() => setOpenId(q.id)} className="flex w-full flex-col gap-1.5 p-3 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800/50 sm:flex-row sm:items-center sm:gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                      <span className="font-mono text-slate-300">{q.questionCode || q.id.slice(-8)}</span>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="font-mono text-slate-700 dark:text-slate-300">{q.questionCode || q.id.slice(-8)}</span>
                       <span>{q.subject}</span>
                       {q.chapter && <span className="truncate">· {q.chapter}</span>}
                       <span>· {words(q.type)}</span>
                     </div>
-                    <div className="mt-0.5 line-clamp-2 text-xs text-slate-200">{q.preview || "(no text)"}</div>
+                    <div className="mt-0.5 line-clamp-2 text-xs text-slate-800 dark:text-slate-200">{q.preview || "(no text)"}</div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {q.openCorrections > 0 && <span className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-300">{q.openCorrections} to decide</span>}
-                    {q.findings > 0 && <span className="text-[11px] text-slate-400">{q.findings} findings</span>}
+                    {q.openCorrections > 0 && <span className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">{q.openCorrections} to decide</span>}
+                    {q.findings > 0 && <span className="text-[11px] text-slate-500 dark:text-slate-400">{q.findings} findings</span>}
                     <StatusBadge status={q.qcStatus} />
                   </div>
                 </button>
@@ -482,12 +482,12 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
           </ul>
         )}
         {pages > 1 && (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-800 p-3 text-xs text-slate-400">
-            <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded-lg border border-slate-700 p-1.5 disabled:opacity-40">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-500 dark:text-slate-400">
+            <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded-lg border border-slate-300 dark:border-slate-700 p-1.5 disabled:opacity-40">
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
             Page {page} of {pages}
-            <button disabled={page >= pages} onClick={() => setPage(page + 1)} className="rounded-lg border border-slate-700 p-1.5 disabled:opacity-40">
+            <button disabled={page >= pages} onClick={() => setPage(page + 1)} className="rounded-lg border border-slate-300 dark:border-slate-700 p-1.5 disabled:opacity-40">
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -516,8 +516,8 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
 function AgentCard({ title, review, note }: { title: string; review: Review | null; note: string }) {
   if (!review) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-xs text-slate-400">
-        <div className="text-sm font-bold text-white">{title}</div>
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 text-xs text-slate-500 dark:text-slate-400">
+        <div className="text-sm font-bold text-slate-900 dark:text-white">{title}</div>
         <div className="mt-1">Has not run on this question yet.</div>
       </div>
     );
@@ -525,55 +525,55 @@ function AgentCard({ title, review, note }: { title: string; review: Review | nu
   const calc: any[] = Array.isArray(review.calcChecks) ? review.calcChecks : [];
   const reasoning: string | undefined = review.agent === "EXPERT" ? review.result?.derivedAnswer?.reasoning : review.result?.solve?.derivedAnswer?.reasoning;
   return (
-    <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-xs text-slate-300">
+    <div className="space-y-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 text-xs text-slate-700 dark:text-slate-300">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-bold text-white">{title}</div>
+        <div className="text-sm font-bold text-slate-900 dark:text-white">{title}</div>
         <span className="text-[11px] text-slate-500">
           {review.model} · {review.promptVersion}
         </span>
       </div>
       <div className="text-[11px] text-slate-500">{note}</div>
       {review.status === "ERROR" ? (
-        <div className="break-words rounded-xl border border-fuchsia-500/40 bg-fuchsia-500/10 p-2 text-fuchsia-200">The review did not finish: {review.errorMessage}</div>
+        <div className="break-words rounded-xl border border-fuchsia-500/40 bg-fuchsia-500/10 p-2 text-fuchsia-800 dark:text-fuchsia-200">The review did not finish: {review.errorMessage}</div>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">
             <span>
-              Its own answer: <b className="text-white">{review.derivedAnswer || "could not solve"}</b>
+              Its own answer: <b className="text-slate-900 dark:text-white">{review.derivedAnswer || "could not solve"}</b>
             </span>
             <span className="text-slate-500">stored key: {review.storedAnswer || "none"}</span>
             {review.answerMatches === true && (
-              <span className="flex items-center gap-1 text-emerald-300">
+              <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
                 <CheckCircle2 className="h-3.5 w-3.5" /> matches
               </span>
             )}
             {review.answerMatches === false && (
-              <span className="flex items-center gap-1 text-rose-300">
+              <span className="flex items-center gap-1 text-rose-700 dark:text-rose-300">
                 <XCircle className="h-3.5 w-3.5" /> differs
               </span>
             )}
             {review.answerMatches === null && (
-              <span className="flex items-center gap-1 text-amber-300">
+              <span className="flex items-center gap-1 text-amber-700 dark:text-amber-300">
                 <HelpCircle className="h-3.5 w-3.5" /> not comparable
               </span>
             )}
           </div>
           {reasoning && (
             <details>
-              <summary className="cursor-pointer text-sky-300">How it solved the question</summary>
-              <div className="mt-1 rounded-xl bg-slate-950 p-2 text-slate-300">
+              <summary className="cursor-pointer text-sky-700 dark:text-sky-300">How it solved the question</summary>
+              <div className="mt-1 rounded-xl bg-slate-50 dark:bg-slate-950 p-2 text-slate-700 dark:text-slate-300">
                 <FormulaText text={reasoning} />
               </div>
             </details>
           )}
           {calc.length > 0 && (
             <details>
-              <summary className="cursor-pointer text-sky-300">
+              <summary className="cursor-pointer text-sky-700 dark:text-sky-300">
                 Arithmetic recomputed by the system ({calc.filter((c) => c.agrees === false).length} disagree of {calc.length})
               </summary>
-              <ul className="mt-1 space-y-1 rounded-xl bg-slate-950 p-2 font-mono text-[11px]">
+              <ul className="mt-1 space-y-1 rounded-xl bg-slate-50 dark:bg-slate-950 p-2 font-mono text-[11px]">
                 {calc.map((c, i) => (
-                  <li key={i} className={c.agrees === false ? "text-rose-300" : c.evaluated ? "text-slate-300" : "text-slate-500"}>
+                  <li key={i} className={c.agrees === false ? "text-rose-700 dark:text-rose-300" : c.evaluated ? "text-slate-700 dark:text-slate-300" : "text-slate-500"}>
                     {c.expression} = {c.evaluated ? c.computedValue : "could not be evaluated"}
                     {c.claimedValue != null && ` (model said ${c.claimedValue})`}
                   </li>
@@ -642,14 +642,14 @@ function QcDetailPanel({ questionId, canApply, onClose, onReview, onChanged }: {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60" onClick={onClose}>
-      <div className="h-full w-full max-w-3xl space-y-4 overflow-y-auto border-l border-slate-800 bg-slate-950 p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="h-full w-full max-w-3xl space-y-4 overflow-y-auto border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="font-mono text-xs text-slate-400">{detail?.question.questionCode || questionId}</div>
+            <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{detail?.question.questionCode || questionId}</div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <StatusBadge status={detail?.question.qcStatus ?? "UNREVIEWED"} />
               {content && (
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   {content.subject}
                   {content.chapter ? ` · ${content.chapter}` : ""} · {words(content.type)} · version {detail?.question.version}
                 </span>
@@ -661,49 +661,49 @@ function QcDetailPanel({ questionId, canApply, onClose, onReview, onChanged }: {
               {busy === "review" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
               {busy === "review" ? "Reviewing (1–2 min)…" : detail?.expert ? "Review again" : "Review now"}
             </button>
-            <button onClick={onClose} className="rounded-xl border border-slate-800 p-2 text-slate-300 hover:bg-slate-800">
+            <button onClick={onClose} className="rounded-xl border border-slate-200 dark:border-slate-800 p-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {error && <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-200">{error}</div>}
+        {error && <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-800 dark:text-rose-200">{error}</div>}
         {!detail && !error && (
-          <div className="flex items-center gap-2 p-6 text-sm text-slate-400">
+          <div className="flex items-center gap-2 p-6 text-sm text-slate-500 dark:text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
         )}
 
         {detail?.changedSinceReview && (
-          <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             This question was edited after its last review. What is shown below is about the older text — review it again.
           </div>
         )}
 
         {content && (
-          <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-200">
-            {content.hasImage && <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-200">This question has a picture. The reviewers cannot see pictures, so it is never marked Verified automatically.</div>}
+          <div className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 text-sm text-slate-800 dark:text-slate-200">
+            {content.hasImage && <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-800 dark:text-amber-200">This question has a picture. The reviewers cannot see pictures, so it is never marked Verified automatically.</div>}
             <FormulaText text={content.statement} />
             {content.options.length > 0 && (
               <ul className="space-y-1.5">
                 {content.options.map((o) => {
                   const isKey = content.storedAnswer.includes(o.key);
                   return (
-                    <li key={o.key} className={`flex gap-2 rounded-xl border p-2 text-xs ${isKey ? "border-emerald-500/40 bg-emerald-500/10" : "border-slate-800"}`}>
+                    <li key={o.key} className={`flex gap-2 rounded-xl border p-2 text-xs ${isKey ? "border-emerald-500/40 bg-emerald-500/10" : "border-slate-200 dark:border-slate-800"}`}>
                       <span className="font-bold">{o.key}.</span>
                       <FormulaText text={o.text} />
-                      {isKey && <span className="ml-auto shrink-0 text-[11px] text-emerald-300">stored key</span>}
+                      {isKey && <span className="ml-auto shrink-0 text-[11px] text-emerald-700 dark:text-emerald-300">stored key</span>}
                     </li>
                   );
                 })}
               </ul>
             )}
-            {content.options.length === 0 && <div className="text-xs text-slate-400">Stored answer: {content.storedAnswer.join(", ") || "none"}</div>}
+            {content.options.length === 0 && <div className="text-xs text-slate-500 dark:text-slate-400">Stored answer: {content.storedAnswer.join(", ") || "none"}</div>}
             {content.solution && (
               <details className="text-xs">
-                <summary className="cursor-pointer text-sky-300">Stored solution</summary>
-                <div className="mt-1 rounded-xl bg-slate-950 p-2">
+                <summary className="cursor-pointer text-sky-700 dark:text-sky-300">Stored solution</summary>
+                <div className="mt-1 rounded-xl bg-slate-50 dark:bg-slate-950 p-2">
                   <FormulaText text={content.solution} />
                 </div>
               </details>
@@ -712,8 +712,8 @@ function QcDetailPanel({ questionId, canApply, onClose, onReview, onChanged }: {
         )}
 
         {reasons.length > 0 && (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-xs text-slate-300">
-            <div className="text-sm font-bold text-white">Why it has this status</div>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 text-xs text-slate-700 dark:text-slate-300">
+            <div className="text-sm font-bold text-slate-900 dark:text-white">Why it has this status</div>
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
               {reasons.map((r, i) => (
                 <li key={i}>{r}</li>
@@ -731,23 +731,23 @@ function QcDetailPanel({ questionId, canApply, onClose, onReview, onChanged }: {
 
         {findings.length > 0 && (
           <div className="space-y-2">
-            <div className="text-sm font-bold text-white">Findings ({findings.length})</div>
+            <div className="text-sm font-bold text-slate-900 dark:text-white">Findings ({findings.length})</div>
             {findings.map((f) => (
-              <div key={f.id} className="space-y-1 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">
+              <div key={f.id} className="space-y-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3 text-xs text-slate-700 dark:text-slate-300">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-lg border px-2 py-0.5 text-[11px] font-semibold ${SEVERITY_TONE[f.severity] ?? SEVERITY_TONE.LOW}`}>{words(f.severity)}</span>
-                  <span className="font-semibold text-white">{words(f.category)}</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">{words(f.category)}</span>
                   <span className="text-[11px] text-slate-500">found by {f.source === "SYSTEM" ? "a rule check" : f.source === "EXPERT" ? "the Expert" : "the Director"}</span>
                 </div>
                 <FormulaText text={f.description} />
                 {f.evidence && (
-                  <div className="text-slate-400">
+                  <div className="text-slate-500 dark:text-slate-400">
                     Evidence: <FormulaText text={f.evidence} className="inline" />
                   </div>
                 )}
                 {f.directorDecision && (
-                  <div className="rounded-xl bg-slate-950 p-2">
-                    <span className="font-semibold text-sky-300">Director: {words(f.directorDecision)}</span>
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-950 p-2">
+                    <span className="font-semibold text-sky-700 dark:text-sky-300">Director: {words(f.directorDecision)}</span>
                     {f.directorReason && <span> — {f.directorReason}</span>}
                   </div>
                 )}
@@ -758,28 +758,28 @@ function QcDetailPanel({ questionId, canApply, onClose, onReview, onChanged }: {
 
         {detail && detail.corrections.length > 0 && (
           <div className="space-y-2">
-            <div className="text-sm font-bold text-white">Proposed corrections</div>
+            <div className="text-sm font-bold text-slate-900 dark:text-white">Proposed corrections</div>
             {detail.corrections.map((c) => (
-              <div key={c.id} className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">
+              <div key={c.id} className="space-y-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3 text-xs text-slate-700 dark:text-slate-300">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-white">{FIELD_LABEL[c.field] ?? words(c.field)}</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">{FIELD_LABEL[c.field] ?? words(c.field)}</span>
                   {c.language && <span className="text-[11px] text-slate-500">{words(c.language)}</span>}
-                  <span className="ml-auto rounded-lg border border-slate-700 px-2 py-0.5 text-[11px]">{words(c.status)}</span>
+                  <span className="ml-auto rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-0.5 text-[11px]">{words(c.status)}</span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-xl bg-slate-950 p-2">
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-950 p-2">
                     <div className="mb-1 text-[11px] text-slate-500">{c.status === "PROPOSED" ? "Now" : "Before"}</div>
                     <FormulaText text={c.originalValue || "(empty)"} />
                   </div>
                   <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-2">
-                    <div className="mb-1 text-[11px] text-emerald-300">Proposed</div>
+                    <div className="mb-1 text-[11px] text-emerald-700 dark:text-emerald-300">Proposed</div>
                     <FormulaText text={c.proposedValue} />
                   </div>
                 </div>
                 <div>
-                  <span className="text-slate-400">Reason:</span> {c.reason}
+                  <span className="text-slate-500 dark:text-slate-400">Reason:</span> {c.reason}
                 </div>
-                {c.decisionNote && <div className="text-slate-400">Note: {c.decisionNote}</div>}
+                {c.decisionNote && <div className="text-slate-500 dark:text-slate-400">Note: {c.decisionNote}</div>}
                 {c.status === "PROPOSED" &&
                   (canApply ? (
                     <div className="flex flex-wrap gap-2">
@@ -787,7 +787,7 @@ function QcDetailPanel({ questionId, canApply, onClose, onReview, onChanged }: {
                         {busy === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                         {["statement", "options"].includes(c.field) ? "Approve (edit by hand)" : "Approve and apply"}
                       </button>
-                      <button disabled={busy !== null} onClick={() => void decide(c, "reject")} className="flex items-center gap-1.5 rounded-xl border border-slate-700 px-3 py-1.5 font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50">
+                      <button disabled={busy !== null} onClick={() => void decide(c, "reject")} className="flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-1.5 font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50">
                         <X className="h-3.5 w-3.5" />
                         Reject
                       </button>
@@ -801,18 +801,18 @@ function QcDetailPanel({ questionId, canApply, onClose, onReview, onChanged }: {
         )}
 
         {references.length > 0 && (
-          <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-xs text-slate-300">
-            <div className="text-sm font-bold text-white">NCERT pages offered to the Expert</div>
+          <div className="space-y-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4 text-xs text-slate-700 dark:text-slate-300">
+            <div className="text-sm font-bold text-slate-900 dark:text-white">NCERT pages offered to the Expert</div>
             <div className="text-[11px] text-slate-500">
               Found by a text search in the NCERT library — they may or may not be about this question. Expert&apos;s reading: {ncertStatus ? words(ncertStatus) : "not stated"}
               {supporting ? ` (passage ${supporting.index})` : ""}.
             </div>
             {references.map((r) => (
-              <div key={r.pageId ?? r.index} className="rounded-xl bg-slate-950 p-2">
-                <div className="font-semibold text-slate-200">
+              <div key={r.pageId ?? r.index} className="rounded-xl bg-slate-50 dark:bg-slate-950 p-2">
+                <div className="font-semibold text-slate-800 dark:text-slate-200">
                   [{r.index}] {[r.className, r.subject, r.chapter].filter(Boolean).join(" · ")} — page {r.pageNumber}
                 </div>
-                <div className="mt-0.5 line-clamp-3 text-slate-400">{r.excerpt}</div>
+                <div className="mt-0.5 line-clamp-3 text-slate-500 dark:text-slate-400">{r.excerpt}</div>
               </div>
             ))}
           </div>

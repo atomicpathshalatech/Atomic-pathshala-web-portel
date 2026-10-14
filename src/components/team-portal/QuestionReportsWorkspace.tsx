@@ -236,21 +236,21 @@ export function QuestionReportsWorkspace({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6 text-slate-100 space-y-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 text-slate-800 dark:text-slate-100 space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-bold border border-amber-500/30">
+            <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/30">
               ISSUE TRIAGE & REVIEW LAYER
             </span>
-            <span className="text-xs text-slate-400">Single Source of Truth: Canonical Question Bank</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Single Source of Truth: Canonical Question Bank</span>
           </div>
-          <h1 className="text-2xl font-extrabold text-white mt-1 flex items-center gap-2">
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1 flex items-center gap-2">
             <Flag className="h-6 w-6 text-amber-500" />
             Reported Questions Review Hub
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Review student-flagged AI & Question Bank questions, verify errors, and correct original questions in place with version history.
           </p>
         </div>
@@ -260,7 +260,7 @@ export function QuestionReportsWorkspace({
             type="button"
             onClick={loadData}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-xs font-medium text-slate-300 transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 transition"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -270,12 +270,12 @@ export function QuestionReportsWorkspace({
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Reported Questions</span>
-            <Flag className="h-4 w-4 text-amber-400" />
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Reported Questions</span>
+            <Flag className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           </div>
-          <div className="text-2xl font-black text-white mt-1.5">
+          <div className="text-2xl font-black text-slate-900 dark:text-white mt-1.5">
             {metrics.totalQuestionsReported}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">Unique Question Bank records</div>
@@ -283,21 +283,21 @@ export function QuestionReportsWorkspace({
 
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-amber-300 font-medium">Needs Faculty Review</span>
-            <AlertCircle className="h-4 w-4 text-amber-400 animate-pulse" />
+            <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">Needs Faculty Review</span>
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-pulse" />
           </div>
-          <div className="text-2xl font-black text-amber-400 mt-1.5">
+          <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1.5">
             {metrics.unresolvedQuestions}
           </div>
-          <div className="text-[11px] text-amber-300/80 mt-0.5">Pending verification / resolution</div>
+          <div className="text-[11px] text-amber-700 dark:text-amber-300/80 mt-0.5">Pending verification / resolution</div>
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Total Student Reports</span>
-            <Users className="h-4 w-4 text-blue-400" />
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Student Reports</span>
+            <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
-          <div className="text-2xl font-black text-white mt-1.5">
+          <div className="text-2xl font-black text-slate-900 dark:text-white mt-1.5">
             {metrics.totalReportsAllTime}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">All-time student feedback submissions</div>
@@ -305,10 +305,10 @@ export function QuestionReportsWorkspace({
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-900/70 border border-slate-800 p-4 rounded-2xl">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl">
         <div className="flex flex-wrap items-center gap-2">
           {/* Status Filter */}
-          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-xs">
+          <div className="flex items-center bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-1 text-xs">
             {[
               { id: "ALL", label: "All Status" },
               { id: "OPEN", label: "Open (Needs Review)" },
@@ -323,7 +323,7 @@ export function QuestionReportsWorkspace({
                 className={`px-3 py-1.5 rounded-lg font-semibold transition ${
                   statusFilter === tab.id
                     ? "bg-amber-500 text-slate-950 shadow-sm"
-                    : "text-slate-400 hover:text-white"
+                    : "text-slate-500 dark:text-slate-400 hover:text-white"
                 }`}
               >
                 {tab.label}
@@ -335,7 +335,7 @@ export function QuestionReportsWorkspace({
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-300 outline-none"
+            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none"
           >
             <option value="ALL">All Sources</option>
             <option value="NCERT">NCERT Practice</option>
@@ -348,7 +348,7 @@ export function QuestionReportsWorkspace({
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
-            className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-300 outline-none"
+            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none"
           >
             <option value="most_reported">Sort: Most Reported</option>
             <option value="recently_reported">Sort: Recently Reported</option>
@@ -364,22 +364,22 @@ export function QuestionReportsWorkspace({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search Question ID, statement, topic..."
-            className="w-full rounded-xl border border-slate-800 bg-slate-950 pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none transition focus:border-amber-500"
+            className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-500 outline-none transition focus:border-amber-500"
           />
         </div>
       </div>
 
       {/* Reported Questions List */}
       {loading ? (
-        <div className="p-12 text-center text-sm text-slate-400 flex flex-col items-center justify-center gap-3">
+        <div className="p-12 text-center text-sm text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
           <span>Loading reported questions...</span>
         </div>
       ) : questions.length === 0 ? (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-2">
-          <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400" />
-          <h3 className="text-sm font-bold text-white">No Reported Questions Found</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 p-12 text-center space-y-2">
+          <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">No Reported Questions Found</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
             {statusFilter !== "ALL" || searchQuery
               ? "No questions match your current filter criteria."
               : "Great job! All student-reported questions have been reviewed and resolved."}
@@ -413,25 +413,25 @@ export function QuestionReportsWorkspace({
             return (
               <div
                 key={q.questionId}
-                className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg space-y-4 hover:border-slate-700 transition"
+                className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/70 p-5 shadow-lg space-y-4 hover:border-slate-700 transition"
               >
                 {/* Header Row */}
-                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-lg bg-blue-500/15 border border-blue-500/30 px-2.5 py-0.5 text-xs font-bold text-blue-400">
+                    <span className="rounded-lg bg-blue-500/15 border border-blue-500/30 px-2.5 py-0.5 text-xs font-bold text-blue-600 dark:text-blue-400">
                       {q.subject}
                     </span>
                     {q.chapter && (
-                      <span className="rounded-lg bg-slate-800 px-2.5 py-0.5 text-xs text-slate-300">
+                      <span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs text-slate-700 dark:text-slate-300">
                         {q.chapter}
                       </span>
                     )}
                     {q.topic && (
-                      <span className="rounded-lg bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-400">
+                      <span className="rounded-lg bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                         {q.topic}
                       </span>
                     )}
-                    <span className="rounded-lg bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 text-[11px] font-bold text-purple-300">
+                    <span className="rounded-lg bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 text-[11px] font-bold text-purple-700 dark:text-purple-300">
                       {q.sourceLabel}
                     </span>
                     <span className="font-mono text-[10px] text-slate-500">
@@ -444,11 +444,11 @@ export function QuestionReportsWorkspace({
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
                         q.overallStatus === "CORRECTED"
-                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
                           : q.overallStatus === "UNDER_REVIEW"
-                            ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
                             : q.overallStatus === "REJECTED"
-                              ? "bg-slate-800 text-slate-400 border border-slate-700"
+                              ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
                               : "bg-red-500/15 text-red-400 border border-red-500/30"
                       }`}
                     >
@@ -468,7 +468,7 @@ export function QuestionReportsWorkspace({
 
                 {/* Question Statement */}
                 <div className="space-y-3">
-                  <div className="text-sm font-medium text-slate-100 leading-relaxed">
+                  <div className="text-sm font-medium text-slate-800 dark:text-slate-100 leading-relaxed">
                     <FormulaText text={translation?.statement || "No statement text"} />
                   </div>
 
@@ -482,15 +482,15 @@ export function QuestionReportsWorkspace({
                             key={opt.id}
                             className={`flex items-start gap-2 rounded-xl p-2.5 border transition ${
                               isMarkedCorrect
-                                ? "bg-emerald-950/40 border-emerald-500 text-emerald-200 font-bold"
-                                : "bg-slate-950/60 border-slate-800/80 text-slate-300"
+                                ? "bg-emerald-950/40 border-emerald-500 text-emerald-800 dark:text-emerald-200 font-bold"
+                                : "bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800/80 text-slate-700 dark:text-slate-300"
                             }`}
                           >
                             <span
                               className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-mono font-bold ${
                                 isMarkedCorrect
                                   ? "bg-emerald-500 text-slate-950"
-                                  : "bg-slate-800 text-slate-400"
+                                  : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                               }`}
                             >
                               {opt.id}
@@ -499,7 +499,7 @@ export function QuestionReportsWorkspace({
                               <FormulaText text={opt.text} />
                             </div>
                             {isMarkedCorrect && (
-                              <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">
+                              <span className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold">
                                 Marked Key
                               </span>
                             )}
@@ -511,8 +511,8 @@ export function QuestionReportsWorkspace({
 
                   {/* Solution Preview */}
                   {(translation?.solution || q.solution) && (
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-xs text-slate-300 space-y-1">
-                      <span className="font-bold text-amber-400 text-[11px] block">
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                      <span className="font-bold text-amber-600 dark:text-amber-400 text-[11px] block">
                         Current Explanation & Solution:
                       </span>
                       <FormulaText text={translation?.solution || q.solution || ""} />
@@ -524,13 +524,13 @@ export function QuestionReportsWorkspace({
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400">
                         <Flag className="h-3.5 w-3.5" />
                         {q.totalReports} {q.totalReports === 1 ? "Report" : "Reports"} from {q.uniqueStudents} {q.uniqueStudents === 1 ? "Student" : "Students"}
                       </span>
                     </div>
 
-                    <div className="text-[11px] text-slate-400">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
                       Latest: {new Date(q.lastReportedAt).toLocaleDateString()}
                     </div>
                   </div>
@@ -540,10 +540,10 @@ export function QuestionReportsWorkspace({
                     {Object.entries(q.reasonCounts).map(([reasonKey, count]) => (
                       <span
                         key={reasonKey}
-                        className="inline-flex items-center gap-1 rounded-md bg-slate-900 border border-slate-800 px-2 py-0.5 text-[11px] text-slate-300 font-medium"
+                        className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 text-[11px] text-slate-700 dark:text-slate-300 font-medium"
                       >
                         <span>{REASON_LABELS[reasonKey] || reasonKey}:</span>
-                        <span className="font-bold text-amber-400">{count}</span>
+                        <span className="font-bold text-amber-600 dark:text-amber-400">{count}</span>
                       </span>
                     ))}
                   </div>
@@ -551,35 +551,35 @@ export function QuestionReportsWorkspace({
 
                 {/* Student Comments Drawer (Collapsible) */}
                 {isCommentsExpanded && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-3 animate-in fade-in duration-150">
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <Users className="h-3.5 w-3.5 text-amber-400" />
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 p-4 space-y-3 animate-in fade-in duration-150">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <Users className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                       Individual Student Submissions ({q.reports.length})
                     </h4>
                     <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                       {q.reports.map((rep) => (
                         <div
                           key={rep.id}
-                          className="rounded-lg border border-slate-800/80 bg-slate-900/60 p-2.5 text-xs space-y-1"
+                          className="rounded-lg border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 p-2.5 text-xs space-y-1"
                         >
                           <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-semibold text-slate-300">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">
                               {rep.reportedBy?.name || rep.reportedBy?.email || "Student"}
                             </span>
                             <span className="text-slate-500">
                               {new Date(rep.createdAt).toLocaleString()}
                             </span>
                           </div>
-                          <div className="text-[11px] text-amber-400/90 font-medium">
+                          <div className="text-[11px] text-amber-600 dark:text-amber-400/90 font-medium">
                             Reason: {rep.reasonTags.split(",").map((r) => REASON_LABELS[r.trim()] || r).join(", ")}
                           </div>
                           {rep.comment && (
-                            <div className="text-slate-200 bg-slate-950 p-2 rounded text-[11px] italic">
+                            <div className="text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-950 p-2 rounded text-[11px] italic">
                               &ldquo;{rep.comment}&rdquo;
                             </div>
                           )}
                           {rep.teacherNotes && (
-                            <div className="text-emerald-400 text-[10px] pt-0.5">
+                            <div className="text-emerald-600 dark:text-emerald-400 text-[10px] pt-0.5">
                               Faculty note: {rep.teacherNotes}
                             </div>
                           )}
@@ -590,13 +590,13 @@ export function QuestionReportsWorkspace({
                 )}
 
                 {/* Bottom Actions Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() =>
                       setExpandedCommentsId(isCommentsExpanded ? null : q.questionId)
                     }
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-white transition"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-white transition"
                   >
                     {isCommentsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     {isCommentsExpanded ? "Hide Student Reports" : `View Student Reports (${q.reports.length})`}
@@ -610,7 +610,7 @@ export function QuestionReportsWorkspace({
                           type="button"
                           disabled={isBusy}
                           onClick={() => handleAction(q.questionId, "UPDATE_STATUS", "UNDER_REVIEW")}
-                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition disabled:opacity-50"
+                          className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition disabled:opacity-50"
                         >
                           Mark Under Review
                         </button>
@@ -622,7 +622,7 @@ export function QuestionReportsWorkspace({
                           type="button"
                           disabled={isBusy}
                           onClick={() => handleAction(q.questionId, "REJECT_ALL")}
-                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-400 hover:text-white transition disabled:opacity-50"
+                          className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-white transition disabled:opacity-50"
                         >
                           Reject Reports (Valid Question)
                         </button>
@@ -649,21 +649,21 @@ export function QuestionReportsWorkspace({
       {/* Fix / Edit Question Modal */}
       {editingQuestion && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-50 dark:bg-slate-950/80 p-4 backdrop-blur-xs animate-in fade-in"
           onClick={() => setEditingQuestion(null)}
         >
           <div
-            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl text-slate-100 space-y-5"
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl text-slate-800 dark:text-slate-100 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
                   <Edit3 className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Fix Question & Answer Key</h3>
-                  <p className="text-xs text-slate-400">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Fix Question & Answer Key</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Updates the canonical Question Bank record in place and records a QuestionVersion snapshot.
                   </p>
                 </div>
@@ -671,7 +671,7 @@ export function QuestionReportsWorkspace({
               <button
                 type="button"
                 onClick={() => setEditingQuestion(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 transition"
+                className="rounded-lg p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -680,7 +680,7 @@ export function QuestionReportsWorkspace({
             <form onSubmit={handleSaveFix} className="space-y-4 text-xs">
               {/* Question Statement */}
               <div className="space-y-1.5">
-                <label className="block font-bold text-slate-300 uppercase tracking-wider text-[11px]">
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
                   Question Statement
                 </label>
                 <textarea
@@ -688,13 +688,13 @@ export function QuestionReportsWorkspace({
                   onChange={(e) => setEditStatement(e.target.value)}
                   rows={4}
                   required
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-white placeholder-slate-500 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-slate-900 dark:text-white placeholder-slate-500 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
                 />
               </div>
 
               {/* Options & Correct Key Selector */}
               <div className="space-y-2">
-                <label className="block font-bold text-slate-300 uppercase tracking-wider text-[11px]">
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
                   Options & Correct Answer
                 </label>
                 <div className="space-y-2">
@@ -706,7 +706,7 @@ export function QuestionReportsWorkspace({
                         className={`px-3 py-2 rounded-xl text-xs font-bold font-mono transition ${
                           editCorrectAnswer.toUpperCase() === opt.id.toUpperCase()
                             ? "bg-emerald-500 text-slate-950 shadow-sm"
-                            : "bg-slate-950 text-slate-400 border border-slate-800 hover:text-white"
+                            : "bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-white"
                         }`}
                         title="Click to set as correct option"
                       >
@@ -721,7 +721,7 @@ export function QuestionReportsWorkspace({
                           setEditOptions(newOpts);
                         }}
                         placeholder={`Option ${opt.id} text...`}
-                        className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                        className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-white placeholder-slate-600 outline-none focus:border-amber-500"
                       />
                     </div>
                   ))}
@@ -730,20 +730,20 @@ export function QuestionReportsWorkspace({
 
               {/* Solution / Explanation */}
               <div className="space-y-1.5">
-                <label className="block font-bold text-slate-300 uppercase tracking-wider text-[11px]">
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
                   Step-by-Step Explanation / Solution
                 </label>
                 <textarea
                   value={editSolution}
                   onChange={(e) => setEditSolution(e.target.value)}
                   rows={4}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-white placeholder-slate-500 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-slate-900 dark:text-white placeholder-slate-500 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
                 />
               </div>
 
               {/* Faculty Audit Note */}
               <div className="space-y-1.5">
-                <label className="block font-bold text-slate-300 uppercase tracking-wider text-[11px]">
+                <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px]">
                   Faculty Audit Note
                 </label>
                 <input
@@ -751,17 +751,17 @@ export function QuestionReportsWorkspace({
                   value={editTeacherNotes}
                   onChange={(e) => setEditTeacherNotes(e.target.value)}
                   placeholder="Reason for correction (recorded in audit log)..."
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-white placeholder-slate-600 outline-none focus:border-amber-500"
                 />
               </div>
 
               {/* Modal Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setEditingQuestion(null)}
                   disabled={savingFix}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-800 transition"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                 >
                   Cancel
                 </button>
