@@ -13,6 +13,7 @@ import type {
 import { CustomPdfReader } from "@/components/ui/CustomPdfReader";
 
 export type BatchTab =
+  | "home"
   | "schedule"
   | "recorded"
   | "dpp"
@@ -53,7 +54,7 @@ function getDateHeading(dateStr: string, todayKey: string, tomorrowKey: string) 
 
 export function StudentBatchHome({
   data,
-  initialTab = "schedule",
+  initialTab = "home",
 }: {
   data: StudentBatchHomeData;
   initialTab?: BatchTab;
@@ -145,6 +146,37 @@ export function StudentBatchHome({
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [activePdf, bookingSlot]);
+
+  // One line under each section box.
+  const sectionHint = (id: BatchTab): string => {
+    const n = now.getTime();
+    switch (id) {
+      case "schedule": {
+        const today = data.timelineEvents.filter((e) => e.dateKey === todayKey).length;
+        const live = data.timelineEvents.some((e) => e.status === "LIVE_NOW");
+        if (live) return "Live now";
+        return today ? `${today} today` : `${data.timelineEvents.filter((e) => new Date(e.startsAt).getTime() > n).length} upcoming`;
+      }
+      case "recorded":
+        return `${data.chapters.length} chapters`;
+      case "dpp":
+        return `${data.dpps.length} DPPs`;
+      case "tests": {
+        const up = data.tests.filter((t) => t.openTime && new Date(t.openTime).getTime() > n).length;
+        return up ? `${data.tests.length} tests · ${up} upcoming` : `${data.tests.length} tests`;
+      }
+      case "materials":
+        return `${data.allPdfs.length} PDFs`;
+      case "mentorship":
+        return data.doubtSlots.length ? `${data.doubtSlots.length} slots open` : "Teachers & availability";
+      case "notices":
+        return data.notices.length ? `${data.notices.length} notices` : "No notices";
+      case "info":
+        return `${data.batch.teacherCards.length} teachers`;
+      default:
+        return "";
+    }
+  };
 
   // Tab switcher
   const switchTab = (newTab: BatchTab) => {
@@ -253,17 +285,17 @@ export function StudentBatchHome({
       {/* ========================================================================= */}
       {/* 1. MINIMAL THIN BATCH HEADER (Requirements 4 & 52)                        */}
       {/* ========================================================================= */}
-      <div className="rounded-2xl border border-pink-200/70 dark:border-pink-900/40 bg-[#fff9fa] dark:bg-[#181215] shadow-xs px-3 sm:px-4 py-2 flex items-center justify-between gap-3">
+      <div className="rounded-2xl border border-sky-200/70 dark:border-sky-900/40 bg-[#f5faff] dark:bg-[#0f1722] shadow-xs px-3 sm:px-4 py-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           {data.batch.thumbnailUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={data.batch.thumbnailUrl}
               alt=""
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shrink-0 border border-pink-200/80 dark:border-pink-800"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shrink-0 border border-sky-200/80 dark:border-sky-800"
             />
           ) : (
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
               {data.batch.name.charAt(0)}
             </div>
           )}
@@ -274,7 +306,7 @@ export function StudentBatchHome({
                 {data.batch.name}
               </h1>
               {data.batch.exam && (
-                <span className="px-1.5 py-0.2 rounded bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 font-bold text-[9.5px]">
+                <span className="px-1.5 py-0.2 rounded bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 font-bold text-[9.5px]">
                   {data.batch.exam}
                 </span>
               )}
@@ -286,7 +318,7 @@ export function StudentBatchHome({
         <div className="hidden sm:flex items-center gap-2 text-xs font-medium">
           <Link
             href="/courses"
-            className="text-slate-500 hover:text-pink-600 dark:hover:text-pink-400 transition flex items-center gap-1"
+            className="text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 transition flex items-center gap-1"
           >
             <span className="material-symbols-outlined text-sm">arrow_back</span>
             <span>All Batches</span>
@@ -295,28 +327,39 @@ export function StudentBatchHome({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. TAB BOXES / ENTRY POINTS (Light Pink Themed, Requirements 5, 6, 7, 50) */}
+      {/* 2. SECTION BOXES — like the home page; a box opens its section          */}
       {/* ========================================================================= */}
-      <div className="flex items-center gap-1.5 p-1.5 bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40 overflow-x-auto no-scrollbar shadow-xs">
-        {TABS.map((t) => {
-          const isActive = tab === t.id;
-          return (
+      {tab === "home" ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 animate-in fade-in duration-150">
+          {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => switchTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
-                isActive
-                  ? "bg-pink-600 text-white shadow-xs font-bold"
-                  : "bg-white/80 dark:bg-[#20161a] text-slate-700 dark:text-slate-300 border border-pink-100 dark:border-pink-950/60 hover:bg-pink-100/50"
-              }`}
+              className="group rounded-2xl bg-white dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 p-3 sm:p-3.5 flex flex-col items-start gap-2 text-left shadow-2xs hover:border-sky-400 hover:shadow-sm transition"
             >
-              <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
-              <span>{t.label}</span>
+              <span className="w-10 h-10 rounded-xl bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 flex items-center justify-center group-hover:scale-105 transition">
+                <span className="material-symbols-outlined text-[22px]">{t.icon}</span>
+              </span>
+              <span className="text-[13px] sm:text-sm font-bold text-slate-900 dark:text-white leading-tight">{t.label}</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">{sectionHint(t.id)}</span>
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-1">
+          <button
+            type="button"
+            onClick={() => switchTab("home")}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-sky-400 transition"
+          >
+            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+            All sections
+          </button>
+          <span className="material-symbols-outlined text-[18px] text-sky-600">{TABS.find((t) => t.id === tab)?.icon}</span>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{TABS.find((t) => t.id === tab)?.label}</h2>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 3. SCHEDULE TAB — SLIM 1/3 CARDS CONNECTED VIA VERTICAL TIMELINE LINE    */}
@@ -324,8 +367,8 @@ export function StudentBatchHome({
       {tab === "schedule" && (
         <div className="space-y-4 animate-in fade-in duration-150">
           {groupedTimeline.length === 0 ? (
-            <div className="p-10 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
-              <span className="material-symbols-outlined text-3xl text-pink-300 dark:text-pink-600 mb-1">
+            <div className="p-10 text-center bg-[#f2f8fe] dark:bg-[#0f1722] rounded-2xl border border-sky-200/70 dark:border-sky-900/40">
+              <span className="material-symbols-outlined text-3xl text-sky-300 dark:text-sky-600 mb-1">
                 event_busy
               </span>
               <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -337,124 +380,72 @@ export function StudentBatchHome({
               <div key={dKey} className="space-y-2">
                 {/* Date Header Badge */}
                 <div className="flex items-center gap-2 px-1">
-                  <span className="px-2.5 py-0.5 rounded-full bg-pink-100/90 dark:bg-pink-950/80 text-[10.5px] font-bold text-pink-800 dark:text-pink-300 uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                  <span className="px-2.5 py-0.5 rounded-full bg-sky-100/90 dark:bg-sky-950/80 text-[10.5px] font-bold text-sky-800 dark:text-sky-300 uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
                     {getDateHeading(dKey, todayKey, tomorrowKey)}
                   </span>
-                  <div className="flex-1 h-px bg-pink-200/60 dark:bg-pink-950" />
+                  <div className="flex-1 h-px bg-sky-200/60 dark:bg-sky-950" />
                   <span className="text-[10px] text-slate-400 font-medium">
                     {events.length} {events.length === 1 ? "class" : "classes"}
                   </span>
                 </div>
 
-                {/* Vertical Timeline Container Connecting All Classes of this Day */}
-                <div className="relative pl-6 sm:pl-7 space-y-2 before:absolute before:left-[11px] sm:before:left-[13px] before:top-3 before:bottom-3 before:w-[2px] before:bg-pink-200/90 dark:before:bg-pink-900/60 before:rounded-full">
+                {/* Thin rows: teacher photo · class name over teacher name · subject · time and status */}
+                <div className="space-y-1.5">
                   {events.map((ev) => {
                     const isLive = ev.status === "LIVE_NOW";
                     const isTest = ev.type === "TEST";
                     const isCompleted = ev.status === "COMPLETED" || ev.status === "SUBMITTED";
-
-                    return (
-                      <div key={ev.id} className="relative group">
-                        {/* Timeline Node / Dot on the vertical line */}
-                        <div
-                          className={`absolute -left-6 sm:-left-7 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center border-2 bg-[#fff9fa] dark:bg-[#1a1215] z-10 transition-all ${
-                            isLive
-                              ? "border-red-500 text-red-600 ring-2 ring-red-200 dark:ring-red-950 animate-pulse"
-                              : isTest
-                              ? "border-purple-500 text-purple-600"
-                              : isCompleted
-                              ? "border-pink-400 text-pink-600 dark:border-pink-700"
-                              : "border-pink-300 text-slate-400 dark:border-pink-800"
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-[12px] sm:text-[13px]">
-                            {isLive ? "sensors" : isTest ? "quiz" : isCompleted ? "check" : "schedule"}
+                    const chip = isLive
+                      ? { label: "LIVE", cls: "bg-red-600 text-white animate-pulse" }
+                      : isCompleted
+                      ? { label: "Done", cls: "bg-slate-100 dark:bg-slate-800 text-slate-500" }
+                      : ev.status === "CANCELLED"
+                      ? { label: "Cancelled", cls: "bg-slate-100 dark:bg-slate-800 text-slate-400 line-through" }
+                      : ev.status === "UPCOMING"
+                      ? { label: "Upcoming", cls: "bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300" }
+                      : ev.status === "ATTEMPTED"
+                      ? { label: "In progress", cls: "bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300" }
+                      : { label: "Open", cls: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300" };
+                    const row = (
+                      <div
+                        className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl border bg-white dark:bg-[#111a26] transition ${
+                          isLive
+                            ? "border-red-300 dark:border-red-800/70"
+                            : "border-sky-100 dark:border-sky-900/40 hover:border-sky-300"
+                        }`}
+                      >
+                        {ev.teacherPhotoUrl && !isTest ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={ev.teacherPhotoUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <span
+                            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
+                              isTest ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300" : "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
+                            }`}
+                          >
+                            {isTest ? <span className="material-symbols-outlined text-[16px]">quiz</span> : (ev.teacherName || "F").charAt(0)}
                           </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-tight">{ev.title}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate leading-tight mt-0.5">
+                            {ev.teacherName || (isTest ? "Test" : "Faculty")}
+                            {ev.subject ? ` · ${ev.subject}` : ""}
+                          </p>
                         </div>
-
-                        {/* Slim 1/3 Thickness Schedule Card */}
-                        <div
-                          className={`px-3 py-2 sm:py-2.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-[#fff9fa] dark:bg-[#1a1215] ${
-                            isLive
-                              ? "border-red-400 dark:border-red-800/80 ring-1 ring-red-400/30 shadow-xs"
-                              : isTest
-                              ? "border-purple-200 dark:border-purple-900/50 hover:border-purple-300 shadow-2xs"
-                              : "border-pink-200/70 dark:border-pink-900/40 hover:border-pink-300 shadow-2xs"
-                          }`}
-                        >
-                          {/* Left: Subject Badge + Title + Faculty Avatar & Name */}
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            {/* Subject Badge */}
-                            <span className="px-2 py-0.5 rounded text-[9.5px] font-extrabold uppercase tracking-wider bg-pink-100/80 dark:bg-pink-950/70 text-pink-700 dark:text-pink-300 shrink-0">
-                              {ev.subject}
-                            </span>
-
-                            {/* Class Title & Faculty */}
-                            <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center sm:gap-2">
-                              <h4 className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-white truncate leading-snug">
-                                {ev.title}
-                              </h4>
-
-                              {/* Teacher Pill */}
-                              <div className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 shrink-0 mt-0.5 sm:mt-0">
-                                <span className="hidden sm:inline opacity-30">•</span>
-                                {ev.teacherPhotoUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={ev.teacherPhotoUrl}
-                                    alt=""
-                                    className="w-4 h-4 rounded-full object-cover shrink-0 border border-pink-200/80"
-                                  />
-                                ) : (
-                                  <div className="w-4 h-4 rounded-full bg-pink-200 dark:bg-pink-900/60 text-pink-800 dark:text-pink-200 text-[8.5px] font-bold flex items-center justify-center shrink-0">
-                                    {(ev.teacherName || "F").charAt(0)}
-                                  </div>
-                                )}
-                                <span className="truncate max-w-[120px] font-medium text-slate-600 dark:text-slate-300">
-                                  {ev.teacherName || "Faculty"}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Right: Time + Play Class Action Button */}
-                          <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-pink-100/60 dark:border-pink-950/50">
-                            {/* Time */}
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[13px] text-pink-500">schedule</span>
-                              {timeFmt(ev.startsAt)}
-                            </span>
-
-                            {/* Action Button */}
-                            {ev.actionHref ? (
-                              <Link
-                                href={ev.actionHref}
-                                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs shrink-0 ${
-                                  isLive
-                                    ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
-                                    : isTest
-                                    ? "bg-purple-600 hover:bg-purple-700 text-white"
-                                    : isCompleted
-                                    ? "bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-200 hover:bg-pink-200"
-                                    : "bg-pink-600 hover:bg-pink-700 text-white"
-                                }`}
-                              >
-                                <span className="material-symbols-outlined text-[14px]">play_arrow</span>
-                                <span>{ev.actionLabel}</span>
-                              </Link>
-                            ) : (
-                              <span
-                                className={`text-[10.5px] font-semibold px-2 py-0.5 rounded ${
-                                  isCompleted ? "text-slate-400 bg-slate-100 dark:bg-slate-800" : "text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/50"
-                                }`}
-                              >
-                                {isCompleted ? "Completed" : ev.actionLabel}
-                              </span>
-                            )}
-                          </div>
+                        <div className="flex flex-col items-end gap-0.5 shrink-0">
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 tabular-nums">{timeFmt(ev.startsAt)}</span>
+                          <span className={`px-1.5 py-px rounded text-[9.5px] font-bold uppercase tracking-wide ${chip.cls}`}>{chip.label}</span>
                         </div>
                       </div>
+                    );
+                    return ev.actionHref ? (
+                      <Link key={ev.id} href={ev.actionHref} className="block" title={ev.actionLabel}>
+                        {row}
+                      </Link>
+                    ) : (
+                      <div key={ev.id}>{row}</div>
                     );
                   })}
                 </div>
@@ -486,13 +477,13 @@ export function StudentBatchHome({
                         setSelectedSubjectId(subj.id);
                         pushNavState("recorded", subj.id, null);
                       }}
-                      className="p-3.5 rounded-2xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 hover:border-pink-400 text-left transition group shadow-xs flex items-center gap-3"
+                      className="p-3.5 rounded-2xl bg-[#f5faff] dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 hover:border-sky-400 text-left transition group shadow-xs flex items-center gap-3"
                     >
-                      <div className="w-9 h-9 rounded-xl bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 flex items-center justify-center font-bold text-sm shrink-0 group-hover:scale-105 transition">
+                      <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 flex items-center justify-center font-bold text-sm shrink-0 group-hover:scale-105 transition">
                         {subj.title.charAt(0)}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-pink-600 transition">
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-sky-600 transition">
                           {subj.title}
                         </h4>
                         <p className="text-[11px] text-slate-500 mt-0.5">
@@ -517,7 +508,7 @@ export function StudentBatchHome({
                     setSelectedSubjectId(null);
                     pushNavState("recorded", null, null);
                   }}
-                  className="font-bold text-pink-600 hover:underline flex items-center gap-0.5"
+                  className="font-bold text-sky-600 hover:underline flex items-center gap-0.5"
                 >
                   <span className="material-symbols-outlined text-sm">arrow_back</span>
                   Subjects
@@ -537,14 +528,14 @@ export function StudentBatchHome({
                       setSelectedChapterId(ch.id);
                       pushNavState("recorded", selectedSubjectId, ch.id);
                     }}
-                    className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 hover:border-pink-400 text-left transition flex items-center justify-between group shadow-xs"
+                    className="p-3 rounded-xl bg-[#f5faff] dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 hover:border-sky-400 text-left transition flex items-center justify-between group shadow-xs"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-6 h-6 rounded-lg bg-pink-100/80 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 text-[11px] font-bold flex items-center justify-center shrink-0">
+                      <span className="w-6 h-6 rounded-lg bg-sky-100/80 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 text-[11px] font-bold flex items-center justify-center shrink-0">
                         {idx + 1}
                       </span>
                       <div className="truncate">
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-pink-600 transition">
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-sky-600 transition">
                           {ch.title}
                         </h4>
                         <p className="text-[10.5px] text-slate-400 mt-0.5">
@@ -552,7 +543,7 @@ export function StudentBatchHome({
                         </p>
                       </div>
                     </div>
-                    <span className="material-symbols-outlined text-pink-400 group-hover:text-pink-600 group-hover:translate-x-1 transition text-lg">
+                    <span className="material-symbols-outlined text-sky-400 group-hover:text-sky-600 group-hover:translate-x-1 transition text-lg">
                       chevron_right
                     </span>
                   </button>
@@ -572,7 +563,7 @@ export function StudentBatchHome({
                     setSelectedChapterId(null);
                     pushNavState("recorded", selectedSubjectId, null);
                   }}
-                  className="font-bold text-pink-600 hover:underline flex items-center gap-0.5"
+                  className="font-bold text-sky-600 hover:underline flex items-center gap-0.5"
                 >
                   <span className="material-symbols-outlined text-sm">arrow_back</span>
                   {selectedSubject?.title}
@@ -588,10 +579,10 @@ export function StudentBatchHome({
                   {selectedChapter.lectureList.map((lec, lIdx) => (
                     <div
                       key={lec.id}
-                      className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 flex items-center justify-between gap-2.5 shadow-xs"
+                      className="p-3 rounded-xl bg-[#f5faff] dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 flex items-center justify-between gap-2.5 shadow-xs"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-7 h-7 rounded-lg bg-pink-100/80 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 text-xs font-black flex items-center justify-center shrink-0">
+                        <span className="w-7 h-7 rounded-lg bg-sky-100/80 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 text-xs font-black flex items-center justify-center shrink-0">
                           {lIdx + 1}
                         </span>
                         <div className="min-w-0">
@@ -610,7 +601,7 @@ export function StudentBatchHome({
                                     fileName: `${lec.title}-Notes.pdf`,
                                   })
                                 }
-                                className="text-pink-600 font-bold hover:underline flex items-center gap-0.5"
+                                className="text-sky-600 font-bold hover:underline flex items-center gap-0.5"
                               >
                                 <span className="material-symbols-outlined text-xs">picture_as_pdf</span>
                                 Class Notes
@@ -622,7 +613,7 @@ export function StudentBatchHome({
 
                       <Link
                         href={`/watch/${lec.id}`}
-                        className="px-3 py-1 rounded-lg bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1 shrink-0"
+                        className="px-3 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1 shrink-0"
                       >
                         <span className="material-symbols-outlined text-xs">play_arrow</span>
                         Play
@@ -631,7 +622,7 @@ export function StudentBatchHome({
                   ))}
                 </div>
               ) : (
-                <div className="p-8 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-xl border border-pink-200/70 dark:border-pink-900/40">
+                <div className="p-8 text-center bg-[#f2f8fe] dark:bg-[#0f1722] rounded-xl border border-sky-200/70 dark:border-sky-900/40">
                   <p className="text-xs text-slate-500">No lectures uploaded for this chapter yet</p>
                 </div>
               )}
@@ -651,12 +642,12 @@ export function StudentBatchHome({
               return (
                 <div
                   key={dpp.id}
-                  className="p-3 rounded-xl border border-pink-200/70 dark:border-pink-900/40 bg-[#fff9fa] dark:bg-[#1a1215] shadow-xs flex flex-col justify-between"
+                  className="p-3 rounded-xl border border-sky-200/70 dark:border-sky-900/40 bg-[#f5faff] dark:bg-[#111a26] shadow-xs flex flex-col justify-between"
                 >
                   <div>
                     {/* Top Status & Code */}
                     <div className="flex items-center justify-between gap-1 mb-1.5">
-                      <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider bg-pink-100/70 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 truncate">
+                      <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider bg-sky-100/70 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 truncate">
                         {dpp.subject}
                       </span>
 
@@ -666,7 +657,7 @@ export function StudentBatchHome({
                           Attempted
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.2 rounded-full bg-pink-100/60 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 text-[9px] font-semibold uppercase">
+                        <span className="px-1.5 py-0.2 rounded-full bg-sky-100/60 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-[9px] font-semibold uppercase">
                           Available
                         </span>
                       )}
@@ -682,22 +673,22 @@ export function StudentBatchHome({
 
                     {/* Attempted Stats Display (Requirement 16 & 17) */}
                     {isAttempted && (
-                      <div className="mt-2 p-1.5 rounded-lg bg-pink-50/60 dark:bg-pink-950/20 border border-pink-100 dark:border-pink-900/30 grid grid-cols-3 gap-1 text-center">
+                      <div className="mt-2 p-1.5 rounded-lg bg-sky-50/60 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900/30 grid grid-cols-3 gap-1 text-center">
                         <div>
                           <p className="text-[9.5px] text-slate-500">Score</p>
-                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
+                          <p className="text-xs font-black text-sky-700 dark:text-sky-300">
                             {dpp.score ?? 0}
                           </p>
                         </div>
                         <div>
                           <p className="text-[9.5px] text-slate-500">Correct</p>
-                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
+                          <p className="text-xs font-black text-sky-700 dark:text-sky-300">
                             {dpp.correctCount ?? 0}/{dpp.questionCount}
                           </p>
                         </div>
                         <div>
                           <p className="text-[9.5px] text-slate-500">Accuracy</p>
-                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
+                          <p className="text-xs font-black text-sky-700 dark:text-sky-300">
                             {dpp.accuracy ?? 0}%
                           </p>
                         </div>
@@ -706,7 +697,7 @@ export function StudentBatchHome({
                   </div>
 
                   {/* Bottom Action */}
-                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-pink-100/80 dark:border-pink-950/60">
+                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-sky-100/80 dark:border-sky-950/60">
                     <span className="text-[10px] text-slate-400">
                       {dpp.durationMin} mins
                     </span>
@@ -715,8 +706,8 @@ export function StudentBatchHome({
                       href={dpp.href || `/dpp/${dpp.id}/attempt`}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition shadow-xs ${
                         isAttempted
-                          ? "bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-200 hover:bg-pink-200"
-                          : "bg-pink-600 hover:bg-pink-700 text-white"
+                          ? "bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-200 hover:bg-sky-200"
+                          : "bg-sky-600 hover:bg-sky-700 text-white"
                       }`}
                     >
                       {dpp.actionLabel}
@@ -742,12 +733,12 @@ export function StudentBatchHome({
               return (
                 <div
                   key={test.id}
-                  className="p-3 rounded-xl border border-pink-200/70 dark:border-pink-900/40 bg-[#fff9fa] dark:bg-[#1a1215] shadow-xs flex flex-col justify-between"
+                  className="p-3 rounded-xl border border-sky-200/70 dark:border-sky-900/40 bg-[#f5faff] dark:bg-[#111a26] shadow-xs flex flex-col justify-between"
                 >
                   <div>
                     {/* Status Pill */}
                     <div className="flex items-center justify-between gap-1 mb-1.5">
-                      <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider bg-pink-100/70 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 truncate">
+                      <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider bg-sky-100/70 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 truncate">
                         {test.subject}
                       </span>
 
@@ -760,7 +751,7 @@ export function StudentBatchHome({
                           Upcoming
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.2 rounded-full bg-pink-600 text-white text-[9px] font-bold uppercase">
+                        <span className="px-1.5 py-0.2 rounded-full bg-sky-600 text-white text-[9px] font-bold uppercase">
                           Live Now
                         </span>
                       )}
@@ -776,16 +767,16 @@ export function StudentBatchHome({
 
                     {/* Attempt Results if Completed */}
                     {isSubmitted && (
-                      <div className="mt-2 p-1.5 rounded-lg bg-pink-50/60 dark:bg-pink-950/20 border border-pink-100 dark:border-pink-900/30 grid grid-cols-2 gap-1 text-center">
+                      <div className="mt-2 p-1.5 rounded-lg bg-sky-50/60 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900/30 grid grid-cols-2 gap-1 text-center">
                         <div>
                           <p className="text-[9.5px] text-slate-500">Score</p>
-                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
+                          <p className="text-xs font-black text-sky-700 dark:text-sky-300">
                             {test.score ?? 0} / {test.maxScore}
                           </p>
                         </div>
                         <div>
                           <p className="text-[9.5px] text-slate-500">Accuracy</p>
-                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
+                          <p className="text-xs font-black text-sky-700 dark:text-sky-300">
                             {test.accuracy ?? 0}%
                           </p>
                         </div>
@@ -794,7 +785,7 @@ export function StudentBatchHome({
                   </div>
 
                   {/* Action */}
-                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-pink-100/80 dark:border-pink-950/60">
+                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-sky-100/80 dark:border-sky-950/60">
                     <span className="text-[10px] text-slate-400">
                       {test.openTime ? dateFmt(test.openTime) : "Test"}
                     </span>
@@ -804,8 +795,8 @@ export function StudentBatchHome({
                         href={test.actionHref}
                         className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
                           isSubmitted
-                            ? "bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-200 hover:bg-pink-200"
-                            : "bg-pink-600 hover:bg-pink-700 text-white shadow-xs"
+                            ? "bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-200 hover:bg-sky-200"
+                            : "bg-sky-600 hover:bg-sky-700 text-white shadow-xs"
                         }`}
                       >
                         {test.actionLabel}
@@ -851,13 +842,13 @@ export function StudentBatchHome({
                       setSelectedPdfCategory(cat.id as BatchPdfCategory);
                       pushNavState("materials", null, null, cat.id as BatchPdfCategory);
                     }}
-                    className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 hover:border-pink-400 text-left transition flex flex-col justify-between gap-2 shadow-xs group"
+                    className="p-3 rounded-xl bg-[#f5faff] dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 hover:border-sky-400 text-left transition flex flex-col justify-between gap-2 shadow-xs group"
                   >
-                    <span className="material-symbols-outlined text-pink-600 text-xl group-hover:scale-105 transition">
+                    <span className="material-symbols-outlined text-sky-600 text-xl group-hover:scale-105 transition">
                       {cat.icon}
                     </span>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-pink-600 transition">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-sky-600 transition">
                         {cat.label}
                       </h4>
                       <p className="text-[10px] text-slate-400 mt-0.5">{cat.count} Files</p>
@@ -876,7 +867,7 @@ export function StudentBatchHome({
                     setSelectedPdfCategory(null);
                     pushNavState("materials", null, null, null);
                   }}
-                  className="font-bold text-pink-600 hover:underline flex items-center gap-0.5"
+                  className="font-bold text-sky-600 hover:underline flex items-center gap-0.5"
                 >
                   <span className="material-symbols-outlined text-sm">arrow_back</span>
                   Categories
@@ -889,8 +880,8 @@ export function StudentBatchHome({
 
               {/* Filtered File Grid */}
               {filteredPdfs.length === 0 ? (
-                <div className="p-10 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
-                  <span className="material-symbols-outlined text-3xl text-pink-300 mb-1">description</span>
+                <div className="p-10 text-center bg-[#f2f8fe] dark:bg-[#0f1722] rounded-2xl border border-sky-200/70 dark:border-sky-900/40">
+                  <span className="material-symbols-outlined text-3xl text-sky-300 mb-1">description</span>
                   <p className="text-xs text-slate-500">No documents available in this category</p>
                 </div>
               ) : (
@@ -898,10 +889,10 @@ export function StudentBatchHome({
                   {filteredPdfs.map((pdf) => (
                     <div
                       key={pdf.id}
-                      className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 flex items-center justify-between gap-2.5 shadow-xs"
+                      className="p-3 rounded-xl bg-[#f5faff] dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 flex items-center justify-between gap-2.5 shadow-xs"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-950/60 text-pink-600 flex items-center justify-center shrink-0">
+                        <span className="w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-950/60 text-sky-600 flex items-center justify-center shrink-0">
                           <span className="material-symbols-outlined text-lg">picture_as_pdf</span>
                         </span>
                         <div className="min-w-0">
@@ -924,7 +915,7 @@ export function StudentBatchHome({
                               fileName: pdf.fileName,
                             })
                           }
-                          className="px-2.5 py-1 rounded-lg bg-pink-100 dark:bg-pink-950/60 hover:bg-pink-200 text-pink-700 dark:text-pink-300 text-xs font-bold transition"
+                          className="px-2.5 py-1 rounded-lg bg-sky-100 dark:bg-sky-950/60 hover:bg-sky-200 text-sky-700 dark:text-sky-300 text-xs font-bold transition"
                         >
                           View
                         </button>
@@ -934,7 +925,7 @@ export function StudentBatchHome({
                           download={pdf.fileName}
                           target="_blank"
                           rel="noreferrer"
-                          className="w-7 h-7 rounded-lg hover:bg-pink-100 text-slate-500 flex items-center justify-center transition"
+                          className="w-7 h-7 rounded-lg hover:bg-sky-100 text-slate-500 flex items-center justify-center transition"
                           title="Download"
                         >
                           <span className="material-symbols-outlined text-sm">download</span>
@@ -964,10 +955,10 @@ export function StudentBatchHome({
                 {data.studentBookings.map((bk) => (
                   <div
                     key={bk.id}
-                    className="p-3 rounded-xl bg-pink-50/70 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800/60 flex items-center justify-between gap-2 shadow-xs"
+                    className="p-3 rounded-xl bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/60 flex items-center justify-between gap-2 shadow-xs"
                   >
                     <div>
-                      <span className="px-1.5 py-0.2 rounded-full bg-pink-600 text-white text-[9px] font-bold uppercase">
+                      <span className="px-1.5 py-0.2 rounded-full bg-sky-600 text-white text-[9px] font-bold uppercase">
                         {bk.status}
                       </span>
                       <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-1">
@@ -981,7 +972,7 @@ export function StudentBatchHome({
                     {bk.meetingUrl && (
                       <Link
                         href={bk.meetingUrl}
-                        className="px-3 py-1 rounded-lg bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold shadow-xs transition shrink-0"
+                        className="px-3 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition shrink-0"
                       >
                         Join
                       </Link>
@@ -998,18 +989,42 @@ export function StudentBatchHome({
               Available Mentorship Slots
             </h3>
             {data.doubtSlots.length === 0 ? (
-              <div className="p-8 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
-                <span className="material-symbols-outlined text-3xl text-pink-300 mb-1">
-                  calendar_today
-                </span>
-                <p className="text-xs text-slate-500">No open mentorship slots available today</p>
+              <div className="p-3 rounded-2xl bg-[#f2f8fe] dark:bg-[#0f1722] border border-sky-200/70 dark:border-sky-900/40 space-y-2">
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  No 1-on-1 slot is open right now. Your teachers' availability — a slot shows here as soon as a teacher opens one:
+                </p>
+                {data.batch.teacherCards.length === 0 ? (
+                  <p className="text-xs text-slate-400">No teachers are listed for this batch yet.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {data.batch.teacherCards.map((tc) => (
+                      <div key={tc.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#111a26] border border-sky-100 dark:border-sky-900/40">
+                        {tc.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={tc.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <span className="w-8 h-8 rounded-full bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-bold shrink-0">
+                            {tc.name.charAt(0)}
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-tight">{tc.name}</p>
+                          <p className="text-[11px] text-slate-500 truncate leading-tight">{tc.subjects.join(", ") || "Faculty"}</p>
+                        </div>
+                        <span className="px-1.5 py-px rounded text-[9.5px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">
+                          No slot open
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {data.doubtSlots.map((slot) => (
                   <div
                     key={slot.id}
-                    className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 flex flex-col justify-between shadow-xs"
+                    className="p-3 rounded-xl bg-[#f5faff] dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 flex flex-col justify-between shadow-xs"
                   >
                     <div>
                       <div className="flex items-center gap-2 mb-1.5">
@@ -1021,7 +1036,7 @@ export function StudentBatchHome({
                             className="w-7 h-7 rounded-full object-cover shrink-0"
                           />
                         ) : (
-                          <div className="w-7 h-7 rounded-full bg-pink-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
+                          <div className="w-7 h-7 rounded-full bg-sky-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
                             {slot.teacherName.charAt(0)}
                           </div>
                         )}
@@ -1029,7 +1044,7 @@ export function StudentBatchHome({
                           <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                             {slot.teacherName}
                           </h4>
-                          <p className="text-[10px] text-pink-600">{slot.subject}</p>
+                          <p className="text-[10px] text-sky-600">{slot.subject}</p>
                         </div>
                       </div>
 
@@ -1041,7 +1056,7 @@ export function StudentBatchHome({
                     <button
                       type="button"
                       onClick={() => setBookingSlot(slot)}
-                      className="mt-2.5 w-full py-1 rounded-lg bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold transition shadow-xs"
+                      className="mt-2.5 w-full py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition shadow-xs"
                     >
                       Book 1-on-1 Session
                     </button>
@@ -1057,27 +1072,29 @@ export function StudentBatchHome({
       {/* 9. NOTICES TAB (Requirement 36)                                           */}
       {/* ========================================================================= */}
       {tab === "notices" && (
-        <div className="space-y-2 animate-in fade-in duration-150">
+        <div className="space-y-1 animate-in fade-in duration-150">
           {data.notices.length === 0 ? (
-            <div className="p-8 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
-              <span className="material-symbols-outlined text-3xl text-pink-300 mb-1">campaign</span>
+            <div className="p-8 text-center bg-[#f2f8fe] dark:bg-[#0f1722] rounded-2xl border border-sky-200/70 dark:border-sky-900/40">
+              <span className="material-symbols-outlined text-3xl text-sky-300 mb-1">campaign</span>
               <p className="text-xs text-slate-500">No notices posted yet</p>
             </div>
           ) : (
+            // One line per notice; tap it to read the whole notice.
             data.notices.map((nt) => (
-              <div
+              <details
                 key={nt.id}
-                className="p-3.5 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 shadow-xs"
+                className="group rounded-lg bg-white dark:bg-[#111a26] border border-sky-100 dark:border-sky-900/40 px-2.5 py-1.5"
               >
-                <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
-                  <span className="font-bold text-pink-600 uppercase tracking-wider">
-                    Official Notice
+                <summary className="flex items-center gap-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <span className="material-symbols-outlined text-[16px] text-sky-600 shrink-0">campaign</span>
+                  <span className="flex-1 min-w-0 truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{nt.title}</span>
+                  <span className="text-[10px] text-slate-400 shrink-0 tabular-nums">
+                    {new Date(nt.createdAt).toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short" })}
                   </span>
-                  <span>{new Date(nt.createdAt).toLocaleDateString("en-IN", { timeZone: IST })}</span>
-                </div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mb-1">{nt.title}</h4>
-                <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed">{nt.body}</p>
-              </div>
+                  <span className="material-symbols-outlined text-[16px] text-slate-400 shrink-0 transition group-open:rotate-180">expand_more</span>
+                </summary>
+                <p className="mt-1.5 pl-6 text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed">{nt.body}</p>
+              </details>
             ))
           )}
         </div>
@@ -1089,7 +1106,7 @@ export function StudentBatchHome({
       {tab === "info" && (
         <div className="space-y-3 animate-in fade-in duration-150">
           {/* Overview & Description */}
-          <div className="p-4 rounded-2xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 shadow-xs space-y-2.5">
+          <div className="p-4 rounded-2xl bg-[#f5faff] dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 shadow-xs space-y-2.5">
             <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
               Batch Overview
             </h3>
@@ -1100,7 +1117,7 @@ export function StudentBatchHome({
                 }. The program features structured live lectures, curated DPP practice sets, full syllabus mock tests, class notes, and one-to-one faculty mentorship.`}
             </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-pink-100/80 dark:border-pink-950/60">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-sky-100/80 dark:border-sky-950/60">
               <div>
                 <p className="text-[10px] text-slate-400 font-medium">Batch Code</p>
                 <p className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
@@ -1115,13 +1132,13 @@ export function StudentBatchHome({
               </div>
               <div>
                 <p className="text-[10px] text-slate-400 font-medium">Status</p>
-                <p className="text-xs font-bold text-pink-600">Active & Enrolled</p>
+                <p className="text-xs font-bold text-sky-600">Active & Enrolled</p>
               </div>
             </div>
           </div>
 
           {/* Assigned Educators & Faculty */}
-          <div className="p-4 rounded-2xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 shadow-xs space-y-2.5">
+          <div className="p-4 rounded-2xl bg-[#f5faff] dark:bg-[#111a26] border border-sky-200/70 dark:border-sky-900/40 shadow-xs space-y-2.5">
             <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
               Assigned Faculty
             </h3>
@@ -1130,17 +1147,17 @@ export function StudentBatchHome({
               {data.batch.teacherCards.map((t) => (
                 <div
                   key={t.id}
-                  className="p-3 rounded-xl border border-pink-100 dark:border-pink-950 flex items-center gap-2.5 bg-white/70 dark:bg-slate-900/40"
+                  className="p-3 rounded-xl border border-sky-100 dark:border-sky-950 flex items-center gap-2.5 bg-white/70 dark:bg-slate-900/40"
                 >
                   {t.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={t.photoUrl}
                       alt=""
-                      className="w-9 h-9 rounded-full object-cover shrink-0 border border-pink-200"
+                      className="w-9 h-9 rounded-full object-cover shrink-0 border border-sky-200"
                     />
                   ) : (
-                    <div className="w-9 h-9 rounded-full bg-pink-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-sky-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
                       {t.name.charAt(0)}
                     </div>
                   )}
@@ -1149,7 +1166,7 @@ export function StudentBatchHome({
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                       {t.name}
                     </h4>
-                    <p className="text-[10.5px] text-pink-600 font-medium truncate">
+                    <p className="text-[10.5px] text-sky-600 font-medium truncate">
                       {t.subjects.join(", ") || t.department || "Faculty"}
                     </p>
                     {t.experienceYears && (
@@ -1204,7 +1221,7 @@ export function StudentBatchHome({
                 value={bookingTopic}
                 onChange={(e) => setBookingTopic(e.target.value)}
                 placeholder="What topics or questions would you like guidance on?"
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
               />
             </div>
 
@@ -1220,7 +1237,7 @@ export function StudentBatchHome({
                 type="button"
                 disabled={isSubmittingBooking}
                 onClick={handleConfirmBooking}
-                className="px-5 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 disabled:bg-pink-600/50 text-white text-xs font-bold shadow transition flex items-center gap-1.5"
+                className="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:bg-sky-600/50 text-white text-xs font-bold shadow transition flex items-center gap-1.5"
               >
                 <span className={`material-symbols-outlined text-sm ${isSubmittingBooking ? "animate-spin" : ""}`}>
                   {isSubmittingBooking ? "progress_activity" : "check"}

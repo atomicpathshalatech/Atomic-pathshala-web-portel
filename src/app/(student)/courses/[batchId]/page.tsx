@@ -117,7 +117,8 @@ export default async function BatchCoursePage({
     const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
     if (data) {
       const rawTab = searchParams?.tab;
-      let initialTab: BatchTab = "schedule";
+      // No tab in the link: the section boxes.
+      let initialTab: BatchTab = "home";
       if (rawTab === "recorded") initialTab = "recorded";
       else if (rawTab === "dpp") initialTab = "dpp";
       else if (rawTab === "tests") initialTab = "tests";

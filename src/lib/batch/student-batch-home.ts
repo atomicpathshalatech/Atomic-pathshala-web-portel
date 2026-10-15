@@ -479,6 +479,12 @@ export async function loadStudentBatchHome(
     .sort((a, b) => a.subject.localeCompare(b.subject) || a.order - b.order || a.title.localeCompare(b.title))
     .map(({ order: _order, ...c }) => c);
 
+  // Mentorship slots of the batch's teachers — also those who teach its
+  // classes without being added to the batch as a teacher.
+  const mentorTeacherIds = Array.from(
+    new Set([...teacherIds, ...schedules.map((s) => s.teacherId).filter((id): id is string => Boolean(id))])
+  );
+
   // Tests whose set time has come are published first (no minute-level cron here).
   await publishDueTests();
   const chapterIds: string[] = Array.from(rawChapterIds);
@@ -611,10 +617,10 @@ export async function loadStudentBatchHome(
     }),
 
     // Available Faculty Doubt Slots
-    teacherIds.length
+    mentorTeacherIds.length
       ? prisma.doubtSlot.findMany({
           where: {
-            teacherId: { in: teacherIds },
+            teacherId: { in: mentorTeacherIds },
             status: "OPEN",
             startTime: { gte: now },
           },
@@ -761,7 +767,8 @@ export async function loadStudentBatchHome(
       timeTakenSec: null,
       opensAt: d.startsAt.toISOString(),
       submittedAt: a?.submittedAt ? a.submittedAt.toISOString() : null,
-      pdfUrl: isSubmitted && t ? `/api/tests/${t.id}/pdf` : null,
+      // The question sheet once the DPP is open (its folder used to stay empty until submitted).
+      pdfUrl: t && status !== "UPCOMING" ? `/api/tests/${t.id}/pdf` : null,
       href: status === "UPCOMING" || !t ? null : `/tests/${t.id}/attempt`,
       actionLabel: isSubmitted ? "View Result" : status === "UPCOMING" ? `Opens at ${timeFmt(d.startsAt)}` : "Attempt DPP",
     });
@@ -955,6 +962,21 @@ export async function loadStudentBatchHome(
       createdAt: d.opensAt || new Date().toISOString(),
       sourceType: "DPP_PDF",
     });
+    if (d.isAttempted) {
+      allPdfs.push({
+        id: `pdf_dpp_sol_${d.id}`,
+        title: `${d.title} (Solutions)`,
+        category: "DPP",
+        subject: d.subject,
+        chapter: d.chapter,
+        fileUrl: `${d.pdfUrl}?type=solutions`,
+        fileName: `${d.code || "DPP"}-Solutions.pdf`,
+        sizeBytes: 200000,
+        allowDownload: true,
+        createdAt: d.opensAt || new Date().toISOString(),
+        sourceType: "DPP_PDF",
+      });
+    }
   }
 
   // 8.2 Test PDFs

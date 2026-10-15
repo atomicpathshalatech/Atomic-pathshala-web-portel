@@ -15,7 +15,7 @@ export async function studentPaperBlockReason(
   userId: string,
   role: string | undefined,
   testId: string,
-  _withSolution: boolean
+  withSolution: boolean
 ): Promise<string | null> {
   if (role !== "STUDENT" && role !== "PARENT") return null;
   const dbTest = await prisma.test.findUnique({
@@ -44,9 +44,11 @@ export async function studentPaperBlockReason(
     select: { id: true },
   });
 
+  // DPP: the question sheet once published (it is practice); the solutions
+  // only after the student has submitted it.
   if (isDppTest(dbTest)) {
-    if (!attempt) {
-      return "DPP PDF is available only after you submit the DPP.";
+    if (withSolution && !attempt) {
+      return "DPP solutions are available after you submit the DPP.";
     }
     return null;
   }
