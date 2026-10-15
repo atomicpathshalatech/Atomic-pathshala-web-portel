@@ -2,9 +2,11 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { canManageTest } from "@/lib/test-engine/access";
+import { testStartedReason } from "@/lib/tests/scheduled-publish";
 
 export async function GET(
   _request: NextRequest,
@@ -48,6 +50,9 @@ export async function POST(
 
     const test = await prisma.test.findUnique({ where: { id: params.id } });
     if (!test) return apiError("Test not found", 404);
+    if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
+    const started = await testStartedReason(test);
+    if (started) return apiError(started, 409);
 
     const body = await request.json();
     const { sections } = body;

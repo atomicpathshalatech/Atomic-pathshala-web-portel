@@ -17,11 +17,30 @@ export interface TestItem {
   incorrectMarks: number;
   examType?: string | null;
   status: string;
+  /** When the test is held. Until then it is a draft (questions can change); then it publishes itself. */
+  openTime?: string | Date | null;
   createdAt: string | Date;
   _count?: {
     sections: number;
     attempts: number;
   };
+}
+
+/** "2026-10-15T14:00" in this computer's time, for <input type="datetime-local">. */
+function toLocalInput(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function fmtWhen(d: string | Date): string {
+  return new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+/** Scheduled (before its time) / Published / time passed but not published (no questions). */
+function scheduleState(t: TestItem, now = Date.now()): "SCHEDULED" | "PUBLISHED" | "MISSED" | "DRAFT" {
+  if (t.status !== "DRAFT") return "PUBLISHED";
+  if (!t.openTime) return "DRAFT";
+  return new Date(t.openTime).getTime() > now ? "SCHEDULED" : "MISSED";
 }
 
 export function ChapterTestsTab({
@@ -52,6 +71,7 @@ export function ChapterTestsTab({
   const [incorrectMarks, setIncorrectMarks] = useState<number>(-1);
   const [examType, setExamType] = useState("NEET");
   const [instructions, setInstructions] = useState("");
+  const [openTimeLocal, setOpenTimeLocal] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -62,6 +82,9 @@ export function ChapterTestsTab({
     setIncorrectMarks(-1);
     setExamType("NEET");
     setInstructions("Standard computer-based assessment. +4 for correct, -1 for incorrect.");
+    const tomorrow = new Date(Date.now() + 24 * 3600 * 1000);
+    tomorrow.setHours(10, 0, 0, 0);
+    setOpenTimeLocal(toLocalInput(tomorrow));
     setError("");
     setShowCreateModal(true);
   };
@@ -74,6 +97,7 @@ export function ChapterTestsTab({
     setCorrectMarks(t.correctMarks || 4);
     setIncorrectMarks(t.incorrectMarks || -1);
     setExamType(t.examType || "NEET");
+    setOpenTimeLocal(t.openTime ? toLocalInput(new Date(t.openTime)) : "");
     setError("");
   };
 
@@ -81,6 +105,10 @@ export function ChapterTestsTab({
     e.preventDefault();
     if (!name.trim()) {
       setError("Please provide a name for this chapter test.");
+      return;
+    }
+    if (!openTimeLocal) {
+      setError("Choose the date and time of the test.");
       return;
     }
     setSubmitting(true);
@@ -97,6 +125,7 @@ export function ChapterTestsTab({
           incorrectMarks: Number(incorrectMarks),
           examType,
           instructions: instructions.trim() || undefined,
+          openTime: new Date(openTimeLocal).toISOString(),
         }),
       });
       const json = await res.json();
@@ -107,7 +136,7 @@ export function ChapterTestsTab({
 
       setTests((prev) => [json.data.test, ...prev]);
       setShowCreateModal(false);
-      toast.success("Chapter Test created successfully!");
+      toast.success(`Test scheduled for ${fmtWhen(new Date(openTimeLocal))}. Add questions — it publishes itself at that time.`);
       router.refresh();
     } catch (err: any) {
       setError(err.message || "Network error");
@@ -132,6 +161,7 @@ export function ChapterTestsTab({
           correctMarks: Number(correctMarks),
           incorrectMarks: Number(incorrectMarks),
           examType,
+          ...(editingTest.status === "DRAFT" && openTimeLocal && { openTime: new Date(openTimeLocal).toISOString() }),
         }),
       });
       const json = await res.json();
@@ -184,8 +214,10 @@ export function ChapterTestsTab({
       const json = await res.json();
       if (json.success) {
         setTests((prev) => prev.map((t) => (t.id === testId ? { ...t, status: "PUBLISHED" } : t)));
-        toast.success("Test submitted & published!");
+        toast.success("Test published — students can open it now.");
         router.refresh();
+      } else {
+        toast.error(json.error || "Could not publish this test.");
       }
     } catch {
       toast.error("Failed to submit test.");
@@ -305,6 +337,28 @@ export function ChapterTestsTab({
 
                 {/* Right: Manage / Add Questions Button + 3-Dot Menu */}
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  {(() => {
+                    const st = scheduleState(t);
+                    if (st === "SCHEDULED")
+                      return (
+                        <span
+                          className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                          title="Questions can be added and corrected until this time; then it publishes itself."
+                        >
+                          Scheduled · {fmtWhen(t.openTime!)}
+                        </span>
+                      );
+                    if (st === "MISSED")
+                      return (
+                        <span
+                          className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-500/30"
+                          title="Its time came but it has no questions (or an empty section), so it was not published. Add questions and publish it, or change its time."
+                        >
+                          Not published — no questions
+                        </span>
+                      );
+                    return null;
+                  })()}
                   {t.status && t.status !== "DRAFT" && (
                     <span
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
@@ -397,7 +451,7 @@ export function ChapterTestsTab({
                               className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Submit / Publish</span>
+                              <span>Publish now</span>
                             </button>
                           )}
 
@@ -455,6 +509,23 @@ export function ChapterTestsTab({
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-emerald-500 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Test date &amp; time
+                </label>
+                <input
+                  type="datetime-local"
+                  required={!editingTest}
+                  disabled={!!editingTest && editingTest.status !== "DRAFT"}
+                  value={openTimeLocal}
+                  onChange={(e) => setOpenTimeLocal(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-sm text-slate-900 dark:text-white focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Students see it as Upcoming from now. Add or correct questions until this time — then it publishes itself and can no longer be changed.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -566,6 +637,23 @@ export function ChapterTestsTab({
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-emerald-500 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Test date &amp; time
+                </label>
+                <input
+                  type="datetime-local"
+                  required={!editingTest}
+                  disabled={!!editingTest && editingTest.status !== "DRAFT"}
+                  value={openTimeLocal}
+                  onChange={(e) => setOpenTimeLocal(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-sm text-slate-900 dark:text-white focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Students see it as Upcoming from now. Add or correct questions until this time — then it publishes itself and can no longer be changed.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

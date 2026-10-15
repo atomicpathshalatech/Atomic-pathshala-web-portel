@@ -9,6 +9,14 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { generateQuestionId } from "@/lib/questions/id-generator";
 import { analyzeQuestionSimilarity } from "@/lib/questions/similarity";
 import { QuestionType, Difficulty } from "@prisma/client";
+import { testStartedReason } from "@/lib/tests/scheduled-publish";
+
+/** A test's questions stop changing once it has started (or someone has taken it). */
+async function testSectionLockReason(sectionId: unknown): Promise<string | null> {
+  if (typeof sectionId !== "string" || !sectionId) return null;
+  const section = await prisma.section.findUnique({ where: { id: sectionId }, select: { test: { select: { id: true, openTime: true } } } });
+  return section ? testStartedReason(section.test) : null;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -173,6 +181,8 @@ export async function POST(request: NextRequest) {
     if (!statementEn?.trim() && !statementHi?.trim()) {
       return apiError("At least one language statement is required.", 400);
     }
+    const sectionLocked = await testSectionLockReason(testSectionId);
+    if (sectionLocked) return apiError(sectionLocked, 409);
 
     // 1. Concurrency-Safe 8-Digit Question ID Generation
     const firstQuestionCode = await generateQuestionId(prisma, subject);
@@ -450,6 +460,8 @@ export async function PUT(request: NextRequest) {
       include: { translations: true },
     });
     if (!existing) return apiError("Question not found.", 404);
+    const sectionLocked = await testSectionLockReason(testSectionId);
+    if (sectionLocked) return apiError(sectionLocked, 409);
 
     const targetExam = pyqExam !== undefined ? (pyqExam ? pyqExam.trim() : null) : existing.pyqExam;
     const targetYear = pyqYear !== undefined ? (pyqYear ? parseInt(String(pyqYear), 10) || null : null) : existing.pyqYear;

@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { testStartedReason } from "@/lib/tests/scheduled-publish";
 
 export async function DELETE(
   _request: NextRequest,
@@ -19,6 +20,8 @@ export async function DELETE(
     const test = await getTestOr404(params.id);
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
+    const started = await testStartedReason(test);
+    if (started) return apiError(started, 409);
 
     // params.testQuestionId can be SectionQuestion.id or Question.id — scope the delete
     // through the section's testId so a stray id from another test can't

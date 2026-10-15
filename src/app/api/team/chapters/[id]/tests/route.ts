@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { LanguageMode, TestStatus } from "@prisma/client";
 import { assertChapterAccess } from "@/lib/chapters/access";
+import { publishDueTests } from "@/lib/tests/scheduled-publish";
 
 export async function GET(
   request: NextRequest,
@@ -17,6 +18,7 @@ export async function GET(
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.TEST_READ);
     await assertChapterAccess(session?.user?.id ?? "", params.id, "read");
+    await publishDueTests({ chapterId: params.id });
 
     const tests = await prisma.test.findMany({
       where: { chapterId: params.id },
@@ -57,10 +59,22 @@ export async function POST(
       examType,
       instructions,
       languageMode,
+      openTime: openTimeRaw,
     } = body;
 
     if (!name?.trim()) {
       return apiError("Test Name is required", 400);
+    }
+
+    // The time the test is held. Until then it stays a draft — questions can
+    // be added and corrected, students see it as Upcoming — and at that time
+    // it publishes itself (src/lib/tests/scheduled-publish.ts).
+    const openTime = typeof openTimeRaw === "string" && openTimeRaw ? new Date(openTimeRaw) : null;
+    if (!openTime || Number.isNaN(openTime.getTime())) {
+      return apiError("Choose the date and time of the test.", 400);
+    }
+    if (openTime.getTime() < Date.now() - 60_000) {
+      return apiError("The test time is in the past — choose a later time.", 400);
     }
 
     // Unique test code
@@ -78,7 +92,8 @@ export async function POST(
         examType: examType || chapter.subject.course?.title || "NEET",
         instructions: instructions?.trim() || null,
         languageMode: languageMode && Object.values(LanguageMode).includes(languageMode) ? languageMode : LanguageMode.BOTH,
-        status: TestStatus.PUBLISHED,
+        openTime,
+        status: TestStatus.DRAFT,
         createdById: session.user.id,
       },
     });
@@ -89,7 +104,7 @@ export async function POST(
         action: "TEST_CREATED",
         entityType: "Test",
         entityId: test.id,
-        metadata: { chapterId: chapter.id, name: test.name },
+        metadata: { chapterId: chapter.id, name: test.name, openTime: openTime.toISOString() },
       },
     });
 

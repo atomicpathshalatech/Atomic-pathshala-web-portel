@@ -1,4 +1,5 @@
 import "server-only";
+import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import { prisma } from "@/lib/db";
 import { canStudentJoinClass, getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 import { areResultsReleased } from "@/lib/tests/schedule-rules";
@@ -478,6 +479,8 @@ export async function loadStudentBatchHome(
     .sort((a, b) => a.subject.localeCompare(b.subject) || a.order - b.order || a.title.localeCompare(b.title))
     .map(({ order: _order, ...c }) => c);
 
+  // Tests whose set time has come are published first (no minute-level cron here).
+  await publishDueTests();
   const chapterIds: string[] = Array.from(rawChapterIds);
   const chapterTitles: string[] = Array.from(rawChapterTitles);
   const subjectTitles: string[] = Array.from(rawSubjectTitles);
@@ -529,11 +532,13 @@ export async function loadStudentBatchHome(
       },
     }),
 
-    // Batch Tests (Assigned via test series, batch schedule, or chapters)
+    // Batch Tests (Assigned via test series, batch schedule, or chapters).
+    // A test scheduled for later shows as Upcoming while the team still adds
+    // its questions (it is a draft until its time, then publishes itself).
     prisma.test.findMany({
       where: {
         archived: false,
-        status: { in: ["PUBLISHED", "APPROVED"] },
+        AND: [{ OR: [{ status: { in: ["PUBLISHED", "APPROVED"] } }, { status: "DRAFT", openTime: { gt: now } }] }],
         OR: [
           { batchSchedule: { batchId } },
           ...(testSeriesIds.length ? [{ testSeriesId: { in: testSeriesIds } }] : []),

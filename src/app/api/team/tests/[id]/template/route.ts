@@ -8,6 +8,7 @@ import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
 import { createSectionsFromTemplate, getTestSectionBreakdown } from "@/lib/test-engine/sections";
 import { applyTemplateSchema } from "@/lib/validation/test-template";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { testLockedReason } from "@/lib/tests/scheduled-publish";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -49,9 +50,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const test = await getTestOr404(params.id);
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
-    if (test.status !== "DRAFT") {
-      return apiError("Cannot change template on a non-draft test", 409);
-    }
+    const locked = testLockedReason(test);
+    if (locked) return apiError(locked, 409);
 
     const body = await request.json();
     const data = applyTemplateSchema.parse(body);

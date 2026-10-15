@@ -8,6 +8,7 @@ import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
 import { getOrCreateDefaultSection, listTestSectionQuestions, nextSectionQuestionOrder } from "@/lib/test-engine/sections";
 import { testQuestionsAddSchema } from "@/lib/validation/test";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { testLockedReason } from "@/lib/tests/scheduled-publish";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -43,7 +44,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const test = await getTestOr404(params.id);
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
-    if (test.status !== "DRAFT") return apiError("Only draft tests can have questions added.", 409);
+    // Questions can be added and corrected until the test's set time (it stays a draft until then).
+    const locked = testLockedReason(test);
+    if (locked) return apiError(locked, 409);
 
     const input = testQuestionsAddSchema.parse(await request.json());
 

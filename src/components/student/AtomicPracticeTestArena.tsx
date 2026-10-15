@@ -663,9 +663,11 @@ export function AtomicPracticeTestArena({
                                         type="button"
                                         disabled
                                         aria-disabled="true"
-                                        className="px-3.5 py-1.5 rounded-lg font-bold text-xs bg-slate-100 text-slate-400 cursor-not-allowed text-center"
+                                        className="px-3.5 py-1.5 rounded-lg font-bold text-xs bg-slate-100 text-slate-500 cursor-not-allowed text-center"
                                       >
-                                        Upcoming
+                                        {test.startsAt
+                                          ? `Opens ${new Date(test.startsAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true })}`
+                                          : "Upcoming"}
                                       </button>
                                     ) : (
                                       <Link

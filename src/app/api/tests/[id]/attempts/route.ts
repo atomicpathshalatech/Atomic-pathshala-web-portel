@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveStudentForTest } from "@/lib/test-series/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { formatIst, publishDueTests } from "@/lib/tests/scheduled-publish";
 
 /** Starts (or resumes) the calling student's attempt at a published test —
  * either a batch-scheduled class test or a standalone TestSeries test (see
@@ -15,6 +16,8 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
 
+    // A scheduled test whose time has come publishes itself now.
+    await publishDueTests({ testIds: [params.id] });
     const test = await prisma.test.findUnique({
       where: { id: params.id },
       include: { batchSchedule: true },
@@ -24,6 +27,14 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       return apiError("This test isn't linked to a scheduled session, series, or chapter.", 400);
     }
     if (test.status === "ARCHIVED" || test.archived) return apiError("This test has been archived.", 409);
+    // Only a published test can be taken, and not before its set time (a
+    // student with the link could start a draft or an early test before).
+    if (test.openTime && Date.now() < test.openTime.getTime()) {
+      return apiError(`This test opens at ${formatIst(test.openTime)}.`, 409);
+    }
+    if (["DRAFT", "PENDING_APPROVAL", "UNDER_REVIEW"].includes(test.status)) {
+      return apiError("This test isn't published yet.", 409);
+    }
 
     const { student } = await resolveStudentForTest(session.user.id, test);
     if (!student) throw new ForbiddenError("You are not eligible to attempt this test.");

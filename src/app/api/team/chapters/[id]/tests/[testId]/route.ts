@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { deleteTestCascading } from "@/lib/team/resource-delete";
 import { assertChapterAccess } from "@/lib/chapters/access";
+import { isTestEditable, publishTestNow, testStartedReason } from "@/lib/tests/scheduled-publish";
 
 export async function PATCH(
   request: NextRequest,
@@ -21,20 +22,42 @@ export async function PATCH(
     const test = await prisma.test.findUnique({
       where: { id: params.testId },
     });
-    if (!test) return apiError("Test not found", 404);
+    if (!test || test.chapterId !== params.id) return apiError("Test not found", 404);
 
     const body = await request.json();
-    const { name, durationMin, correctMarks, incorrectMarks, instructions, status, examType } = body;
+    const { name, durationMin, correctMarks, incorrectMarks, instructions, status, examType, openTime: openTimeRaw } = body;
+
+    // "Publish now" goes through the same checks as every publish (questions
+    // in every section…). No other status can be set from here.
+    if (status !== undefined) {
+      if (status !== "PUBLISHED") return apiError("Only publishing is possible here.", 400);
+      const result = await publishTestNow(test.id, session.user.id);
+      if (!result.ok) return apiError(result.error, result.status);
+      const published = await prisma.test.findUnique({ where: { id: test.id } });
+      return apiSuccess({ test: published });
+    }
+
+    // Name, time and marks: only before the test starts (and before anyone took it).
+    const started = await testStartedReason(test);
+    if (started) return apiError(started, 409);
+
+    let openTime: Date | undefined;
+    if (openTimeRaw !== undefined) {
+      if (!isTestEditable(test)) return apiError("This test is already published — its time can't be changed here.", 409);
+      openTime = new Date(String(openTimeRaw));
+      if (Number.isNaN(openTime.getTime())) return apiError("Choose the date and time of the test.", 400);
+      if (openTime.getTime() < Date.now() - 60_000) return apiError("The test time is in the past — choose a later time.", 400);
+    }
 
     const updated = await prisma.test.update({
       where: { id: params.testId },
       data: {
+        ...(openTime && { openTime }),
         ...(name !== undefined && { name: name.trim() }),
         ...(durationMin !== undefined && { durationMin: Number(durationMin) }),
         ...(correctMarks !== undefined && { correctMarks: Number(correctMarks) }),
         ...(incorrectMarks !== undefined && { incorrectMarks: Number(incorrectMarks) }),
         ...(instructions !== undefined && { instructions: instructions?.trim() || null }),
-        ...(status !== undefined && { status }),
         ...(examType !== undefined && { examType }),
       },
     });
@@ -45,7 +68,7 @@ export async function PATCH(
         action: "TEST_UPDATED",
         entityType: "Test",
         entityId: updated.id,
-        metadata: { chapterId: params.id, name: updated.name },
+        metadata: { chapterId: params.id, name: updated.name, ...(openTime && { openTime: openTime.toISOString() }) },
       },
     });
 

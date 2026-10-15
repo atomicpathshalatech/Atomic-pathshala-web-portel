@@ -4,7 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
+import { canManageTest } from "@/lib/test-engine/access";
+import { publishTestNow } from "@/lib/tests/scheduled-publish";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
@@ -13,77 +14,14 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
 
-    const test = await prisma.test.findUnique({
-      where: { id: params.id },
-      include: {
-        template: true,
-        sections: {
-          include: {
-            questions: {
-              include: { question: true },
-            },
-          },
-        },
-      },
-    });
-
+    const test = await prisma.test.findUnique({ where: { id: params.id }, select: { batchScheduleId: true } });
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
-    if (test.status !== "DRAFT") return apiError("This test has already been published.", 409);
 
-    if (test.sections.length === 0) {
-      return apiError("Cannot publish test without any sections or questions configured.", 400);
-    }
-
-    const totalQuestions = test.sections.reduce((sum, s) => sum + s.questions.length, 0);
-    if (totalQuestions === 0) {
-      return apiError("Add at least one question before publishing.", 400);
-    }
-
-    // Validation 1: Verify all sections have at least one question
-    const emptySections = test.sections.filter((s) => s.questions.length === 0);
-    if (emptySections.length > 0) {
-      const secName = emptySections[0]?.name || "Unnamed Section";
-      return apiError(
-        `Section "${secName}" has no questions assigned. Every section must have questions.`,
-        400
-      );
-    }
-
-    // Validation 2 / Auto-promotion: Automatically verify and publish all assigned questions on test publish
-    const unverifiedQuestions = test.sections.flatMap((s) =>
-      s.questions.filter((sq) => !sq.question.isPublished || sq.question.status !== "PUBLISHED").map((sq) => sq.questionId)
-    );
-    if (unverifiedQuestions.length > 0) {
-      await prisma.question.updateMany({
-        where: { id: { in: unverifiedQuestions } },
-        data: {
-          isPublished: true,
-          status: "PUBLISHED",
-          publishedAt: new Date(),
-          publishedById: session.user.id,
-        },
-      });
-    }
-
-    const updated = await prisma.test.update({
-      where: { id: params.id },
-      data: { status: "PUBLISHED" },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "TEST_PUBLISHED",
-        entityType: "Test",
-        entityId: params.id,
-        metadata: {
-          questionCount: totalQuestions,
-          sectionsCount: test.sections.length,
-          templateId: test.templateId,
-        },
-      },
-    });
+    // Same rules as the automatic publish at a test's set time (src/lib/tests/scheduled-publish.ts).
+    const result = await publishTestNow(params.id, session.user.id);
+    if (!result.ok) return apiError(result.error, result.status);
+    const updated = await prisma.test.findUnique({ where: { id: params.id } });
 
     return apiSuccess({ test: updated });
   } catch (error) {

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { DualColumnQuestionStudio } from "@/components/questions/DualColumnQuestionStudio";
+import { isTestEditable, publishDueTests } from "@/lib/tests/scheduled-publish";
 
 export const metadata: Metadata = {
   title: "Test Question Authoring Studio — Atomic Pathshala",
@@ -18,6 +19,8 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
   const canEdit = await hasPermission(session.user.id, PERMISSIONS.TEST_UPDATE);
   if (!canEdit) redirect("/team/tests");
 
+  // A scheduled test whose time has come publishes itself now.
+  await publishDueTests({ testIds: [params.id] });
   const test = await prisma.test.findUnique({
     where: { id: params.id },
     include: {
@@ -119,7 +122,9 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
     0
   );
 
-  const isPublished = (test.status as string) === "APPROVED" || (test.status as string) === "PUBLISHED" || (test.status as string) === "ACTIVE";
+  // Locked once published — or once a scheduled test's time has come (even if it could not publish).
+  const isPublished = !isTestEditable(test);
+  const opensAt = test.status === "DRAFT" && test.openTime && test.openTime > new Date() ? test.openTime.toISOString() : null;
 
   return (
     <DualColumnQuestionStudio
@@ -131,6 +136,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
       initialQuestions={initialQuestions.length > 0 ? initialQuestions : undefined}
       backHref={`/team/tests/${test.id}`}
       isPublished={isPublished}
+      opensAt={opensAt}
     />
   );
 }

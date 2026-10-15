@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
@@ -38,6 +39,9 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
     },
   });
   if (!chapter) notFound();
+
+  // Tests whose set time has come are published before the list is shown.
+  await publishDueTests({ chapterId: chapter.id });
 
   const [user, lectures, dpps, tests, reviews, batchChapters, scheduledBatches] = await Promise.all([
     prisma.user.findUnique({
@@ -239,6 +243,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           incorrectMarks: t.incorrectMarks,
           examType: t.examType,
           status: t.status,
+          openTime: t.openTime,
           createdAt: t.createdAt,
           _count: t._count,
         }))}

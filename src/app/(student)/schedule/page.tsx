@@ -3,6 +3,7 @@ import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { HorizontalScheduleCalendar, type ScheduleItem, type BatchOption } from "@/components/schedule/HorizontalScheduleCalendar";
 import { reconcileRecordingStatus } from "@/lib/livekit/egress";
+import { publishDueTests } from "@/lib/tests/scheduled-publish";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -194,7 +195,45 @@ export default async function SchedulePage({
     bookingId: b.id,
   }));
 
-  const allSchedules: ScheduleItem[] = [...batchScheduleItems, ...doubtScheduleItems].sort(
+  // Chapter tests with a set time (published, or scheduled and still being
+  // prepared) of the courses of the student's batches. "View Test" opens the
+  // Tests page, where it shows as Upcoming until its time.
+  await publishDueTests();
+  const now = new Date();
+  const courseBatch = new Map<string, (typeof enrollments)[number]["batch"]>();
+  for (const e of enrollments) if (e.batch.courseId && !courseBatch.has(e.batch.courseId)) courseBatch.set(e.batch.courseId, e.batch);
+  const chapterTests = courseBatch.size
+    ? await prisma.test.findMany({
+        where: {
+          archived: false,
+          batchScheduleId: null,
+          openTime: { not: null, gte: new Date(now.getTime() - 60 * 24 * 3600 * 1000) },
+          chapter: { subject: { courseId: { in: Array.from(courseBatch.keys()) } } },
+          OR: [{ status: { in: ["PUBLISHED", "APPROVED"] } }, { status: "DRAFT", openTime: { gt: now } }],
+        },
+        select: { id: true, name: true, openTime: true, durationMin: true, chapter: { select: { title: true, subject: { select: { title: true, courseId: true } } } } },
+        take: 200,
+      })
+    : [];
+  const chapterTestItems: ScheduleItem[] = chapterTests.map((t) => {
+    const b = courseBatch.get(t.chapter!.subject.courseId)!;
+    const startsAt = t.openTime!;
+    const endsAt = new Date(startsAt.getTime() + (t.durationMin || 60) * 60_000);
+    return {
+      id: `chapter-test-${t.id}`,
+      title: t.name,
+      subject: t.chapter?.subject.title ?? null,
+      type: "TEST",
+      status: endsAt < now ? "COMPLETED" : startsAt <= now ? "LIVE" : "SCHEDULED",
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      batchId: b.id,
+      batch: { id: b.id, name: b.name, code: b.code },
+      teacher: null,
+    };
+  });
+
+  const allSchedules: ScheduleItem[] = [...batchScheduleItems, ...doubtScheduleItems, ...chapterTestItems].sort(
     (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
   );
 

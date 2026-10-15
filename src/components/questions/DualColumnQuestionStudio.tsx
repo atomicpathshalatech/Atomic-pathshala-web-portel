@@ -48,6 +48,8 @@ interface DualColumnQuestionStudioProps {
   initialQuestions?: QuestionEntry[];
   backHref?: string;
   isPublished?: boolean;
+  /** A scheduled test: questions can change until this time, then it publishes itself. */
+  opensAt?: string | null;
   onSave?: (question: QuestionEntry) => Promise<void>;
 }
 
@@ -65,6 +67,7 @@ export function DualColumnQuestionStudio({
   initialQuestions,
   backHref = "/team/tests",
   isPublished = false,
+  opensAt = null,
 }: DualColumnQuestionStudioProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
@@ -760,6 +763,20 @@ export function DualColumnQuestionStudio({
             </button>
           </div>
         </header>
+
+        {!isPublished && opensAt && (
+          <div className="mx-4 sm:mx-8 mt-4 p-3 rounded-2xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-900 dark:text-sky-200 text-xs flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-sky-600 text-xl shrink-0">schedule</span>
+            <div className="leading-relaxed">
+              <span className="font-bold">
+                Scheduled for{" "}
+                {new Date(opensAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true })}
+                :
+              </span>{" "}
+              is samay tak questions jod aur sudhaar sakte hain. Samay hote hi test apne aap publish ho jaayega aur phir badla nahi ja sakega. Students ko ye abhi se Upcoming me dikh raha hai.
+            </div>
+          </div>
+        )}
 
         {isPublished && (
           <div className="mx-4 sm:mx-8 mt-4 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">

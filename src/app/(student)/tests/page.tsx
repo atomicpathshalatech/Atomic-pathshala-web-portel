@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { NCERT_CHAPTERS } from "@/lib/ai-chat/ncertChapters";
 import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
 import { formatISTDateTime } from "@/lib/date-utils";
+import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import {
   AtomicPracticeTestArena,
   type SubjectChapterwiseTests,
@@ -79,6 +80,8 @@ function detectBiologyBranch(title: string, subjTitle?: string): "BOTANY" | "ZOO
 export default async function StudentTestsPage() {
   const { student } = await requireStudentSession();
   const now = new Date();
+  // Tests whose set time has come are published first (no minute-level cron here).
+  await publishDueTests({ now });
 
   // 1. Fetch Student's Active Batch Enrollments
   let batchIds: string[] = [];
@@ -101,7 +104,9 @@ export default async function StudentTestsPage() {
           where: { status: { in: ["PUBLISHED", "READY_TO_PUBLISH", "LECTURES_COMPLETE", "DRAFT"] } },
           include: {
             tests: {
-              where: { status: "PUBLISHED" },
+              // Published, or scheduled for later (shown as Upcoming while the
+              // team still adds its questions; it publishes itself at that time).
+              where: { archived: false, OR: [{ status: "PUBLISHED" }, { status: "DRAFT", openTime: { gt: now } }] },
               include: {
                 attempts: {
                   where: { studentId: student.id },
@@ -251,6 +256,7 @@ export default async function StudentTestsPage() {
           totalMarks,
           status,
           score: attempt?.score ?? null,
+          startsAt: t.openTime ? new Date(t.openTime).toISOString() : null,
         };
       });
 

@@ -33,7 +33,7 @@ export async function GET(_request: NextRequest) {
         studentId: student.id,
         status: "ACTIVE",
       },
-      select: { batchId: true, batch: { select: { id: true, name: true } } },
+      select: { batchId: true, batch: { select: { id: true, name: true, courseId: true } } },
     });
 
     const batchIds = enrollments.map((e) => e.batchId);
@@ -59,6 +59,8 @@ export async function GET(_request: NextRequest) {
     const horizon = new Date(now.getTime() + POPUP_LEAD_MS);
     const lookBack = new Date(now.getTime() - 2 * 24 * 3600 * 1000);
 
+    // Chapter tests of the student's batch courses count too.
+    const courseIds = Array.from(new Set(enrollments.map((e) => e.batch.courseId).filter((c): c is string => Boolean(c))));
     const candidates = await prisma.test.findMany({
       where: {
         archived: false,
@@ -67,8 +69,11 @@ export async function GET(_request: NextRequest) {
             OR: [
               { testSeriesId: { in: importedSeriesIds } },
               { batchSchedule: { batchId: { in: batchIds } } },
+              ...(courseIds.length ? [{ chapter: { subject: { courseId: { in: courseIds } } } }] : []),
             ],
           },
+          // Published, or scheduled for later (a draft until its set time).
+          { OR: [{ status: { in: ["PUBLISHED", "APPROVED"] } }, { status: "DRAFT", openTime: { gt: now } }] },
           {
             OR: [
               { openTime: { gte: lookBack, lte: horizon } },
