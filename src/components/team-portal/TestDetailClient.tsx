@@ -47,10 +47,12 @@ interface TestDetailClientProps {
     }>;
   };
   isDraft: boolean;
+  /** A scheduled draft: it publishes itself at this time, so there is no Publish button. */
+  opensAt?: string | null;
   canPublish: boolean;
 }
 
-export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClientProps) {
+export function TestDetailClient({ test, isDraft, canPublish, opensAt = null }: TestDetailClientProps) {
   const router = useRouter();
   const [showTemplateModal, setShowTemplateModal] = useState(false);
 
@@ -152,7 +154,28 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
             </Link>
           )}
 
-          {isDraft && canPublish && <PublishTestButton testId={test.id} />}
+          {opensAt ? (
+            new Date(opensAt).getTime() > Date.now() ? (
+              <span
+                className="px-3.5 py-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold flex items-center gap-1.5"
+                title="Questions can be added and corrected until this time; then the test publishes itself and can no longer be changed."
+              >
+                <span className="material-symbols-outlined text-base">schedule</span>
+                Publishes automatically ·{" "}
+                {new Date(opensAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true })}
+              </span>
+            ) : (
+              <span
+                className="px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-1.5"
+                title="Its time came but it had no questions, so it was not published. Change its time from the chapter page."
+              >
+                <span className="material-symbols-outlined text-base">error</span>
+                Not published — it had no questions at its time
+              </span>
+            )
+          ) : (
+            isDraft && canPublish && <PublishTestButton testId={test.id} />
+          )}
         </div>
       </div>
 

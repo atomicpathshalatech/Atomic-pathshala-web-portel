@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { chaptersOfBatches } from "@/lib/batch/batch-chapters";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -59,8 +60,8 @@ export async function GET(_request: NextRequest) {
     const horizon = new Date(now.getTime() + POPUP_LEAD_MS);
     const lookBack = new Date(now.getTime() - 2 * 24 * 3600 * 1000);
 
-    // Chapter tests of the student's batch courses count too.
-    const courseIds = Array.from(new Set(enrollments.map((e) => e.batch.courseId).filter((c): c is string => Boolean(c))));
+    // Chapter tests of the chapters the student's batches cover count too.
+    const chapterIds = Array.from((await chaptersOfBatches(batchIds)).keys());
     const candidates = await prisma.test.findMany({
       where: {
         archived: false,
@@ -69,7 +70,7 @@ export async function GET(_request: NextRequest) {
             OR: [
               { testSeriesId: { in: importedSeriesIds } },
               { batchSchedule: { batchId: { in: batchIds } } },
-              ...(courseIds.length ? [{ chapter: { subject: { courseId: { in: courseIds } } } }] : []),
+              ...(chapterIds.length ? [{ chapterId: { in: chapterIds } }] : []),
             ],
           },
           // Published, or scheduled for later (a draft until its set time).

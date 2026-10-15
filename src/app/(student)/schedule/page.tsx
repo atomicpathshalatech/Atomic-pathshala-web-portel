@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { HorizontalScheduleCalendar, type ScheduleItem, type BatchOption } from "@/components/schedule/HorizontalScheduleCalendar";
 import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 import { publishDueTests } from "@/lib/tests/scheduled-publish";
+import { chaptersOfBatches } from "@/lib/batch/batch-chapters";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -196,27 +197,28 @@ export default async function SchedulePage({
   }));
 
   // Chapter tests with a set time (published, or scheduled and still being
-  // prepared) of the courses of the student's batches. "View Test" opens the
+  // prepared) of the chapters the student's batches cover — found the same
+  // way the batch page finds them (chaptersOfBatches). "View Test" opens the
   // Tests page, where it shows as Upcoming until its time.
   await publishDueTests();
   const now = new Date();
-  const courseBatch = new Map<string, (typeof enrollments)[number]["batch"]>();
-  for (const e of enrollments) if (e.batch.courseId && !courseBatch.has(e.batch.courseId)) courseBatch.set(e.batch.courseId, e.batch);
-  const chapterTests = courseBatch.size
+  const batchById = new Map(enrollments.map((e) => [e.batch.id, e.batch]));
+  const chapterBatch = await chaptersOfBatches(Array.from(batchById.keys()));
+  const chapterTests = chapterBatch.size
     ? await prisma.test.findMany({
         where: {
           archived: false,
           batchScheduleId: null,
           openTime: { not: null, gte: new Date(now.getTime() - 60 * 24 * 3600 * 1000) },
-          chapter: { subject: { courseId: { in: Array.from(courseBatch.keys()) } } },
+          chapterId: { in: Array.from(chapterBatch.keys()) },
           OR: [{ status: { in: ["PUBLISHED", "APPROVED"] } }, { status: "DRAFT", openTime: { gt: now } }],
         },
-        select: { id: true, name: true, openTime: true, durationMin: true, chapter: { select: { title: true, subject: { select: { title: true, courseId: true } } } } },
+        select: { id: true, name: true, openTime: true, durationMin: true, chapterId: true, chapter: { select: { title: true, subject: { select: { title: true } } } } },
         take: 200,
       })
     : [];
   const chapterTestItems: ScheduleItem[] = chapterTests.map((t) => {
-    const b = courseBatch.get(t.chapter!.subject.courseId)!;
+    const b = batchById.get(chapterBatch.get(t.chapterId!)!)!;
     const startsAt = t.openTime!;
     const endsAt = new Date(startsAt.getTime() + (t.durationMin || 60) * 60_000);
     return {

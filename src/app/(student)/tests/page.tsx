@@ -101,7 +101,9 @@ export default async function StudentTestsPage() {
     dbSubjects = await prisma.subject.findMany({
       include: {
         chapters: {
-          where: { status: { in: ["PUBLISHED", "READY_TO_PUBLISH", "LECTURES_COMPLETE", "DRAFT"] } },
+          // Every chapter that is not archived — APPROVED / UNDER_REVIEW chapters
+          // were left out, so their chapter tests never showed here.
+          where: { status: { not: "ARCHIVED" } },
           include: {
             tests: {
               // Published, or scheduled for later (shown as Upcoming while the

@@ -452,7 +452,8 @@ export function ChapterTestsTab({
                             <span>Download PDF</span>
                           </button>
 
-                          {t.status !== "PUBLISHED" && (
+                          {/* A test with a set time publishes itself — no manual publish for it. */}
+                          {t.status === "DRAFT" && !t.openTime && (
                             <button
                               type="button"
                               onClick={() => handleSubmitTest(t.id)}

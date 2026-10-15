@@ -9,6 +9,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest } from "@/lib/test-engine/access";
 import { computeAttemptCounts } from "@/lib/test-engine/scoring";
 import { TestDetailClient } from "@/components/team-portal/TestDetailClient";
+import { isTestEditable, publishDueTests } from "@/lib/tests/scheduled-publish";
 
 export const metadata: Metadata = {
   title: "Test Detail",
@@ -21,6 +22,8 @@ export default async function TestDetailPage({ params }: { params: { id: string 
   const canRead = await hasPermission(session.user.id, PERMISSIONS.TEST_READ);
   if (!canRead) redirect("/team");
 
+  // A scheduled test whose time has come publishes itself now.
+  await publishDueTests({ testIds: [params.id] });
   const test = await prisma.test.findUnique({
     where: { id: params.id },
     include: {
@@ -43,7 +46,8 @@ export default async function TestDetailPage({ params }: { params: { id: string 
   if (!manageable) redirect("/team/tests");
 
   const canPublish = await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
-  const isDraft = test.status === "DRAFT";
+  // Can still be changed: a draft whose set time (if any) has not come yet.
+  const isDraft = isTestEditable(test);
 
   const sectionQuestions = test.sections.flatMap((s) => s.questions.map((sq) => ({ ...sq, section: s })));
 
@@ -71,6 +75,7 @@ export default async function TestDetailPage({ params }: { params: { id: string 
         test={test as any}
         isDraft={isDraft}
         canPublish={canPublish}
+        opensAt={test.status === "DRAFT" && test.openTime ? test.openTime.toISOString() : null}
       />
 
       {/* Submissions leaderboard if published */}
