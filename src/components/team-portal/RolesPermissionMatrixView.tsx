@@ -4,119 +4,14 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "@/lib/rbac/permissions";
+import { PERMISSION_GROUPS as ALL_GROUPS } from "@/lib/rbac/permission-groups";
 import { OpsBackButton } from "@/components/common/OpsBackButton";
-
-const MODULE_GROUPS = [
-  {
-    name: "Question Bank",
-    actions: [
-      { code: "question.read", label: "View" },
-      { code: "question.create", label: "Create" },
-      { code: "question.update", label: "Edit" },
-      { code: "question.delete", label: "Delete" },
-      { code: "question.verify", label: "Verify" },
-      { code: "question.approve", label: "Approve" },
-      { code: "question.reject", label: "Reject" },
-      { code: "question.import", label: "Import" },
-      { code: "question.export", label: "Export" },
-    ],
-  },
-  {
-    name: "Test Portal",
-    actions: [
-      { code: "test.read", label: "View" },
-      { code: "test.create", label: "Create" },
-      { code: "test.update", label: "Edit" },
-      { code: "test.delete", label: "Delete" },
-      { code: "test.publish", label: "Publish" },
-      { code: "test.approve", label: "Approve" },
-      { code: "test.reject", label: "Reject" },
-      { code: "test.export", label: "Export" },
-      { code: "test.import", label: "Import" },
-    ],
-  },
-  {
-    name: "DPP (Daily Practice Problems)",
-    actions: [
-      { code: "dpp.read", label: "View" },
-      { code: "dpp.create", label: "Create" },
-      { code: "dpp.update", label: "Edit" },
-      { code: "dpp.delete", label: "Delete" },
-      { code: "dpp.publish", label: "Publish" },
-      { code: "dpp.approve", label: "Approve" },
-      { code: "dpp.reject", label: "Reject" },
-    ],
-  },
-  {
-    name: "Doubt Desk",
-    actions: [
-      { code: "doubt.read", label: "View" },
-      { code: "doubt.resolve", label: "Resolve" },
-      { code: "doubt.review", label: "Review" },
-    ],
-  },
-  {
-    name: "Batches & Courses",
-    actions: [
-      { code: "batch.read", label: "View" },
-      { code: "batch.create", label: "Create" },
-      { code: "batch.update", label: "Edit" },
-      { code: "batch.delete", label: "Delete" },
-      { code: "batch.enrollment.manage", label: "Enrollments" },
-      { code: "batch.schedule.manage", label: "Schedule" },
-    ],
-  },
-  {
-    name: "Design Studio",
-    actions: [
-      { code: "design.read", label: "View" },
-      { code: "design.create", label: "Create" },
-      { code: "design.update", label: "Edit" },
-      { code: "design.delete", label: "Delete" },
-      { code: "design.publish", label: "Publish" },
-      { code: "design.asset.upload", label: "Upload" },
-    ],
-  },
-  {
-    name: "Video Production",
-    actions: [
-      { code: "video.read", label: "View" },
-      { code: "video.create", label: "Create" },
-      { code: "video.update", label: "Edit" },
-      { code: "video.delete", label: "Delete" },
-      { code: "video.publish", label: "Publish" },
-      { code: "video.upload", label: "Upload" },
-    ],
-  },
-  {
-    name: "CRM & Sales",
-    actions: [
-      { code: "crm.lead.read", label: "View Leads" },
-      { code: "crm.lead.create", label: "Add Lead" },
-      { code: "crm.lead.assign", label: "Assign" },
-      { code: "crm.lead.update", label: "Update" },
-      { code: "crm.lead.delete", label: "Delete" },
-      { code: "crm.sales.report.view", label: "Reports" },
-    ],
-  },
-  {
-    name: "Administration & RBAC",
-    actions: [
-      { code: "admin.user.read", label: "View Users" },
-      { code: "admin.user.create", label: "Create User" },
-      { code: "admin.user.update", label: "Edit User" },
-      { code: "admin.user.delete", label: "Delete User" },
-      { code: "admin.role.manage", label: "Role Matrix" },
-      { code: "admin.department.manage", label: "Departments" },
-      { code: "admin.audit.view", label: "Audit Logs" },
-    ],
-  },
-];
 
 export function RolesPermissionMatrixView() {
   const [roles, setRoles] = useState<any[]>([]);
   const [selectedRole, setSelectedRole] = useState<string>("TEACHER");
   const [activePermissions, setActivePermissions] = useState<string[]>([]);
+  const [permissionSearch, setPermissionSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -295,9 +190,26 @@ export function RolesPermissionMatrixView() {
         })}
       </div>
 
-      {/* 3. VISUAL MATRIX GRID */}
+      {/* 3. VISUAL MATRIX GRID — every permission in the catalogue */}
       <div className="space-y-4">
-        {MODULE_GROUPS.map((grp) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={permissionSearch}
+            onChange={(e) => setPermissionSearch(e.target.value)}
+            placeholder="Search a permission or area (e.g. live class, schedule, chapter)…"
+            className="flex-1 min-w-[16rem] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+          />
+          <span className="text-xs text-slate-500">
+            {activePermissions.length} of {ALL_GROUPS.reduce((n, g) => n + g.actions.length, 0)} permissions on
+          </span>
+        </div>
+        {ALL_GROUPS.map((g) => {
+          const q = permissionSearch.trim().toLowerCase();
+          if (!q) return g;
+          if (g.name.toLowerCase().includes(q)) return g;
+          return { ...g, actions: g.actions.filter((a) => a.label.toLowerCase().includes(q) || a.code.includes(q)) };
+        }).filter((g) => g.actions.length > 0).map((grp) => (
           <div
             key={grp.name}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-3"

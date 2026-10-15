@@ -20,6 +20,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const userId = params.id;
     const body = await req.json();
     const { permissionCode, granted, reason, action } = body;
+    if (typeof permissionCode !== "string" || !(Object.values(PERMISSIONS) as string[]).includes(permissionCode)) {
+      return NextResponse.json({ error: `Unknown permission: ${String(permissionCode)}` }, { status: 400 });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },

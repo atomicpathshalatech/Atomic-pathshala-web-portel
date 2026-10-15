@@ -43,6 +43,8 @@ interface ChapterTeamViewWrapperProps {
   initialDpps: any[];
   initialTests: any[];
   canEdit: boolean;
+  /** May add old classes from a YouTube link (batch.schedule.manage). */
+  canManageSchedule?: boolean;
   canReview: boolean;
   reviews?: ReviewHistoryItem[];
   studentPreviewData: ChapterDetailData;
@@ -73,6 +75,7 @@ export function ChapterTeamViewWrapper({
   initialDpps,
   initialTests,
   canEdit,
+  canManageSchedule = false,
   canReview,
   reviews = [],
   studentPreviewData,
@@ -319,6 +322,7 @@ export function ChapterTeamViewWrapper({
             initialTests={initialTests}
             subjectTitle={subjectTitle}
             canEdit={canEdit || canReview}
+            canManageSchedule={canManageSchedule}
             reviews={reviews}
             assignedBatches={assignedBatches}
           />

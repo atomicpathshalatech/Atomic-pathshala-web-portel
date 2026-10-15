@@ -49,6 +49,8 @@ export interface UnifiedChapterScheduleTimelineProps {
   /** The chapter's subject — sets a new chapter test's default number of questions (Biology 90, else 45). */
   subjectTitle?: string;
   canEdit: boolean;
+  /** Old classes (YouTube link) — only for whoever manages the schedule. */
+  canManageSchedule?: boolean;
   reviews?: ReviewHistoryItem[];
   assignedBatches?: { id: string; name: string }[];
 }
@@ -87,6 +89,7 @@ export function UnifiedChapterScheduleTimeline({
   initialTests,
   subjectTitle,
   canEdit,
+  canManageSchedule = false,
   reviews = [],
   assignedBatches = [],
 }: UnifiedChapterScheduleTimelineProps) {
@@ -774,6 +777,7 @@ export function UnifiedChapterScheduleTimeline({
                 <span>Add Lecture</span>
               </button>
 
+              {canManageSchedule && (
               <button
                 type="button"
                 onClick={() => {
@@ -792,6 +796,7 @@ export function UnifiedChapterScheduleTimeline({
                 <Video className="w-3.5 h-3.5" />
                 <span>Add Old Class (YouTube)</span>
               </button>
+              )}
 
               <button
                 type="button"

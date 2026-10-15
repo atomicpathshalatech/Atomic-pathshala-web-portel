@@ -10,6 +10,7 @@ import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { ClassNotesUploadButton } from "@/components/schedule/ClassNotesUploadButton";
 import { isRecordingNotYetDue } from "@/lib/schedule/access-rules";
 import { formatISTDate, formatISTTime } from "@/lib/date-utils";
+import { parseYouTubeVideoId } from "@/lib/youtube/video-link";
 
 export const metadata: Metadata = {
   title: "Class Recording — Atomic Pathshala",
@@ -40,7 +41,7 @@ export default async function TeacherRecordingPage({
 
   const schedule = await prisma.batchSchedule.findUnique({
     where: { id: scheduleId },
-    include: { batch: true, liveWhiteboardSession: true },
+    include: { batch: true, liveWhiteboardSession: true, lecture: { select: { videoUrl: true } } },
   });
   if (!schedule) notFound();
 
@@ -72,7 +73,18 @@ export default async function TeacherRecordingPage({
     );
   }
 
-  if (!schedule.liveWhiteboardSession) {
+  // A YouTube class is recorded on YouTube: play that video. The app's own
+  // recording player only knows LiveKit recordings, so for a YouTube class it
+  // showed "Processing the recording" for ever.
+  const wb = schedule.liveWhiteboardSession;
+  const youtubeId =
+    (wb?.youtubeArchiveVideoUrl && parseYouTubeVideoId(wb.youtubeArchiveVideoUrl)) ||
+    wb?.youtubeVideoId ||
+    (schedule.youtubeUrl && parseYouTubeVideoId(schedule.youtubeUrl)) ||
+    (schedule.lecture?.videoUrl && parseYouTubeVideoId(schedule.lecture.videoUrl)) ||
+    null;
+
+  if (!schedule.liveWhiteboardSession && !youtubeId) {
     return (
       <div className="max-w-2xl mx-auto py-16 px-4 text-center">
         <span className="material-symbols-outlined text-4xl text-gray-400">videocam_off</span>
@@ -101,7 +113,28 @@ export default async function TeacherRecordingPage({
           </Link>
         </div>
       </div>
-      <RecordingPlayer whiteboardSessionId={schedule.liveWhiteboardSession.id} />
+      {youtubeId ? (
+        <div className="space-y-2">
+          <div className="relative w-full overflow-hidden rounded-2xl bg-black" style={{ aspectRatio: "16 / 9" }}>
+            <iframe
+              src={`https://www.youtube.com/embed/${youtubeId}?rel=0&modestbranding=1`}
+              title={schedule.title}
+              className="absolute inset-0 w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
+          <p className="text-[11px] text-gray-500">
+            Recorded on YouTube.{" "}
+            <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">
+              Open on YouTube
+            </a>{" "}
+            (a live stream can take a little while after the class before YouTube can replay it).
+          </p>
+        </div>
+      ) : (
+        <RecordingPlayer whiteboardSessionId={schedule.liveWhiteboardSession!.id} />
+      )}
     </div>
   );
 }

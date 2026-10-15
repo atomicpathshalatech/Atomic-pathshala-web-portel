@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { PERMISSION_GROUPS } from "@/lib/rbac/permission-groups";
 import Link from "next/link";
 import { toast } from "sonner";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "@/lib/rbac/permissions";
@@ -24,7 +25,7 @@ const LIFECYCLE_STATUSES = [
   "EX_TEAM_MEMBER",
 ];
 
-const MODULES_MATRIX = [
+const MODULE_DESCRIPTIONS_SOURCE = [
   {
     module: "Question Bank",
     description: "Question authoring, OCR, AI solutions, verification & approvals",
@@ -164,6 +165,13 @@ const MODULES_MATRIX = [
     ],
   },
 ];
+
+/** Every permission in the catalogue (src/lib/rbac/permission-groups.ts), with the descriptions above where a group has one. */
+const MODULES_MATRIX = PERMISSION_GROUPS.map((g) => ({
+  module: g.name,
+  description: MODULE_DESCRIPTIONS_SOURCE.find((m) => m.module === g.name)?.description ?? "",
+  actions: g.actions,
+}));
 
 export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
   const [user, setUser] = useState<any>(null);

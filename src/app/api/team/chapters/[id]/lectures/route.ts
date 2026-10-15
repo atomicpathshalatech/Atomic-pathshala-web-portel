@@ -72,6 +72,11 @@ export async function POST(
       return apiError("Lecture title is required", 400);
     }
 
+    // An old (already taught) class from a YouTube link is added by whoever
+    // manages the schedule — not by every teacher who can edit the chapter.
+    const isOldClass = Boolean(typeof videoUrl === "string" && videoUrl.trim()) && Boolean(scheduledDate) && new Date(scheduledDate).getTime() < Date.now();
+    if (isOldClass) await requirePermission(session.user.id, PERMISSIONS.BATCH_SCHEDULE_MANAGE);
+
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       include: { role: true },

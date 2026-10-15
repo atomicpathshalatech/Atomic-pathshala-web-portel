@@ -336,6 +336,7 @@ export function TeacherLiveClassRoom({
   currentUserId,
   endsAt,
   classMode = null,
+  scheduledYoutubeUrl = null,
 }: {
   batchScheduleId: string;
   scheduleTitle: string;
@@ -344,6 +345,8 @@ export function TeacherLiveClassRoom({
   endsAt: string;
   /** Chosen when the class was scheduled: APP_ONLY | APP_AND_YOUTUBE (null: the teacher chooses at Start). */
   classMode?: string | null;
+  /** The public YouTube link put on the schedule (App + YouTube classes) — Start uses it. */
+  scheduledYoutubeUrl?: string | null;
 }) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -2755,7 +2758,10 @@ export function TeacherLiveClassRoom({
     const ytId =
       ytVideoIdOverride !== undefined
         ? ytVideoIdOverride
-        : (typedLink ? extractYouTubeVideoId(typedLink) : null) || wbSession?.youtubeVideoId || extractYouTubeVideoId(manualObsYtLink);
+        : (typedLink ? extractYouTubeVideoId(typedLink) : null) ||
+          (classMode === "APP_AND_YOUTUBE" && scheduledYoutubeUrl ? extractYouTubeVideoId(scheduledYoutubeUrl) : null) ||
+          wbSession?.youtubeVideoId ||
+          extractYouTubeVideoId(manualObsYtLink);
     const streamKey = streamKeyInput.trim();
     if (streamKey && !ytId) {
       setYoutubeInputError("Enter the YouTube link of the stream this key belongs to.");
@@ -2778,7 +2784,7 @@ export function TeacherLiveClassRoom({
 
     // The delivery mode chosen when the class was scheduled.
     if (classMode === "APP_AND_YOUTUBE" && !ytId) {
-      setYoutubeInputError("This class is scheduled as App + public YouTube: enter the YouTube live link (and stream key), then press Start.");
+      setYoutubeInputError("This class is scheduled as App + public YouTube but has no YouTube link yet — ask whoever schedules classes to add it to the schedule (or enter it here).");
       setPublicSetupOpen(true);
       setStartingClass(false);
       return;

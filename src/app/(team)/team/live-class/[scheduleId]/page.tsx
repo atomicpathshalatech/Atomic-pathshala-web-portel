@@ -103,6 +103,7 @@ export default async function TeacherLiveClassPage({
         scheduleTitle={schedule.title}
         batchName={schedule.batch?.name || "Whiteboard Test Lab"}
         classMode={(schedule as { classMode?: string | null }).classMode ?? null}
+        scheduledYoutubeUrl={(schedule as { youtubeUrl?: string | null }).youtubeUrl ?? null}
         currentUserId={session.user.id}
         endsAt={schedule.endsAt.toISOString()}
       />
@@ -145,6 +146,7 @@ export default async function TeacherLiveClassPage({
       scheduleTitle={schedule.title}
       batchName={schedule.batch?.name || "Live Classroom"}
       classMode={(schedule as { classMode?: string | null }).classMode ?? null}
+        scheduledYoutubeUrl={(schedule as { youtubeUrl?: string | null }).youtubeUrl ?? null}
       currentUserId={session.user.id}
       endsAt={schedule.endsAt.toISOString()}
     />

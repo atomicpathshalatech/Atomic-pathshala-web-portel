@@ -31,6 +31,8 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   const canUpdate =
     (await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE)) && (await canAccessChapter(scope, params.id, "write"));
   const canReviewPermission = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW);
+  // Old classes (from a YouTube link) are added by whoever manages the schedule.
+  const canManageSchedule = await hasPermission(session.user.id, PERMISSIONS.BATCH_SCHEDULE_MANAGE);
 
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.id },
@@ -250,6 +252,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
         }))}
         canEdit={canUpdate}
         canReview={canReview}
+        canManageSchedule={canManageSchedule}
         reviews={reviews.map((r) => ({
           id: r.id,
           action: r.action,
