@@ -43,15 +43,6 @@ const dateFmt = (d: string | Date) =>
 const sizeFmt = (b: number) =>
   b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
 
-function getDateHeading(dateStr: string, todayKey: string, tomorrowKey: string) {
-  if (dateStr === todayKey) return "TODAY";
-  if (dateStr === tomorrowKey) return "TOMORROW";
-  const d = new Date(dateStr);
-  const dayName = d.toLocaleDateString("en-IN", { timeZone: IST, weekday: "long" }).toUpperCase();
-  const dateFormatted = d.toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short" });
-  return `${dayName} · ${dateFormatted}`;
-}
-
 export function StudentBatchHome({
   data,
   initialTab = "home",
@@ -365,92 +356,122 @@ export function StudentBatchHome({
       {/* 3. SCHEDULE TAB — SLIM 1/3 CARDS CONNECTED VIA VERTICAL TIMELINE LINE    */}
       {/* ========================================================================= */}
       {tab === "schedule" && (
-        <div className="space-y-4 animate-in fade-in duration-150">
+        <div className="space-y-5 animate-in fade-in duration-150">
           {groupedTimeline.length === 0 ? (
-            <div className="p-10 text-center bg-[#f2f8fe] dark:bg-[#0f1722] rounded-2xl border border-sky-200/70 dark:border-sky-900/40">
-              <span className="material-symbols-outlined text-3xl text-sky-300 dark:text-sky-600 mb-1">
-                event_busy
-              </span>
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                No scheduled classes or tests found
-              </p>
+            <div className="py-12 text-center">
+              <span className="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-600">event_available</span>
+              <p className="mt-1 text-sm text-slate-500">Nothing scheduled yet</p>
             </div>
           ) : (
-            groupedTimeline.map(([dKey, events]) => (
-              <div key={dKey} className="space-y-2">
-                {/* Date Header Badge */}
-                <div className="flex items-center gap-2 px-1">
-                  <span className="px-2.5 py-0.5 rounded-full bg-sky-100/90 dark:bg-sky-950/80 text-[10.5px] font-bold text-sky-800 dark:text-sky-300 uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
-                    {getDateHeading(dKey, todayKey, tomorrowKey)}
-                  </span>
-                  <div className="flex-1 h-px bg-sky-200/60 dark:bg-sky-950" />
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    {events.length} {events.length === 1 ? "class" : "classes"}
-                  </span>
-                </div>
+            groupedTimeline.map(([dKey, events]) => {
+              const isToday = dKey === todayKey;
+              const isTomorrow = dKey === tomorrowKey;
+              const dayLabel = new Date(`${dKey}T12:00:00+05:30`).toLocaleDateString("en-IN", {
+                timeZone: IST,
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+              });
+              return (
+                <section key={dKey}>
+                  {/* Day: quiet, small */}
+                  <h3 className="mb-1.5 px-1 text-[11px] font-semibold tracking-wide text-slate-500 dark:text-slate-400">
+                    {(isToday || isTomorrow) && (
+                      <span className={isToday ? "text-sky-600 dark:text-sky-400" : "text-slate-700 dark:text-slate-200"}>
+                        {isToday ? "Today" : "Tomorrow"} ·{" "}
+                      </span>
+                    )}
+                    {dayLabel}
+                  </h3>
 
-                {/* Thin rows: teacher photo · class name over teacher name · subject · time and status */}
-                <div className="space-y-1.5">
-                  {events.map((ev) => {
-                    const isLive = ev.status === "LIVE_NOW";
-                    const isTest = ev.type === "TEST";
-                    const isCompleted = ev.status === "COMPLETED" || ev.status === "SUBMITTED";
-                    const chip = isLive
-                      ? { label: "LIVE", cls: "bg-red-600 text-white animate-pulse" }
-                      : isCompleted
-                      ? { label: "Done", cls: "bg-slate-100 dark:bg-slate-800 text-slate-500" }
-                      : ev.status === "CANCELLED"
-                      ? { label: "Cancelled", cls: "bg-slate-100 dark:bg-slate-800 text-slate-400 line-through" }
-                      : ev.status === "UPCOMING"
-                      ? { label: "Upcoming", cls: "bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300" }
-                      : ev.status === "ATTEMPTED"
-                      ? { label: "In progress", cls: "bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300" }
-                      : { label: "Open", cls: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300" };
-                    const row = (
-                      <div
-                        className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl border bg-white dark:bg-[#111a26] transition ${
-                          isLive
-                            ? "border-red-300 dark:border-red-800/70"
-                            : "border-sky-100 dark:border-sky-900/40 hover:border-sky-300"
-                        }`}
-                      >
-                        {ev.teacherPhotoUrl && !isTest ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={ev.teacherPhotoUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
-                        ) : (
-                          <span
-                            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
-                              isTest ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300" : "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
-                            }`}
-                          >
-                            {isTest ? <span className="material-symbols-outlined text-[16px]">quiz</span> : (ev.teacherName || "F").charAt(0)}
-                          </span>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-tight">{ev.title}</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate leading-tight mt-0.5">
-                            {ev.teacherName || (isTest ? "Test" : "Faculty")}
-                            {ev.subject ? ` · ${ev.subject}` : ""}
-                          </p>
+                  {/* One card per day; rows divided by hairlines */}
+                  <div className="rounded-2xl bg-white dark:bg-[#111a26] ring-1 ring-slate-200/70 dark:ring-slate-800 divide-y divide-slate-100 dark:divide-slate-800/80 overflow-hidden">
+                    {events.map((ev) => {
+                      const isLive = ev.status === "LIVE_NOW";
+                      const isTest = ev.type === "TEST" || ev.type === "DPP";
+                      const isCancelled = ev.status === "CANCELLED";
+                      const isDone = ev.status === "COMPLETED" || ev.status === "SUBMITTED";
+                      const mins =
+                        ev.durationMin ??
+                        (ev.endsAt ? Math.max(0, Math.round((new Date(ev.endsAt).getTime() - new Date(ev.startsAt).getTime()) / 60000)) : null);
+
+                      // What tapping it does, said plainly on a button.
+                      let action: { label: string; icon: string; cls: string } | null = null;
+                      if (!isCancelled && ev.actionHref) {
+                        if (isLive) action = { label: "Join", icon: "sensors", cls: "bg-red-600 hover:bg-red-700 text-white" };
+                        else if (isTest && ev.status === "SUBMITTED") action = { label: "Result", icon: "insights", cls: "bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100" };
+                        else if (isTest) action = { label: ev.status === "ATTEMPTED" ? "Resume" : "Start", icon: "edit_note", cls: "bg-violet-600 hover:bg-violet-700 text-white" };
+                        else if (isDone) action = { label: "Watch", icon: "play_arrow", cls: "bg-sky-600 hover:bg-sky-700 text-white" };
+                        else if (ev.status === "AVAILABLE") action = { label: "Enter", icon: "login", cls: "bg-sky-600 hover:bg-sky-700 text-white" };
+                      }
+                      const note = isCancelled
+                        ? "Cancelled"
+                        : isTest && !ev.actionHref
+                        ? "Opens soon"
+                        : !action
+                        ? "Upcoming"
+                        : null;
+
+                      const content = (
+                        <div className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 transition ${ev.actionHref && !isCancelled ? "hover:bg-slate-50 dark:hover:bg-slate-800/40" : ""} ${isCancelled ? "opacity-55" : ""}`}>
+                          {/* Time */}
+                          <div className="w-14 shrink-0 text-right">
+                            <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100 tabular-nums leading-tight">{timeFmt(ev.startsAt)}</p>
+                            {mins ? <p className="text-[10px] text-slate-400 tabular-nums leading-tight mt-0.5">{mins} min</p> : null}
+                          </div>
+
+                          {/* Who / what */}
+                          {isTest ? (
+                            <span className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                              <span className="material-symbols-outlined text-[18px]">{ev.type === "DPP" ? "assignment" : "fact_check"}</span>
+                            </span>
+                          ) : ev.teacherPhotoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={ev.teacherPhotoUrl} alt="" className="w-9 h-9 rounded-full object-cover shrink-0 ring-2 ring-white dark:ring-slate-900 shadow-sm" />
+                          ) : (
+                            <span className="w-9 h-9 rounded-full bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 flex items-center justify-center text-xs font-bold shrink-0">
+                              {(ev.teacherName || "F").charAt(0)}
+                            </span>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-[13px] sm:text-sm font-semibold text-slate-900 dark:text-white truncate leading-snug ${isCancelled ? "line-through" : ""}`}>
+                              {ev.title}
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate leading-snug flex items-center gap-1.5">
+                              {isLive && <span className="inline-flex items-center gap-1 font-bold text-red-600"><span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />LIVE</span>}
+                              <span className="truncate">
+                                {isTest ? (ev.type === "DPP" ? "DPP" : "Test") : ev.teacherName || "Faculty"}
+                                {ev.subject ? ` · ${ev.subject}` : ""}
+                                {isTest && ev.questionCount ? ` · ${ev.questionCount} Qs` : ""}
+                              </span>
+                            </p>
+                          </div>
+
+                          {/* Action */}
+                          {action ? (
+                            <span className={`inline-flex items-center gap-1 pl-2 pr-3 py-1 rounded-full text-[11.5px] font-semibold whitespace-nowrap shrink-0 shadow-xs ${action.cls}`}>
+                              <span className="material-symbols-outlined leading-none" style={{ fontSize: 16, width: 16 }}>{action.icon}</span>
+                              {action.label}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-medium text-slate-400 shrink-0">{note}</span>
+                          )}
                         </div>
-                        <div className="flex flex-col items-end gap-0.5 shrink-0">
-                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 tabular-nums">{timeFmt(ev.startsAt)}</span>
-                          <span className={`px-1.5 py-px rounded text-[9.5px] font-bold uppercase tracking-wide ${chip.cls}`}>{chip.label}</span>
-                        </div>
-                      </div>
-                    );
-                    return ev.actionHref ? (
-                      <Link key={ev.id} href={ev.actionHref} className="block" title={ev.actionLabel}>
-                        {row}
-                      </Link>
-                    ) : (
-                      <div key={ev.id}>{row}</div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))
+                      );
+
+                      return ev.actionHref && !isCancelled ? (
+                        <Link key={ev.id} href={ev.actionHref} className="block" title={ev.actionLabel}>
+                          {content}
+                        </Link>
+                      ) : (
+                        <div key={ev.id}>{content}</div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })
           )}
         </div>
       )}
