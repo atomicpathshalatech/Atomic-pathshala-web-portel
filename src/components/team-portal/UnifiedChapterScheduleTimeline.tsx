@@ -46,6 +46,8 @@ export interface UnifiedChapterScheduleTimelineProps {
   initialLectures: LectureItem[];
   initialDpps: DppItem[];
   initialTests: TestItem[];
+  /** The chapter's subject — sets a new chapter test's default number of questions (Biology 90, else 45). */
+  subjectTitle?: string;
   canEdit: boolean;
   reviews?: ReviewHistoryItem[];
   assignedBatches?: { id: string; name: string }[];
@@ -69,6 +71,12 @@ interface TimelineEntry {
   testData?: TestItem;
 }
 
+/** "2026-10-15T14:00" in this computer's time, for <input type="datetime-local">. */
+function toLocalInput(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function UnifiedChapterScheduleTimeline({
   chapterId,
   chapterTitle,
@@ -77,6 +85,7 @@ export function UnifiedChapterScheduleTimeline({
   initialLectures,
   initialDpps,
   initialTests,
+  subjectTitle,
   canEdit,
   reviews = [],
   assignedBatches = [],
@@ -163,6 +172,10 @@ export function UnifiedChapterScheduleTimeline({
   const [testIncorrect, setTestIncorrect] = useState<number>(-1);
   const [testExamType, setTestExamType] = useState("NEET");
   const [testInstructions, setTestInstructions] = useState("");
+  // When the test is held ("datetime-local" text) and how many questions it has.
+  const [testOpenTime, setTestOpenTime] = useState("");
+  const [testQuestionCount, setTestQuestionCount] = useState<number>(45);
+  const defaultQuestionCount = /bio|botany|zoology/i.test(subjectTitle ?? "") ? 90 : 45;
 
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
@@ -233,9 +246,16 @@ export function UnifiedChapterScheduleTimeline({
         type: "TEST",
         itemIndex: seqCounter++,
         title: t.name,
-        subtitle: `${t.examType || "NEET"} • ${t.durationMin} mins • +${t.correctMarks} / ${t.incorrectMarks}`,
+        subtitle: `${t.questionCount ? `${t.questionCount} questions • ` : ""}${t.durationMin} mins • +${t.correctMarks} / ${t.incorrectMarks}${
+          t.status === "DRAFT" && t.openTime && new Date(t.openTime).getTime() > Date.now()
+            ? " • Scheduled — questions can be changed until then"
+            : t.status === "DRAFT" && t.openTime
+            ? " • Not published — no questions"
+            : ""
+        }`,
         badge: t.examType || "NEET",
         status: t.status || "SCHEDULED",
+        ...(t.openTime && { dateStr: formatISTDate(new Date(t.openTime)), timeStr: formatISTTime(new Date(t.openTime)) }),
         durationMin: t.durationMin,
         testData: t,
       });
@@ -556,6 +576,10 @@ export function UnifiedChapterScheduleTimeline({
       setFormError("Please provide a name for this chapter test.");
       return;
     }
+    if (!testOpenTime) {
+      setFormError("Choose the date and time of the test.");
+      return;
+    }
     setSubmitting(true);
     setFormError("");
 
@@ -570,6 +594,8 @@ export function UnifiedChapterScheduleTimeline({
           incorrectMarks: Number(testIncorrect),
           examType: testExamType,
           instructions: testInstructions.trim() || undefined,
+          openTime: new Date(testOpenTime).toISOString(),
+          questionCount: Number(testQuestionCount),
         }),
       });
       const json = await res.json();
@@ -578,9 +604,9 @@ export function UnifiedChapterScheduleTimeline({
         return;
       }
 
-      setTests((prev) => [...prev, json.data.test]);
+      setTests((prev) => [...prev, { ...json.data.test, questionCount: Number(testQuestionCount) }]);
       setShowAddTestModal(false);
-      toast.success("Chapter test created successfully!");
+      toast.success("Test scheduled. Add its questions — it publishes itself at the set time.");
       router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Network error");
@@ -606,6 +632,8 @@ export function UnifiedChapterScheduleTimeline({
           correctMarks: Number(testCorrect),
           incorrectMarks: Number(testIncorrect),
           examType: testExamType,
+          questionCount: Number(testQuestionCount),
+          ...(editingTest.status === "DRAFT" && testOpenTime && { openTime: new Date(testOpenTime).toISOString() }),
         }),
       });
       const json = await res.json();
@@ -614,7 +642,7 @@ export function UnifiedChapterScheduleTimeline({
         return;
       }
 
-      setTests((prev) => (prev.map((t) => (t.id === editingTest.id ? json.data.test : t))));
+      setTests((prev) => prev.map((t) => (t.id === editingTest.id ? { ...json.data.test, questionCount: Number(testQuestionCount) } : t)));
       setEditingTest(null);
       toast.success("Chapter test updated successfully!");
       router.refresh();
@@ -793,6 +821,12 @@ export function UnifiedChapterScheduleTimeline({
                   setTestIncorrect(-1);
                   setTestExamType("NEET");
                   setTestInstructions("Standard timed computer-based assessment.");
+                  setTestQuestionCount(defaultQuestionCount);
+                  {
+                    const d = new Date(Date.now() + 24 * 3600 * 1000);
+                    d.setHours(10, 0, 0, 0);
+                    setTestOpenTime(toLocalInput(d));
+                  }
                   setFormError("");
                   setShowAddTestModal(true);
                 }}
@@ -1213,6 +1247,8 @@ export function UnifiedChapterScheduleTimeline({
                                     setTestCorrect(t.correctMarks || 4);
                                     setTestIncorrect(t.incorrectMarks || -1);
                                     setTestExamType(t.examType || "NEET");
+                                    setTestQuestionCount(t.questionCount || defaultQuestionCount);
+                                    setTestOpenTime(t.openTime ? toLocalInput(new Date(t.openTime)) : "");
                                     setFormError("");
                                   }}
                                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left cursor-pointer"
@@ -1764,6 +1800,41 @@ export function UnifiedChapterScheduleTimeline({
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Test date &amp; time *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required={!editingTest}
+                    disabled={!!editingTest && editingTest.status !== "DRAFT"}
+                    value={testOpenTime}
+                    onChange={(e) => setTestOpenTime(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Number of questions *
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    required
+                    value={testQuestionCount}
+                    onChange={(e) => setTestQuestionCount(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+              <p className="-mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                {subjectTitle ? `${subjectTitle} only (${defaultQuestionCount} is the NEET-style default; choose any number from 1 to 200). ` : ""}
+                Students see the test as Upcoming right away. Add and correct its questions until the set time — then it publishes itself and can no longer be changed.
+              </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

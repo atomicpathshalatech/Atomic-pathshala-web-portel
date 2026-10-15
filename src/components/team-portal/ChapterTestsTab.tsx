@@ -19,6 +19,8 @@ export interface TestItem {
   status: string;
   /** When the test is held. Until then it is a draft (questions can change); then it publishes itself. */
   openTime?: string | Date | null;
+  /** How many questions the test is set to have (its section's target). */
+  questionCount?: number | null;
   createdAt: string | Date;
   _count?: {
     sections: number;
@@ -72,6 +74,8 @@ export function ChapterTestsTab({
   const [examType, setExamType] = useState("NEET");
   const [instructions, setInstructions] = useState("");
   const [openTimeLocal, setOpenTimeLocal] = useState("");
+  // Empty = the subject's default (90 for Biology, 45 otherwise), set by the server.
+  const [questionCount, setQuestionCount] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -85,6 +89,7 @@ export function ChapterTestsTab({
     const tomorrow = new Date(Date.now() + 24 * 3600 * 1000);
     tomorrow.setHours(10, 0, 0, 0);
     setOpenTimeLocal(toLocalInput(tomorrow));
+    setQuestionCount("");
     setError("");
     setShowCreateModal(true);
   };
@@ -98,6 +103,7 @@ export function ChapterTestsTab({
     setIncorrectMarks(t.incorrectMarks || -1);
     setExamType(t.examType || "NEET");
     setOpenTimeLocal(t.openTime ? toLocalInput(new Date(t.openTime)) : "");
+    setQuestionCount(t.questionCount ? String(t.questionCount) : "");
     setError("");
   };
 
@@ -126,6 +132,7 @@ export function ChapterTestsTab({
           examType,
           instructions: instructions.trim() || undefined,
           openTime: new Date(openTimeLocal).toISOString(),
+          ...(questionCount && { questionCount: Number(questionCount) }),
         }),
       });
       const json = await res.json();
@@ -162,6 +169,7 @@ export function ChapterTestsTab({
           incorrectMarks: Number(incorrectMarks),
           examType,
           ...(editingTest.status === "DRAFT" && openTimeLocal && { openTime: new Date(openTimeLocal).toISOString() }),
+          ...(questionCount && { questionCount: Number(questionCount) }),
         }),
       });
       const json = await res.json();
@@ -528,6 +536,21 @@ export function ChapterTestsTab({
                 </p>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Number of questions
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  placeholder="Default: 90 for Biology, 45 for Physics / Chemistry"
+                  value={questionCount}
+                  onChange={(e) => setQuestionCount(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-sm text-slate-900 dark:text-white focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -654,6 +677,21 @@ export function ChapterTestsTab({
                 <p className="mt-1 text-[11px] text-slate-500">
                   Students see it as Upcoming from now. Add or correct questions until this time — then it publishes itself and can no longer be changed.
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Number of questions
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  placeholder="Default: 90 for Biology, 45 for Physics / Chemistry"
+                  value={questionCount}
+                  onChange={(e) => setQuestionCount(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-sm text-slate-900 dark:text-white focus:border-emerald-500 focus:outline-none"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

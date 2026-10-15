@@ -98,6 +98,14 @@ async function run() {
     const test = ok.json?.data?.test;
     if (test) created.push(test.id);
     assert(ok.status === 201 && test.status === "DRAFT" && new Date(test.openTime).getTime() === when.getTime(), `Created as a draft with its time (${ok.status} ${test?.status})`);
+    const secs = await prisma.section.findMany({ where: { testId: test.id } });
+    assert(secs.length === 1 && secs[0]!.subject === "Physics" && secs[0]!.targetCount === 45, `One Physics section, 45 questions by default (${secs.map((x) => x.subject + ":" + x.targetCount).join(",")})`);
+    const custom = await call(chapterTests.POST, "POST", { id: chapter.id }, { name: `STQ Custom ${tag}`, openTime: when.toISOString(), questionCount: 25 });
+    if (custom.json?.data?.test?.id) created.push(custom.json.data.test.id);
+    const customSec = await prisma.section.findFirst({ where: { testId: custom.json?.data?.test?.id } });
+    assert(custom.status === 201 && customSec?.targetCount === 25, "The team can choose its own number of questions (25)");
+    const tooMany = await call(chapterTests.POST, "POST", { id: chapter.id }, { name: "Too many", openTime: when.toISOString(), questionCount: 500 });
+    assert(tooMany.status === 400, `More than 200 questions is refused (${tooMany.status})`);
 
     console.log("Before its time");
     const add = await call(testQuestions.POST, "POST", { id: test.id }, { questionIds: [question.id] });
@@ -113,6 +121,11 @@ async function run() {
     const moved = new Date(Date.now() + 3 * 3600_000);
     const resched = await call(chapterTest.PATCH, "PATCH", { id: chapter.id, testId: test.id }, { openTime: moved.toISOString() });
     assert(resched.status === 200 && new Date(resched.json.data.test.openTime).getTime() === moved.getTime(), "Its time can be changed before it starts");
+    const recount = await call(chapterTest.PATCH, "PATCH", { id: chapter.id, testId: test.id }, { questionCount: 30 });
+    const sec30 = await prisma.section.findFirst({ where: { testId: test.id } });
+    assert(recount.status === 200 && sec30?.targetCount === 30, "Its number of questions can be changed before it starts");
+    const below = await call(chapterTest.PATCH, "PATCH", { id: chapter.id, testId: test.id }, { questionCount: 0 });
+    assert(below.status === 400, `0 questions is refused (${below.status})`);
 
     console.log("At its time");
     // The set time has come.

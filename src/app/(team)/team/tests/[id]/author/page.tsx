@@ -7,6 +7,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { DualColumnQuestionStudio } from "@/components/questions/DualColumnQuestionStudio";
 import { isTestEditable, publishDueTests } from "@/lib/tests/scheduled-publish";
+import { ensureChapterTestSection } from "@/lib/tests/chapter-test";
 
 export const metadata: Metadata = {
   title: "Test Question Authoring Studio — Atomic Pathshala",
@@ -21,6 +22,8 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
 
   // A scheduled test whose time has come publishes itself now.
   await publishDueTests({ testIds: [params.id] });
+  // An older chapter test with no section gets its chapter's one (else the full NEET paper showed).
+  await ensureChapterTestSection(params.id);
   const test = await prisma.test.findUnique({
     where: { id: params.id },
     include: {

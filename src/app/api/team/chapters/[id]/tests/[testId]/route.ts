@@ -8,6 +8,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { deleteTestCascading } from "@/lib/team/resource-delete";
 import { assertChapterAccess } from "@/lib/chapters/access";
 import { isTestEditable, publishTestNow, testStartedReason } from "@/lib/tests/scheduled-publish";
+import { parseQuestionCount, setChapterTestSection } from "@/lib/tests/chapter-test";
 
 export async function PATCH(
   request: NextRequest,
@@ -25,7 +26,7 @@ export async function PATCH(
     if (!test || test.chapterId !== params.id) return apiError("Test not found", 404);
 
     const body = await request.json();
-    const { name, durationMin, correctMarks, incorrectMarks, instructions, status, examType, openTime: openTimeRaw } = body;
+    const { name, durationMin, correctMarks, incorrectMarks, instructions, status, examType, openTime: openTimeRaw, questionCount: questionCountRaw } = body;
 
     // "Publish now" goes through the same checks as every publish (questions
     // in every section…). No other status can be set from here.
@@ -49,6 +50,14 @@ export async function PATCH(
       if (openTime.getTime() < Date.now() - 60_000) return apiError("The test time is in the past — choose a later time.", 400);
     }
 
+    let questionCount: number | null = null;
+    if (questionCountRaw !== undefined && questionCountRaw !== null && questionCountRaw !== "") {
+      questionCount = parseQuestionCount(questionCountRaw);
+      if (questionCount === null) return apiError("Number of questions must be a whole number from 1 to 200.", 400);
+      const added = await prisma.sectionQuestion.count({ where: { section: { testId: test.id } } });
+      if (questionCount < added) return apiError(`This test already has ${added} questions — remove some first, or choose ${added} or more.`, 400);
+    }
+
     const updated = await prisma.test.update({
       where: { id: params.testId },
       data: {
@@ -61,6 +70,16 @@ export async function PATCH(
         ...(examType !== undefined && { examType }),
       },
     });
+
+    if (questionCount !== null) {
+      const ch = await prisma.chapter.findUnique({ where: { id: params.id }, select: { subject: { select: { title: true } } } });
+      await setChapterTestSection(updated.id, {
+        subjectTitle: ch?.subject.title ?? "Questions",
+        questionCount,
+        marksPerQuestion: updated.correctMarks,
+        negativeMarks: updated.incorrectMarks,
+      });
+    }
 
     await prisma.auditLog.create({
       data: {

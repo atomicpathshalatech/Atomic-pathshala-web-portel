@@ -317,6 +317,7 @@ export function ChapterTeamViewWrapper({
             initialLectures={initialLectures}
             initialDpps={initialDpps}
             initialTests={initialTests}
+            subjectTitle={subjectTitle}
             canEdit={canEdit || canReview}
             reviews={reviews}
             assignedBatches={assignedBatches}

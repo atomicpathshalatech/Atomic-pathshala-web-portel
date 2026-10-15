@@ -60,7 +60,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
     }),
     prisma.test.findMany({
       where: { chapterId: chapter.id },
-      include: { _count: { select: { sections: true, attempts: true } } },
+      include: { _count: { select: { sections: true, attempts: true } }, sections: { select: { targetCount: true } } },
       orderBy: { createdAt: "desc" },
     }),
     prisma.chapterReview.findMany({
@@ -244,6 +244,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           examType: t.examType,
           status: t.status,
           openTime: t.openTime,
+          questionCount: t.sections.reduce((sum, s) => sum + (s.targetCount || 0), 0) || null,
           createdAt: t.createdAt,
           _count: t._count,
         }))}

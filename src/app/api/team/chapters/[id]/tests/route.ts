@@ -8,6 +8,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { LanguageMode, TestStatus } from "@prisma/client";
 import { assertChapterAccess } from "@/lib/chapters/access";
 import { publishDueTests } from "@/lib/tests/scheduled-publish";
+import { defaultChapterTestQuestionCount, parseQuestionCount, setChapterTestSection } from "@/lib/tests/chapter-test";
 
 export async function GET(
   request: NextRequest,
@@ -24,6 +25,7 @@ export async function GET(
       where: { chapterId: params.id },
       include: {
         _count: { select: { sections: true, attempts: true } },
+        sections: { select: { targetCount: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -60,6 +62,7 @@ export async function POST(
       instructions,
       languageMode,
       openTime: openTimeRaw,
+      questionCount: questionCountRaw,
     } = body;
 
     if (!name?.trim()) {
@@ -76,6 +79,12 @@ export async function POST(
     if (openTime.getTime() < Date.now() - 60_000) {
       return apiError("The test time is in the past — choose a later time.", 400);
     }
+    // How many questions: chosen by the team (default 90 for Biology, 45 otherwise).
+    const questionCount =
+      questionCountRaw === undefined || questionCountRaw === null || questionCountRaw === ""
+        ? defaultChapterTestQuestionCount(chapter.subject.title)
+        : parseQuestionCount(questionCountRaw);
+    if (questionCount === null) return apiError("Number of questions must be a whole number from 1 to 200.", 400);
 
     // Unique test code
     const count = await prisma.test.count();
@@ -98,13 +107,21 @@ export async function POST(
       },
     });
 
+    // One section: this chapter's subject, with the chosen number of questions.
+    await setChapterTestSection(test.id, {
+      subjectTitle: chapter.subject.title,
+      questionCount,
+      marksPerQuestion: test.correctMarks,
+      negativeMarks: test.incorrectMarks,
+    });
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
         action: "TEST_CREATED",
         entityType: "Test",
         entityId: test.id,
-        metadata: { chapterId: chapter.id, name: test.name, openTime: openTime.toISOString() },
+        metadata: { chapterId: chapter.id, name: test.name, openTime: openTime.toISOString(), questionCount },
       },
     });
 
