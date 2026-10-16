@@ -11,6 +11,9 @@ import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { BackButton } from "@/components/layout/BackButton";
 import { isRootRoute } from "@/lib/navigation/hierarchy";
 import { StudentUpcomingTestBanner } from "@/components/student/StudentUpcomingTestBanner";
+import { DownloadAppsModal } from "@/components/common/DownloadAppsModal";
+import { PortalSwitch } from "@/components/common/PortalSwitch";
+import { useIsNativeApp } from "@/lib/platform/use-native-app";
 
 export type StudentNavItem = {
   href: string;
@@ -51,9 +54,11 @@ function isActive(pathname: string, href: string) {
 function AccountMenu({
   studentName,
   studentIdCode,
+  onOpenDownloadApp,
 }: {
   studentName: string;
   studentIdCode: string;
+  onOpenDownloadApp: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -170,6 +175,17 @@ function AccountMenu({
             <span className="material-symbols-outlined text-lg text-cyan-500">insights</span>
             NEET 2026 Rank Predictor
           </Link>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onOpenDownloadApp();
+            }}
+            className="flex w-full items-center gap-3 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 transition"
+          >
+            <span className="material-symbols-outlined text-lg text-sky-600">install_mobile</span>
+            Download App
+          </button>
           <Link
             href="/"
             onClick={() => setOpen(false)}
@@ -193,6 +209,7 @@ export function StudentShell({
   targetExam,
   currentStreakDays,
   hasActiveSubscription,
+  teamPreview = false,
   children,
 }: {
   studentName: string;
@@ -200,6 +217,8 @@ export function StudentShell({
   targetExam: string;
   currentStreakDays: number;
   hasActiveSubscription: boolean;
+  /** A team member viewing the student portal through the Team ⇄ Student switch. */
+  teamPreview?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -211,6 +230,11 @@ export function StudentShell({
   const [activeGoal, setActiveGoal] = useState<string>(targetExam || "NEET");
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [downloadAppOpen, setDownloadAppOpen] = useState(false);
+  // No Store in the Android app (Google Play billing policy).
+  const nativeApp = useIsNativeApp();
+  const sidebarItems = nativeApp ? SIDEBAR_ITEMS.filter((i) => i.href !== "/store") : SIDEBAR_ITEMS;
+  const dockItems = nativeApp ? DOCK_ITEMS.filter((i) => i.href !== "/store") : DOCK_ITEMS;
 
   useEffect(() => {
     if (targetExam) setActiveGoal(targetExam);
@@ -320,8 +344,9 @@ export function StudentShell({
             <div className="lg:hidden">
               <GlobalSearchBar compact />
             </div>
+            {teamPreview && <PortalSwitch current="student" />}
             <NotificationBell />
-            <AccountMenu studentName={studentName} studentIdCode={studentIdCode} />
+            <AccountMenu studentName={studentName} studentIdCode={studentIdCode} onOpenDownloadApp={() => setDownloadAppOpen(true)} />
           </div>
         </div>
       </header>
@@ -391,7 +416,7 @@ export function StudentShell({
                   Learning Hub
                 </div>
                 <nav className="space-y-1">
-                  {SIDEBAR_ITEMS.map((item) => {
+                  {sidebarItems.map((item) => {
                     const active = isActive(pathname, item.href);
                     return (
                       <Link
@@ -448,6 +473,17 @@ export function StudentShell({
                     <span className="material-symbols-outlined text-[18px] text-white/70">settings</span>
                     <span>Settings</span>
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      setDownloadAppOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white/85 hover:bg-white/10 hover:text-white transition"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-white/70">install_mobile</span>
+                    <span>Download App (Windows / Android)</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -466,7 +502,7 @@ export function StudentShell({
         <div className="hidden lg:block bg-white border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 py-2">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             <nav className="flex items-center gap-1 overflow-x-auto pb-0.5">
-              {SIDEBAR_ITEMS.map((item) => {
+              {sidebarItems.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
                   <Link
@@ -527,7 +563,7 @@ export function StudentShell({
           id="bottom-dock-nav"
           className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl rounded-2xl p-1.5 flex items-center justify-around gap-1"
         >
-          {DOCK_ITEMS.map((item) => {
+          {dockItems.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <Link
@@ -559,6 +595,8 @@ export function StudentShell({
 
       {/* Global In-App Notification Pop-up Queue */}
       <NotificationPopupLayer />
+
+      <DownloadAppsModal isOpen={downloadAppOpen} onClose={() => setDownloadAppOpen(false)} />
     </div>
   );
 }

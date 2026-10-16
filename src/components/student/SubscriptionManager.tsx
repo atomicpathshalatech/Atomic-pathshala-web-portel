@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useIsNativeApp } from "@/lib/platform/use-native-app";
+import { NotInAppNotice } from "@/components/common/NotInAppNotice";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -71,6 +73,7 @@ export function SubscriptionManager({
   studentEmail: string;
 }) {
   const router = useRouter();
+  const nativeApp = useIsNativeApp();
   const [subscription, setSubscription] = useState(initialSubscription);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("MONTHLY");
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -299,6 +302,10 @@ export function SubscriptionManager({
         </div>
       )}
 
+      {nativeApp && <NotInAppNotice />}
+
+      {!nativeApp && (
+      <>
       {/* Billing cycle toggle */}
       <div className="flex flex-wrap gap-2">
         {(Object.keys(CYCLE_LABELS) as BillingCycle[]).map((cycle) => (
@@ -359,6 +366,8 @@ export function SubscriptionManager({
       <p className="text-label-sm font-label-sm text-on-surface-variant">
         *NEET UG Assure terms apply. Prices shown are placeholders and may change.
       </p>
+      </>
+      )}
     </div>
   );
 }

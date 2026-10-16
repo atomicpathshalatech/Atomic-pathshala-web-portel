@@ -56,6 +56,8 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/website/testimonials", label: "Student Feedback / Reviews", icon: "rate_review", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
       { href: "/team/website/faqs", label: "FAQs (फेक प्रश्न/उत्तर)", icon: "help_center", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
       { href: "/team/website", label: "Website Builder", icon: "web", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
+      { href: "/team/apps", label: "App Releases (Windows / Android)", icon: "install_mobile", permission: PERMISSIONS.APP_RELEASE_MANAGE },
+      { href: "/team/account-deletions", label: "Account Deletions", icon: "person_remove", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
     ],
   },
   {
@@ -134,7 +136,13 @@ export default async function TeamPortalLayout({ children }: { children: React.R
   })).filter((section) => section.items.length > 0);
 
   return (
-    <TeamShell userName={user.name} userRoleLabel={user.role?.label ?? ""} hasTeacherProfile={hasTeacherProfile} sections={visibleSections}>
+    <TeamShell
+      userName={user.name}
+      userRoleLabel={user.role?.label ?? ""}
+      hasTeacherProfile={hasTeacherProfile}
+      canViewAsStudent={permissions.has(PERMISSIONS.STUDENT_VIEW_AS)}
+      sections={visibleSections}
+    >
       {children}
     </TeamShell>
   );

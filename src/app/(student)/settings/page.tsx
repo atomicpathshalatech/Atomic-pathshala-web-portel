@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
 import { LogoutButton } from "@/components/student/LogoutButton";
 import { DeviceSessionsPanel } from "@/components/student/DeviceSessionsPanel";
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
  * be added here once there's a place to persist them.
  */
 export default async function SettingsPage() {
-  const { session, student } = await requireStudentSession();
+  const { session, student, teamPreview } = await requireStudentSession();
 
   return (
     <div className="space-y-stack-lg max-w-2xl">
@@ -58,6 +59,20 @@ export default async function SettingsPage() {
       </div>
 
       <DeviceSessionsPanel />
+
+      {!teamPreview && (
+        <Link
+          href="/delete-account"
+          className="glass-card rounded-2xl p-4 flex items-center gap-3 border border-red-200 hover:border-red-300 transition"
+        >
+          <span className="material-symbols-outlined text-red-600 shrink-0">person_remove</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-label-md font-bold text-red-700">Delete account</span>
+            <span className="block text-body-sm text-on-surface-variant">Close your account and delete your personal data.</span>
+          </span>
+          <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+        </Link>
+      )}
 
       <div className="glass-card rounded-2xl p-5 flex items-center justify-between gap-4">
         <div>

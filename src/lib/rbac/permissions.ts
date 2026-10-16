@@ -14,6 +14,10 @@ export const PERMISSIONS = {
   STUDENT_CREATE: "student.create",
   STUDENT_UPDATE: "student.update",
   STUDENT_DELETE: "student.delete",
+  // Open the student portal from the Team Portal ("Student" switch) without
+  // signing in again — as the team member's own student profile, with every
+  // batch open, to check what students see.
+  STUDENT_VIEW_AS: "student.view_as",
 
   // Teacher / Team Portal
   TEACHER_READ: "teacher.read",
@@ -79,6 +83,9 @@ export const PERMISSIONS = {
 
   // Team Portal — baseline gate permission
   TEAM_PORTAL_ACCESS: "team.portal.access",
+
+  // Publish new builds of the Windows / Android apps (App Releases page)
+  APP_RELEASE_MANAGE: "apps.release.manage",
 
   // Whiteboard (teacher-side session/practice board)
   WHITEBOARD_ACCESS: "whiteboard.access",

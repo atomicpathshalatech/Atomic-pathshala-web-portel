@@ -28,7 +28,9 @@ export default async function CoursesPage() {
     if (session?.user?.id) {
       const { hasPermission } = await import("@/lib/rbac/guard");
       const { PERMISSIONS } = await import("@/lib/rbac/permissions");
-      const canManage = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
+      const canManage =
+        (await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE)) ||
+        (await hasPermission(session.user.id, PERMISSIONS.STUDENT_VIEW_AS));
       if (canManage) {
         hasUniversalAccess = true;
       }

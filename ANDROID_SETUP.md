@@ -238,3 +238,52 @@ Upload this `.aab` directly to the **Google Play Console** under Production / In
    - `RECORD_AUDIO` and `CAMERA` permissions are declared in `AndroidManifest.xml`. Ensure permissions are granted when prompted on device.
 4. **NextAuth Session Cookie Not Persisting**:
    - Capacitor WebView uses standard Chromium engine. Session cookies over HTTPS (`ap.atomicpathshala.in`) persist automatically across restarts.
+
+---
+
+## 📲 "Download App" in the portal (APK for students and team)
+
+Students and the team download the Android app from **Download App** (team
+sidebar / student menu). The portal serves the build named in
+`apps/android/latest.json` in file storage.
+
+**One-time setup**
+
+1. Create the release key once (keep it safe — every future update must be
+   signed with the same key):
+   `keytool -genkeypair -v -keystore atomic-release-key.jks -alias atomicpathshala -keyalg RSA -keysize 2048 -validity 10000`
+2. GitHub → repository **Settings → Secrets and variables → Actions**, add:
+   - `ANDROID_KEYSTORE_BASE64` — output of `base64 -w0 atomic-release-key.jks`
+     (Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("atomic-release-key.jks"))`)
+   - `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
+   - optional, to publish automatically: `CLOUDFLARE_ACCOUNT_ID`,
+     `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` (same values as on Vercel)
+
+**Every new version**
+
+GitHub → **Actions → Android APK → Run workflow**, enter the version (e.g. `1.0.1`).
+With the storage secrets it is published straight away; otherwise download the
+APK from the run's **Artifacts** and upload it on **Team → App Releases**.
+
+The Windows app is published the same way: `npm run dist` in `desktop/teacher`,
+then the publish-release script (or upload the `.exe` on Team → App Releases).
+
+---
+
+## ✅ Google Play checklist
+
+Built into the app:
+- **Account deletion** — in the app: Settings → Delete account; on the web:
+  `https://ap.atomicpathshala.in/delete-account` (enter this URL in Play Console →
+  App content → Data safety → "Delete account URL"). The account closes at once;
+  a super admin erases the personal data on **Team → Account Deletions** (within 30 days).
+- **No purchases inside the app** — Store, Buy buttons, batch checkout and
+  subscription plans are hidden in the Android app (Google Play allows selling
+  digital content in an app only through Play Billing). Students who already
+  have access use everything; purchases happen on the website.
+
+Still to do in Play Console: store listing (icon 512×512, feature graphic
+1024×500, at least 2 phone screenshots), Data safety form, content rating,
+target audience, "App access" demo login for the reviewer, and the release
+key's SHA-256 in `public/.well-known/assetlinks.json` (Play Console → App
+integrity → App signing key certificate).

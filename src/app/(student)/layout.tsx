@@ -6,7 +6,7 @@ export default async function StudentPortalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { session, student } = await requireStudentSession();
+  const { session, student, teamPreview } = await requireStudentSession();
 
   // Subscription status now rides along on the cached student lookup in
   // requireStudentSession() — no separate query here.
@@ -25,6 +25,7 @@ export default async function StudentPortalLayout({
       targetExam={targetExam}
       currentStreakDays={currentStreakDays}
       hasActiveSubscription={hasActiveSubscription}
+      teamPreview={teamPreview}
     >
       {children}
     </StudentShell>

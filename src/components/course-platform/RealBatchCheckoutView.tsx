@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useIsNativeApp } from "@/lib/platform/use-native-app";
+import { NotInAppNotice } from "@/components/common/NotInAppNotice";
 
 declare global {
   interface Window {
@@ -49,6 +51,7 @@ export function RealBatchCheckoutView({
   studentEmail: string;
 }) {
   const router = useRouter();
+  const nativeApp = useIsNativeApp();
   const [result, setResult] = useState<ResultState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [amountPaid, setAmountPaid] = useState<number | null>(null);
@@ -141,6 +144,14 @@ export function RealBatchCheckoutView({
       setResult("failed");
       setErrorMessage(err instanceof Error ? err.message : "Something went wrong");
     }
+  }
+
+  if (nativeApp && result !== "success") {
+    return (
+      <div className="mx-auto max-w-md px-4 py-10">
+        <NotInAppNotice />
+      </div>
+    );
   }
 
   return (

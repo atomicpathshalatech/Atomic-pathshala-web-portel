@@ -9,7 +9,8 @@ import { OpsBackButton } from "@/components/common/OpsBackButton";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { NotificationBell } from "@/components/student/NotificationBell";
 import { NotificationPopupLayer } from "@/components/common/NotificationPopupLayer";
-import { DownloadWindowsAppModal } from "@/components/team-portal/DownloadWindowsAppModal";
+import { DownloadAppsModal } from "@/components/common/DownloadAppsModal";
+import { PortalSwitch } from "@/components/common/PortalSwitch";
 
 export type TeamNavItem = { href: string; label: string; icon: string };
 export type TeamNavSection = { title?: string; items: TeamNavItem[] };
@@ -30,12 +31,15 @@ export function TeamShell({
   userName,
   userRoleLabel,
   hasTeacherProfile,
+  canViewAsStudent = false,
   sections,
   children,
 }: {
   userName: string;
   userRoleLabel: string;
   hasTeacherProfile: boolean;
+  /** Shows the Team | Student switch (permission "student.view_as"). */
+  canViewAsStudent?: boolean;
   sections: TeamNavSection[];
   children: React.ReactNode;
 }) {
@@ -92,6 +96,7 @@ export function TeamShell({
             <div className="md:hidden">
               <GlobalSearchBar compact />
             </div>
+            {canViewAsStudent && <PortalSwitch current="team" />}
             <NotificationBell />
             <TeamProfileMenu userName={userName} userRoleLabel={userRoleLabel} hasTeacherProfile={hasTeacherProfile} />
           </div>
@@ -145,7 +150,7 @@ export function TeamShell({
       </div>
 
       <NotificationPopupLayer />
-      <DownloadWindowsAppModal isOpen={downloadAppOpen} onClose={() => setDownloadAppOpen(false)} />
+      <DownloadAppsModal isOpen={downloadAppOpen} onClose={() => setDownloadAppOpen(false)} />
     </div>
   );
 }
@@ -217,22 +222,17 @@ function SidebarNav({
           <button
             type="button"
             onClick={onOpenDownloadApp}
-            title="Download Atomic Pathshala Windows Desktop App"
+            title="Download the Atomic Pathshala app (Windows / Android)"
             className={`w-full flex items-center gap-2.5 py-2 rounded-xl bg-gradient-to-r from-orange-500/20 to-amber-500/10 hover:from-orange-500/30 hover:to-amber-500/20 text-white text-xs font-bold transition-all border border-orange-400/30 shadow-xs group text-left ${
               collapsible ? "justify-center lg:justify-start px-2 lg:px-3" : "px-3"
             }`}
           >
             <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
-              <span className="material-symbols-outlined text-[15px] text-white">desktop_windows</span>
+              <span className="material-symbols-outlined text-[15px] text-white">install_desktop</span>
             </div>
             <div className={collapsible ? "hidden lg:block truncate min-w-0" : "truncate min-w-0"}>
-              <div className="flex items-center gap-1.5">
-                <span className="truncate">Windows App</span>
-                <span className="px-1 py-0.2 rounded bg-orange-500 text-[8.5px] font-black uppercase text-white">
-                  v0.1.0
-                </span>
-              </div>
-              <p className="text-[10px] text-white/70 font-normal truncate">Download Studio</p>
+              <span className="block truncate">Download App</span>
+              <p className="text-[10px] text-white/70 font-normal truncate">Windows · Android</p>
             </div>
           </button>
         )}

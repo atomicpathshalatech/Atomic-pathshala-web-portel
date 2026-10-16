@@ -39,7 +39,10 @@ export async function resolveBatchAccess(
   // just a normal ACTIVE_ENROLLMENT row with enrolledById set by staff).
   const { hasPermission } = await import("@/lib/rbac/guard");
   const { PERMISSIONS } = await import("@/lib/rbac/permissions");
-  const canManageBatch = await hasPermission(userId, PERMISSIONS.BATCH_UPDATE);
+  // ("student.view_as": a team member checking the student portal through
+  // the Team ⇄ Student switch sees every batch the same way.)
+  const canManageBatch =
+    (await hasPermission(userId, PERMISSIONS.BATCH_UPDATE)) || (await hasPermission(userId, PERMISSIONS.STUDENT_VIEW_AS));
   if (canManageBatch) {
     return { status: "ADMIN_GRANTED", actingAsTeacherId: userId };
   }
