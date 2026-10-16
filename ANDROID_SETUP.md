@@ -267,3 +267,23 @@ APK from the run's **Artifacts** and upload it on **Team → App Releases**.
 
 The Windows app is published the same way: `npm run dist` in `desktop/teacher`,
 then the publish-release script (or upload the `.exe` on Team → App Releases).
+
+---
+
+## ✅ Google Play checklist
+
+Built into the app:
+- **Account deletion** — in the app: Settings → Delete account; on the web:
+  `https://ap.atomicpathshala.in/delete-account` (enter this URL in Play Console →
+  App content → Data safety → "Delete account URL"). The account closes at once;
+  a super admin erases the personal data on **Team → Account Deletions** (within 30 days).
+- **No purchases inside the app** — Store, Buy buttons, batch checkout and
+  subscription plans are hidden in the Android app (Google Play allows selling
+  digital content in an app only through Play Billing). Students who already
+  have access use everything; purchases happen on the website.
+
+Still to do in Play Console: store listing (icon 512×512, feature graphic
+1024×500, at least 2 phone screenshots), Data safety form, content rating,
+target audience, "App access" demo login for the reviewer, and the release
+key's SHA-256 in `public/.well-known/assetlinks.json` (Play Console → App
+integrity → App signing key certificate).

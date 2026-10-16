@@ -57,6 +57,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/website/faqs", label: "FAQs (फेक प्रश्न/उत्तर)", icon: "help_center", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
       { href: "/team/website", label: "Website Builder", icon: "web", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
       { href: "/team/apps", label: "App Releases (Windows / Android)", icon: "install_mobile", permission: PERMISSIONS.APP_RELEASE_MANAGE },
+      { href: "/team/account-deletions", label: "Account Deletions", icon: "person_remove", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
     ],
   },
   {

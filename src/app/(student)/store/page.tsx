@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getActiveBatchCatalog } from "@/lib/courses/catalog";
 import { CourseListingMasterView } from "@/components/course-platform/CourseListingMasterView";
 import { CourseData } from "@/components/course-platform/CourseCard";
+import { NotInApp } from "@/components/common/NotInApp";
 
 export const metadata: Metadata = {
   title: "Store — Atomic Pathshala",
@@ -122,7 +123,9 @@ export default async function StorePage() {
         </div>
       </div>
 
-      <CourseListingMasterView courses={storeCourses} />
+      <NotInApp>
+        <CourseListingMasterView courses={storeCourses} />
+      </NotInApp>
     </div>
   );
 }

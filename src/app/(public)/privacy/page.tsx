@@ -130,7 +130,7 @@ export default function PrivacyPolicyPage() {
               <ul>
                 <li>You can see and update your profile details in the app.</li>
                 <li>You can turn off push notifications in your device settings.</li>
-                <li>You can ask us to correct your information or to delete your account and data by writing to <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a>. We will reply within 30 days. Some records (for example fee receipts) may be kept where the law requires.</li>
+                <li>You can delete your account in the app (Settings → Delete account) or at <a href="/delete-account">{LEGAL.site}/delete-account</a>, and ask us to correct your information by writing to <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a>. We will act within 30 days. Some records (for example fee receipts) may be kept where the law requires.</li>
               </ul>
             </>
           ),

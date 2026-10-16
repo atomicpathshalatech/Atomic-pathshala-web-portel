@@ -3,8 +3,11 @@
 import React from "react";
 import Link from "next/link";
 import { CourseData } from "./CourseCard";
+import { useIsNativeApp } from "@/lib/platform/use-native-app";
+import { NotInAppNotice } from "@/components/common/NotInAppNotice";
 
 export function StickyPurchaseBar({ course }: { course: CourseData }) {
+  const nativeApp = useIsNativeApp();
   const discount =
     course.originalPrice > course.price
       ? Math.round(((course.originalPrice - course.price) / course.originalPrice) * 100)
@@ -83,6 +86,9 @@ export function StickyPurchaseBar({ course }: { course: CourseData }) {
       </>
     );
   }
+
+  // Android app: no purchases in the app (Google Play billing policy).
+  if (nativeApp) return <NotInAppNotice />;
 
   return (
     <>

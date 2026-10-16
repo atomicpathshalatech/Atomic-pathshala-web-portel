@@ -13,6 +13,7 @@ import { isRootRoute } from "@/lib/navigation/hierarchy";
 import { StudentUpcomingTestBanner } from "@/components/student/StudentUpcomingTestBanner";
 import { DownloadAppsModal } from "@/components/common/DownloadAppsModal";
 import { PortalSwitch } from "@/components/common/PortalSwitch";
+import { useIsNativeApp } from "@/lib/platform/use-native-app";
 
 export type StudentNavItem = {
   href: string;
@@ -230,6 +231,10 @@ export function StudentShell({
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [downloadAppOpen, setDownloadAppOpen] = useState(false);
+  // No Store in the Android app (Google Play billing policy).
+  const nativeApp = useIsNativeApp();
+  const sidebarItems = nativeApp ? SIDEBAR_ITEMS.filter((i) => i.href !== "/store") : SIDEBAR_ITEMS;
+  const dockItems = nativeApp ? DOCK_ITEMS.filter((i) => i.href !== "/store") : DOCK_ITEMS;
 
   useEffect(() => {
     if (targetExam) setActiveGoal(targetExam);
@@ -411,7 +416,7 @@ export function StudentShell({
                   Learning Hub
                 </div>
                 <nav className="space-y-1">
-                  {SIDEBAR_ITEMS.map((item) => {
+                  {sidebarItems.map((item) => {
                     const active = isActive(pathname, item.href);
                     return (
                       <Link
@@ -497,7 +502,7 @@ export function StudentShell({
         <div className="hidden lg:block bg-white border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 py-2">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             <nav className="flex items-center gap-1 overflow-x-auto pb-0.5">
-              {SIDEBAR_ITEMS.map((item) => {
+              {sidebarItems.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
                   <Link
@@ -558,7 +563,7 @@ export function StudentShell({
           id="bottom-dock-nav"
           className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl rounded-2xl p-1.5 flex items-center justify-around gap-1"
         >
-          {DOCK_ITEMS.map((item) => {
+          {dockItems.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <Link
