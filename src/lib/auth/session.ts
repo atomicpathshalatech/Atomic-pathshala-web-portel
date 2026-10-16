@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { getUserPermissionCodes } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
+import { isTeamStudentView } from "@/lib/auth/student-view";
 
 /**
  * Defense-in-depth alongside middleware.ts: middleware runs on the edge and
@@ -29,7 +30,12 @@ export const requireStudentSession = cache(async function requireStudentSession(
     redirect("/login");
   }
 
-  if (session.user.role !== "STUDENT" && session.user.role !== "PARENT") {
+  // Team members reach the student portal only through the Team ⇄ Student
+  // switch (cookie + "student.view_as" permission); they use their own
+  // student profile, created below on first use like any new account.
+  const teamPreview =
+    session.user.role !== "STUDENT" && session.user.role !== "PARENT" && (await isTeamStudentView(session.user));
+  if (session.user.role !== "STUDENT" && session.user.role !== "PARENT" && !teamPreview) {
     redirect("/team");
   }
 
@@ -69,7 +75,7 @@ export const requireStudentSession = cache(async function requireStudentSession(
     redirect("/login");
   }
 
-  return { session, student };
+  return { session, student, teamPreview };
 });
 
 /**

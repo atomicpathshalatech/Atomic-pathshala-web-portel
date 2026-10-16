@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { AUTH_SECRET } from "@/lib/auth-secret";
+import { STUDENT_VIEW_COOKIE } from "@/lib/auth/student-view-cookie";
 
 const STUDENT_PATHS = [
   "/dashboard",
@@ -57,7 +58,11 @@ export async function middleware(request: NextRequest) {
   const isTeamPath = pathname.startsWith("/team");
   const isStudentPath = STUDENT_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
-  if (isStudentPath && token.role !== "STUDENT" && token.role !== "PARENT") {
+  // A team member who switched to the student portal (Team ⇄ Student) may
+  // pass; the page re-checks the "student.view_as" permission against the DB.
+  const teamStudentView =
+    !NON_TEAM_ROLES.has(token.role as string) && request.cookies.get(STUDENT_VIEW_COOKIE)?.value === "1";
+  if (isStudentPath && token.role !== "STUDENT" && token.role !== "PARENT" && !teamStudentView) {
     return NextResponse.redirect(new URL("/team", request.url));
   }
 

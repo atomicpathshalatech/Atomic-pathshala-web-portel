@@ -11,6 +11,8 @@ import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { BackButton } from "@/components/layout/BackButton";
 import { isRootRoute } from "@/lib/navigation/hierarchy";
 import { StudentUpcomingTestBanner } from "@/components/student/StudentUpcomingTestBanner";
+import { DownloadAppsModal } from "@/components/common/DownloadAppsModal";
+import { PortalSwitch } from "@/components/common/PortalSwitch";
 
 export type StudentNavItem = {
   href: string;
@@ -51,9 +53,11 @@ function isActive(pathname: string, href: string) {
 function AccountMenu({
   studentName,
   studentIdCode,
+  onOpenDownloadApp,
 }: {
   studentName: string;
   studentIdCode: string;
+  onOpenDownloadApp: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -170,6 +174,17 @@ function AccountMenu({
             <span className="material-symbols-outlined text-lg text-cyan-500">insights</span>
             NEET 2026 Rank Predictor
           </Link>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onOpenDownloadApp();
+            }}
+            className="flex w-full items-center gap-3 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 transition"
+          >
+            <span className="material-symbols-outlined text-lg text-sky-600">install_mobile</span>
+            Download App
+          </button>
           <Link
             href="/"
             onClick={() => setOpen(false)}
@@ -193,6 +208,7 @@ export function StudentShell({
   targetExam,
   currentStreakDays,
   hasActiveSubscription,
+  teamPreview = false,
   children,
 }: {
   studentName: string;
@@ -200,6 +216,8 @@ export function StudentShell({
   targetExam: string;
   currentStreakDays: number;
   hasActiveSubscription: boolean;
+  /** A team member viewing the student portal through the Team ⇄ Student switch. */
+  teamPreview?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -211,6 +229,7 @@ export function StudentShell({
   const [activeGoal, setActiveGoal] = useState<string>(targetExam || "NEET");
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [downloadAppOpen, setDownloadAppOpen] = useState(false);
 
   useEffect(() => {
     if (targetExam) setActiveGoal(targetExam);
@@ -320,8 +339,9 @@ export function StudentShell({
             <div className="lg:hidden">
               <GlobalSearchBar compact />
             </div>
+            {teamPreview && <PortalSwitch current="student" />}
             <NotificationBell />
-            <AccountMenu studentName={studentName} studentIdCode={studentIdCode} />
+            <AccountMenu studentName={studentName} studentIdCode={studentIdCode} onOpenDownloadApp={() => setDownloadAppOpen(true)} />
           </div>
         </div>
       </header>
@@ -448,6 +468,17 @@ export function StudentShell({
                     <span className="material-symbols-outlined text-[18px] text-white/70">settings</span>
                     <span>Settings</span>
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      setDownloadAppOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white/85 hover:bg-white/10 hover:text-white transition"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-white/70">install_mobile</span>
+                    <span>Download App (Windows / Android)</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -559,6 +590,8 @@ export function StudentShell({
 
       {/* Global In-App Notification Pop-up Queue */}
       <NotificationPopupLayer />
+
+      <DownloadAppsModal isOpen={downloadAppOpen} onClose={() => setDownloadAppOpen(false)} />
     </div>
   );
 }

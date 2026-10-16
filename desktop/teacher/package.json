@@ -1,9 +1,9 @@
 {
   "name": "atomic-teacher-desktop",
-  "productName": "Atomic Pathshala Teacher",
-  "version": "0.2.1",
+  "productName": "Atomic Pathshala",
+  "version": "0.2.2",
   "private": true,
-  "description": "Windows app for Atomic Pathshala teachers: the live classroom plus a built-in YouTube encoder.",
+  "description": "Atomic Pathshala Windows app for students and the team: opens the portal of whoever signs in, plus the teachers' built-in YouTube encoder.",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -20,7 +20,7 @@
   },
   "build": {
     "appId": "in.atomicpathshala.teacher",
-    "productName": "Atomic Pathshala Teacher",
+    "productName": "Atomic Pathshala",
     "directories": {
       "output": "dist"
     },
@@ -39,7 +39,7 @@
       "perMachine": false,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "shortcutName": "Atomic Pathshala Teacher",
+      "shortcutName": "Atomic Pathshala",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
     },
@@ -54,7 +54,7 @@
         ]
       }
     ],
-    "artifactName": "Atomic-Pathshala-Teacher-Setup-${version}.${ext}",
+    "artifactName": "Atomic-Pathshala-Setup-${version}.${ext}",
     "publish": [
       {
         "provider": "generic",

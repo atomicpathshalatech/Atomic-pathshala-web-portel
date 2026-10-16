@@ -147,6 +147,7 @@ const AREA_NAMES: Record<string, string> = {
   communication: "Communication Center",
   whatsapp: "WhatsApp",
   message: "Messages",
+  apps: "App Downloads",
 };
 
 const humanize = (s: string) =>

@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Atomic Pathshala Teacher — Electron main process.
+ * Atomic Pathshala (Windows app) — Electron main process.
  *
  * The app is a thin, locked-down shell around the existing teacher portal
  * (the same whiteboard, schedule and class controls teachers already use),
@@ -30,7 +30,7 @@ const { startSilentUpdates } = require("./updater");
 // reached (no internet, Wi-Fi still connecting at start-up). It retries by
 // itself, so the app opens as soon as the connection is back.
 function offlinePage(target) {
-  const html = `<!doctype html><meta charset="utf-8"><title>Atomic Pathshala Teacher</title>
+  const html = `<!doctype html><meta charset="utf-8"><title>Atomic Pathshala</title>
 <body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0d14;color:#e5e7eb;font-family:Segoe UI,system-ui,sans-serif;text-align:center">
 <div><h2 style="margin:0 0 8px">Connecting to Atomic Pathshala…</h2>
 <p style="color:#9ca3af;margin:0 0 16px">Check the internet connection. The app opens by itself as soon as it is back.</p>
@@ -61,6 +61,10 @@ app.commandLine.appendSwitch("disable-renderer-backgrounding");
 app.commandLine.appendSwitch("disable-background-timer-throttling");
 app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
 app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion,IntensiveWakeUpThrottling");
+
+// The app was called "Atomic Pathshala Teacher" before it became one app for
+// everyone. Keep its old data folder so an updated install stays signed in.
+app.setPath("userData", path.join(app.getPath("appData"), "Atomic Pathshala Teacher"));
 
 if (!SMOKE && !app.requestSingleInstanceLock()) {
   app.quit();
@@ -93,7 +97,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 700,
     show: !SMOKE || SMOKE_MINIMIZE,
-    title: "Atomic Pathshala Teacher",
+    title: "Atomic Pathshala",
     icon: path.join(__dirname, "icon.png"),
     backgroundColor: "#0b0d14",
     webPreferences: {

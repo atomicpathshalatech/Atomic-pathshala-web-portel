@@ -1,6 +1,8 @@
-# Atomic Pathshala Teacher (Windows)
+# Atomic Pathshala (Windows)
 
-Desktop app for teachers. It opens the normal Atomic teacher portal in a
+One Windows app for everyone (until 0.2.1 it was "Atomic Pathshala Teacher"):
+whoever signs in gets their own portal — students the student portal, the
+team the team portal. For teachers it opens the normal teacher portal in a
 locked-down window and adds what a browser can't do: sending the class to
 YouTube with a built-in encoder, so teachers never touch OBS, RTMP URLs or
 stream keys.

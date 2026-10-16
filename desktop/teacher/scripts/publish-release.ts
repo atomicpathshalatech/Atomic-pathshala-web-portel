@@ -1,4 +1,4 @@
-// Publishes a built Teacher app release to file storage (desktop/ folder):
+// Publishes a built Windows app release to file storage (desktop/ folder):
 // the installer and its blockmap first, latest.yml last — installed apps read
 // latest.yml to find a new version, so it must never point at a file that is
 // not there yet.
@@ -23,6 +23,19 @@ import { uploadBufferToR2 } from "../../../src/lib/storage/r2-client";
     await uploadBufferToR2({ key: `desktop/${name}`, buffer, contentType: type });
     console.log("uploaded", `desktop/${name}`, buffer.length, "bytes");
   }
+  // The portal's Download App window reads this one (src/lib/apps/releases.ts).
+  const version = manifest.match(/^version:\s*(.+)$/m)?.[1]?.trim() ?? "";
+  const release = {
+    platform: "windows",
+    version,
+    key: `desktop/${exe}`,
+    fileName: exe,
+    sizeBytes: fs.statSync(path.join(dir, exe)).size,
+    publishedAt: new Date().toISOString(),
+    notes: null,
+  };
+  await uploadBufferToR2({ key: "apps/windows/latest.json", buffer: Buffer.from(JSON.stringify(release, null, 2)), contentType: "application/json" });
+  console.log("uploaded apps/windows/latest.json", version);
   process.exit(0);
 })().catch((e) => {
   console.error(String(e?.message ?? e).slice(0, 500));
