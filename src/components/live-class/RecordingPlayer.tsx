@@ -5,8 +5,9 @@ import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardP
 import { LectureVideoPlayer } from "@/components/video-player/LectureVideoPlayer";
 
 /**
- * Catch-up playback for a live class that's already been recorded (Room
- * Composite Egress -> R2, see src/lib/livekit/egress.ts). Used both for a
+ * Catch-up playback for a live class that's already been recorded (older
+ * classes were recorded from the LiveKit room to R2; that recording is gone
+ * now, but those files still play here). Used both for a
  * student who joined late wanting to start from the beginning, and for
  * anyone revisiting a class after it ended.
  *

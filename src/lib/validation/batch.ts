@@ -73,7 +73,7 @@ export const batchScheduleCreateSchema = z
     type: z.enum(SCHEDULE_SESSION_TYPE_OPTIONS).default("LIVE_CLASS"),
     teacherId: z.string().optional().or(z.literal("")),
     chapterId: z.string().optional().or(z.literal("")),
-    videoTransport: z.enum(["LIVEKIT", "YOUTUBE", "BOTH"]).default("LIVEKIT"),
+    videoTransport: z.enum(["LIVEKIT", "YOUTUBE", "BOTH"]).default("YOUTUBE"),
     classMode: z.enum(["APP_ONLY", "APP_AND_YOUTUBE"]).optional(),
     youtubeVideoId: z.string().optional(),
     startsAt: z.coerce.date({ required_error: "Start time is required" }),

@@ -5,7 +5,6 @@ import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { AtomicVideoPlayer } from "@/components/student/AtomicVideoPlayer";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
-import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 
 export const metadata: Metadata = {
   title: "Lecture Video Player — Atomic Pathshala",
@@ -179,13 +178,6 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
       }
 
       let resolvedRecUrl = "";
-      if (schedule.liveWhiteboardSession) {
-        const updated = await reconcileRecordingStatus(schedule.liveWhiteboardSession);
-        if (updated) {
-          schedule.liveWhiteboardSession.recordingStatus = updated.recordingStatus;
-          schedule.liveWhiteboardSession.recordingStorageKey = updated.recordingStorageKey;
-        }
-      }
 
       // Prefer the archived YouTube (unlisted) video once it's fully
       // uploaded — the student plays it right here via AtomicVideoPlayer's

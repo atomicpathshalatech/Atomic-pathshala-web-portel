@@ -370,21 +370,9 @@ export async function POST(
       // up, no free stream slot, YouTube down) does NOT start: there is no
       // other way to run a class. The start is undone so the teacher can
       // press Start again, or enter a YouTube link + stream key instead.
-      // When YouTube cannot be used (sign-in expired, quota used up, no
-      // stream slot), the class still runs: in the app's own video room
-      // (LiveKit) — students watch the teacher's camera and the board in the
-      // app. Only when that room is not set up either is the start undone.
-      const livekitReady = Boolean((process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL) && process.env.NEXT_PUBLIC_LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET);
-      const runInAppRoom = async (reason: string) => {
-        console.warn("[live_class_youtube_fallback_to_app_room]", reason);
-        effectiveTransport = "LIVEKIT";
-        wbSession.videoTransport = "LIVEKIT";
-        await prisma.whiteboardSession.update({ where: { id: wbSession.id }, data: { videoTransport: "LIVEKIT" } }).catch(() => null);
-        youtubeSimulcastWarning = `YouTube could not be used for this class (${reason}). The class is running in the app's own video room instead — students see your camera and board in the app.`;
-        return null;
-      };
+      // (There is no LiveKit video room to fall back to any more: a class
+      // runs only as a YouTube stream.)
       const undoStart = async (reason: string) => {
-        if (livekitReady) return runInAppRoom(reason);
         const neverRan = !existingSession?.actualStartedAt || isNewOccurrence;
         await prisma
           .$transaction([

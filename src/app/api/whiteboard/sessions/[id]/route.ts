@@ -7,7 +7,6 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { whiteboardSessionPatchSchema } from "@/lib/validation/whiteboard";
 import { pushPageChanged, pushLivePhaseChanged } from "@/lib/whiteboard/board-mirror";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
 import { pusherServer } from "@/lib/realtime/pusher-server";
 import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 
@@ -139,35 +138,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
-    let recordingEgressId = existing.recordingEgressId;
-    let recordingStatus = existing.recordingStatus;
-
+    // Classes are recorded by YouTube's own archive; there is no LiveKit
+    // room recording any more.
     if (input.livePhase === "LIVE" && existing.livePhase !== "LIVE") {
-      const isAlreadyRecording =
-        existing.recordingStatus === "RECORDING" ||
-        existing.recordingStatus === "RECORDING_STARTING" ||
-        existing.recordingStatus === "STARTING" ||
-        Boolean(existing.recordingEgressId);
-
-      // LiveKit room recording only for a LiveKit-fallback class. YouTube
-      // classes (incl. BOTH) are recorded by YouTube's own archive — a room
-      // recording there never showed the board and only cost Egress minutes.
-      if (!isAlreadyRecording && existing.videoTransport === "LIVEKIT") {
-        try {
-          const { videoRoomName } = await import("@/lib/livekit/server");
-          const roomName = videoRoomName(existing.id);
-          const storageKey = recordingStorageKey(existing.id);
-          const egress = await startRoomRecording(roomName, storageKey);
-          if (egress?.egressId) {
-            recordingEgressId = egress.egressId;
-            recordingStatus = "RECORDING";
-          }
-        } catch (err) {
-          console.warn("[startRoomRecording_fallback]", err);
-          recordingStatus = "RECORDING_FAILED";
-        }
-      }
-
       await prisma.batchSchedule.update({
         where: { id: existing.batchScheduleId },
         data: { status: "LIVE" },
@@ -187,7 +160,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           livePhase: input.livePhase,
           ...(input.livePhase === "LIVE" && !existing.actualStartedAt && { actualStartedAt: new Date() }),
         }),
-        ...(recordingEgressId && { recordingEgressId, recordingStatus }),
       },
     });
 

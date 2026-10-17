@@ -98,7 +98,7 @@ export function BatchScheduleManager({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [teachingModel, setTeachingModel] = useState<"MODEL_1_APP" | "MODEL_2_DUAL" | "PURE_LIVEKIT">("MODEL_1_APP");
+  const [teachingModel, setTeachingModel] = useState<"MODEL_1_APP" | "MODEL_2_DUAL">("MODEL_1_APP");
 
   const [form, setForm] = useState({
     title: "",
@@ -154,7 +154,6 @@ export function BatchScheduleManager({
     const end = new Date(entry.endsAt);
     const diffMins = Math.max(15, Math.round((end.getTime() - start.getTime()) / (1000 * 60)));
     const isCommon = COMMON_DURATIONS.some((d) => d.minutes === diffMins);
-    const isYt = entry.liveWhiteboardSession?.videoTransport === "YOUTUBE" || entry.liveWhiteboardSession?.videoTransport === "BOTH";
     // A public link: the class's own one, else the one already added on the chapter's
     // lecture. An App class's own unlisted broadcast is NOT a public link (opening
     // such a class for editing used to turn it into a public YouTube class).
@@ -168,10 +167,9 @@ export function BatchScheduleManager({
       setTeachingModel("MODEL_1_APP");
     } else if (ytId) {
       setTeachingModel("MODEL_2_DUAL");
-    } else if (isYt) {
-      setTeachingModel("MODEL_1_APP");
     } else {
-      setTeachingModel("PURE_LIVEKIT");
+      // (Older classes saved for the removed LiveKit room open as App classes.)
+      setTeachingModel("MODEL_1_APP");
     }
 
     setForm({
@@ -180,7 +178,7 @@ export function BatchScheduleManager({
       type: entry.type,
       status: entry.status,
       teacherId: entry.teacherId ?? "",
-      videoTransport: isYt || ytId ? "YOUTUBE" : "LIVEKIT",
+      videoTransport: "YOUTUBE",
       youtubeVideoId: entry.classMode === "APP_ONLY" ? "" : ytId,
       startsAt: toISTDateTimeLocal(entry.startsAt),
       durationMinutes: isCommon ? diffMins : 60,
@@ -229,12 +227,8 @@ export function BatchScheduleManager({
         teacherId: form.teacherId || undefined,
         classMode:
           form.type === "LIVE_CLASS" ? (teachingModel === "MODEL_2_DUAL" ? "APP_AND_YOUTUBE" : "APP_ONLY") : undefined,
-        videoTransport:
-          form.type === "LIVE_CLASS"
-            ? teachingModel === "PURE_LIVEKIT"
-              ? "LIVEKIT"
-              : "YOUTUBE"
-            : "LIVEKIT",
+        // Every class is a YouTube stream (the LiveKit room is gone).
+        videoTransport: "YOUTUBE",
         youtubeVideoId:
           form.type === "LIVE_CLASS" && teachingModel === "MODEL_2_DUAL"
             ? form.youtubeVideoId.trim() || undefined
