@@ -182,19 +182,24 @@ function hexToRgb(hex?: string): Color {
 
 async function embedImageBuffer(doc: PDFDocument, base64OrUrl: string): Promise<any> {
   if (!base64OrUrl) return null;
+  let buf: Buffer;
   if (base64OrUrl.startsWith("data:image/") || base64OrUrl.includes(";base64,")) {
-    const isPng = base64OrUrl.includes("image/png");
-    const clean = base64OrUrl.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
-    const buf = Buffer.from(clean, "base64");
-    return isPng ? await doc.embedPng(buf) : await doc.embedJpg(buf);
+    buf = Buffer.from(base64OrUrl.slice(base64OrUrl.indexOf(",") + 1), "base64");
   } else if (base64OrUrl.startsWith("http://") || base64OrUrl.startsWith("https://")) {
     const res = await fetch(base64OrUrl);
     if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    const isPng = base64OrUrl.toLowerCase().endsWith(".png");
-    return isPng ? await doc.embedPng(buf) : await doc.embedJpg(buf);
+    buf = Buffer.from(await res.arrayBuffer());
+  } else {
+    return null;
   }
-  return null;
+  // Decided by the bytes, not the label or the file name (a ".jpg" that is
+  // really a PNG, or an address with a query string, was read as JPEG and
+  // silently left out of the PDF).
+  const isPng = buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  const isJpg = buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  if (isPng) return doc.embedPng(buf);
+  if (isJpg) return doc.embedJpg(buf);
+  throw new Error("This image format cannot go into a PDF (use PNG or JPEG).");
 }
 
 function replaceVariables(

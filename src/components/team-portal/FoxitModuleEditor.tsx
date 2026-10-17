@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { moveEditorImagesToStorage } from "@/lib/module-editor/image-upload";
 import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
 import {
   TextEditItem,
@@ -647,10 +648,14 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const handleSaveDocument = async (isAutosave = false): Promise<string | null> => {
     try {
       setSaveStatus("saving");
+      // Images go to file storage first; the save request carries only their
+      // addresses (a request over ~4.5 MB is refused — see image-upload.ts).
+      const media = await moveEditorImagesToStorage({ images, globalReplacements, background, watermark, coverPage }, moduleId);
       const res = await fetch(`/api/team/modules/${moduleId}/save-native`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...media,
           textEdits,
           whiteouts,
           images,
