@@ -4,8 +4,44 @@ import { computePdfHash } from "./pdf-hash";
 import { executeParallelPdfExtraction, type PageProcessingStatus } from "./parallel-extraction-engine";
 import type { ModuleProcessInput } from "@/lib/validation/module";
 
-// Active in-memory cancellation tokens
-const activeCancellations = new Map<string, boolean>();
+/**
+ * Extraction runs INSIDE requests, in slices, never after the response.
+ *
+ * It used to be started as a detached promise after the API had answered.
+ * On Vercel a function is frozen as soon as its response is sent, so the
+ * work stopped at a random point: jobs sat for hours at "EXTRACTING 10%",
+ * "OCR_PROCESSING 28%" or even "95%" until someone cancelled them, and only
+ * a small PDF that finished within the first moments ever came out.
+ *
+ * Now each request processes pages for at most sliceBudgetMs() (45 s), saves every
+ * finished page straight away, and records where to carry on
+ * (metadata.nextPage). The editor keeps calling "continue" until the job is
+ * done, so any size of PDF is finished piece by piece, a crash or a closed
+ * tab loses at most one batch, and a job left behind can be resumed.
+ */
+const sliceBudgetMs = () => Number(process.env.MODULE_SLICE_BUDGET_MS) || 45_000;
+const BATCH_PAGES = { FAST_EDITABLE: 25, AI_ENHANCE: 10 } as const;
+
+type SliceMeta = {
+  nextPage: number;
+  fromPage: number;
+  toPage: number | null;
+  documentPages: number | null;
+  mode: "FAST_EDITABLE" | "AI_ENHANCE";
+  removeWords?: string[];
+  renames?: Record<string, string>;
+  scannedPages: number;
+  digitalPages: number;
+};
+
+export type SliceResult = {
+  jobId: string;
+  done: boolean;
+  status: string;
+  completedPages: number;
+  totalPages: number;
+  nextPage: number | null;
+};
 
 export interface JobStatusResponse {
   jobId: string;
@@ -31,7 +67,7 @@ export async function startExtractionJob(
   moduleId: string,
   userId: string,
   options: ModuleProcessInput = {}
-): Promise<{ jobId: string; status: string; totalPages: number; isCached: boolean }> {
+): Promise<{ jobId: string; status: string; totalPages: number; isCached: boolean; slice?: SliceResult }> {
   const moduleRow = await prisma.module.findUnique({
     where: { id: moduleId },
     include: { pages: true },
@@ -126,156 +162,199 @@ export async function startExtractionJob(
     return { jobId: job.id, status: "READY", totalPages: cachedMatch.pages.length, isCached: true };
   }
 
-  // 3. Create fresh processing job
+  // 3. Create the job and process its first slice right here.
+  const meta: SliceMeta = {
+    nextPage: Math.max(1, options.fromPage ?? 1),
+    fromPage: Math.max(1, options.fromPage ?? 1),
+    toPage: options.toPage ?? null,
+    documentPages: null,
+    mode: options.mode || "FAST_EDITABLE",
+    removeWords: options.removeWords,
+    renames: options.renames,
+    scannedPages: 0,
+    digitalPages: 0,
+  };
   const job = await prisma.processingJob.create({
-    data: {
-      moduleId: moduleRow.id,
-      stage: "ANALYZING",
-      progress: 5,
-      contentHash,
-    },
+    data: { moduleId: moduleRow.id, stage: "EXTRACTING", progress: 5, contentHash, metadata: meta as any },
   });
+  await prisma.module.update({ where: { id: moduleRow.id }, data: { status: "PROCESSING", contentHash } });
 
-  await prisma.module.update({
-    where: { id: moduleRow.id },
-    data: { status: "PROCESSING", contentHash },
+  const slice = await runExtractionSlice(job.id, { buffer, userId });
+  return { jobId: job.id, status: slice.status, totalPages: slice.totalPages, isCached: false, slice };
+}
+
+/**
+ * Carries on with the module's latest unfinished extraction job (one more
+ * slice). Also picks up jobs left half-way by the old background worker.
+ */
+export async function continueExtractionJob(moduleId: string, userId: string): Promise<SliceResult | null> {
+  const job = await prisma.processingJob.findFirst({
+    where: { moduleId, finishedAt: null },
+    orderBy: { startedAt: "desc" },
   });
+  if (!job) return null;
+  return runExtractionSlice(job.id, { userId });
+}
 
-  activeCancellations.set(job.id, false);
+async function runExtractionSlice(jobId: string, ctx: { buffer?: Buffer; userId: string }): Promise<SliceResult> {
+  const startedAt = Date.now();
+  const job = await prisma.processingJob.findUniqueOrThrow({ where: { id: jobId } });
+  const moduleRow = await prisma.module.findUniqueOrThrow({ where: { id: job.moduleId } });
+  const stored = (job.metadata ?? {}) as unknown as Partial<SliceMeta>;
+  const meta: SliceMeta = {
+    // A job from the old background worker has no slice data: start it over.
+    nextPage: stored.nextPage ?? stored.fromPage ?? 1,
+    fromPage: stored.fromPage ?? 1,
+    toPage: stored.toPage ?? null,
+    documentPages: stored.documentPages ?? null,
+    mode: stored.mode ?? "FAST_EDITABLE",
+    removeWords: stored.removeWords,
+    renames: stored.renames,
+    scannedPages: stored.scannedPages ?? 0,
+    digitalPages: stored.digitalPages ?? 0,
+  };
+  const pageStatuses = { ...((job.pageStatuses ?? {}) as unknown as Record<string, PageProcessingStatus>) };
 
-  // 4. Kick off Background Extraction Worker (Detached / Non-blocking)
-  (async () => {
-    try {
-      await prisma.processingJob.update({
-        where: { id: job.id },
-        data: { stage: "EXTRACTING", progress: 10 },
-      });
+  try {
+    let buffer = ctx.buffer;
+    if (!buffer) {
+      const fileRes = await fetch(moduleRow.originalFileUrl);
+      if (!fileRes.ok) throw new Error(`Could not download the source PDF (HTTP ${fileRes.status}).`);
+      buffer = Buffer.from(await fileRes.arrayBuffer());
+    }
 
-      let lastDbUpdate = Date.now();
-      const extraction = await executeParallelPdfExtraction(buffer, {
-        fromPage: options.fromPage,
-        toPage: options.toPage,
-        mode: options.mode || "FAST_EDITABLE",
-        removeWords: options.removeWords,
-        renames: options.renames,
-        shouldCancel: () => activeCancellations.get(job.id) === true,
-        onPageProgress: async (status, completed, total) => {
-          const pct = Math.min(92, 10 + Math.round((completed / total) * 80));
-          // Throttle DB writes to at most once every 600ms
-          if (Date.now() - lastDbUpdate > 600 || completed === total) {
-            lastDbUpdate = Date.now();
-            await prisma.processingJob
-              .update({
-                where: { id: job.id },
-                data: {
-                  progress: pct,
-                  completedPages: completed,
-                  totalPages: total,
-                  stage: "OCR_PROCESSING",
-                },
-              })
-              .catch(() => undefined);
-          }
-        },
-      });
+    const batchSize = BATCH_PAGES[meta.mode];
+    let batches = 0;
+    for (;;) {
+      const lastPage = meta.documentPages ? Math.min(meta.toPage ?? meta.documentPages, meta.documentPages) : null;
+      if (lastPage !== null && meta.nextPage > lastPage) break;
+      // Always at least one batch per request, so every call makes progress.
+      if (batches > 0 && Date.now() - startedAt > sliceBudgetMs()) break;
 
-      if (activeCancellations.get(job.id)) {
-        await prisma.processingJob.update({
-          where: { id: job.id },
-          data: { stage: "FAILED", errorMessage: "Job cancelled by user", finishedAt: new Date() },
-        });
-        await prisma.module.update({ where: { id: moduleRow.id }, data: { status: "DRAFT" } });
-        activeCancellations.delete(job.id);
-        return;
+      // Cancelled from the editor (another request) since this slice began?
+      const current = await prisma.processingJob.findUnique({ where: { id: jobId }, select: { finishedAt: true } });
+      if (!current || current.finishedAt) {
+        return { jobId, done: true, status: "CANCELLED", completedPages: job.completedPages, totalPages: job.totalPages, nextPage: null };
       }
 
-      await prisma.processingJob.update({
-        where: { id: job.id },
-        data: { stage: "RECONSTRUCTING_LAYOUT", progress: 95 },
+      const batchTo = meta.nextPage + batchSize - 1;
+      const extraction = await executeParallelPdfExtraction(buffer, {
+        fromPage: meta.nextPage,
+        toPage: lastPage !== null ? Math.min(batchTo, lastPage) : (meta.toPage ? Math.min(batchTo, meta.toPage) : batchTo),
+        mode: meta.mode,
+        removeWords: meta.removeWords,
+        renames: meta.renames,
       });
+      meta.documentPages = extraction.documentPages;
+      const rangeEnd = Math.min(meta.toPage ?? extraction.documentPages, extraction.documentPages);
+      if (meta.fromPage > rangeEnd) throw new Error(`This PDF has ${extraction.documentPages} pages; page ${meta.fromPage} does not exist.`);
 
-      // 5. Persist extracted pages to DB in chunks
-      const anyReview = extraction.pages.some((p) => p.needsReview);
-      await prisma.$transaction([
-        ...extraction.pages.map((r) =>
-          prisma.modulePage.upsert({
-            where: { moduleId_pageNumber: { moduleId: moduleRow.id, pageNumber: r.pageNumber } },
-            create: {
-              moduleId: moduleRow.id,
-              pageNumber: r.pageNumber,
-              width: r.width,
-              height: r.height,
-              pdfType: r.pdfType,
-              elements: r.elements as any,
-              ocrConfidence: r.ocrConfidence,
-              needsReview: r.needsReview,
-              warnings: r.warnings as any,
-            },
-            update: {
-              width: r.width,
-              height: r.height,
-              pdfType: r.pdfType,
-              elements: r.elements as any,
-              ocrConfidence: r.ocrConfidence,
-              needsReview: r.needsReview,
-              warnings: r.warnings as any,
-            },
-          })
-        ),
-        prisma.module.update({
-          where: { id: moduleRow.id },
-          data: {
-            pageCount: extraction.totalPages,
-            pdfType: extraction.pdfType,
-            status: anyReview ? "REVIEW_REQUIRED" : "READY",
-            contentHash,
-          },
-        }),
-      ]);
+      // Every finished page is saved now — a later failure never loses it.
+      if (extraction.pages.length > 0) {
+        await prisma.$transaction(
+          extraction.pages.map((r) =>
+            prisma.modulePage.upsert({
+              where: { moduleId_pageNumber: { moduleId: moduleRow.id, pageNumber: r.pageNumber } },
+              create: {
+                moduleId: moduleRow.id,
+                pageNumber: r.pageNumber,
+                width: r.width,
+                height: r.height,
+                pdfType: r.pdfType,
+                elements: r.elements as any,
+                ocrConfidence: r.ocrConfidence,
+                needsReview: r.needsReview,
+                warnings: r.warnings as any,
+              },
+              update: {
+                width: r.width,
+                height: r.height,
+                pdfType: r.pdfType,
+                elements: r.elements as any,
+                ocrConfidence: r.ocrConfidence,
+                needsReview: r.needsReview,
+                warnings: r.warnings as any,
+              },
+            })
+          )
+        );
+      }
+      for (const r of extraction.pages) {
+        if (r.pdfType === "SCANNED") meta.scannedPages++;
+        else meta.digitalPages++;
+      }
+      for (const [k, v] of Object.entries(extraction.pageStatuses)) pageStatuses[k] = v;
+      const lastDone = extraction.pages.length ? Math.max(...extraction.pages.map((r) => r.pageNumber)) : meta.nextPage + batchSize - 1;
+      meta.nextPage = lastDone + 1;
+      batches++;
 
+      const total = rangeEnd - meta.fromPage + 1;
+      const completed = Math.min(total, meta.nextPage - meta.fromPage);
       await prisma.processingJob.update({
-        where: { id: job.id },
+        where: { id: jobId },
+        data: {
+          stage: "OCR_PROCESSING",
+          totalPages: total,
+          completedPages: completed,
+          progress: Math.min(95, 5 + Math.round((completed / Math.max(1, total)) * 90)),
+          pageStatuses: pageStatuses as any,
+          metadata: meta as any,
+        },
+      });
+    }
+
+    const lastPage = Math.min(meta.toPage ?? meta.documentPages ?? 0, meta.documentPages ?? 0);
+    const total = Math.max(0, lastPage - meta.fromPage + 1);
+    const completed = Math.min(total, meta.nextPage - meta.fromPage);
+    if (meta.documentPages === null || meta.nextPage <= lastPage) {
+      return { jobId, done: false, status: "PROCESSING", completedPages: completed, totalPages: total, nextPage: meta.nextPage };
+    }
+
+    // Finished: the module is ready for review.
+    const needsReview = await prisma.modulePage.count({
+      where: { moduleId: moduleRow.id, needsReview: true, pageNumber: { gte: meta.fromPage, lte: lastPage } },
+    });
+    const pdfType = meta.scannedPages === 0 ? "DIGITAL" : meta.digitalPages === 0 ? "SCANNED" : "HYBRID";
+    await prisma.$transaction([
+      prisma.module.update({
+        where: { id: moduleRow.id },
+        data: { pageCount: meta.documentPages, pdfType, status: needsReview > 0 ? "REVIEW_REQUIRED" : "READY" },
+      }),
+      prisma.processingJob.update({
+        where: { id: jobId },
         data: {
           stage: "READY_FOR_REVIEW",
           progress: 100,
-          totalPages: extraction.totalPages,
-          completedPages: extraction.completedPages,
-          failedPages: extraction.failedPages,
-          pageStatuses: extraction.pageStatuses as any,
+          totalPages: total,
+          completedPages: completed,
+          failedPages: 0,
+          pageStatuses: pageStatuses as any,
+          metadata: meta as any,
           finishedAt: new Date(),
         },
-      });
-
-      await prisma.auditLog.create({
+      }),
+    ]);
+    await prisma.auditLog
+      .create({
         data: {
-          userId,
+          userId: ctx.userId,
           action: "MODULE_PROCESSED_PARALLEL",
           entityType: "Module",
           entityId: moduleRow.id,
-          metadata: {
-            totalPages: extraction.totalPages,
-            completed: extraction.completedPages,
-            failed: extraction.failedPages,
-            durationMs: extraction.totalDurationMs,
-          },
+          metadata: { totalPages: total, scanned: meta.scannedPages, needsReview, durationMs: Date.now() - job.startedAt.getTime() },
         },
-      });
-    } catch (err: any) {
-      console.error("[extraction_job_worker_error]", err);
-      const errMsg = err instanceof Error ? err.message : "Extraction failed.";
-      await prisma.processingJob
-        .update({
-          where: { id: job.id },
-          data: { stage: "FAILED", errorMessage: errMsg, finishedAt: new Date() },
-        })
-        .catch(() => undefined);
-      await prisma.module.update({ where: { id: moduleRow.id }, data: { status: "FAILED" } }).catch(() => undefined);
-    } finally {
-      activeCancellations.delete(job.id);
-    }
-  })();
-
-  return { jobId: job.id, status: "PROCESSING", totalPages: moduleRow.pageCount || 0, isCached: false };
+      })
+      .catch(() => undefined);
+    return { jobId, done: true, status: "READY", completedPages: completed, totalPages: total, nextPage: null };
+  } catch (err) {
+    console.error("[extraction_job_slice_error]", err);
+    const errMsg = err instanceof Error ? err.message : "Extraction failed.";
+    await prisma.processingJob
+      .update({ where: { id: jobId }, data: { stage: "FAILED", errorMessage: errMsg, finishedAt: new Date(), metadata: meta as any } })
+      .catch(() => undefined);
+    await prisma.module.update({ where: { id: moduleRow.id }, data: { status: "FAILED" } }).catch(() => undefined);
+    return { jobId, done: true, status: "FAILED", completedPages: job.completedPages, totalPages: job.totalPages, nextPage: null };
+  }
 }
 
 /**
@@ -320,7 +399,6 @@ export async function cancelJob(moduleId: string): Promise<boolean> {
   });
   if (!job) return false;
 
-  activeCancellations.set(job.id, true);
   await prisma.processingJob.update({
     where: { id: job.id },
     data: { stage: "FAILED", errorMessage: "Cancelled by user", finishedAt: new Date() },

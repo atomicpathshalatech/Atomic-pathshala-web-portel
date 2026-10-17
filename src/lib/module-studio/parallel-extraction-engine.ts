@@ -45,6 +45,8 @@ export interface ExtractedPageResult {
 }
 
 export interface ParallelExtractionSummary {
+  /** Pages in the whole PDF (not just the range processed). */
+  documentPages: number;
   totalPages: number;
   completedPages: number;
   failedPages: number;
@@ -184,8 +186,11 @@ export async function executeParallelPdfExtraction(
     try {
       if (!layer.isScanned && layer.text.length >= 20) {
         if (mode === "FAST_EDITABLE") {
-          // FAST PATH: Pure Deterministic Native Rule-Based Parser (< 1ms per page)
-          elements = parsePageTextNatively(layer.text, pageNumber, {
+          // FAST PATH: Pure Deterministic Native Rule-Based Parser (< 1ms per page).
+          // Hindi typed in the old Kruti Dev font arrives as Latin gibberish; it
+          // was only converted in AI mode, so the default mode kept it unreadable.
+          const fastText = isKrutiDevEncoded(layer.text) ? convertKrutiDevToUnicode(layer.text) : layer.text;
+          elements = parsePageTextNatively(fastText, pageNumber, {
             removeWords: options.removeWords,
             renames: options.renames,
           });
@@ -268,6 +273,7 @@ export async function executeParallelPdfExtraction(
   }
 
   return {
+    documentPages: totalDocPages,
     totalPages: pageNumbers.length,
     completedPages: results.length,
     failedPages: 0,

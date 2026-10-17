@@ -138,7 +138,7 @@ type ModuleDetail = {
   pages: PageRow[];
   versions: VersionRow[];
   exportHistory: ExportRow[];
-  processingJobs: { stage: string; progress: number; errorMessage: string | null }[];
+  processingJobs: { stage: string; progress: number; errorMessage: string | null; finishedAt?: string | null; completedPages?: number; totalPages?: number }[];
 };
 
 const ELEMENT_TYPES = [
@@ -600,15 +600,48 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
       if (!body.success) {
         setError(body.error ?? "Failed to initiate extraction job.");
         setProcessing(false);
+      } else if (body.data.done) {
+        setProcessing(false);
+        await load();
       } else {
-        if (body.data.isCached) {
-          setProcessing(false);
-          await load();
-        }
+        await driveExtraction();
       }
     } catch {
       setError("Unable to connect to server. Please check your connection.");
       setProcessing(false);
+    }
+  }
+
+  // The server extracts a slice of pages per request (it cannot keep working
+  // after answering), so the editor asks for the next slice until the whole
+  // PDF is done. Progress is shown by the status polling above.
+  const drivingRef = useRef(false);
+  async function driveExtraction() {
+    if (drivingRef.current) return;
+    drivingRef.current = true;
+    setProcessing(true);
+    let failures = 0;
+    try {
+      for (;;) {
+        try {
+          const res = await fetch(`/api/team/modules/${moduleId}/process?action=continue`, { method: "POST" });
+          const body = await res.json();
+          if (!body.success) throw new Error(body.error ?? "Extraction could not continue.");
+          failures = 0;
+          if (body.data.done) break;
+        } catch (err) {
+          // A dropped connection: try again a few times, then stop (progress is saved; "Resume" carries on).
+          if (++failures >= 3) {
+            setError(err instanceof Error ? err.message : "Extraction could not continue.");
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 2000 * failures));
+        }
+      }
+    } finally {
+      drivingRef.current = false;
+      setProcessing(false);
+      await load();
     }
   }
 
@@ -1019,6 +1052,17 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               <span className="material-symbols-outlined text-base">{analyzingPdf ? "sync" : "analytics"}</span>
               {analyzingPdf ? "Analyzing PDF…" : "Pre-flight Analyze"}
             </button>
+            {!processing && latestJob && !latestJob.finishedAt && (
+              <button
+                type="button"
+                onClick={() => void driveExtraction()}
+                className="rounded-full border border-amber-500/50 text-amber-700 px-4 py-2 font-label-md text-label-sm hover:bg-amber-500/10 transition-colors flex items-center gap-1.5"
+                title="An extraction was left unfinished — carry on from the last saved page"
+              >
+                <span className="material-symbols-outlined text-base">play_circle</span>
+                Resume extraction{latestJob.totalPages ? ` (${latestJob.completedPages ?? 0}/${latestJob.totalPages})` : ""}
+              </button>
+            )}
             {processing && (
               <button
                 type="button"
@@ -1035,7 +1079,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               className="bg-primary text-on-primary rounded-full px-6 py-2.5 font-label-md text-label-md disabled:opacity-60 hover:opacity-90 transition-all shadow-sm flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-lg">{processing ? "sync" : "play_arrow"}</span>
-              {processing ? "Extracting in background…" : data.pageCount ? "Reprocess Module" : "Run Extraction"}
+              {processing ? "Extracting…" : data.pageCount ? "Reprocess Module" : "Run Extraction"}
             </button>
           </div>
         </div>

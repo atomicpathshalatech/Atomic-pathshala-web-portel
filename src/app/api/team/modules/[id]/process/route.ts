@@ -5,9 +5,11 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { moduleProcessSchema } from "@/lib/validation/module";
-import { startExtractionJob, getJobStatus, cancelJob } from "@/lib/module-studio/extraction-job-service";
+import { startExtractionJob, getJobStatus, cancelJob, continueExtractionJob } from "@/lib/module-studio/extraction-job-service";
 
 export const dynamic = "force-dynamic";
+// Each call processes one slice of pages (about 45 s at most) — see extraction-job-service.ts.
+export const maxDuration = 120;
 
 /**
  * GET /api/team/modules/[id]/process
@@ -49,6 +51,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const cancelled = await cancelJob(params.id);
       return apiSuccess({ cancelled });
     }
+    if (action === "continue") {
+      const slice = await continueExtractionJob(params.id, session.user.id);
+      return apiSuccess({ slice, done: !slice || slice.done });
+    }
 
     const options = moduleProcessSchema.parse(await request.json().catch(() => ({})));
 
@@ -60,9 +66,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         status: result.status,
         totalPages: result.totalPages,
         isCached: result.isCached,
+        slice: result.slice ?? null,
+        done: result.isCached || Boolean(result.slice?.done),
         message: result.isCached
           ? "Existing high-fidelity extraction found and instantly applied from cache."
-          : "Extraction job queued and running in background.",
+          : result.slice?.done
+          ? "Extraction finished."
+          : `Extracted ${result.slice?.completedPages ?? 0} of ${result.slice?.totalPages ?? 0} pages — continuing.`,
       },
       202
     );
