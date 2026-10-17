@@ -151,7 +151,7 @@ export async function PATCH(
             batchScheduleId: schedule.id,
             teacherId: resolvedTeacherId,
             title: schedule.title,
-            videoTransport: input.videoTransport || "LIVEKIT",
+            videoTransport: input.videoTransport || "YOUTUBE",
             youtubeVideoId: ytIdOf(input.youtubeVideoId),
           },
         });

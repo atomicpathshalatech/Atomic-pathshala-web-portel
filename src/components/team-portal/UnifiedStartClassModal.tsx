@@ -37,15 +37,15 @@ export function UnifiedStartClassModal({
   dateStr,
   timeStr,
   isLive = false,
-  initialTransport = "LIVEKIT",
+  initialTransport = "YOUTUBE",
   initialYoutubeId = "",
   onSuccess,
 }: UnifiedStartClassModalProps) {
   const router = useRouter();
 
   // "APP" = App class: this class's own unlisted YouTube stream, played
-  // inside the app. Falls back to the interactive LiveKit room only while
-  // App YouTube isn't set up on this server (appYoutube === false).
+  // inside the app. (There is no LiveKit-room fallback: without App YouTube
+  // the class can't start.)
   // "YOUTUBE" = the class is also live on a YouTube channel: paste its link.
   const [deliveryMode, setDeliveryModeState] = useState<"APP" | "YOUTUBE">(
     initialTransport === "YOUTUBE" && initialYoutubeId ? "YOUTUBE" : "APP"
@@ -109,8 +109,8 @@ export function UnifiedStartClassModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // The server makes the final call (LIVEKIT only as a fallback).
-          videoTransport: deliveryMode === "YOUTUBE" || appYoutube ? "YOUTUBE" : "LIVEKIT",
+          // Every class is a YouTube stream.
+          videoTransport: "YOUTUBE",
           youtubeVideoId: deliveryMode === "YOUTUBE" ? parsedYtId || null : null,
         }),
       });
@@ -242,12 +242,12 @@ export function UnifiedStartClassModal({
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
                   {appYoutube === false
-                    ? "Interactive in-app room with whiteboard, chat, doubts and polls. (App YouTube streaming isn't set up on this server yet.)"
+                    ? "App YouTube streaming isn't set up on this server yet, so an App class can't start. Use YouTube + App Class with the channel's link and stream key."
                     : "Private in-app class with whiteboard, chat, doubts and polls — streamed through its own unlisted YouTube link, recorded automatically."}
                 </p>
                 <div className="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
                   <span className="material-symbols-outlined text-xs">shield_lock</span>
-                  <span>{appYoutube === false ? "Interactive room (fallback)" : "Unlisted & Private"}</span>
+                  <span>{appYoutube === false ? "Not set up" : "Unlisted & Private"}</span>
                 </div>
               </div>
 

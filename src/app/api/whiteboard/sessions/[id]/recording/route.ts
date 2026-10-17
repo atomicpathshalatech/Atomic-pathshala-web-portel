@@ -5,7 +5,6 @@ import { prisma } from "@/lib/db";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
-import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 import { isRecordingNotYetDue } from "@/lib/schedule/access-rules";
 
 /**
@@ -117,15 +116,7 @@ export async function GET(
       });
     }
 
-    // Self-heal a missed egress_ended webhook via LiveKit reconciliation
-    const reconciled = await reconcileRecordingStatus({
-      id: params.id,
-      recordingStatus: wbSession.recordingStatus,
-      recordingEgressId: wbSession.recordingEgressId,
-    });
-    const effective = reconciled
-      ? { ...wbSession, ...reconciled }
-      : wbSession;
+    const effective = wbSession;
 
     // Look up FileAsset if storageKey exists
     let fileAsset = null;
