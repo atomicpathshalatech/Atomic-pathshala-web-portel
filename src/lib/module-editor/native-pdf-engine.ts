@@ -25,13 +25,26 @@ import { CoordinateEngine, DEFAULT_PAGE_SIZE } from "./coordinate-engine";
 import { ThemeEngine, SUBJECT_THEMES } from "./theme-engine";
 import { LayerEngine } from "./layer-engine";
 import { PreviewRenderer } from "./preview-renderer";
+import { exportPlan, objectsOnPage } from "./overlay-model";
+import { TEXT_PAD, TEXT_LINE_HEIGHT, FONT_ASCENT, FONT_BOX } from "./text-box";
 
 export type { HeaderFooterConfig, WatermarkConfig, CoverPageConfig };
 
 // -------------------------------------------------------------
 // Compatibility Interfaces for FoxitModuleEditor & save-native API
 // -------------------------------------------------------------
-export interface TextEditItem {
+/**
+ * Every overlay object (text, whiteout, image, shape) on a page shares one
+ * stacking order: higher `z` is drawn later, i.e. on top — in the editor and
+ * in the exported PDF alike. `pageNumber` is the page's id in the editor
+ * (see overlay-model.ts: duplicated / blank pages get ids past the PDF's own).
+ */
+export interface OverlayCommon {
+  z?: number;
+  locked?: boolean;
+}
+
+export interface TextEditItem extends OverlayCommon {
   id: string;
   pageNumber: number; // 1-indexed
   x: number; // Points from top-left (UI coords)
@@ -51,7 +64,7 @@ export interface TextEditItem {
   backgroundColor?: string;
 }
 
-export interface WhiteoutItem {
+export interface WhiteoutItem extends OverlayCommon {
   id: string;
   pageNumber: number;
   x: number;
@@ -61,7 +74,7 @@ export interface WhiteoutItem {
   color?: string; // default #ffffff
 }
 
-export interface ImageEditItem {
+export interface ImageEditItem extends OverlayCommon {
   id: string;
   pageNumber: number;
   x: number;
@@ -74,10 +87,10 @@ export interface ImageEditItem {
   rotation?: number;
 }
 
-export interface ShapeEditItem {
+export interface ShapeEditItem extends OverlayCommon {
   id: string;
   pageNumber: number;
-  type: "rect" | "circle" | "line" | "highlight" | "callout" | "divider";
+  type: "rect" | "circle" | "line" | "highlight" | "underline" | "callout" | "divider";
   x: number;
   y: number;
   width: number;
@@ -138,6 +151,8 @@ export interface NativePdfEditPayload {
   pageRotations?: Record<number, number>;
   deletedPages?: number[];
   pageOrder?: number[];
+  /** Page id → source page (0 = blank) for duplicated / inserted pages (overlay-model.ts). */
+  pageSources?: Record<number, number>;
   headerFooter?: HeaderFooterConfig;
   watermark?: WatermarkConfig;
   coverPage?: CoverPageConfig;
@@ -148,6 +163,8 @@ export interface NativePdfEditResult {
   pageCount: number;
   fileSizeBytes: number;
   processedAt: string;
+  /** What could not be written into the PDF (told to the user, never dropped silently). */
+  warnings: string[];
 }
 
 export interface PdfExportOptions {
@@ -262,27 +279,29 @@ export async function processNativePdfEdits(
     pageRotations = {},
     deletedPages = [],
     pageOrder,
+    pageSources = {},
     headerFooter,
     watermark,
     coverPage,
   } = payload;
+  const dropped = { chars: 0, images: 0 };
 
   const pdfDoc = await PDFDocument.load(originalPdfBuffer);
 
-  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const helveticaItalic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
-  const timesFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
-  const timesBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
-  const courierFont = await pdfDoc.embedFont(StandardFonts.Courier);
-
+  // Text boxes are drawn into the finished document, so their fonts live there.
+  const fontsFor = async (doc: PDFDocument) => {
+    const f = async (name: StandardFonts) => doc.embedFont(name);
+    return {
+      helvetica: [await f(StandardFonts.Helvetica), await f(StandardFonts.HelveticaBold), await f(StandardFonts.HelveticaOblique), await f(StandardFonts.HelveticaBoldOblique)],
+      times: [await f(StandardFonts.TimesRoman), await f(StandardFonts.TimesRomanBold), await f(StandardFonts.TimesRomanItalic), await f(StandardFonts.TimesRomanBoldItalic)],
+      courier: [await f(StandardFonts.Courier), await f(StandardFonts.CourierBold), await f(StandardFonts.CourierOblique), await f(StandardFonts.CourierBoldOblique)],
+    };
+  };
+  let fontSet: Awaited<ReturnType<typeof fontsFor>> | null = null;
   const getFont = (family?: string, isBold?: boolean, isItalic?: boolean): PDFFont => {
-    if (family === "times") return isBold ? timesBold : timesFont;
-    if (family === "courier") return courierFont;
-    if (isBold && isItalic) return helveticaBold;
-    if (isBold) return helveticaBold;
-    if (isItalic) return helveticaItalic;
-    return helveticaFont;
+    const set = fontSet!;
+    const fam = family === "times" ? set.times : family === "courier" ? set.courier : set.helvetica;
+    return fam[(isBold ? 1 : 0) + (isItalic ? 2 : 0)]!;
   };
 
   const theme = ThemeEngine.getThemeForSubject(coverPage?.subject || "CHEMISTRY");
@@ -295,12 +314,44 @@ export async function processNativePdfEdits(
     deletedSet.add(1);
   }
 
+  // Pages of the finished PDF from the editor's page list (order, deletions,
+  // duplicated and blank pages). Overlays are matched by page id, not by the
+  // position the page ends up at, so reordering never moves them.
+  const plan = exportPlan(
+    {
+      pageOrder: pageOrder && pageOrder.length ? pageOrder : Array.from({ length: originalPageCount }, (_, i) => i + 1),
+      deletedPages: Array.from(deletedSet),
+      pageSources,
+      pageRotations,
+    },
+    originalPageCount
+  );
+  const workingDoc = await PDFDocument.create();
+  const firstSize = originalPageCount ? pdfDoc.getPage(0).getSize() : { width: DEFAULT_PAGE_SIZE.width, height: DEFAULT_PAGE_SIZE.height };
+  for (const entry of plan) {
+    if (entry.source === 0) {
+      workingDoc.addPage([firstSize.width, firstSize.height]);
+    } else {
+      const [copied] = await workingDoc.copyPages(pdfDoc, [entry.source - 1]);
+      if (copied) workingDoc.addPage(copied);
+    }
+  }
+  // The editor shows a page turned by its own /Rotate plus the user's turn; so does the PDF.
+  workingDoc.getPages().forEach((pg, i) => {
+    const extra = plan[i]!.rotation;
+    if (extra) pg.setRotation(degrees((((pg.getRotation().angle + extra) % 360) + 360) % 360));
+  });
+
+  fontSet = await fontsFor(workingDoc);
+  const helveticaFont = fontSet.helvetica[0]!;
+  const helveticaBold = fontSet.helvetica[1]!;
+
   // Pre-embed images
   let headerImgEmbed: any = null;
   const hImg = headerFooter?.headerImageBase64 || headerFooter?.headerImageUrl;
   if (hImg) {
     try {
-      headerImgEmbed = await embedImageBuffer(pdfDoc, hImg);
+      headerImgEmbed = await embedImageBuffer(workingDoc, hImg);
     } catch (err) {
       console.warn("[processNativePdfEdits] Header image embed failed:", err);
     }
@@ -310,7 +361,7 @@ export async function processNativePdfEdits(
   const fImg = headerFooter?.footerImageBase64 || headerFooter?.footerImageUrl;
   if (fImg) {
     try {
-      footerImgEmbed = await embedImageBuffer(pdfDoc, fImg);
+      footerImgEmbed = await embedImageBuffer(workingDoc, fImg);
     } catch (err) {
       console.warn("[processNativePdfEdits] Footer image embed failed:", err);
     }
@@ -320,46 +371,20 @@ export async function processNativePdfEdits(
   const wmImg = watermark?.base64Data || watermark?.imageUrl;
   if (watermark?.type === "image" && wmImg) {
     try {
-      watermarkImgEmbed = await embedImageBuffer(pdfDoc, wmImg);
+      watermarkImgEmbed = await embedImageBuffer(workingDoc, wmImg);
     } catch (err) {
       console.warn("[processNativePdfEdits] Watermark image embed failed:", err);
     }
   }
 
-  let workingDoc = pdfDoc;
-  if (pageOrder && pageOrder.length > 0) {
-    const reorderedDoc = await PDFDocument.create();
-    for (const pNum of pageOrder) {
-      if (pNum >= 1 && pNum <= originalPageCount && !deletedSet.has(pNum)) {
-        const [copied] = await reorderedDoc.copyPages(pdfDoc, [pNum - 1]);
-        if (copied) {
-          reorderedDoc.addPage(copied);
-        }
-      }
-    }
-    workingDoc = reorderedDoc;
-  } else if (deletedSet.size > 0) {
-    const sortedDeletes = Array.from(deletedSet).sort((a, b) => b - a);
-    for (const pNum of sortedDeletes) {
-      if (pNum >= 1 && pNum <= workingDoc.getPageCount()) {
-        workingDoc.removePage(pNum - 1);
-      }
-    }
-  }
-
   const pages = workingDoc.getPages();
   const totalPages = pages.length;
-
-  // Apply Page Rotations
-  for (const [pNumStr, rotDeg] of Object.entries(pageRotations)) {
-    const pNum = Number(pNumStr);
-    if (pNum >= 1 && pNum <= pages.length) {
-      const pageToRotate = pages[pNum - 1];
-      if (pageToRotate) {
-        pageToRotate.setRotation(degrees(Number(rotDeg)));
-      }
-    }
-  }
+  const overlayProject = { textEdits, whiteouts, images, shapes };
+  const imageCache = new Map<string, any>();
+  const embedCached = async (src: string) => {
+    if (!imageCache.has(src)) imageCache.set(src, await embedImageBuffer(workingDoc, src).catch(() => null));
+    return imageCache.get(src);
+  };
 
   // Strict Layer Processing
   for (let pIdx = 0; pIdx < pages.length; pIdx++) {
@@ -367,6 +392,8 @@ export async function processNativePdfEdits(
     const page = pages[pIdx];
     if (!page) continue;
     const { width, height } = page.getSize();
+    const turn = ((page.getRotation().angle % 360) + 360) % 360;
+    const frame = viewFrame(width, height, turn);
 
     const vars = {
       page: pageNum,
@@ -448,130 +475,76 @@ export async function processNativePdfEdits(
       }
     }
 
-    // Whiteouts
-    const pageWhiteouts = whiteouts.filter((w) => w.pageNumber === pageNum);
-    for (const w of pageWhiteouts) {
-      const pdfY = height - w.y - w.height;
-      page.drawRectangle({
-        x: w.x,
-        y: Math.max(0, pdfY),
-        width: w.width,
-        height: w.height,
-        color: w.color ? hexToRgb(w.color) : rgb(1, 1, 1),
-      });
-    }
-
-    // In-Place Text Edits
-    const pageTextEdits = textEdits.filter((t) => t.pageNumber === pageNum);
-    for (const t of pageTextEdits) {
-      const pdfY = height - t.y - t.height;
-      if (t.hideOriginal !== false) {
-        page.drawRectangle({
-          x: t.x - 2,
-          y: Math.max(0, pdfY - 2),
-          width: t.width + 4,
-          height: t.height + 4,
-          color: t.backgroundColor ? hexToRgb(t.backgroundColor) : rgb(1, 1, 1),
-        });
-      }
-
-      if (t.newText && t.newText.trim().length > 0) {
-        const font = getFont(t.fontFamily, t.isBold, t.isItalic);
-        const textColor = t.color ? hexToRgb(t.color) : hexToRgb(theme.colors.bodyText);
-        const fontSize = Math.max(6, t.fontSize || 10);
-        const cleanText = t.newText.replace(/[^\x20-\x7E\n]/g, " ");
-        const lines = cleanText.split("\n");
-        let lineY = pdfY + t.height - fontSize;
-
-        for (const line of lines) {
-          let lineX = t.x;
-          if (t.align === "center") {
-            const textW = font.widthOfTextAtSize(line, fontSize);
-            lineX = t.x + Math.max(0, (t.width - textW) / 2);
-          } else if (t.align === "right") {
-            const textW = font.widthOfTextAtSize(line, fontSize);
-            lineX = t.x + Math.max(0, t.width - textW);
-          }
-
-          page.drawText(line, {
-            x: lineX,
-            y: Math.max(4, lineY),
-            size: fontSize,
-            font,
-            color: textColor,
-          });
-
-          lineY -= fontSize * (t.lineHeight || 1.25);
+    // Page objects, bottom to top in the editor's stacking order (z), at the
+    // positions the editor shows them (top-left origin, in the turned page).
+    for (const o of objectsOnPage(overlayProject, plan[pIdx]!.pageId)) {
+      const pl = frame.place(o.x, o.y, o.width, o.height, o.kind === "image" ? o.rotation ?? 0 : 0);
+      if (o.kind === "whiteout") {
+        page.drawRectangle({ ...pl.at(0, 0), width: o.width, height: o.height, rotate: pl.rotate, color: o.color ? hexToRgb(o.color) : rgb(1, 1, 1) });
+      } else if (o.kind === "text") {
+        if (o.hideOriginal !== false) {
+          const m = frame.place(o.x - 2, o.y - 2, o.width + 4, o.height + 4, 0);
+          page.drawRectangle({ ...m.at(0, 0), width: o.width + 4, height: o.height + 4, rotate: m.rotate, color: o.backgroundColor ? hexToRgb(o.backgroundColor) : rgb(1, 1, 1) });
         }
-      }
-    }
-
-    // Inserted Images
-    const pageImages = images.filter((img) => img.pageNumber === pageNum);
-    for (const img of pageImages) {
-      try {
-        const embedded = await embedImageBuffer(workingDoc, (img.base64Data || img.imageUrl)!);
+        if (o.newText && o.newText.trim().length > 0) {
+          const font = getFont(o.fontFamily, o.isBold, o.isItalic);
+          const fontSize = Math.max(4, o.fontSize || 10);
+          const lineHeight = o.lineHeight || TEXT_LINE_HEIGHT;
+          const lines = wrapText(writable(font, o.newText, dropped), font, fontSize, Math.max(1, o.width - TEXT_PAD * 2));
+          // Same box model as the editor: padding, line height, first baseline.
+          const firstBaseline = TEXT_PAD + fontSize * ((lineHeight - FONT_BOX) / 2 + FONT_ASCENT);
+          lines.forEach((line, i) => {
+            const w = font.widthOfTextAtSize(line, fontSize);
+            const lx = o.align === "center" ? (o.width - w) / 2 : o.align === "right" ? o.width - TEXT_PAD - w : TEXT_PAD;
+            const top = firstBaseline + i * fontSize * lineHeight;
+            if (!line) return;
+            page.drawText(line, { ...pl.at(lx, o.height - top), size: fontSize, font, rotate: pl.rotate, color: o.color ? hexToRgb(o.color) : rgb(0, 0, 0) });
+          });
+        }
+      } else if (o.kind === "image") {
+        const src = o.base64Data || o.imageUrl;
+        const embedded = src ? await embedCached(src) : null;
         if (embedded) {
-          const pdfY = height - img.y - img.height;
-          page.drawImage(embedded, {
-            x: img.x,
-            y: Math.max(0, pdfY),
-            width: img.width,
-            height: img.height,
-            opacity: img.opacity ?? 1,
-            rotate: degrees(img.rotation ?? 0),
-          });
+          page.drawImage(embedded, { ...pl.at(0, 0), width: o.width, height: o.height, rotate: pl.rotate, opacity: o.opacity ?? 1 });
+        } else {
+          dropped.images++;
         }
-      } catch (imgErr) {
-        console.warn("[processNativePdfEdits] Failed to embed image on page:", pageNum, imgErr);
-      }
-    }
-
-    // Inserted Shapes
-    const pageShapes = shapes.filter((s) => s.pageNumber === pageNum);
-    for (const s of pageShapes) {
-      const pdfY = height - s.y - s.height;
-      const stroke = s.strokeColor ? hexToRgb(s.strokeColor) : undefined;
-      const fill = s.fillColor ? hexToRgb(s.fillColor) : undefined;
-
-      if (s.type === "highlight") {
-        page.drawRectangle({
-          x: s.x,
-          y: Math.max(0, pdfY),
-          width: s.width,
-          height: s.height,
-          color: fill || hexToRgb(theme.colors.tagBg),
-          opacity: s.opacity ?? 0.35,
-        });
-      } else if (s.type === "rect" || s.type === "callout") {
-        page.drawRectangle({
-          x: s.x,
-          y: Math.max(0, pdfY),
-          width: s.width,
-          height: s.height,
-          borderColor: stroke || hexToRgb(theme.colors.border),
-          borderWidth: s.strokeWidth || 1.5,
-          color: fill,
-          opacity: s.opacity ?? 1,
-        });
-      } else if (s.type === "divider" || s.type === "line") {
-        page.drawLine({
-          start: { x: s.x, y: pdfY + s.height },
-          end: { x: s.x + s.width, y: pdfY },
-          thickness: s.strokeWidth || theme.structuralDividerThickness,
-          color: stroke || hexToRgb(theme.colors.primary),
-        });
-      } else if (s.type === "circle") {
-        const radius = Math.min(s.width, s.height) / 2;
-        page.drawCircle({
-          x: s.x + radius,
-          y: Math.max(0, pdfY + radius),
-          size: radius,
-          borderColor: stroke,
-          borderWidth: s.strokeWidth || 1.5,
-          color: fill,
-          opacity: s.opacity ?? 1,
-        });
+      } else if (o.kind === "shape") {
+        const s = o;
+        const stroke = s.strokeColor ? hexToRgb(s.strokeColor) : undefined;
+        const fill = s.fillColor ? hexToRgb(s.fillColor) : undefined;
+        const strokeWidth = s.strokeWidth ?? 1.5;
+        if (s.type === "highlight") {
+          page.drawRectangle({ ...pl.at(0, 0), width: s.width, height: s.height, rotate: pl.rotate, color: fill || rgb(1, 0.9, 0.2), opacity: s.opacity ?? 0.4 });
+        } else if (s.type === "rect" || s.type === "callout") {
+          page.drawRectangle({
+            ...pl.at(0, 0),
+            width: s.width,
+            height: s.height,
+            rotate: pl.rotate,
+            borderColor: stroke ?? (fill ? undefined : rgb(0, 0, 0)),
+            borderWidth: stroke || !fill ? strokeWidth : 0,
+            color: fill,
+            opacity: fill ? s.opacity ?? 1 : undefined,
+            borderOpacity: s.opacity ?? 1,
+          });
+        } else if (s.type === "circle") {
+          page.drawEllipse({
+            ...pl.at(s.width / 2, s.height / 2),
+            xScale: s.width / 2,
+            yScale: s.height / 2,
+            rotate: pl.rotate,
+            borderColor: stroke ?? (fill ? undefined : rgb(0, 0, 0)),
+            borderWidth: stroke || !fill ? strokeWidth : 0,
+            color: fill,
+            opacity: fill ? s.opacity ?? 1 : undefined,
+            borderOpacity: s.opacity ?? 1,
+          });
+        } else if (s.type === "line" || s.type === "divider") {
+          page.drawLine({ start: pl.at(0, s.height), end: pl.at(s.width, 0), thickness: strokeWidth, color: stroke || rgb(0, 0, 0), opacity: s.opacity ?? 1 });
+        } else if (s.type === "underline") {
+          page.drawLine({ start: pl.at(0, 0), end: pl.at(s.width, 0), thickness: strokeWidth, color: stroke || rgb(0, 0, 0), opacity: s.opacity ?? 1 });
+        }
       }
     }
 
@@ -651,12 +624,102 @@ export async function processNativePdfEdits(
   }
 
   const pdfBytes = await workingDoc.save();
+  const warnings: string[] = [];
+  if (dropped.chars) warnings.push(`${dropped.chars} character(s) in your text boxes (for example Hindi) cannot be written with the PDF's built-in fonts and were left blank in the exported PDF.`);
+  if (dropped.images) warnings.push(`${dropped.images} picture(s) could not be read (only PNG and JPEG can go into the PDF) and are missing from the export.`);
   return {
     pdfBytes,
     pageCount: workingDoc.getPageCount(),
     fileSizeBytes: pdfBytes.length,
     processedAt: new Date().toISOString(),
+    warnings,
   };
+}
+
+export { TEXT_PAD, TEXT_LINE_HEIGHT };
+
+/**
+ * The page as the editor shows it — turned by its rotation, origin at the top
+ * left — and the way back to PDF space. `place` maps a box (plus a clockwise
+ * turn of the object itself, for pictures) so that drawing at `at(lx, ly)` in
+ * the box's own coordinates (origin bottom-left, y up) with `rotate` lands
+ * exactly where the editor showed it.
+ */
+function viewFrame(W0: number, H0: number, turn: number) {
+  const toPdf = (dx: number, dy: number): { x: number; y: number } => {
+    switch (turn) {
+      case 90:
+        return { x: dy, y: dx };
+      case 180:
+        return { x: W0 - dx, y: dy };
+      case 270:
+        return { x: W0 - dy, y: H0 - dx };
+      default:
+        return { x: dx, y: H0 - dy };
+    }
+  };
+  const place = (dx: number, dy: number, w: number, h: number, objectTurnCw: number) => {
+    const angle = turn - objectTurnCw; // pdf-lib turns counter-clockwise
+    const rad = (angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const c = toPdf(dx + w / 2, dy + h / 2);
+    return {
+      rotate: degrees(angle),
+      at: (lx: number, ly: number) => {
+        const ux = lx - w / 2;
+        const uy = ly - h / 2;
+        return { x: c.x + ux * cos - uy * sin, y: c.y + ux * sin + uy * cos };
+      },
+    };
+  };
+  return { place };
+}
+
+/** Breaks text into lines that fit `maxWidth`, keeping the user's own line breaks. */
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const out: string[] = [];
+  for (const para of text.split("\n")) {
+    const words = para.split(/(\s+)/);
+    let line = "";
+    for (const w of words) {
+      const next = line + w;
+      if (line && font.widthOfTextAtSize(next.trimEnd(), size) > maxWidth) {
+        out.push(line.trimEnd());
+        line = w.trimStart();
+        // A single word wider than the box is cut by characters.
+        while (line && font.widthOfTextAtSize(line, size) > maxWidth && line.length > 1) {
+          let k = line.length - 1;
+          while (k > 1 && font.widthOfTextAtSize(line.slice(0, k), size) > maxWidth) k--;
+          out.push(line.slice(0, k));
+          line = line.slice(k);
+        }
+      } else {
+        line = next;
+      }
+    }
+    out.push(line.trimEnd());
+  }
+  return out;
+}
+
+/** Characters the standard PDF fonts cannot write (Hindi, emoji…) become spaces — and are counted, not hidden. */
+function writable(font: PDFFont, text: string, dropped: { chars: number; images: number }): string {
+  let out = "";
+  for (const ch of text) {
+    if (ch === "\n") {
+      out += ch;
+      continue;
+    }
+    try {
+      font.encodeText(ch);
+      out += ch;
+    } catch {
+      out += " ";
+      dropped.chars++;
+    }
+  }
+  return out;
 }
 
 function renderWatermark(

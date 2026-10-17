@@ -19,6 +19,7 @@ import {
   type WatermarkConfig,
   type CoverPageConfig,
 } from "@/lib/module-editor/native-pdf-engine";
+import { PROJECT_KIND, PROJECT_SCHEMA } from "@/lib/module-editor/overlay-model";
 
 export const runtime = "nodejs";
 export const maxDuration = 120; // 2 minutes
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       pageRotations = {},
       deletedPages = [],
       pageOrder,
+      pageSources = {},
       headerFooter,
       watermark,
       coverPage,
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       pageRotations?: Record<number, number>;
       deletedPages?: number[];
       pageOrder?: number[];
+      pageSources?: Record<number, number>;
       headerFooter?: HeaderFooterConfig;
       watermark?: WatermarkConfig;
       coverPage?: CoverPageConfig;
@@ -90,6 +93,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       pageRotations,
       deletedPages,
       pageOrder,
+      pageSources,
       headerFooter,
       watermark,
       coverPage,
@@ -114,6 +118,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         moduleId: moduleRow.id,
         label: isAutosave ? `Autosave (${new Date().toLocaleTimeString("en-IN")})` : changeSummary,
         snapshot: {
+          kind: PROJECT_KIND,
+          schema: PROJECT_SCHEMA,
+          pageSources,
+          exportWarnings: result.warnings,
           textEdits,
           whiteouts,
           images,
@@ -175,6 +183,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       fileSizeBytes: result.fileSizeBytes,
       savedAt: result.processedAt,
       isAutosave,
+      warnings: result.warnings,
     });
   } catch (error) {
     return handleApiError(error);

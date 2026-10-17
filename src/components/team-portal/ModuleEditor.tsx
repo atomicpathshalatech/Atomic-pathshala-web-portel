@@ -90,7 +90,7 @@ type PageRow = {
   warnings: string[];
 };
 
-type VersionRow = { id: string; label: string; createdAt: string };
+type VersionRow = { id: string; label: string; createdAt: string; snapshot?: unknown };
 type ExportRow = { id: string; fileUrl: string; fileName: string; fileSize: number; createdAt: string; includedWatermark: boolean };
 
 type ModuleDetail = {
@@ -885,6 +885,8 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   }
 
   const latestJob = data.processingJobs[0];
+  // Versions of this block editor are page lists; the PDF editor keeps its own versions in the same table.
+  const blockVersions = data.versions.filter((v) => Array.isArray(v.snapshot));
   const selectedPage = data.pages.find((p) => p.id === selectedPageId) ?? null;
   const currentElements = selectedPageId ? (pageEdits[selectedPageId] ?? []).slice().sort((a, b) => a.order - b.order) : [];
   const selectedElement = currentElements.find((el) => el.id === selectedElementId) ?? null;
@@ -1551,11 +1553,11 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               Save Version
             </button>
           </div>
-          {data.versions.length === 0 ? (
+          {blockVersions.length === 0 ? (
             <p className="text-label-sm text-on-surface-variant">No saved versions yet.</p>
           ) : (
             <ul className="space-y-1.5">
-              {data.versions.map((v) => (
+              {blockVersions.map((v) => (
                 <li key={v.id} className="flex items-center justify-between text-label-sm">
                   <span className="text-on-surface">{v.label}</span>
                   <span className="text-on-surface-variant">{new Date(v.createdAt).toLocaleDateString()}</span>
@@ -1574,7 +1576,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
             >
               <option value="">Current content</option>
-              {data.versions.map((v) => (
+              {blockVersions.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.label}
                 </option>

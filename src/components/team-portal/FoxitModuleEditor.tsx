@@ -5,32 +5,81 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { moveEditorImagesToStorage } from "@/lib/module-editor/image-upload";
 import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
+import type { SetStateAction } from "react";
 import {
   TextEditItem,
   WhiteoutItem,
   ImageEditItem,
-  ShapeEditItem,
   GlobalRemovalItem,
   GlobalReplacementItem,
-  BackgroundConfig,
-  HeaderFooterConfig,
-  WatermarkConfig,
-  CoverPageConfig,
 } from "@/lib/module-editor/native-pdf-engine";
+import {
+  normalizeProject,
+  placeNewObjects,
+  objectsOnPage,
+  findObject,
+  addObject,
+  updateObject,
+  removeObject,
+  duplicateObject,
+  arrange,
+  movePage,
+  movePageTo,
+  duplicatePage,
+  insertBlankPage,
+  toggleDeletePage,
+  rotatePage,
+  sourceOf,
+  exportPlan,
+  newId,
+  PROJECT_DRAFT_LABEL,
+  type PdfProject,
+  type OverlayObject,
+  type ArrangeOp,
+} from "@/lib/module-editor/overlay-model";
+import { PdfPageCanvas, type EditorTool } from "./pdf-editor/PdfPageCanvas";
+import { PageThumb } from "./pdf-editor/PageThumb";
+import { ObjectArrangePanel } from "./pdf-editor/ObjectPanel";
 
-export type EditorTool =
-  | "SELECT"
-  | "HAND"
-  | "EDIT_TEXT"
-  | "ADD_TEXT"
-  | "WHITEOUT"
-  | "IMAGE"
-  | "RECTANGLE"
-  | "CIRCLE"
-  | "LINE"
-  | "HIGHLIGHT"
-  | "REMOVE_OBJECT"
-  | "REPLACE_OBJECT";
+export type { EditorTool };
+
+const HISTORY_LIMIT = 100;
+const AUTOSAVE_MS = 2500;
+
+/** Page styles a module starts with before anything was saved (unchanged from before). */
+const DEFAULT_PAGE_STYLES: Pick<PdfProject, "background" | "headerFooter" | "watermark" | "coverPage"> = {
+  background: { enabled: false, color: "#ffffff", opacity: 1, pageRange: "ALL" },
+  headerFooter: {
+    enabled: true,
+    headerLeft: "ATOMIC PATHSHALA",
+    headerCenter: "| {subject} - {chapter}",
+    headerRight: "{teacher}",
+    footerLeft: "Atomic Pathshala | India's Leading NEET Accelerator",
+    footerRight: "Page {page} of {totalPages}",
+    headerTopOffsetPt: 0,
+    footerBottomOffsetPt: 0,
+    headerImageHeight: 36,
+    footerImageHeight: 24,
+    removeOldHeader: true,
+    removeOldFooter: true,
+    oldHeaderHeightPt: 42,
+    oldFooterHeightPt: 32,
+    accentColor: "#059669",
+    excludeFirstPage: true,
+    pageRange: "ALL",
+  },
+  watermark: { enabled: false, type: "text", text: "ATOMIC PATHSHALA", opacity: 0.05, rotation: 35, position: "CENTER", excludeFirstPage: true, pageRange: "ALL" },
+  coverPage: {
+    enabled: false,
+    action: "PREPEND",
+    subject: "CHEMISTRY",
+    moduleNumber: "Module 01",
+    chapter: "IUPAC Nomenclature",
+    teacher: "Firoz Sir",
+    batch: "NEET Accelerated Batch",
+    targetExam: "NEET (UG)",
+  },
+};
 
 export interface FoxitModuleEditorProps {
   moduleId: string;
@@ -80,67 +129,61 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectType, setSelectedObjectType] = useState<"text" | "whiteout" | "image" | "shape" | null>(null);
 
-  // 3. Document Edits (Applied per-page)
-  const [textEdits, setTextEdits] = useState<TextEditItem[]>([]);
-  const [whiteouts, setWhiteouts] = useState<WhiteoutItem[]>([]);
-  const [images, setImages] = useState<ImageEditItem[]>([]);
-  const [shapes, setShapes] = useState<ShapeEditItem[]>([]);
-  const [globalRemovals, setGlobalRemovals] = useState<GlobalRemovalItem[]>([]);
-  const [globalReplacements, setGlobalReplacements] = useState<GlobalReplacementItem[]>([]);
-  const [deletedPages, setDeletedPages] = useState<number[]>([]);
-  const [pageRotations, setPageRotations] = useState<Record<number, number>>({});
-  const [pageOrder, setPageOrder] = useState<number[]>([]);
   const [viewMode, setViewMode] = useState<"continuous" | "single">("continuous");
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [firstPageSize, setFirstPageSize] = useState<{ width: number; height: number }>({ width: 595, height: 842 });
 
-  // 4. Global Overlays & Configurations
-  const [background, setBackground] = useState<BackgroundConfig>({
-    enabled: false,
-    color: "#ffffff",
-    opacity: 1,
-    pageRange: "ALL",
-  });
+  // 3. The document being edited — overlays, page list and page styles in one
+  //    object (overlay-model.ts): one stacking order per page, pages with ids.
+  const [project, setProjectRaw] = useState<PdfProject>(() => normalizeProject({}, 0, DEFAULT_PAGE_STYLES));
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  // Every change goes through here: an object that arrives without a stacking
+  // position is put on top of its page, whichever tool or dialog added it.
+  const setProject = useCallback((next: SetStateAction<PdfProject>) => {
+    setProjectRaw((prev) => placeNewObjects(typeof next === "function" ? (next as (p: PdfProject) => PdfProject)(prev) : next));
+  }, []);
+  const { textEdits, whiteouts, images, shapes, globalRemovals, globalReplacements, deletedPages, pageRotations, pageOrder, background, headerFooter, watermark, coverPage } = project;
+  // Setters for each part, so the existing dialogs keep working unchanged.
+  const {
+    setTextEdits,
+    setWhiteouts,
+    setImages,
+    setShapes,
+    setGlobalRemovals,
+    setGlobalReplacements,
+    setPageOrder,
+    setBackground,
+    setHeaderFooter,
+    setWatermark,
+    setCoverPage,
+  } = useMemo(() => {
+    const field =
+      <K extends keyof PdfProject>(key: K) =>
+      (v: SetStateAction<PdfProject[K]>) =>
+        setProject((p) => ({ ...p, [key]: typeof v === "function" ? (v as (x: PdfProject[K]) => PdfProject[K])(p[key]) : v }));
+    return {
+      setTextEdits: field("textEdits"),
+      setWhiteouts: field("whiteouts"),
+      setImages: field("images"),
+      setShapes: field("shapes"),
+      setGlobalRemovals: field("globalRemovals"),
+      setGlobalReplacements: field("globalReplacements"),
+      setPageOrder: field("pageOrder"),
+      setBackground: field("background"),
+      setHeaderFooter: field("headerFooter"),
+      setWatermark: field("watermark"),
+      setCoverPage: field("coverPage"),
+    };
+  }, [setProject]);
 
-  const [headerFooter, setHeaderFooter] = useState<HeaderFooterConfig>({
-    enabled: true,
-    headerLeft: "ATOMIC PATHSHALA",
-    headerCenter: "| {subject} - {chapter}",
-    headerRight: "{teacher}",
-    footerLeft: "Atomic Pathshala | India's Leading NEET Accelerator",
-    footerRight: "Page {page} of {totalPages}",
-    headerTopOffsetPt: 0,
-    footerBottomOffsetPt: 0,
-    headerImageHeight: 36,
-    footerImageHeight: 24,
-    removeOldHeader: true,
-    removeOldFooter: true,
-    oldHeaderHeightPt: 42,
-    oldFooterHeightPt: 32,
-    accentColor: "#059669",
-    excludeFirstPage: true,
-    pageRange: "ALL",
-  });
-
-  const [watermark, setWatermark] = useState<WatermarkConfig>({
-    enabled: false,
-    type: "text",
-    text: "ATOMIC PATHSHALA",
-    opacity: 0.05,
-    rotation: 35,
-    position: "CENTER",
-    excludeFirstPage: true,
-    pageRange: "ALL",
-  });
-
-  const [coverPage, setCoverPage] = useState<CoverPageConfig>({
-    enabled: false,
-    action: "PREPEND",
-    subject: "CHEMISTRY",
-    moduleNumber: "Module 01",
-    chapter: "IUPAC Nomenclature",
-    teacher: "Firoz Sir",
-    batch: "NEET Accelerated Batch",
-    targetExam: "NEET (UG)",
-  });
+  // Pages of the finished PDF (the front-page option may take the place of page 1, as the PDF writer does).
+  const coverDropsFirst = coverPage?.action === "REPLACE_FIRST" || coverPage?.action === "DELETE_FIRST";
+  const effectiveDeleted = useMemo(() => (coverDropsFirst && !deletedPages.includes(1) ? [...deletedPages, 1] : deletedPages), [coverDropsFirst, deletedPages]);
+  const plan = useMemo(
+    () => exportPlan({ pageOrder, deletedPages: effectiveDeleted, pageSources: project.pageSources, pageRotations }, totalPages).map((e, i) => ({ ...e, displayNumber: i + 1 })),
+    [pageOrder, effectiveDeleted, project.pageSources, pageRotations, totalPages]
+  );
 
   // 5. Search & Replace State
   const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
@@ -168,14 +211,9 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const [showBackgroundDialog, setShowBackgroundDialog] = useState<boolean>(false);
   const [showPagePropsDialog, setShowPagePropsDialog] = useState<boolean>(false);
 
-  // 8. Undo / Redo History Stack
-  const [history, setHistory] = useState<any[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
-
   // 9. UI & Lifecycle States
   const [activeSidebarTab, setActiveSidebarTab] = useState<"thumbnails" | "layers" | "versions" | "diagnostics">("thumbnails");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [latestExportUrl, setLatestExportUrl] = useState<string | null>(null);
@@ -184,62 +222,143 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isAdmin = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
 
-  // Push state to Undo/Redo stack (Stable reference with zero re-trigger loops)
-  const pushHistory = useCallback(
-    (newState: {
-      textEdits: TextEditItem[];
-      whiteouts: WhiteoutItem[];
-      images: ImageEditItem[];
-      shapes: ShapeEditItem[];
-      globalRemovals: GlobalRemovalItem[];
-      globalReplacements: GlobalReplacementItem[];
-      deletedPages: number[];
-      pageRotations: Record<number, number>;
-    }) => {
-      setHistory((prev) => {
-        const nextIndex = historyIndexRef.current + 1;
-        historyIndexRef.current = nextIndex;
-        setHistoryIndex(nextIndex);
-        const updated = prev.slice(0, nextIndex);
-        return [...updated, newState].slice(-50);
-      });
-      setHasUnsavedChanges(true);
-    },
-    []
-  );
+  // Undo / redo: snapshots of the whole document, taken when an edit settles —
+  // typing a sentence or dragging an object is one step, not one per key or pixel.
+  const [projectLoaded, setProjectLoaded] = useState(false);
+  const historyRef = useRef<{ stack: PdfProject[]; index: number }>({ stack: [], index: -1 });
+  const [historyInfo, setHistoryInfo] = useState({ canUndo: false, canRedo: false });
+  const restoringRef = useRef(false);
+  const syncHistoryInfo = useCallback(() => {
+    const h = historyRef.current;
+    setHistoryInfo({ canUndo: h.index > 0, canRedo: h.index < h.stack.length - 1 });
+  }, []);
+  const commitHistory = useCallback(() => {
+    const h = historyRef.current;
+    const cur = projectRef.current;
+    if (h.index >= 0 && h.stack[h.index] === cur) return;
+    h.stack = [...h.stack.slice(0, h.index + 1), cur].slice(-HISTORY_LIMIT);
+    h.index = h.stack.length - 1;
+    syncHistoryInfo();
+  }, [syncHistoryInfo]);
+  useEffect(() => {
+    if (!projectLoaded) return;
+    if (restoringRef.current) {
+      restoringRef.current = false;
+      return;
+    }
+    const t = setTimeout(commitHistory, 400);
+    return () => clearTimeout(t);
+  }, [project, projectLoaded, commitHistory]);
 
-  const historyIndexRef = useRef<number>(historyIndex);
-  historyIndexRef.current = historyIndex;
+  const stepHistory = (dir: -1 | 1) => {
+    commitHistory(); // an edit still settling becomes its own step first
+    const h = historyRef.current;
+    const i = h.index + dir;
+    if (i < 0 || i >= h.stack.length) return;
+    h.index = i;
+    restoringRef.current = true;
+    setProjectRaw(h.stack[i]!);
+    setEditingTextId(null);
+    syncHistoryInfo();
+  };
+  const handleUndo = () => stepHistory(-1);
+  const handleRedo = () => stepHistory(1);
 
-  const handleUndo = () => {
-    if (historyIndex > 0) {
-      const targetState = history[historyIndex - 1];
-      setTextEdits(targetState.textEdits);
-      setWhiteouts(targetState.whiteouts);
-      setImages(targetState.images);
-      setShapes(targetState.shapes);
-      setGlobalRemovals(targetState.globalRemovals || []);
-      setGlobalReplacements(targetState.globalReplacements || []);
-      setDeletedPages(targetState.deletedPages);
-      setPageRotations(targetState.pageRotations);
-      setHistoryIndex(historyIndex - 1);
+  // Autosave of the working copy: the editable document only (no PDF is made),
+  // a moment after the last edit. Saves run one after another and carry the
+  // revision they are based on, so an older save never overwrites newer edits.
+  const revisionRef = useRef(0);
+  const savedRef = useRef<PdfProject | null>(null);
+  const exportedRef = useRef<PdfProject | null>(null);
+  const conflictRef = useRef(false);
+  const saveChainRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  const [savedSnapshot, setSavedSnapshot] = useState<PdfProject | null>(null);
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const hasUnsavedChanges = projectLoaded && project !== savedSnapshot;
+
+  const saveWorkingCopy = useCallback((): Promise<boolean> => {
+    const run = async (): Promise<boolean> => {
+      const snapshot = projectRef.current;
+      if (snapshot === savedRef.current) return true;
+      if (conflictRef.current) return false;
+      setDraftState("saving");
+      try {
+        const media = await moveEditorImagesToStorage(snapshot, moduleId);
+        const res = await fetch(`/api/team/modules/${moduleId}/editor-project`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ baseRevision: revisionRef.current, project: media }),
+        });
+        const body = await res.json().catch(() => null);
+        if (res.status === 409) {
+          conflictRef.current = true;
+          setDraftState("conflict");
+          return false;
+        }
+        if (!res.ok || !body?.success) throw new Error(body?.error || `Saving failed (HTTP ${res.status}).`);
+        revisionRef.current = body.data.revision;
+        savedRef.current = snapshot;
+        setSavedSnapshot(snapshot);
+        setLastSavedAt(body.data.savedAt);
+        setDraftError(null);
+        setDraftState("saved");
+        return true;
+      } catch (err: any) {
+        setDraftError(err?.message || "Saving failed.");
+        setDraftState("error");
+        return false;
+      }
+    };
+    const p = saveChainRef.current.then(run, run);
+    saveChainRef.current = p;
+    return p;
+  }, [moduleId]);
+
+  useEffect(() => {
+    if (!projectLoaded || project === savedRef.current || conflictRef.current) return;
+    const t = setTimeout(() => void saveWorkingCopy(), AUTOSAVE_MS);
+    return () => clearTimeout(t);
+  }, [project, projectLoaded, saveWorkingCopy]);
+  useEffect(() => {
+    if (draftState !== "error") return;
+    const t = setTimeout(() => void saveWorkingCopy(), 10000);
+    return () => clearTimeout(t);
+  }, [draftState, saveWorkingCopy]);
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (savedRef.current && projectRef.current !== savedRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  /** After a conflict: keep this tab's document and save it over the other one. */
+  const keepMineAfterConflict = async () => {
+    try {
+      const res = await fetch(`/api/team/modules/${moduleId}/editor-project`, { cache: "no-store" });
+      const body = await res.json();
+      revisionRef.current = body?.data?.revision ?? revisionRef.current;
+      conflictRef.current = false;
+      setDraftState("idle");
+      savedRef.current = null;
+      await saveWorkingCopy();
+    } catch {
+      toast.error("Could not reach the server — try again.");
     }
   };
 
-  const handleRedo = () => {
-    if (historyIndex < history.length - 1) {
-      const targetState = history[historyIndex + 1];
-      setTextEdits(targetState.textEdits);
-      setWhiteouts(targetState.whiteouts);
-      setImages(targetState.images);
-      setShapes(targetState.shapes);
-      setGlobalRemovals(targetState.globalRemovals || []);
-      setGlobalReplacements(targetState.globalReplacements || []);
-      setDeletedPages(targetState.deletedPages);
-      setPageRotations(targetState.pageRotations);
-      setHistoryIndex(historyIndex + 1);
-    }
-  };
+  const selectObject = useCallback((id: string | null, pageId?: number) => {
+    setSelectedObjectId(id);
+    const o = id ? findObject(projectRef.current, id) : null;
+    setSelectedObjectType(o ? o.kind : null);
+    if (o && pageId) setCurrentPage(pageId);
+    setEditingTextId((cur) => (cur && cur !== id ? null : cur));
+  }, []);
 
   // 1. Initial Load of Module Details & PDF Document (Runs strictly once per moduleId)
   useEffect(() => {
@@ -285,69 +404,53 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         setTotalPages(docProxy.numPages);
         setPageOrder(Array.from({ length: docProxy.numPages }, (_, i) => i + 1));
 
-        // Check for existing saved version snapshot to restore full state
-        const latestVersion = data.versions && data.versions.length > 0 ? data.versions[0] : null;
-        const snap = latestVersion?.snapshot;
+        const first = await docProxy.getPage(1);
+        const firstView = first.getViewport({ scale: 1, rotation: 0 });
+        setFirstPageSize({ width: firstView.width, height: firstView.height });
 
-        const initTextEdits = snap?.textEdits || [];
-        const initWhiteouts = snap?.whiteouts || [];
-        const initImages = snap?.images || [];
-        const initShapes = snap?.shapes || [];
-        const initGlobalRemovals = snap?.globalRemovals || [];
-        const initGlobalReplacements = snap?.globalReplacements || [];
-        const initPageRotations = snap?.pageRotations || {};
-        const initDeletedPages = snap?.deletedPages || [];
-        const initPageOrder = snap?.pageOrder || Array.from({ length: docProxy.numPages }, (_, i) => i + 1);
+        // The editable document: the working copy, or this editor's latest saved
+        // version if that is newer (not just "the newest version" — the block
+        // editor saves its own versions in the same list).
+        const stored = await fetch(`/api/team/modules/${moduleId}/editor-project`, { cache: "no-store" })
+          .then((r) => r.json())
+          .then((j) => (j?.success ? j.data : null))
+          .catch(() => null);
+        if (!isMounted) return;
 
-        if (snap?.textEdits) setTextEdits(snap.textEdits);
-        if (snap?.whiteouts) setWhiteouts(snap.whiteouts);
-        if (snap?.images) setImages(snap.images);
-        if (snap?.shapes) setShapes(snap.shapes);
-        if (snap?.globalRemovals) setGlobalRemovals(snap.globalRemovals);
-        if (snap?.globalReplacements) setGlobalReplacements(snap.globalReplacements);
-        if (snap?.pageRotations) setPageRotations(snap.pageRotations);
-        if (snap?.deletedPages) setDeletedPages(snap.deletedPages);
-        if (snap?.pageOrder) setPageOrder(snap.pageOrder);
-        if (snap?.background) setBackground(snap.background);
-        if (snap?.headerFooter) setHeaderFooter(snap.headerFooter);
-        if (snap?.watermark) setWatermark(snap.watermark);
-        if (snap?.coverPage) setCoverPage(snap.coverPage);
-        if (snap?.fileUrl) setLatestExportUrl(snap.fileUrl);
-
-        // Auto-detect subject theme from module data if not explicitly set
         const sub = (data.subject || "").toUpperCase();
-        let detectedThemeColor = "#ea580c";
-        if (sub.includes("CHEM")) detectedThemeColor = "#059669";
-        else if (sub.includes("PHYS")) detectedThemeColor = "#0284c7";
-        else if (sub.includes("BIO")) detectedThemeColor = "#7c3aed";
-
-        if (!snap?.headerFooter?.accentColor) {
-          setHeaderFooter((prev) => ({
-            ...prev,
-            accentColor: detectedThemeColor,
-            headerCenter: prev.headerCenter || `| ${data.subject || "NEET PREP"} - ${data.chapter || data.title || "Module"}`,
-            headerRight: prev.headerRight || data.facultyName || "Firoz Sir",
-          }));
-        }
+        const accent = sub.includes("CHEM") ? "#059669" : sub.includes("PHYS") ? "#0284c7" : sub.includes("BIO") ? "#7c3aed" : "#ea580c";
+        const defaults = {
+          ...DEFAULT_PAGE_STYLES,
+          headerFooter: {
+            ...DEFAULT_PAGE_STYLES.headerFooter,
+            accentColor: accent,
+            headerCenter: `| ${data.subject || "NEET PREP"} - ${data.chapter || data.title || "Module"}`,
+            headerRight: data.facultyName || DEFAULT_PAGE_STYLES.headerFooter.headerRight,
+          },
+          coverPage: {
+            ...DEFAULT_PAGE_STYLES.coverPage,
+            subject: data.subject || "CHEMISTRY",
+            chapter: data.chapter || data.title || "Academic Chapter",
+            teacher: data.facultyName || DEFAULT_PAGE_STYLES.coverPage.teacher,
+            batch: data.batch || DEFAULT_PAGE_STYLES.coverPage.batch,
+          },
+        };
+        const loaded = placeNewObjects(normalizeProject(stored?.project ?? null, docProxy.numPages, defaults));
+        revisionRef.current = stored?.revision ?? 0;
+        savedRef.current = loaded;
+        exportedRef.current = stored?.source === "saved-version" ? loaded : null;
+        const lastPdf = (data.versions ?? []).find((v) => v.label !== PROJECT_DRAFT_LABEL && v.snapshot?.fileUrl)?.snapshot?.fileUrl;
+        if (lastPdf) setLatestExportUrl(lastPdf);
+        setProjectRaw(loaded);
+        setSavedSnapshot(loaded);
+        setLastSavedAt(stored?.savedAt ?? null);
+        historyRef.current = { stack: [loaded], index: 0 };
+        syncHistoryInfo();
+        setCurrentPage(loaded.pageOrder.find((id) => !loaded.deletedPages.includes(id)) ?? 1);
 
         setDiagnosticsData((d) => ({ ...d, loadTimeMs: Date.now() - loadStart }));
         setLoading(false);
-
-        // Initialize history stack with restored state
-        setHistory([
-          {
-            textEdits: initTextEdits,
-            whiteouts: initWhiteouts,
-            images: initImages,
-            shapes: initShapes,
-            globalRemovals: initGlobalRemovals,
-            globalReplacements: initGlobalReplacements,
-            deletedPages: initDeletedPages,
-            pageRotations: initPageRotations,
-          },
-        ]);
-        setHistoryIndex(0);
-        historyIndexRef.current = 0;
+        setProjectLoaded(true);
       } catch (err: any) {
         console.error("Failed to load PDF document:", err);
         toast.error("Failed to load PDF: " + (err.message || "Unknown error"));
@@ -436,7 +539,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     const newEditText = match.text.replace(new RegExp(searchQuery, "gi"), replaceQuery);
 
     const newEdit: TextEditItem = {
-      id: `rep-${Date.now()}-${match.pageNumber}`,
+      id: newId("text"),
       pageNumber: match.pageNumber,
       x: match.x,
       y: match.y,
@@ -452,16 +555,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
 
     const updatedEdits = [...textEdits, newEdit];
     setTextEdits(updatedEdits);
-    pushHistory({
-      textEdits: updatedEdits,
-      whiteouts,
-      images,
-      shapes,
-      globalRemovals,
-      globalReplacements,
-      deletedPages,
-      pageRotations,
-    });
     toast.success(`Replaced match on Page ${match.pageNumber}`);
   };
 
@@ -470,7 +563,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     const newEditsToAdd: TextEditItem[] = searchMatches.map((match, idx) => {
       const newEditText = match.text.replace(new RegExp(searchQuery, "gi"), replaceQuery);
       return {
-        id: `rep-all-${Date.now()}-${idx}`,
+        id: newId("text"),
         pageNumber: match.pageNumber,
         x: match.x,
         y: match.y,
@@ -487,16 +580,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
 
     const updatedEdits = [...textEdits, ...newEditsToAdd];
     setTextEdits(updatedEdits);
-    pushHistory({
-      textEdits: updatedEdits,
-      whiteouts,
-      images,
-      shapes,
-      globalRemovals,
-      globalReplacements,
-      deletedPages,
-      pageRotations,
-    });
     toast.success(`Replaced ${newEditsToAdd.length} occurrences across all pages!`);
     setShowSearchModal(false);
   };
@@ -506,7 +589,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     if (!pendingTargetBox) return;
     if (removeScope === "current") {
       const newWo: WhiteoutItem = {
-        id: `wo-${Date.now()}`,
+        id: newId("whiteout"),
         pageNumber: currentPage,
         x: pendingTargetBox.x,
         y: pendingTargetBox.y,
@@ -515,20 +598,10 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         color: "#ffffff",
       };
       setWhiteouts((prev) => [...prev, newWo]);
-      pushHistory({
-        textEdits,
-        whiteouts: [...whiteouts, newWo],
-        images,
-        shapes,
-        globalRemovals,
-        globalReplacements,
-        deletedPages,
-        pageRotations,
-      });
       toast.success(`Object removed from Page ${currentPage}`);
     } else {
       const newRemoval: GlobalRemovalItem = {
-        id: `g-rem-${Date.now()}`,
+        id: newId("removal"),
         x: pendingTargetBox.x,
         y: pendingTargetBox.y,
         width: pendingTargetBox.width,
@@ -536,16 +609,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         pageRange: "ALL",
       };
       setGlobalRemovals((prev) => [...prev, newRemoval]);
-      pushHistory({
-        textEdits,
-        whiteouts,
-        images,
-        shapes,
-        globalRemovals: [...globalRemovals, newRemoval],
-        globalReplacements,
-        deletedPages,
-        pageRotations,
-      });
       toast.success(`Object removed across entire PDF (All ${totalPages} pages)`);
     }
     setShowRemoveModal(false);
@@ -558,7 +621,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     if (replaceScope === "current") {
       if (replaceType === "image" && replaceImageData) {
         const newImg: ImageEditItem = {
-          id: `img-${Date.now()}`,
+          id: newId("image"),
           pageNumber: currentPage,
           x: pendingTargetBox.x,
           y: pendingTargetBox.y,
@@ -568,7 +631,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
           opacity: 1,
         };
         const newWo: WhiteoutItem = {
-          id: `wo-rep-${Date.now()}`,
+          id: newId("whiteout"),
           pageNumber: currentPage,
           x: pendingTargetBox.x,
           y: pendingTargetBox.y,
@@ -578,20 +641,10 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         };
         setWhiteouts((prev) => [...prev, newWo]);
         setImages((prev) => [...prev, newImg]);
-        pushHistory({
-          textEdits,
-          whiteouts: [...whiteouts, newWo],
-          images: [...images, newImg],
-          shapes,
-          globalRemovals,
-          globalReplacements,
-          deletedPages,
-          pageRotations,
-        });
         toast.success(`Object replaced on Page ${currentPage}`);
       } else if (replaceType === "text" && replaceTextData) {
         const newTxt: TextEditItem = {
-          id: `txt-rep-${Date.now()}`,
+          id: newId("text"),
           pageNumber: currentPage,
           x: pendingTargetBox.x,
           y: pendingTargetBox.y,
@@ -603,21 +656,11 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
           hideOriginal: true,
         };
         setTextEdits((prev) => [...prev, newTxt]);
-        pushHistory({
-          textEdits: [...textEdits, newTxt],
-          whiteouts,
-          images,
-          shapes,
-          globalRemovals,
-          globalReplacements,
-          deletedPages,
-          pageRotations,
-        });
         toast.success(`Object replaced with text on Page ${currentPage}`);
       }
     } else {
       const newRep: GlobalReplacementItem = {
-        id: `g-rep-${Date.now()}`,
+        id: newId("replacement"),
         x: pendingTargetBox.x,
         y: pendingTargetBox.y,
         width: pendingTargetBox.width,
@@ -628,48 +671,27 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         pageRange: "ALL",
       };
       setGlobalReplacements((prev) => [...prev, newRep]);
-      pushHistory({
-        textEdits,
-        whiteouts,
-        images,
-        shapes,
-        globalRemovals,
-        globalReplacements: [...globalReplacements, newRep],
-        deletedPages,
-        pageRotations,
-      });
       toast.success(`Object replaced across entire PDF (${totalPages} pages)`);
     }
     setShowReplaceModal(false);
     setPendingTargetBox(null);
   };
 
-  // 5. Save Document Handler (with In-Place Native PDF Engine)
+  // 5. Save = keep the working copy, then make the edited PDF and record it as a version.
   const handleSaveDocument = async (isAutosave = false): Promise<string | null> => {
     try {
       setSaveStatus("saving");
+      await saveWorkingCopy();
+      const snapshot = projectRef.current;
       // Images go to file storage first; the save request carries only their
       // addresses (a request over ~4.5 MB is refused — see image-upload.ts).
-      const media = await moveEditorImagesToStorage({ images, globalReplacements, background, watermark, coverPage }, moduleId);
+      const media = await moveEditorImagesToStorage(snapshot, moduleId);
       const res = await fetch(`/api/team/modules/${moduleId}/save-native`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...media,
-          textEdits,
-          whiteouts,
-          images,
-          shapes,
-          globalRemovals,
-          globalReplacements,
-          background,
-          pageRotations,
-          deletedPages,
-          pageOrder,
-          headerFooter,
-          watermark,
-          coverPage,
-          changeSummary: `Revision saved with ${textEdits.length} edits, ${images.length} images, ${globalRemovals.length} removals`,
+          changeSummary: `Saved with ${snapshot.textEdits.length} text boxes, ${snapshot.images.length} pictures, ${snapshot.shapes.length} shapes, ${snapshot.whiteouts.length} covers`,
           isAutosave,
         }),
       });
@@ -681,15 +703,13 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
 
       const result = await res.json();
       const returnedFileUrl = result.data?.fileUrl || null;
-      if (returnedFileUrl) {
-        setLatestExportUrl(returnedFileUrl);
-      }
-
+      if (returnedFileUrl) setLatestExportUrl(returnedFileUrl);
+      exportedRef.current = snapshot;
       setSaveStatus("saved");
-      setHasUnsavedChanges(false);
+      for (const w of (result.data?.warnings as string[] | undefined) ?? []) toast.warning(w, { duration: 12000 });
 
       if (!isAutosave) {
-        toast.success("Document saved successfully! New revision created.");
+        toast.success("Saved. A new PDF revision was made.");
         setModuleData((prev) =>
           prev
             ? {
@@ -698,13 +718,9 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                 versions: [
                   {
                     id: result.data.versionId,
-                    label: `Revision #${(prev.versions?.length || 0) + 1}`,
+                    label: `Revision #${(prev.versions?.filter((v) => v.label !== PROJECT_DRAFT_LABEL && v.snapshot?.fileUrl).length || 0) + 1}`,
                     createdAt: new Date().toISOString(),
-                    snapshot: {
-                      textEditsCount: textEdits.length,
-                      pageCount: result.data.pageCount,
-                      fileUrl: returnedFileUrl,
-                    },
+                    snapshot: { textEditsCount: snapshot.textEdits.length, pageCount: result.data.pageCount, fileUrl: returnedFileUrl, textEdits: [] },
                   },
                   ...(prev.versions || []),
                 ],
@@ -741,7 +757,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     try {
       let fileUrl = latestExportUrl;
       // If there are unsaved changes or we haven't saved yet, perform a fresh save
-      if (hasUnsavedChanges || !fileUrl) {
+      if (projectRef.current !== exportedRef.current || !fileUrl) {
         fileUrl = await handleSaveDocument(false);
       }
 
@@ -786,79 +802,145 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     return () => window.removeEventListener("click", handleWindowClick);
   }, []);
 
-  // Keyboard Shortcuts Listener
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+S / Cmd+S
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        handleSaveDocument(false);
-      }
-      // Ctrl+E / Cmd+E -> Export & Download
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "e") {
-        e.preventDefault();
-        handleExportAndDownload();
-      }
-      // Ctrl+P / Cmd+P -> Print
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        handlePrintDocument();
-      }
-      // Ctrl+Z
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
-        e.preventDefault();
-        handleUndo();
-      }
-      // Ctrl+Y or Ctrl+Shift+Z
-      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
-        e.preventDefault();
-        handleRedo();
-      }
-      // Ctrl+F or Ctrl+H for Search & Replace
-      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "h")) {
-        e.preventDefault();
-        setShowSearchModal(true);
-      }
-      // Tool shortcuts (when not typing in an input/textarea)
-      if (document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
-        if (e.key.toLowerCase() === "t") setActiveTool("EDIT_TEXT");
-        if (e.key.toLowerCase() === "v") setActiveTool("SELECT");
-        if (e.key.toLowerCase() === "h") setActiveTool("HAND");
-        if (e.key.toLowerCase() === "w") setActiveTool("WHITEOUT");
-        if (e.key.toLowerCase() === "a") setActiveTool("ADD_TEXT");
-        if (e.key === "Delete" || e.key === "Backspace") {
-          if (selectedObjectId) {
-            e.preventDefault();
-            handleDeleteSelectedObject();
-          }
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedObjectId, historyIndex, history, textEdits, whiteouts, images, shapes, globalRemovals, globalReplacements, latestExportUrl, hasUnsavedChanges, moduleData]);
-
-  // Delete Active Selected Object
+  // Object actions (toolbar, properties panel, layers list and keyboard all use these).
+  const clipboardRef = useRef<OverlayObject | null>(null);
   const handleDeleteSelectedObject = () => {
-    if (!selectedObjectId) return;
-    setTextEdits((prev) => prev.filter((t) => t.id !== selectedObjectId));
-    setWhiteouts((prev) => prev.filter((w) => w.id !== selectedObjectId));
-    setImages((prev) => prev.filter((img) => img.id !== selectedObjectId));
-    setShapes((prev) => prev.filter((s) => s.id !== selectedObjectId));
+    const id = selectedObjectId;
+    if (!id) return;
+    const o = findObject(projectRef.current, id);
+    if (o?.locked) {
+      toast.info("This object is locked — unlock it to delete it.");
+      return;
+    }
+    setProject((p) => removeObject(p, id));
     setSelectedObjectId(null);
     setSelectedObjectType(null);
-    pushHistory({
-      textEdits: textEdits.filter((t) => t.id !== selectedObjectId),
-      whiteouts: whiteouts.filter((w) => w.id !== selectedObjectId),
-      images: images.filter((img) => img.id !== selectedObjectId),
-      shapes: shapes.filter((s) => s.id !== selectedObjectId),
-      globalRemovals,
-      globalReplacements,
-      deletedPages,
-      pageRotations,
-    });
+    setEditingTextId(null);
   };
+  const duplicateSelected = () => {
+    if (!selectedObjectId) return;
+    const { project: next, newId: created } = duplicateObject(projectRef.current, selectedObjectId);
+    setProject(next);
+    if (created) selectObject(created);
+  };
+  const arrangeSelected = (op: ArrangeOp) => {
+    if (selectedObjectId) setProject((p) => arrange(p, selectedObjectId, op));
+  };
+  const updateSelected = (patch: Record<string, unknown>) => {
+    if (selectedObjectId) setProject((p) => updateObject(p, selectedObjectId, patch));
+  };
+  const pasteObject = () => {
+    const src = clipboardRef.current;
+    if (!src) return;
+    const copy = { ...src, id: newId(src.kind), pageNumber: currentPage, x: src.x + 12, y: src.y + 12, locked: false, z: undefined } as OverlayObject;
+    setProject((p) => addObject(p, copy));
+    selectObject(copy.id, currentPage);
+    clipboardRef.current = { ...copy };
+  };
+
+  // Keyboard shortcuts. Inside a text field the browser's own typing, undo and copy apply.
+  const keys = useRef<Record<string, any>>({});
+  keys.current = { selectedObjectId, editingTextId, handleUndo, handleRedo, handleSaveDocument, handleExportAndDownload, handlePrintDocument, handleDeleteSelectedObject, duplicateSelected, arrangeSelected, updateSelected, pasteObject };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const K = keys.current;
+      const mod = e.ctrlKey || e.metaKey;
+      const k = e.key.toLowerCase();
+      const el = document.activeElement as HTMLElement | null;
+      const typing = !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+      if (mod && k === "s") {
+        e.preventDefault();
+        void K.handleSaveDocument(false);
+        return;
+      }
+      if (mod && k === "e") {
+        e.preventDefault();
+        void K.handleExportAndDownload();
+        return;
+      }
+      if (mod && k === "p") {
+        e.preventDefault();
+        K.handlePrintDocument();
+        return;
+      }
+      if (typing) return;
+      if (mod && k === "z" && !e.shiftKey) {
+        e.preventDefault();
+        K.handleUndo();
+        return;
+      }
+      if (mod && (k === "y" || (k === "z" && e.shiftKey))) {
+        e.preventDefault();
+        K.handleRedo();
+        return;
+      }
+      if (mod && (k === "f" || k === "h")) {
+        e.preventDefault();
+        setShowSearchModal(true);
+        return;
+      }
+      if (mod && k === "v") {
+        if (clipboardRef.current) {
+          e.preventDefault();
+          K.pasteObject();
+        }
+        return;
+      }
+      const id: string | null = K.selectedObjectId;
+      if (id) {
+        const o = findObject(projectRef.current, id);
+        if (mod && k === "d") {
+          e.preventDefault();
+          K.duplicateSelected();
+          return;
+        }
+        if (mod && k === "c") {
+          if (o) clipboardRef.current = o;
+          return;
+        }
+        if (mod && k === "x") {
+          if (o && !o.locked) {
+            clipboardRef.current = o;
+            K.handleDeleteSelectedObject();
+          }
+          return;
+        }
+        if (mod && (e.code === "BracketRight" || e.code === "BracketLeft")) {
+          e.preventDefault();
+          K.arrangeSelected(e.code === "BracketRight" ? (e.shiftKey ? "front" : "forward") : e.shiftKey ? "back" : "backward");
+          return;
+        }
+        if (e.key === "Delete" || e.key === "Backspace") {
+          e.preventDefault();
+          K.handleDeleteSelectedObject();
+          return;
+        }
+        if (o && !o.locked && e.key.startsWith("Arrow")) {
+          e.preventDefault();
+          const step = e.shiftKey ? 10 : 1;
+          const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+          const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+          K.updateSelected({ x: o.x + dx, y: o.y + dy });
+          return;
+        }
+        if (e.key === "Enter" && o?.kind === "text" && !o.locked) {
+          e.preventDefault();
+          setEditingTextId(id);
+          return;
+        }
+        if (e.key === "Escape") {
+          setSelectedObjectId(null);
+          setSelectedObjectType(null);
+          return;
+        }
+      }
+      if (mod || e.altKey) return;
+      const tool: Record<string, EditorTool> = { v: "SELECT", h: "HAND", t: "EDIT_TEXT", a: "ADD_TEXT", w: "WHITEOUT", r: "RECTANGLE", o: "CIRCLE", l: "LINE", g: "HIGHLIGHT", u: "UNDERLINE" };
+      if (tool[k]) setActiveTool(tool[k]!);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Scroll to page in continuous view mode
   const handleSelectPage = useCallback((pNum: number) => {
@@ -929,7 +1011,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     setBackground({ enabled: true, color: bgCol, opacity: 0.85, pageRange: "ALL" });
     setHeaderFooter((prev) => ({ ...prev, enabled: true, accentColor: accentCol }));
     setCoverPage((prev) => ({ ...prev, subject }));
-    setHasUnsavedChanges(true);
 
     if (selectedObjectId) {
       setTextEdits((prev) =>
@@ -944,7 +1025,17 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const selectedTextObj = useMemo(() => textEdits.find((t) => t.id === selectedObjectId), [textEdits, selectedObjectId]);
   const selectedWhiteoutObj = useMemo(() => whiteouts.find((w) => w.id === selectedObjectId), [whiteouts, selectedObjectId]);
   const selectedImageObj = useMemo(() => images.find((img) => img.id === selectedObjectId), [images, selectedObjectId]);
-  const selectedShapeObj = useMemo(() => shapes.find((s) => s.id === selectedObjectId), [shapes, selectedObjectId]);
+  const selectedObj = useMemo(() => (selectedObjectId ? findObject(project, selectedObjectId) : null), [project, selectedObjectId]);
+  const selectedStack = useMemo(() => (selectedObj ? objectsOnPage(project, selectedObj.pageNumber) : []), [project, selectedObj]);
+  // This editor's own saved PDFs (the working copy and the block editor's versions live in the same list).
+  const savedVersions = (moduleData?.versions ?? []).filter((v) => v.label !== PROJECT_DRAFT_LABEL && v.snapshot && !Array.isArray(v.snapshot));
+  const fitZoom = (mode: "width" | "page") => {
+    const c = canvasContainerRef.current;
+    if (!c) return;
+    const w = (c.clientWidth - 72) / firstPageSize.width;
+    const h = (c.clientHeight - 90) / firstPageSize.height;
+    setZoom(Math.max(0.25, Math.min(4, Number((mode === "width" ? w : Math.min(w, h)).toFixed(2)))));
+  };
 
   return (
     <div
@@ -1218,32 +1309,40 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Autosave / Save Status Indicator */}
-            <div className="flex items-center gap-1.5 text-[11px]">
-              {saveStatus === "saving" && (
+            {/* Save status: the working copy autosaves; "Save" also makes the PDF */}
+            <div className="flex items-center gap-1.5 text-[11px]" role="status" aria-live="polite">
+              {saveStatus === "saving" ? (
                 <span className="text-amber-400 flex items-center gap-1 font-semibold">
                   <span className="material-symbols-outlined text-xs animate-spin">sync</span>
-                  Saving...
+                  Making the PDF…
                 </span>
-              )}
-              {saveStatus === "saved" && (
-                <span className="text-emerald-400 flex items-center gap-1 font-semibold">
-                  <span className="material-symbols-outlined text-xs">check_circle</span>
-                  Saved ✓
-                </span>
-              )}
-              {saveStatus === "error" && (
+              ) : saveStatus === "error" ? (
                 <span className="text-red-400 flex items-center gap-1 font-semibold">
                   <span className="material-symbols-outlined text-xs">error</span>
-                  Save Failed
+                  PDF not made
                 </span>
-              )}
-              {saveStatus === "idle" && hasUnsavedChanges && (
-                <span className="text-slate-400 flex items-center gap-1 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                  Unsaved Changes
+              ) : draftState === "conflict" ? (
+                <span className="text-red-400 font-semibold">Changed elsewhere — not saved</span>
+              ) : draftState === "error" ? (
+                <span className="text-red-400 font-semibold" title={draftError ?? ""}>
+                  Autosave failed — retrying
                 </span>
-              )}
+              ) : draftState === "saving" ? (
+                <span className="text-slate-300 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs animate-spin">sync</span>
+                  Saving…
+                </span>
+              ) : hasUnsavedChanges ? (
+                <span className="text-slate-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  Unsaved changes
+                </span>
+              ) : lastSavedAt ? (
+                <span className="text-emerald-400 flex items-center gap-1" title={`Saved ${new Date(lastSavedAt).toLocaleString()}`}>
+                  <span className="material-symbols-outlined text-xs">cloud_done</span>
+                  All changes saved
+                </span>
+              ) : null}
             </div>
 
             {/* Save & Export / Download Action Buttons */}
@@ -1415,7 +1514,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               className={`p-1.5 rounded-lg flex items-center gap-1 font-semibold transition-all ${
                 activeTool === "WHITEOUT" ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-slate-400 hover:text-white"
               }`}
-              title="Whiteout / Mask Unwanted Region (W)"
+              title="Cover an area with white (W) — an overlay: text underneath stays in the PDF file, so this is not a redaction"
             >
               <span className="material-symbols-outlined text-base">ink_eraser</span>
               <span>Whiteout</span>
@@ -1460,7 +1559,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     reader.onload = (evt) => {
                       const base64 = evt.target?.result as string;
                       const newImg: ImageEditItem = {
-                        id: `img-${Date.now()}`,
+                        id: newId("image"),
                         pageNumber: currentPage,
                         x: 50,
                         y: 50,
@@ -1472,16 +1571,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                       setImages((prev) => [...prev, newImg]);
                       setSelectedObjectId(newImg.id);
                       setSelectedObjectType("image");
-                      pushHistory({
-                        textEdits,
-                        whiteouts,
-                        images: [...images, newImg],
-                        shapes,
-                        globalRemovals,
-                        globalReplacements,
-                        deletedPages,
-                        pageRotations,
-                      });
                       toast.success("Image placed on Page " + currentPage);
                     };
                     reader.readAsDataURL(file);
@@ -1492,6 +1581,34 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               <span>Image</span>
             </label>
           </div>
+
+          {/* Tool Group 2b: Draw (drag on the page) */}
+          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 shrink-0" role="group" aria-label="Draw">
+            {(
+              [
+                ["RECTANGLE", "crop_square", "Box", "R"],
+                ["CIRCLE", "circle", "Ellipse", "O"],
+                ["LINE", "horizontal_rule", "Line", "L"],
+                ["HIGHLIGHT", "ink_highlighter", "Highlight", "G"],
+                ["UNDERLINE", "format_underlined", "Underline", "U"],
+              ] as const
+            ).map(([tool, icon, label, key]) => (
+              <button
+                key={tool}
+                type="button"
+                onClick={() => setActiveTool(tool)}
+                aria-pressed={activeTool === tool}
+                className={`p-1.5 rounded-lg flex items-center gap-1 font-semibold transition-all ${
+                  activeTool === tool ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "text-slate-400 hover:text-white"
+                }`}
+                title={`${label} — drag on the page (${key})`}
+              >
+                <span className="material-symbols-outlined text-base">{icon}</span>
+                <span className="hidden 2xl:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+
 
           {/* Tool Group 3: Module Branding Dialogs */}
           <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 shrink-0">
@@ -1594,7 +1711,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               <button
                 type="button"
                 onClick={handleUndo}
-                disabled={historyIndex <= 0}
+                disabled={!historyInfo.canUndo}
                 className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30"
                 title="Undo (Ctrl+Z)"
               >
@@ -1603,7 +1720,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               <button
                 type="button"
                 onClick={handleRedo}
-                disabled={historyIndex >= history.length - 1}
+                disabled={!historyInfo.canRedo}
                 className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30"
                 title="Redo (Ctrl+Y)"
               >
@@ -1629,60 +1746,69 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             </button>
 
             {/* Page Navigator */}
-            <div className="flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 rounded-xl border border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => handleSelectPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage <= 1}
-                className="text-slate-400 hover:text-white disabled:opacity-30"
-              >
-                <span className="material-symbols-outlined text-sm">chevron_left</span>
-              </button>
-              <span className="font-semibold text-slate-300">
-                {currentPage} / {totalPages || 1}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleSelectPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage >= totalPages}
-                className="text-slate-400 hover:text-white disabled:opacity-30"
-              >
-                <span className="material-symbols-outlined text-sm">chevron_right</span>
-              </button>
+            <div className="flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 rounded-xl border border-slate-800 text-xs" role="group" aria-label="Pages">
+              {(() => {
+                const at = plan.findIndex((e) => e.pageId === currentPage);
+                return (
+                  <>
+                    <button type="button" onClick={() => at > 0 && handleSelectPage(plan[at - 1]!.pageId)} disabled={at <= 0} className="text-slate-400 hover:text-white disabled:opacity-30" aria-label="Previous page">
+                      <span className="material-symbols-outlined text-sm">chevron_left</span>
+                    </button>
+                    <span className="font-semibold text-slate-300 tabular-nums">
+                      {at + 1} / {plan.length || 1}
+                    </span>
+                    <button type="button" onClick={() => at < plan.length - 1 && handleSelectPage(plan[at + 1]!.pageId)} disabled={at >= plan.length - 1} className="text-slate-400 hover:text-white disabled:opacity-30" aria-label="Next page">
+                      <span className="material-symbols-outlined text-sm">chevron_right</span>
+                    </button>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Zoom Controls */}
-            <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.15).toFixed(2))))}
-                className="p-1 text-slate-400 hover:text-white"
-                title="Zoom Out"
-              >
+            <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 text-xs" role="group" aria-label="Zoom">
+              <button type="button" onClick={() => setZoom((z) => Math.max(0.25, Number((z - 0.15).toFixed(2))))} className="p-1 text-slate-400 hover:text-white" title="Zoom out" aria-label="Zoom out">
                 <span className="material-symbols-outlined text-sm">remove</span>
               </button>
-              <span className="font-bold w-12 text-center text-slate-300">
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
-                type="button"
-                onClick={() => setZoom((z) => Math.min(2.5, Number((z + 0.15).toFixed(2))))}
-                className="p-1 text-slate-400 hover:text-white"
-                title="Zoom In"
-              >
+              <span className="font-bold w-12 text-center text-slate-300 tabular-nums">{Math.round(zoom * 100)}%</span>
+              <button type="button" onClick={() => setZoom((z) => Math.min(4, Number((z + 0.15).toFixed(2))))} className="p-1 text-slate-400 hover:text-white" title="Zoom in" aria-label="Zoom in">
                 <span className="material-symbols-outlined text-sm">add</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setZoom(1.0)}
-                className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-slate-400 hover:text-white"
-              >
+              <button type="button" onClick={() => fitZoom("width")} className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-slate-400 hover:text-white" title="Fit page width">
+                Fit width
+              </button>
+              <button type="button" onClick={() => fitZoom("page")} className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-slate-400 hover:text-white" title="Fit whole page">
+                Fit page
+              </button>
+              <button type="button" onClick={() => setZoom(1.0)} className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-slate-400 hover:text-white">
                 100%
               </button>
             </div>
           </div>
         </div>
       </header>
+
+      {draftState === "conflict" && (
+        <div role="alert" className="bg-red-950/80 border-b border-red-800 text-red-200 text-xs px-4 py-2 flex flex-wrap items-center gap-3 shrink-0">
+          <span>This document was saved from another tab or by someone else after you opened it, so your latest edits are not saved.</span>
+          <button type="button" onClick={() => window.location.reload()} className="px-2.5 py-1 rounded-lg border border-red-700 hover:bg-red-900 font-bold">
+            Load their version
+          </button>
+          <button type="button" onClick={() => void keepMineAfterConflict()} className="px-2.5 py-1 rounded-lg bg-red-700 hover:bg-red-600 text-white font-bold">
+            Keep mine (replace theirs)
+          </button>
+        </div>
+      )}
+      <div className="bg-slate-900 border-b border-slate-800 text-[11px] text-slate-400 px-4 py-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0">
+        <span className="font-bold text-orange-400">Original PDF mode</span>
+        <span>
+          Text, covers, pictures and shapes are added <b className="text-slate-300">on top of</b> the original pages; the original content is not rewritten (text under a cover stays in the file). Page order,
+          removing, turning, duplicating and blank pages change the document&apos;s pages.
+        </span>
+        <Link href={`/team/modules/${moduleId}/blocks`} className="text-orange-400 hover:underline font-semibold">
+          Need to rewrite the content? Rebuild it as editable blocks →
+        </Link>
+      </div>
 
       {/* 2. MAIN WORKSPACE WITH 3-COLUMN SPLIT */}
       <div className="flex flex-1 overflow-hidden relative">
@@ -1724,193 +1850,132 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
 
           {/* Sidebar Content */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {/* THUMBNAILS TAB */}
+            {/* PAGES TAB — order, turn, copy, blank page, remove/restore; drag a page to move it */}
             {activeSidebarTab === "thumbnails" && (
-              <div className="space-y-3">
-                {pageOrder.map((pNum, idx) => {
-                  const isDeleted = deletedPages.includes(pNum);
-                  const isCurrent = currentPage === pNum;
-
+              <ol className="space-y-3" aria-label="Pages">
+                {pageOrder.map((pageId, idx) => {
+                  const isDeleted = effectiveDeleted.includes(pageId);
+                  const coverTook = coverDropsFirst && pageId === 1 && !deletedPages.includes(1);
+                  const src = sourceOf(project, pageId);
+                  const num = plan.findIndex((e) => e.pageId === pageId) + 1;
+                  const isCurrent = currentPage === pageId;
+                  const iconBtn = "p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 focus-visible:outline focus-visible:outline-1 focus-visible:outline-orange-500";
                   return (
-                    <div
-                      key={pNum}
-                      onClick={() => !isDeleted && handleSelectPage(pNum)}
-                      className={`p-2.5 rounded-2xl border transition-all cursor-pointer relative ${
-                        isCurrent
-                          ? "border-orange-500 bg-orange-500/10 shadow-md"
-                          : isDeleted
-                          ? "border-red-900/40 bg-red-950/20 opacity-50"
-                          : "border-slate-800 bg-slate-950/40 hover:border-slate-700"
+                    <li
+                      key={pageId}
+                      draggable
+                      onDragStart={(ev) => {
+                        ev.dataTransfer.setData("text/x-page-id", String(pageId));
+                        ev.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragOver={(ev) => {
+                        if (ev.dataTransfer.types.includes("text/x-page-id")) ev.preventDefault();
+                      }}
+                      onDrop={(ev) => {
+                        ev.preventDefault();
+                        const from = Number(ev.dataTransfer.getData("text/x-page-id"));
+                        if (from && from !== pageId) setProject((p) => movePageTo(p, from, p.pageOrder.indexOf(pageId)));
+                      }}
+                      className={`p-2 rounded-2xl border transition-all relative ${
+                        isCurrent ? "border-orange-500 bg-orange-500/10 shadow-md" : isDeleted ? "border-red-900/40 bg-red-950/20 opacity-60" : "border-slate-800 bg-slate-950/40 hover:border-slate-700"
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1.5 text-[11px]">
-                        <span className="font-bold text-slate-300">Page {idx + 1}</span>
-                        <div className="flex items-center gap-1">
-                          {/* Rotate Page Button */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPageRotations((prev) => ({
-                                ...prev,
-                                [pNum]: ((prev[pNum] || 0) + 90) % 360,
-                              }));
-                              setHasUnsavedChanges(true);
-                            }}
-                            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
-                            title="Rotate 90° CW"
-                          >
+                      <div className="flex items-center justify-between mb-1.5 text-[11px] gap-1">
+                        <span className="font-bold text-slate-300 truncate">
+                          {isDeleted ? (coverTook ? "Replaced by front page" : "Removed") : `Page ${num}`}
+                          {src === 0 ? " · blank" : src !== pageId ? ` · copy of p.${src}` : ""}
+                        </span>
+                        <div className="flex items-center shrink-0">
+                          <button type="button" className={iconBtn} disabled={idx === 0} onClick={() => setProject((p) => movePage(p, pageId, -1))} title="Move up" aria-label={`Move page ${num || idx + 1} up`}>
+                            <span className="material-symbols-outlined text-xs">arrow_upward</span>
+                          </button>
+                          <button type="button" className={iconBtn} disabled={idx === pageOrder.length - 1} onClick={() => setProject((p) => movePage(p, pageId, 1))} title="Move down" aria-label={`Move page ${num || idx + 1} down`}>
+                            <span className="material-symbols-outlined text-xs">arrow_downward</span>
+                          </button>
+                          <button type="button" className={iconBtn} onClick={() => setProject((p) => rotatePage(p, pageId))} title="Turn 90° clockwise" aria-label="Turn page">
                             <span className="material-symbols-outlined text-xs">rotate_right</span>
                           </button>
-
-                          {/* Delete Page Button */}
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (isDeleted) {
-                                setDeletedPages((prev) => prev.filter((p) => p !== pNum));
-                              } else {
-                                setDeletedPages((prev) => [...prev, pNum]);
-                              }
-                              setHasUnsavedChanges(true);
+                            className={iconBtn}
+                            onClick={() => {
+                              const r = duplicatePage(projectRef.current, pageId);
+                              setProject(r.project);
+                              toast.success("Page duplicated — the copy has its own edits.");
                             }}
-                            className={`p-1 rounded hover:bg-slate-800 ${
-                              isDeleted ? "text-emerald-400" : "text-red-400 hover:text-red-300"
-                            }`}
-                            title={isDeleted ? "Restore Page" : "Delete Page"}
+                            title="Duplicate page (with its edits)"
+                            aria-label="Duplicate page"
                           >
-                            <span className="material-symbols-outlined text-xs">
-                              {isDeleted ? "restore" : "delete"}
-                            </span>
+                            <span className="material-symbols-outlined text-xs">library_add</span>
+                          </button>
+                          <button type="button" className={iconBtn} onClick={() => setProject((p) => insertBlankPage(p, pageId).project)} title="Insert a blank page after" aria-label="Insert blank page after">
+                            <span className="material-symbols-outlined text-xs">note_add</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`p-1 rounded hover:bg-slate-800 ${isDeleted ? "text-emerald-400" : "text-red-400 hover:text-red-300"}`}
+                            disabled={coverTook}
+                            onClick={() => {
+                              if (!isDeleted && plan.length <= 1) return toast.info("A PDF needs at least one page.");
+                              setProject((p) => toggleDeletePage(p, pageId));
+                            }}
+                            title={isDeleted ? "Restore page" : "Remove page"}
+                            aria-label={isDeleted ? "Restore page" : "Remove page"}
+                          >
+                            <span className="material-symbols-outlined text-xs">{isDeleted ? "restore" : "delete"}</span>
                           </button>
                         </div>
                       </div>
-
-                      <div className="w-full aspect-[1/1.414] bg-white/5 rounded-lg border border-slate-800/80 flex items-center justify-center text-slate-500 text-xs">
-                        {isDeleted ? (
-                          <span className="text-red-400 font-bold">Deleted</span>
-                        ) : (
-                          <span>Page {idx + 1}</span>
-                        )}
-                      </div>
-                    </div>
+                      <button type="button" onClick={() => !isDeleted && handleSelectPage(pageId)} className="block w-full rounded-lg border border-slate-800/80 overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-500" aria-label={`Go to page ${num || idx + 1}`}>
+                        <PageThumb pdfDocProxy={pdfDocProxy} sourcePage={src} rotation={pageRotations[pageId] ?? 0} />
+                      </button>
+                    </li>
                   );
                 })}
-              </div>
+              </ol>
             )}
 
-            {/* LAYERS & EDITS TAB */}
+            {/* LAYERS TAB — the current page's objects, top first */}
             {activeSidebarTab === "layers" && (
               <div className="space-y-2 text-xs">
-                <h4 className="font-bold text-slate-400 uppercase text-[10px] tracking-wider mb-2">
-                  Edits on Page {currentPage}
+                <h4 className="font-bold text-slate-400 uppercase text-[10px] tracking-wider mb-1">
+                  Layers on page {plan.find((e) => e.pageId === currentPage)?.displayNumber ?? "–"} <span className="normal-case font-normal">(top first)</span>
                 </h4>
-
-                {/* Global Removals / Replacements */}
-                {globalRemovals.length > 0 && (
-                  <div className="p-2 rounded-xl border border-red-800/50 bg-red-950/20 text-red-300">
-                    <span className="font-bold">Global Removals:</span> {globalRemovals.length} active
-                  </div>
+                {(globalRemovals.length > 0 || globalReplacements.length > 0) && (
+                  <p className="p-2 rounded-xl border border-slate-800 bg-slate-950/40 text-slate-400">
+                    {globalRemovals.length} cover(s) and {globalReplacements.length} replacement(s) on every page sit under all page objects.
+                  </p>
                 )}
-                {globalReplacements.length > 0 && (
-                  <div className="p-2 rounded-xl border border-cyan-800/50 bg-cyan-950/20 text-cyan-300">
-                    <span className="font-bold">Global Replacements:</span> {globalReplacements.length} active
-                  </div>
-                )}
-
-                {/* Text Edits */}
-                {textEdits
-                  .filter((t) => t.pageNumber === currentPage)
-                  .map((t) => (
-                    <div
-                      key={t.id}
-                      onClick={() => {
-                        setSelectedObjectId(t.id);
-                        setSelectedObjectType("text");
-                      }}
-                      className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer ${
-                        selectedObjectId === t.id ? "border-emerald-500 bg-emerald-500/10" : "border-slate-800 bg-slate-950/40"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className="material-symbols-outlined text-emerald-400 text-sm">edit_note</span>
-                        <span className="truncate">{t.newText || "(Empty Text)"}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setTextEdits((prev) => prev.filter((item) => item.id !== t.id));
-                        }}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <span className="material-symbols-outlined text-xs">delete</span>
-                      </button>
-                    </div>
-                  ))}
-
-                {/* Whiteouts */}
-                {whiteouts
-                  .filter((w) => w.pageNumber === currentPage)
-                  .map((w) => (
-                    <div
-                      key={w.id}
-                      onClick={() => {
-                        setSelectedObjectId(w.id);
-                        setSelectedObjectType("whiteout");
-                      }}
-                      className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer ${
-                        selectedObjectId === w.id ? "border-red-500 bg-red-500/10" : "border-slate-800 bg-slate-950/40"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-red-400 text-sm">ink_eraser</span>
-                        <span>Whiteout ({Math.round(w.width)}x{Math.round(w.height)})</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setWhiteouts((prev) => prev.filter((item) => item.id !== w.id));
-                        }}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <span className="material-symbols-outlined text-xs">delete</span>
-                      </button>
-                    </div>
-                  ))}
-
-                {/* Images */}
-                {images
-                  .filter((img) => img.pageNumber === currentPage)
-                  .map((img) => (
-                    <div
-                      key={img.id}
-                      onClick={() => {
-                        setSelectedObjectId(img.id);
-                        setSelectedObjectType("image");
-                      }}
-                      className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer ${
-                        selectedObjectId === img.id ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-950/40"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-indigo-400 text-sm">image</span>
-                        <span>Image ({Math.round(img.width)}x{Math.round(img.height)})</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setImages((prev) => prev.filter((item) => item.id !== img.id));
-                        }}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <span className="material-symbols-outlined text-xs">delete</span>
-                      </button>
-                    </div>
-                  ))}
+                {(() => {
+                  const stack = objectsOnPage(project, currentPage).slice().reverse();
+                  if (!stack.length) return <p className="text-slate-500 italic text-center py-4">No objects on this page yet.</p>;
+                  return (
+                    <ul className="space-y-1.5" aria-label="Layers">
+                      {stack.map((o) => {
+                        const icon = o.kind === "text" ? "text_fields" : o.kind === "image" ? "image" : o.kind === "whiteout" ? "ink_eraser" : o.type === "highlight" ? "ink_highlighter" : o.type === "underline" ? "format_underlined" : o.type === "circle" ? "circle" : o.type === "line" ? "horizontal_rule" : "crop_square";
+                        const name = o.kind === "text" ? o.newText || "(empty text)" : o.kind === "image" ? "Picture" : o.kind === "whiteout" ? "White cover" : o.type;
+                        return (
+                          <li key={o.id} className={`p-1.5 rounded-xl border flex items-center gap-1.5 ${selectedObjectId === o.id ? "border-orange-500 bg-orange-500/10" : "border-slate-800 bg-slate-950/40"}`}>
+                            <button type="button" onClick={() => selectObject(o.id, currentPage)} className="flex-1 flex items-center gap-1.5 truncate text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-orange-500 rounded">
+                              <span className="material-symbols-outlined text-sm text-slate-400">{icon}</span>
+                              <span className="truncate">{name}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setProject((p) => updateObject(p, o.id, { locked: !o.locked }))}
+                              className={`p-0.5 rounded ${o.locked ? "text-amber-400" : "text-slate-500 hover:text-white"}`}
+                              title={o.locked ? "Unlock" : "Lock"}
+                              aria-label={o.locked ? `Unlock ${name}` : `Lock ${name}`}
+                              aria-pressed={!!o.locked}
+                            >
+                              <span className="material-symbols-outlined text-sm">{o.locked ? "lock" : "lock_open"}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  );
+                })()}
               </div>
             )}
 
@@ -1922,11 +1987,11 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     Revision History
                   </h4>
                   <span className="text-[10px] text-slate-500 font-medium">
-                    {moduleData?.versions?.length || 0} saved
+                    {savedVersions.length} saved
                   </span>
                 </div>
-                {moduleData?.versions && moduleData.versions.length > 0 ? (
-                  moduleData.versions.map((v) => (
+                {savedVersions.length > 0 ? (
+                  savedVersions.map((v) => (
                     <div key={v.id} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/60 space-y-2 hover:border-slate-700 transition-colors">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-slate-200 truncate pr-2">{v.label}</span>
@@ -1942,7 +2007,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                             onClick={() => {
                               triggerBrowserDownload(
                                 v.snapshot.fileUrl,
-                                `${(moduleData.code || "Module")}_${v.label.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`
+                                `${(moduleData?.code || "Module")}_${v.label.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`
                               );
                               toast.success("Downloading revision PDF...");
                             }}
@@ -1976,171 +2041,75 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               </span>
               <p className="font-bold text-sm text-slate-300">Loading Native PDF...</p>
             </div>
-          ) : viewMode === "continuous" ? (
-            <div className="space-y-8 flex flex-col items-center w-full pb-16">
-              {pageOrder
-                .filter((p) => !deletedPages.includes(p))
-                .map((pNum) => (
-                  <div
-                    key={pNum}
-                    id={`pdf-page-${pNum}`}
-                    data-page={pNum}
-                    className="flex flex-col items-center relative"
-                  >
-                    <div className="text-[10px] font-bold text-slate-400 mb-1 flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
-                        Page {pNum} of {totalPages}
-                      </span>
-                    </div>
-                    <NativePdfPageView
-                      pdfDocProxy={pdfDocProxy}
-                      pageNumber={pNum}
-                      totalPages={totalPages}
-                      zoom={zoom}
-                      rotation={pageRotations[pNum] || 0}
-                      activeTool={activeTool}
-                      textEdits={textEdits.filter((t) => t.pageNumber === pNum)}
-                      whiteouts={whiteouts.filter((w) => w.pageNumber === pNum)}
-                      images={images.filter((img) => img.pageNumber === pNum)}
-                      shapes={shapes.filter((s) => s.pageNumber === pNum)}
-                      globalRemovals={globalRemovals}
-                      globalReplacements={globalReplacements}
-                      selectedObjectId={selectedObjectId}
-                      onSelectObject={(id, type) => {
-                        setSelectedObjectId(id);
-                        setSelectedObjectType(type);
-                        setCurrentPage(pNum);
-                      }}
-                      onAddTextEdit={(newEdit) => {
-                        setTextEdits((prev) => [...prev, newEdit]);
-                        setSelectedObjectId(newEdit.id);
-                        setSelectedObjectType("text");
-                        setCurrentPage(pNum);
-                        pushHistory({
-                          textEdits: [...textEdits, newEdit],
-                          whiteouts,
-                          images,
-                          shapes,
-                          globalRemovals,
-                          globalReplacements,
-                          deletedPages,
-                          pageRotations,
-                        });
-                      }}
-                      onUpdateTextEdit={(updated) => {
-                        setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                        setHasUnsavedChanges(true);
-                      }}
-                      onUpdateImage={(updated) => {
-                        setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                        setHasUnsavedChanges(true);
-                      }}
-                      onAddWhiteout={(newWhiteout) => {
-                        setWhiteouts((prev) => [...prev, newWhiteout]);
-                        setSelectedObjectId(newWhiteout.id);
-                        setSelectedObjectType("whiteout");
-                        setCurrentPage(pNum);
-                        pushHistory({
-                          textEdits,
-                          whiteouts: [...whiteouts, newWhiteout],
-                          images,
-                          shapes,
-                          globalRemovals,
-                          globalReplacements,
-                          deletedPages,
-                          pageRotations,
-                        });
-                      }}
-                      onTargetBoxSelected={(box) => {
-                        setPendingTargetBox(box);
-                        setCurrentPage(pNum);
-                        if (activeTool === "REMOVE_OBJECT") {
-                          setShowRemoveModal(true);
-                        } else if (activeTool === "REPLACE_OBJECT") {
-                          setShowReplaceModal(true);
-                        }
-                      }}
-                      headerFooter={headerFooter}
-                      watermark={watermark}
-                      background={background}
-                      coverPage={coverPage}
-                      moduleData={moduleData}
-                    />
-                  </div>
-                ))}
-            </div>
           ) : (
-            <div className="space-y-8 flex flex-col items-center">
-              <NativePdfPageView
-                pdfDocProxy={pdfDocProxy}
-                pageNumber={currentPage}
-                totalPages={totalPages}
-                zoom={zoom}
-                rotation={pageRotations[currentPage] || 0}
-                activeTool={activeTool}
-                textEdits={textEdits.filter((t) => t.pageNumber === currentPage)}
-                whiteouts={whiteouts.filter((w) => w.pageNumber === currentPage)}
-                images={images.filter((img) => img.pageNumber === currentPage)}
-                shapes={shapes.filter((s) => s.pageNumber === currentPage)}
-                globalRemovals={globalRemovals}
-                globalReplacements={globalReplacements}
-                selectedObjectId={selectedObjectId}
-                onSelectObject={(id, type) => {
-                  setSelectedObjectId(id);
-                  setSelectedObjectType(type);
-                }}
-                onAddTextEdit={(newEdit) => {
-                  setTextEdits((prev) => [...prev, newEdit]);
-                  setSelectedObjectId(newEdit.id);
-                  setSelectedObjectType("text");
-                  pushHistory({
-                    textEdits: [...textEdits, newEdit],
-                    whiteouts,
-                    images,
-                    shapes,
-                    globalRemovals,
-                    globalReplacements,
-                    deletedPages,
-                    pageRotations,
-                  });
-                }}
-                onUpdateTextEdit={(updated) => {
-                  setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                  setHasUnsavedChanges(true);
-                }}
-                onUpdateImage={(updated) => {
-                  setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                  setHasUnsavedChanges(true);
-                }}
-                onAddWhiteout={(newWhiteout) => {
-                  setWhiteouts((prev) => [...prev, newWhiteout]);
-                  setSelectedObjectId(newWhiteout.id);
-                  setSelectedObjectType("whiteout");
-                  pushHistory({
-                    textEdits,
-                    whiteouts: [...whiteouts, newWhiteout],
-                    images,
-                    shapes,
-                    globalRemovals,
-                    globalReplacements,
-                    deletedPages,
-                    pageRotations,
-                  });
-                }}
-                onTargetBoxSelected={(box) => {
-                  setPendingTargetBox(box);
-                  if (activeTool === "REMOVE_OBJECT") {
-                    setShowRemoveModal(true);
-                  } else if (activeTool === "REPLACE_OBJECT") {
-                    setShowReplaceModal(true);
-                  }
-                }}
-                headerFooter={headerFooter}
-                watermark={watermark}
-                background={background}
-                coverPage={coverPage}
-                moduleData={moduleData}
-              />
+            <div className="space-y-8 flex flex-col items-center w-full pb-16">
+              {coverPage?.enabled && (coverPage.action === "PREPEND" || coverPage.action === "REPLACE_FIRST" || !coverPage.action) && (viewMode === "continuous" || plan[0]?.pageId === currentPage) && (
+                <div className="flex flex-col items-center">
+                  <div className="text-[10px] font-bold text-slate-400 mb-1">Front page (added when the PDF is made — set it up under Front Page)</div>
+                  <div
+                    className="shadow-2xl border border-slate-800 p-8 flex flex-col justify-between text-white"
+                    style={{ width: 595 * zoom, height: 842 * zoom, background: "linear-gradient(145deg, #7c2d12 0%, #431407 60%, #9a3412 100%)" }}
+                    aria-label="Front page preview"
+                  >
+                    <span className="text-xl font-black tracking-wider">ATOMIC PATHSHALA</span>
+                    <div className="space-y-3">
+                      <div className="inline-block px-3 py-1 rounded-lg bg-white/20 text-xs font-extrabold uppercase">
+                        {coverPage.subject || "CHEMISTRY"} • {coverPage.moduleNumber || "MODULE 01"}
+                      </div>
+                      <h1 className="text-3xl font-black leading-tight">{coverPage.chapter}</h1>
+                    </div>
+                    <div className="text-sm font-bold">{coverPage.teacher}</div>
+                  </div>
+                </div>
+              )}
+              {(viewMode === "continuous" ? plan : plan.filter((e) => e.pageId === currentPage).concat(plan.some((e) => e.pageId === currentPage) ? [] : plan.slice(0, 1))).map((e) => (
+                <div key={e.pageId} id={`pdf-page-${e.pageId}`} data-page={e.pageId} className="flex flex-col items-center relative">
+                  <div className="text-[10px] font-bold text-slate-400 mb-1 flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                      Page {e.displayNumber} of {plan.length}
+                      {e.source === 0 ? " · blank" : e.source !== e.pageId ? ` · copy of page ${e.source}` : ""}
+                    </span>
+                  </div>
+                  <PdfPageCanvas
+                    pdfDocProxy={pdfDocProxy}
+                    pageId={e.pageId}
+                    sourcePage={e.source}
+                    displayNumber={e.displayNumber}
+                    totalPages={plan.length}
+                    zoom={zoom}
+                    rotation={e.rotation}
+                    defaultSize={firstPageSize}
+                    activeTool={activeTool}
+                    objects={objectsOnPage(project, e.pageId)}
+                    globalRemovals={globalRemovals}
+                    globalReplacements={globalReplacements}
+                    selectedObjectId={selectedObjectId}
+                    editingTextId={editingTextId}
+                    onSelectObject={(id) => selectObject(id, e.pageId)}
+                    onStartEditText={setEditingTextId}
+                    onAddObject={(obj) => {
+                      setProject((p) => addObject(p, obj));
+                      setSelectedObjectId(obj.id);
+                      setSelectedObjectType(obj.kind);
+                      setCurrentPage(e.pageId);
+                    }}
+                    onUpdateObject={(id, patch) => setProject((p) => updateObject(p, id, patch))}
+                    onTargetBoxSelected={(box) => {
+                      setPendingTargetBox(box);
+                      setCurrentPage(e.pageId);
+                      if (activeTool === "REMOVE_OBJECT") setShowRemoveModal(true);
+                      else if (activeTool === "REPLACE_OBJECT") setShowReplaceModal(true);
+                    }}
+                    onToolDone={() => setActiveTool("SELECT")}
+                    onGestureStart={commitHistory}
+                    headerFooter={headerFooter}
+                    watermark={watermark}
+                    background={background}
+                    coverPage={coverPage}
+                    moduleData={moduleData}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </main>
@@ -2151,6 +2120,18 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             <span className="material-symbols-outlined text-orange-500">tune</span>
             <span>Object Properties</span>
           </h3>
+
+          {selectedObj ? (
+            <ObjectArrangePanel
+              o={selectedObj}
+              index={selectedStack.findIndex((x) => x.id === selectedObj.id)}
+              count={selectedStack.length}
+              onArrange={arrangeSelected}
+              onUpdate={updateSelected}
+              onDuplicate={duplicateSelected}
+              onDelete={handleDeleteSelectedObject}
+            />
+          ) : null}
 
           {/* TEXT OBJECT PROPERTIES */}
           {selectedTextObj && (
@@ -2164,7 +2145,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   onChange={(e) => {
                     const updated = { ...selectedTextObj, newText: e.target.value };
                     setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                    setHasUnsavedChanges(true);
                   }}
                   rows={4}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 font-sans text-xs focus:ring-1 focus:ring-orange-500"
@@ -2184,7 +2164,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => {
                       const updated = { ...selectedTextObj, fontSize: Number(e.target.value) };
                       setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                      setHasUnsavedChanges(true);
                     }}
                     className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 font-sans"
                   />
@@ -2199,7 +2178,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => {
                       const updated = { ...selectedTextObj, fontFamily: e.target.value as any };
                       setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                      setHasUnsavedChanges(true);
                     }}
                     className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 font-sans"
                   >
@@ -2261,7 +2239,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onClick={() => {
                       const updated = { ...selectedTextObj, color: "#059669", isBold: true };
                       setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                      setHasUnsavedChanges(true);
                       toast.success("Applied Chemistry Heading Style");
                     }}
                     className="p-1.5 rounded-lg border border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/50 flex flex-col items-center gap-0.5"
@@ -2276,7 +2253,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onClick={() => {
                       const updated = { ...selectedTextObj, color: "#0284c7", isBold: true };
                       setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                      setHasUnsavedChanges(true);
                       toast.success("Applied Physics Heading Style");
                     }}
                     className="p-1.5 rounded-lg border border-sky-500/40 bg-sky-950/40 hover:bg-sky-900/50 flex flex-col items-center gap-0.5"
@@ -2291,7 +2267,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onClick={() => {
                       const updated = { ...selectedTextObj, color: "#7c3aed", isBold: true };
                       setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                      setHasUnsavedChanges(true);
                       toast.success("Applied Biology Heading Style");
                     }}
                     className="p-1.5 rounded-lg border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50 flex flex-col items-center gap-0.5"
@@ -2306,7 +2281,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onClick={() => {
                       const updated = { ...selectedTextObj, color: "#ea580c", isBold: true };
                       setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-                      setHasUnsavedChanges(true);
                       toast.success("Applied Orange Accent Style");
                     }}
                     className="p-1.5 rounded-lg border border-orange-500/40 bg-orange-950/40 hover:bg-orange-900/50 flex flex-col items-center gap-0.5"
@@ -2333,7 +2307,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
           {selectedWhiteoutObj && (
             <div className="space-y-4">
               <p className="text-slate-400 text-xs">
-                Solid vector mask permanently covers underlying content in the final PDF.
+                A white cover drawn on top of the page. It hides the area when viewed or printed, but any text underneath is still inside the PDF file.
               </p>
               <button
                 type="button"
@@ -2358,7 +2332,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => {
                       const updated = { ...selectedImageObj, x: Number(e.target.value) };
                       setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                      setHasUnsavedChanges(true);
                     }}
                     className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs"
                   />
@@ -2371,7 +2344,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => {
                       const updated = { ...selectedImageObj, y: Number(e.target.value) };
                       setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                      setHasUnsavedChanges(true);
                     }}
                     className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs"
                   />
@@ -2387,7 +2359,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => {
                       const updated = { ...selectedImageObj, width: Number(e.target.value) };
                       setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                      setHasUnsavedChanges(true);
                     }}
                     className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs"
                   />
@@ -2400,7 +2371,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => {
                       const updated = { ...selectedImageObj, height: Number(e.target.value) };
                       setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                      setHasUnsavedChanges(true);
                     }}
                     className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs"
                   />
@@ -2420,7 +2390,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   onChange={(e) => {
                     const updated = { ...selectedImageObj, rotation: Number(e.target.value) };
                     setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                    setHasUnsavedChanges(true);
                   }}
                   className="w-full accent-orange-500"
                 />
@@ -2439,7 +2408,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   onChange={(e) => {
                     const updated = { ...selectedImageObj, opacity: Number(e.target.value) };
                     setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                    setHasUnsavedChanges(true);
                   }}
                   className="w-full accent-orange-500"
                 />
@@ -2457,7 +2425,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                       reader.onload = (evt) => {
                         const updated = { ...selectedImageObj, base64Data: evt.target?.result as string };
                         setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
-                        setHasUnsavedChanges(true);
                         toast.success("Image replaced successfully!");
                       };
                       reader.readAsDataURL(f);
@@ -2478,10 +2445,10 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             </div>
           )}
 
-          {!selectedTextObj && !selectedWhiteoutObj && !selectedImageObj && (
+          {!selectedObj && (
             <div className="text-center py-8 text-slate-500 space-y-2">
               <span className="material-symbols-outlined text-3xl opacity-40">touch_app</span>
-              <p>Select any text snippet, whiteout, or image on the canvas to inspect and edit its properties.</p>
+              <p>Select an object on the page (or in Layers) to edit it. Drag to move, the corner handle to resize, double-click text to type.</p>
             </div>
           )}
         </aside>
@@ -2935,7 +2902,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                 type="button"
                 onClick={() => {
                   setShowCoverDialog(false);
-                  setHasUnsavedChanges(true);
                   toast.success("Front Page configuration applied!");
                 }}
                 className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs"
@@ -3202,7 +3168,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                 type="button"
                 onClick={() => {
                   setShowHeaderFooterDialog(false);
-                  setHasUnsavedChanges(true);
                   toast.success("Header & Footer applied across pages!");
                 }}
                 className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs"
@@ -3360,7 +3325,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                 type="button"
                 onClick={() => {
                   setShowWatermarkDialog(false);
-                  setHasUnsavedChanges(true);
                   toast.success("Watermark applied!");
                 }}
                 className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs"
@@ -3517,7 +3481,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                 type="button"
                 onClick={() => {
                   setShowBackgroundDialog(false);
-                  setHasUnsavedChanges(true);
                   toast.success("Background settings applied!");
                 }}
                 className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs"
@@ -3563,774 +3526,6 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// Helper function to check if a page is in the active range
-function isPageInRange(
-  pageNumber: number,
-  range?: "ALL" | "ODD" | "EVEN" | "CUSTOM",
-  customPages?: number[],
-  excludeFirstPage?: boolean
-): boolean {
-  if (excludeFirstPage && pageNumber === 1) return false;
-  if (!range || range === "ALL") return true;
-  if (range === "ODD") return pageNumber % 2 !== 0;
-  if (range === "EVEN") return pageNumber % 2 === 0;
-  if (range === "CUSTOM") {
-    return Array.isArray(customPages) && customPages.includes(pageNumber);
-  }
-  return true;
-}
-
-// Helper function to interpolate header/footer template variables
-function replaceVariables(
-  template: string,
-  vars: {
-    page: number;
-    totalPages: number;
-    subject: string;
-    chapter: string;
-    teacher: string;
-    date: string;
-    moduleNumber: string;
-  }
-): string {
-  let res = template;
-  res = res.replace(/\{page\}/gi, String(vars.page));
-  res = res.replace(/\{totalPages\}/gi, String(vars.totalPages));
-  res = res.replace(/\{subject\}/gi, vars.subject);
-  res = res.replace(/\{chapter\}/gi, vars.chapter);
-  res = res.replace(/\{teacher\}/gi, vars.teacher);
-  res = res.replace(/\{date\}/gi, vars.date);
-  res = res.replace(/\{moduleNumber\}/gi, vars.moduleNumber);
-  return res;
-}
-
-/**
- * High-Resolution Native PDF Page View with Interactive In-Place Edit Overlays,
- * Live Running Header & Footer, Watermark, Subject Theme, and Front Page Previews
- */
-interface NativePdfPageViewProps {
-  pdfDocProxy: any;
-  pageNumber: number;
-  totalPages: number;
-  zoom: number;
-  rotation: number;
-  activeTool: EditorTool;
-  textEdits: TextEditItem[];
-  whiteouts: WhiteoutItem[];
-  images: ImageEditItem[];
-  shapes: ShapeEditItem[];
-  globalRemovals: GlobalRemovalItem[];
-  globalReplacements: GlobalReplacementItem[];
-  selectedObjectId: string | null;
-  onSelectObject: (id: string, type: "text" | "whiteout" | "image" | "shape") => void;
-  onAddTextEdit: (edit: TextEditItem) => void;
-  onUpdateTextEdit: (edit: TextEditItem) => void;
-  onUpdateImage: (edit: ImageEditItem) => void;
-  onAddWhiteout: (whiteout: WhiteoutItem) => void;
-  onTargetBoxSelected: (box: { x: number; y: number; width: number; height: number }) => void;
-  headerFooter?: HeaderFooterConfig;
-  watermark?: WatermarkConfig;
-  background?: BackgroundConfig;
-  coverPage?: CoverPageConfig;
-  moduleData?: ModuleData | null;
-}
-
-function NativePdfPageView({
-  pdfDocProxy,
-  pageNumber,
-  totalPages,
-  zoom,
-  rotation,
-  activeTool,
-  textEdits,
-  whiteouts,
-  images,
-  shapes,
-  globalRemovals,
-  globalReplacements,
-  selectedObjectId,
-  onSelectObject,
-  onAddTextEdit,
-  onUpdateTextEdit,
-  onUpdateImage,
-  onAddWhiteout,
-  onTargetBoxSelected,
-  headerFooter,
-  watermark,
-  background,
-  coverPage,
-  moduleData,
-}: NativePdfPageViewProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-  const [pageSize, setPageSize] = useState<{ width: number; height: number }>({ width: 595, height: 842 });
-  const [textSpans, setTextSpans] = useState<
-    Array<{ text: string; x: number; y: number; width: number; height: number; fontSize: number }>
-  >([]);
-  const [isSelectingBox, setIsSelectingBox] = useState<boolean>(false);
-  const [drawBox, setDrawBox] = useState<{ startX: number; startY: number; currX: number; currY: number } | null>(null);
-  const [resizingImgId, setResizingImgId] = useState<string | null>(null);
-  const [resizeStart, setResizeStart] = useState<{ startW: number; startH: number; startX: number; startY: number } | null>(null);
-
-  // Render PDF.js Canvas on Page Change or Zoom Change
-  useEffect(() => {
-    let isCancelled = false;
-    let renderTask: any = null;
-
-    async function renderPage() {
-      if (!pdfDocProxy || pageNumber < 1 || pageNumber > pdfDocProxy.numPages) return;
-
-      try {
-        const page = await pdfDocProxy.getPage(pageNumber);
-        if (isCancelled) return;
-
-        const viewport = page.getViewport({ scale: zoom * 1.5, rotation });
-        setPageSize({ width: viewport.width / (zoom * 1.5), height: viewport.height / (zoom * 1.5) });
-
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            canvas.style.width = `${viewport.width / 1.5}px`;
-            canvas.style.height = `${viewport.height / 1.5}px`;
-
-            const renderContext = {
-              canvasContext: ctx,
-              viewport,
-            };
-            renderTask = page.render(renderContext);
-            await renderTask.promise;
-          }
-        }
-
-        if (isCancelled) return;
-
-        // Extract Text Geometry Spans for Direct In-Place Text Editing
-        const textContent = await page.getTextContent();
-        if (isCancelled) return;
-
-        const spans: Array<{ text: string; x: number; y: number; width: number; height: number; fontSize: number }> = [];
-        for (const item of textContent.items as any[]) {
-          if (item.str && item.str.trim().length > 0) {
-            const tx = item.transform;
-            const x = tx[4];
-            const y = viewport.height / (zoom * 1.5) - tx[5] - (item.height || item.fontSize || 12);
-            spans.push({
-              text: item.str,
-              x: Math.max(0, x),
-              y: Math.max(0, y),
-              width: item.width || item.str.length * 6,
-              height: item.height || item.fontSize || 12,
-              fontSize: item.fontSize || 10,
-            });
-          }
-        }
-        setTextSpans(spans);
-      } catch (err: any) {
-        if (err?.name !== "RenderingCancelledException") {
-          console.warn("[NativePdfPageView] Render error:", err);
-        }
-      }
-    }
-
-    renderPage();
-    return () => {
-      isCancelled = true;
-      if (renderTask) {
-        try {
-          renderTask.cancel();
-        } catch {}
-      }
-    };
-  }, [pdfDocProxy, pageNumber, zoom, rotation]);
-
-  // Handle Dragging / Box Selection for Whiteout, Add Text, Remove Object, Replace Object
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (resizingImgId) return;
-
-    if (
-      activeTool !== "WHITEOUT" &&
-      activeTool !== "ADD_TEXT" &&
-      activeTool !== "REMOVE_OBJECT" &&
-      activeTool !== "REPLACE_OBJECT"
-    )
-      return;
-    const rect = overlayRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const scale = zoom;
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-
-    setIsSelectingBox(true);
-    setDrawBox({ startX: x, startY: y, currX: x, currY: y });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = overlayRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const scale = zoom;
-
-    // Handle Image Corner Resize
-    if (resizingImgId && resizeStart) {
-      const currX = (e.clientX - rect.left) / scale;
-      const currY = (e.clientY - rect.top) / scale;
-      const deltaX = currX - resizeStart.startX;
-      const deltaY = currY - resizeStart.startY;
-      const newWidth = Math.max(20, resizeStart.startW + deltaX);
-      const newHeight = Math.max(20, resizeStart.startH + deltaY);
-
-      const targetImg = images.find((img) => img.id === resizingImgId);
-      if (targetImg) {
-        onUpdateImage({ ...targetImg, width: newWidth, height: newHeight });
-      }
-      return;
-    }
-
-    if (!isSelectingBox || !drawBox) return;
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-
-    setDrawBox((prev) => (prev ? { ...prev, currX: x, currY: y } : null));
-  };
-
-  const handleMouseUp = () => {
-    if (resizingImgId) {
-      setResizingImgId(null);
-      setResizeStart(null);
-      return;
-    }
-
-    if (!isSelectingBox || !drawBox) return;
-    setIsSelectingBox(false);
-
-    const x = Math.min(drawBox.startX, drawBox.currX);
-    const y = Math.min(drawBox.startY, drawBox.currY);
-    const width = Math.max(10, Math.abs(drawBox.currX - drawBox.startX));
-    const height = Math.max(10, Math.abs(drawBox.currY - drawBox.startY));
-
-    if (activeTool === "WHITEOUT") {
-      onAddWhiteout({
-        id: `wo-${Date.now()}`,
-        pageNumber,
-        x,
-        y,
-        width,
-        height,
-        color: "#ffffff",
-      });
-      toast.success("Whiteout mask applied");
-    } else if (activeTool === "ADD_TEXT") {
-      onAddTextEdit({
-        id: `txt-${Date.now()}`,
-        pageNumber,
-        x,
-        y,
-        width: Math.max(120, width),
-        height: Math.max(24, height),
-        newText: "Double-click to type text",
-        fontSize: 12,
-        fontFamily: "helvetica",
-        color: "#000000",
-        hideOriginal: false,
-      });
-    } else if (activeTool === "REMOVE_OBJECT" || activeTool === "REPLACE_OBJECT") {
-      onTargetBoxSelected({ x, y, width, height });
-    }
-
-    setDrawBox(null);
-  };
-
-  const scale = zoom;
-
-  // Variables interpolation dictionary
-  const vars = {
-    page: pageNumber,
-    totalPages: totalPages || 1,
-    subject: coverPage?.subject || moduleData?.subject || "NEET PREP",
-    chapter: coverPage?.chapter || moduleData?.chapter || moduleData?.title || "Academic Module",
-    teacher: coverPage?.teacher || moduleData?.facultyName || "Firoz Sir",
-    date: new Date().toLocaleDateString("en-IN"),
-    moduleNumber: coverPage?.moduleNumber || moduleData?.code || "Module 01",
-  };
-
-  const isCoverActive =
-    coverPage?.enabled &&
-    pageNumber === 1 &&
-    (coverPage.action === "REPLACE_FIRST" || coverPage.action === "PREPEND");
-
-  const showHeader =
-    headerFooter?.enabled &&
-    isPageInRange(pageNumber, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage);
-
-  const showWatermark =
-    watermark?.enabled &&
-    isPageInRange(pageNumber, watermark.pageRange, watermark.customPages, watermark.excludeFirstPage);
-
-  const showBackground =
-    background?.enabled &&
-    isPageInRange(pageNumber, background.pageRange, background.customPages);
-
-  const headerAccent = headerFooter?.accentColor || "#ea580c";
-  const headerHeightPt = headerFooter?.headerImageHeight || 36;
-  const footerHeightPt = headerFooter?.footerImageHeight || 24;
-
-  return (
-    <div
-      className="relative shadow-2xl border border-slate-800 bg-white select-none transition-transform"
-      style={{
-        width: `${pageSize.width * scale}px`,
-        height: `${pageSize.height * scale}px`,
-      }}
-    >
-      {/* 0. Subject Background Theme Tint Layer */}
-      {showBackground && (
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            backgroundColor: background?.color || "#ffffff",
-            opacity: background?.opacity ?? 0.85,
-            mixBlendMode: "multiply",
-            zIndex: 5,
-          }}
-        >
-          {background?.base64Data && (
-            <img
-              src={background.base64Data}
-              alt="Page Background Pattern"
-              className="w-full h-full object-cover pointer-events-none opacity-20"
-            />
-          )}
-        </div>
-      )}
-
-      {/* 1. Underlying High-Res PDF.js Render Canvas */}
-      {!isCoverActive && (
-        <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-[2]" />
-      )}
-
-      {/* 2. ATOMIC PATHSHALA FRONT PAGE LIVE PREVIEW (if page 1 and cover active) */}
-      {isCoverActive && (
-        <div
-          className="absolute inset-0 z-20 flex flex-col justify-between p-8 text-white select-none pointer-events-none overflow-hidden"
-          style={{
-            background:
-              coverPage?.subject === "CHEMISTRY"
-                ? "linear-gradient(145deg, #064e3b 0%, #022c22 60%, #065f46 100%)"
-                : coverPage?.subject === "PHYSICS"
-                ? "linear-gradient(145deg, #0c4a6e 0%, #082f49 60%, #0369a1 100%)"
-                : coverPage?.subject === "BIOLOGY"
-                ? "linear-gradient(145deg, #4a044e 0%, #2e1065 60%, #6b21a8 100%)"
-                : "linear-gradient(145deg, #7c2d12 0%, #431407 60%, #9a3412 100%)",
-          }}
-        >
-          {/* Top Branding Banner */}
-          <div className="flex items-center justify-between border-b border-white/20 pb-4">
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-black tracking-wider text-white">ATOMIC PATHSHALA</span>
-              <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] font-bold tracking-widest uppercase border border-white/20">
-                Academy
-              </span>
-            </div>
-            <div className="px-3 py-1 rounded-full bg-white/15 text-xs font-bold tracking-wide uppercase backdrop-blur-sm">
-              {coverPage?.targetExam || "NEET (UG)"} Accelerator
-            </div>
-          </div>
-
-          {/* Center Title Hero */}
-          <div className="space-y-4 my-auto">
-            <div className="inline-block px-3.5 py-1 rounded-lg bg-white/20 text-xs font-extrabold tracking-widest uppercase text-white shadow-sm">
-              {coverPage?.subject || "CHEMISTRY"} • {coverPage?.moduleNumber || "MODULE 01"}
-            </div>
-            <h1 className="text-3xl font-black tracking-tight leading-tight max-w-lg text-white drop-shadow-md">
-              {coverPage?.chapter || "Academic Chapter Title"}
-            </h1>
-            <p className="text-xs text-white/80 font-medium">Comprehensive NEET Theory, Solved Examples &amp; Question Bank</p>
-          </div>
-
-          {/* Bottom Faculty & Batch Card */}
-          <div className="border-t border-white/20 pt-4 flex items-center justify-between">
-            <div>
-              <div className="text-[10px] text-white/60 uppercase font-bold tracking-wider">Course Faculty</div>
-              <div className="text-sm font-bold text-white">{coverPage?.teacher || "Firoz Sir"}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-[10px] text-white/60 uppercase font-bold tracking-wider">Target Academic Batch</div>
-              <div className="text-xs font-bold text-white">{coverPage?.batch || "NEET Accelerated Batch"}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Old Header / Footer Masking Layers */}
-      {headerFooter?.removeOldHeader && isPageInRange(pageNumber, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage) && (
-        <div
-          className="absolute top-0 left-0 right-0 bg-white z-10 pointer-events-none"
-          style={{ height: `${((headerFooter.oldHeaderHeightPt || 42) + (headerFooter.headerTopOffsetPt || 0)) * scale}px` }}
-        />
-      )}
-      {headerFooter?.removeOldFooter && isPageInRange(pageNumber, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage) && (
-        <div
-          className="absolute bottom-0 left-0 right-0 bg-white z-10 pointer-events-none"
-          style={{ height: `${((headerFooter.oldFooterHeightPt || 32) + (headerFooter.footerBottomOffsetPt || 0)) * scale}px` }}
-        />
-      )}
-
-      {/* 4. RUNNING HEADER LIVE PREVIEW */}
-      {showHeader && !isCoverActive && (
-        <div
-          className="absolute left-0 right-0 bg-white z-15 flex items-center justify-between px-4 border-b pointer-events-none"
-          style={{
-            top: `${(headerFooter?.headerTopOffsetPt || 0) * scale}px`,
-            height: `${headerHeightPt * scale}px`,
-            borderBottomColor: headerAccent,
-            borderBottomWidth: `${2.5 * scale}px`,
-            zIndex: 15,
-          }}
-        >
-          {headerFooter?.headerImageBase64 ? (
-            <img
-              src={headerFooter.headerImageBase64}
-              alt="Header Logo"
-              className="h-[80%] object-contain"
-            />
-          ) : (
-            <span
-              className="font-bold uppercase tracking-wider"
-              style={{ color: headerAccent, fontSize: `${(headerFooter?.fontSize || 9) * scale}px` }}
-            >
-              {replaceVariables(headerFooter?.headerLeft || "ATOMIC PATHSHALA", vars)}
-            </span>
-          )}
-
-          <span
-            className="text-slate-800 font-semibold truncate px-2"
-            style={{ fontSize: `${((headerFooter?.fontSize || 9) - 0.5) * scale}px` }}
-          >
-            {replaceVariables(headerFooter?.headerCenter || "| {subject} - {chapter}", vars)}
-          </span>
-
-          <span
-            className="text-slate-500 font-medium truncate"
-            style={{ fontSize: `${((headerFooter?.fontSize || 9) - 1) * scale}px` }}
-          >
-            {replaceVariables(headerFooter?.headerRight || "{teacher}", vars)}
-          </span>
-        </div>
-      )}
-
-      {/* 5. RUNNING FOOTER LIVE PREVIEW */}
-      {showHeader && !isCoverActive && (
-        <div
-          className="absolute left-0 right-0 bg-white z-15 flex items-center justify-between px-4 border-t border-slate-200 pointer-events-none"
-          style={{
-            bottom: `${(headerFooter?.footerBottomOffsetPt || 0) * scale}px`,
-            height: `${footerHeightPt * scale}px`,
-            zIndex: 15,
-          }}
-        >
-          <span className="text-slate-500 font-medium" style={{ fontSize: `${7.5 * scale}px` }}>
-            {replaceVariables(headerFooter?.footerLeft || "Atomic Pathshala | NEET Accelerator", vars)}
-          </span>
-          <span
-            className="font-bold uppercase"
-            style={{ color: headerAccent, fontSize: `${8 * scale}px` }}
-          >
-            {replaceVariables(headerFooter?.footerRight || "Page {page} of {totalPages}", vars)}
-          </span>
-        </div>
-      )}
-
-      {/* 6. WATERMARK LIVE OVERLAY */}
-      {showWatermark && !isCoverActive && (
-        <div
-          className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden"
-          style={{ zIndex: 12 }}
-        >
-          {watermark?.type === "image" && (watermark.base64Data || watermark.imageUrl) ? (
-            <img
-              src={watermark.base64Data || watermark.imageUrl}
-              alt="Watermark Overlay"
-              className="pointer-events-none select-none"
-              style={{
-                width: `${(watermark.imageWidth || 320) * scale}px`,
-                opacity: watermark.opacity ?? 0.08,
-                transform: `rotate(${watermark.rotation ?? -30}deg)`,
-                transformOrigin: "center",
-              }}
-            />
-          ) : (
-            <div
-              className="font-black uppercase tracking-widest text-center select-none"
-              style={{
-                fontSize: `${(watermark?.fontSize || 38) * scale}px`,
-                color: watermark?.color || "#000000",
-                opacity: watermark?.opacity ?? 0.08,
-                transform: `rotate(${watermark?.rotation ?? -30}deg)`,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {watermark?.text || "ATOMIC PATHSHALA"}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 7. Interactive Editing Overlay (Text, Whiteouts, Images, Global Masks) */}
-      <div
-        ref={overlayRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        className={`absolute inset-0 overflow-hidden z-20 ${
-          activeTool === "WHITEOUT" ||
-          activeTool === "ADD_TEXT" ||
-          activeTool === "REMOVE_OBJECT" ||
-          activeTool === "REPLACE_OBJECT"
-            ? "cursor-crosshair"
-            : "cursor-default"
-        }`}
-      >
-        {/* Draw Temporary Selection Box during drag */}
-        {drawBox && (
-          <div
-            className={`absolute border-2 ${
-              activeTool === "WHITEOUT" || activeTool === "REMOVE_OBJECT"
-                ? "bg-red-500/20 border-red-500"
-                : activeTool === "REPLACE_OBJECT"
-                ? "bg-cyan-500/20 border-cyan-500"
-                : "bg-blue-500/20 border-blue-500"
-            }`}
-            style={{
-              left: `${Math.min(drawBox.startX, drawBox.currX) * scale}px`,
-              top: `${Math.min(drawBox.startY, drawBox.currY) * scale}px`,
-              width: `${Math.abs(drawBox.currX - drawBox.startX) * scale}px`,
-              height: `${Math.abs(drawBox.currY - drawBox.startY) * scale}px`,
-              zIndex: 50,
-            }}
-          />
-        )}
-
-        {/* Global Removals Masks (Solid 100% Opaque Pure Whiteout without red outlines) */}
-        {globalRemovals.map((g) => (
-          <div
-            key={g.id}
-            className="absolute bg-white pointer-events-none z-10"
-            style={{
-              left: `${g.x * scale}px`,
-              top: `${g.y * scale}px`,
-              width: `${g.width * scale}px`,
-              height: `${g.height * scale}px`,
-            }}
-          />
-        ))}
-
-        {/* Global Replacements (Masks underlying old object completely, then renders new object) */}
-        {globalReplacements.map((r) => (
-          <div
-            key={r.id}
-            className="absolute bg-white overflow-hidden pointer-events-none z-10 flex items-center justify-center"
-            style={{
-              left: `${r.x * scale}px`,
-              top: `${r.y * scale}px`,
-              width: `${r.width * scale}px`,
-              height: `${r.height * scale}px`,
-            }}
-          >
-            {r.replacementType === "image" && r.base64Data && (
-              <img src={r.base64Data} alt="Global Replacement" className="w-full h-full object-contain" />
-            )}
-            {r.replacementType === "text" && r.newText && (
-              <span className="text-slate-900 font-bold px-1" style={{ fontSize: `${(r.fontSize || 11) * scale}px` }}>
-                {r.newText}
-              </span>
-            )}
-          </div>
-        ))}
-
-        {/* Existing PDF Text Hover Spans (for Edit Text Tool) */}
-        {activeTool === "EDIT_TEXT" &&
-          textSpans.map((span, idx) => (
-            <div
-              key={idx}
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddTextEdit({
-                  id: `edit-${Date.now()}-${idx}`,
-                  pageNumber,
-                  x: span.x,
-                  y: span.y,
-                  width: span.width + 4,
-                  height: span.height + 2,
-                  originalText: span.text,
-                  newText: span.text,
-                  fontSize: Math.max(9, span.fontSize),
-                  fontFamily: "helvetica",
-                  color: "#000000",
-                  hideOriginal: true,
-                });
-                toast.success(`Editing: "${span.text.slice(0, 20)}..."`);
-              }}
-              className="absolute border border-transparent hover:border-emerald-500 hover:bg-emerald-500/20 cursor-text transition-colors rounded z-30"
-              style={{
-                left: `${span.x * scale}px`,
-                top: `${span.y * scale}px`,
-                width: `${span.width * scale}px`,
-                height: `${span.height * scale}px`,
-              }}
-              title={`Click to edit: "${span.text}"`}
-            />
-          ))}
-
-        {/* Applied Whiteout Masks */}
-        {whiteouts.map((w) => (
-          <div
-            key={w.id}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectObject(w.id, "whiteout");
-            }}
-            className={`absolute transition-all cursor-pointer z-10 ${
-              selectedObjectId === w.id ? "ring-2 ring-red-500" : ""
-            }`}
-            style={{
-              left: `${w.x * scale}px`,
-              top: `${w.y * scale}px`,
-              width: `${w.width * scale}px`,
-              height: `${w.height * scale}px`,
-              backgroundColor: w.color || "#ffffff",
-            }}
-          />
-        ))}
-
-        {/* Applied Text Edits (with 100% Solid Underneath Mask to PREVENT OVERLAPS) */}
-        {textEdits.map((t) => {
-          const isSelected = selectedObjectId === t.id;
-          return (
-            <React.Fragment key={t.id}>
-              {/* Opaque solid white mask covering old text underneath */}
-              {t.hideOriginal !== false && (
-                <div
-                  className="absolute bg-white pointer-events-none z-15"
-                  style={{
-                    left: `${(t.x - 2) * scale}px`,
-                    top: `${(t.y - 2) * scale}px`,
-                    width: `${(t.width + 4) * scale}px`,
-                    height: `${(t.height + 4) * scale}px`,
-                    backgroundColor: t.backgroundColor || "#ffffff",
-                  }}
-                />
-              )}
-
-              {/* Editable Text Box */}
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectObject(t.id, "text");
-                }}
-                className={`absolute flex flex-col cursor-move z-25 ${
-                  isSelected ? "ring-2 ring-emerald-500 z-35" : ""
-                }`}
-                style={{
-                  left: `${t.x * scale}px`,
-                  top: `${t.y * scale}px`,
-                  width: `${t.width * scale}px`,
-                  minHeight: `${t.height * scale}px`,
-                }}
-              >
-                {isSelected ? (
-                  <textarea
-                    value={t.newText}
-                    autoFocus
-                    onChange={(e) => onUpdateTextEdit({ ...t, newText: e.target.value })}
-                    className="w-full h-full p-1 bg-white text-slate-900 border-0 outline-none resize-none shadow-sm"
-                    style={{
-                      fontSize: `${t.fontSize * scale}px`,
-                      fontFamily:
-                        t.fontFamily === "times" ? "serif" : t.fontFamily === "courier" ? "monospace" : "sans-serif",
-                      fontWeight: t.isBold ? "bold" : "normal",
-                      fontStyle: t.isItalic ? "italic" : "normal",
-                      color: t.color || "#000000",
-                      textAlign: t.align || "left",
-                    }}
-                  />
-                ) : (
-                  <div
-                    className="w-full h-full p-0.5 whitespace-pre-wrap select-text text-slate-900"
-                    style={{
-                      fontSize: `${t.fontSize * scale}px`,
-                      fontFamily:
-                        t.fontFamily === "times" ? "serif" : t.fontFamily === "courier" ? "monospace" : "sans-serif",
-                      fontWeight: t.isBold ? "bold" : "normal",
-                      fontStyle: t.isItalic ? "italic" : "normal",
-                      color: t.color || "#000000",
-                      textAlign: t.align || "left",
-                    }}
-                  >
-                    {t.newText}
-                  </div>
-                )}
-              </div>
-            </React.Fragment>
-          );
-        })}
-
-        {/* Inserted Images (with Move, Corner Resize, Rotation, and Delete Handles) */}
-        {images.map((img) => {
-          const isSelected = selectedObjectId === img.id;
-          return (
-            <div
-              key={img.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectObject(img.id, "image");
-              }}
-              className={`absolute cursor-move z-25 group ${
-                isSelected ? "ring-2 ring-indigo-500 z-35" : ""
-              }`}
-              style={{
-                left: `${img.x * scale}px`,
-                top: `${img.y * scale}px`,
-                width: `${img.width * scale}px`,
-                height: `${img.height * scale}px`,
-                opacity: img.opacity ?? 1,
-                transform: `rotate(${img.rotation ?? 0}deg)`,
-                transformOrigin: "center",
-              }}
-            >
-              <img
-                src={img.base64Data || img.imageUrl}
-                alt="Embedded PDF graphic"
-                className="w-full h-full object-contain pointer-events-none select-none"
-              />
-
-              {/* Corner Resize Handle on bottom-right */}
-              {isSelected && (
-                <div
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                    setResizingImgId(img.id);
-                    setResizeStart({
-                      startW: img.width,
-                      startH: img.height,
-                      startX: (e.clientX - (overlayRef.current?.getBoundingClientRect().left || 0)) / scale,
-                      startY: (e.clientY - (overlayRef.current?.getBoundingClientRect().top || 0)) / scale,
-                    });
-                  }}
-                  className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-indigo-600 rounded-tl border border-white cursor-nwse-resize shadow-md"
-                  title="Drag to resize image"
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
