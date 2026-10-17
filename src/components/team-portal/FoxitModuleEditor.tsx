@@ -971,6 +971,13 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">
                 {moduleData?.originalFileName || "document.pdf"}
               </span>
+              <Link
+                href={`/team/modules/${moduleId}/blocks`}
+                className="px-2 py-0.5 rounded text-[10px] font-bold border border-orange-500/40 text-orange-400 hover:bg-orange-500/10"
+                title="Extract this PDF into editable blocks (text, questions, pictures; OCR for scanned pages)"
+              >
+                Extract to blocks
+              </Link>
             </div>
 
             {/* EXPANDED MENU BAR */}

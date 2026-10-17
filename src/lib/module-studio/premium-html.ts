@@ -130,7 +130,7 @@ function renderElements(elements: ModuleElementInput[], counters: { section: num
         // Gather this question's options and solution into one card.
         const options: ModuleElementInput[] = [];
         let solution: ModuleElementInput | null = null;
-        while (els[i + 1] && (els[i + 1]!.type === "OPTION" || (els[i + 1]!.type === "SOLUTION" && !solution))) {
+        while (els[i + 1] && (els[i + 1]!.type === "OPTION" || ((els[i + 1]!.type === "SOLUTION" || els[i + 1]!.type === "ANSWER") && !solution))) {
           const next = els[++i]!;
           if (next.type === "OPTION") options.push(next);
           else solution = next;
@@ -139,7 +139,7 @@ function renderElements(elements: ModuleElementInput[], counters: { section: num
         out.push(
           `<div class="question"><div class="q-text">${rich(el.content)}</div>${
             options.length ? `<div class="options ${long ? "one-col" : ""}">${options.map((o) => `<div class="option">${rich(o.content)}</div>`).join("")}</div>` : ""
-          }${solution ? `<div class="solution"><span class="sol-tag">Solution</span>${rich(solution.content)}</div>` : ""}</div>`
+          }${solution ? `<div class="solution"><span class="sol-tag">${solution.type === "ANSWER" ? "Answer" : "Solution"}</span>${rich(solution.content)}</div>` : ""}</div>`
         );
         break;
       }
@@ -147,7 +147,11 @@ function renderElements(elements: ModuleElementInput[], counters: { section: num
         out.push(`<div class="option loose">${rich(el.content)}</div>`);
         break;
       case "SOLUTION":
-        out.push(`<div class="solution"><span class="sol-tag">Solution</span>${rich(el.content)}</div>`);
+      case "ANSWER":
+        out.push(`<div class="solution"><span class="sol-tag">${el.type === "ANSWER" ? "Answer" : "Solution"}</span>${rich(el.content)}</div>`);
+        break;
+      case "PAGE_BREAK":
+        out.push(`<div style="break-after:page;page-break-after:always"></div>`);
         break;
       default:
         if (el.content.trim()) out.push(`<p>${rich(el.content)}</p>`);

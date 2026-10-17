@@ -176,6 +176,15 @@ export function parsePageTextNatively(
       continue;
     }
 
+    // Right after a question (or another option), "(1) …" / "(a) …" / "[A] …" lines are its
+    // options — even when they start with a word ("(1) Proton", "(1) प्रोटॉन"), which the
+    // sub-heading rule below would otherwise take.
+    const lastType = elements[elements.length - 1]?.type;
+    if ((lastType === "QUESTION" || lastType === "OPTION") && currentParagraphLines.length === 0 && /^(?:\([1-4a-dA-D]\)|\[[1-4a-dA-D]\])\s*\S/.test(line)) {
+      push({ type: "OPTION", content: clean(line) });
+      continue;
+    }
+
     // 3. Subrules: Subrule (i), Subrule (ii), (a), (b), A), B)
     if (
       /^(?:subrule|उप\s*नियम|नियम|mifu;e|fu;e)\s*[\(\d\wivx\)]+/i.test(line) ||
@@ -188,6 +197,13 @@ export function parsePageTextNatively(
 
     // 4. Questions: Q.1, Q.2, Q.3, प्रश्न 1, Que. 1
     if (/^(?:q(?:uestion|\.)?\s*\d+|प्रश्न\s*\d+|que\.\s*\d+)/i.test(line)) {
+      flushParagraph();
+      push({ type: "QUESTION", content: clean(line) });
+      continue;
+    }
+    // Question papers number questions "1." / "12)" and options "(1)…(4)":
+    // a numbered line with real text (or ending in "?") is a question, not an option.
+    if (/^\d{1,3}[.)]\s+\S/.test(line) && (line.length > 30 || /\?\s*$/.test(line))) {
       flushParagraph();
       push({ type: "QUESTION", content: clean(line) });
       continue;

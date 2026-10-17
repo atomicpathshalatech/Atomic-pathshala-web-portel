@@ -20,6 +20,13 @@ export const MODULE_ELEMENT_TYPES = [
   "CALLOUT",
   // One item per line.
   "BULLETS",
+  // From the PDF import (pdf-layout.ts): an answer line ("Ans.", "उत्तर"),
+  // the source page's running header / footer (kept, not dropped), and a
+  // page boundary.
+  "ANSWER",
+  "HEADER",
+  "FOOTER",
+  "PAGE_BREAK",
 ] as const;
 
 export const MODULE_CALLOUT_VARIANTS = ["CONCEPT", "NOTE", "EXAMPLE", "TIP", "REMEMBER", "CAUTION", "FORMULA", "SUMMARY"] as const;
@@ -120,6 +127,16 @@ export const moduleElementSchema = z.object({
   tableData: z.array(z.array(z.string())).optional(),
   variant: z.string().max(30).optional(),
   label: z.string().max(80).optional(),
+  // Where the block came from on the ORIGINAL PDF (kept separately): page
+  // number and box in PDF points, top-left origin. Optional — blocks typed in
+  // the editor have none.
+  sourcePage: z.number().int().min(1).optional(),
+  bbox: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
+  // TEXT = read from the PDF's own text layer, OCR = recognised from the
+  // page image, IMAGE_REGION = a picture on the page (position only).
+  source: z.enum(["TEXT", "OCR", "IMAGE_REGION"]).optional(),
+  // OCR confidence 0–100 (low values are flagged for review).
+  confidence: z.number().min(0).max(100).optional(),
 });
 export type ModuleElementInput = z.infer<typeof moduleElementSchema>;
 

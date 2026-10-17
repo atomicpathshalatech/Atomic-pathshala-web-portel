@@ -6,6 +6,7 @@ import Link from "next/link";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { renderFormulaContent } from "@/lib/test-portal/formula";
+import { ImportProgressPanel } from "./ImportProgressPanel";
 
 type FontFamily = "helvetica" | "times" | "courier";
 type Align = "left" | "center" | "right" | "justify";
@@ -92,32 +93,6 @@ type PageRow = {
 type VersionRow = { id: string; label: string; createdAt: string };
 type ExportRow = { id: string; fileUrl: string; fileName: string; fileSize: number; createdAt: string; includedWatermark: boolean };
 
-type PageStatusItem = {
-  pageNumber: number;
-  status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
-  attempts: number;
-  error?: string | null;
-  elementsCount: number;
-  durationMs?: number;
-  isScanned: boolean;
-};
-
-type JobStatusData = {
-  jobId: string;
-  moduleId: string;
-  stage: string;
-  progress: number;
-  totalPages: number;
-  completedPages: number;
-  failedPages: number;
-  pageStatuses: Record<number, PageStatusItem>;
-  errorMessage: string | null;
-  startedAt: string;
-  finishedAt: string | null;
-  pdfType: string;
-  isCached: boolean;
-};
-
 type ModuleDetail = {
   id: string;
   code: string;
@@ -157,6 +132,10 @@ const ELEMENT_TYPES = [
   "TABLE",
   "CALLOUT",
   "BULLETS",
+  "ANSWER",
+  "HEADER",
+  "FOOTER",
+  "PAGE_BREAK",
 ];
 
 const ADD_PALETTE: { type: string; label: string; icon: string }[] = [
@@ -267,7 +246,6 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const [data, setData] = useState<ModuleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [jobStatus, setJobStatus] = useState<JobStatusData | null>(null);
   const [pageEdits, setPageEdits] = useState<Record<string, ElementRow[]>>({});
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
@@ -364,7 +342,6 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImageTargetRef = useRef<{ pageId: string; elId: string } | null>(null);
   const dragIndexRef = useRef<number | null>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -394,9 +371,6 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
       setPageEdits(edits);
       setSelectedPageId((prev) => (prev && m.pages.some((p) => p.id === prev) ? prev : (m.pages[0]?.id ?? null)));
 
-      if (m.status === "PROCESSING") {
-        setProcessing(true);
-      }
     } catch {
       setError("Failed to connect to module service.");
     }
@@ -405,39 +379,6 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   useEffect(() => {
     load();
   }, [load]);
-
-  // Polling for live asynchronous job progress
-  useEffect(() => {
-    if (!processing) {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      return;
-    }
-
-    const pollJob = async () => {
-      try {
-        const res = await fetch(`/api/team/modules/${moduleId}/process`);
-        const body = await res.json();
-        if (body.success && body.data.job) {
-          const job = body.data.job as JobStatusData;
-          setJobStatus(job);
-          if (job.stage === "READY_FOR_REVIEW" || job.finishedAt || job.stage === "FAILED") {
-            setProcessing(false);
-            if (pollingRef.current) clearInterval(pollingRef.current);
-            await load();
-          }
-        }
-      } catch {
-        // Transient network drop during poll — don't crash, will retry on next tick
-      }
-    };
-
-    pollJob();
-    pollingRef.current = setInterval(pollJob, 1600);
-
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [processing, moduleId, load]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -597,7 +538,10 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
         }),
       });
       const body = await res.json();
-      if (!body.success) {
+      if (res.status === 409) {
+        // An import of this module is already running (another tab or an earlier visit) — carry it on.
+        await driveExtraction();
+      } else if (!body.success) {
         setError(body.error ?? "Failed to initiate extraction job.");
         setProcessing(false);
       } else if (body.data.done) {
@@ -948,26 +892,6 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const canUndo = !!history && history.index > 0;
   const canRedo = !!history && history.index < history.stack.length - 1;
 
-  const currentStageLabel = (stage?: string) => {
-    switch (stage) {
-      case "ANALYZING":
-        return "Analyzing PDF layout and language layers…";
-      case "EXTRACTING":
-        return "Extracting text and isolating scanned pages…";
-      case "OCR_PROCESSING":
-        return "Processing pages in parallel with Gemini AI…";
-      case "RECONSTRUCTING_LAYOUT":
-        return "Structuring formulas, callouts, and questions…";
-      case "GENERATING_PREVIEW":
-        return "Generating academic layout and preview…";
-      case "READY_FOR_REVIEW":
-        return "Module Ready for Review";
-      case "FAILED":
-        return "Processing Encountered Issues";
-      default:
-        return "Processing Module…";
-    }
-  };
 
   return (
     <div className="space-y-stack-lg">
@@ -1039,7 +963,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               <h2 className="font-headline-md text-headline-md text-on-surface">Parallel Extraction Engine</h2>
             </div>
             <p className="text-label-sm text-on-surface-variant mt-0.5">
-              Ultra-fast deterministic text-first rule extraction with 100% Hindi/English preservation and AI structuring.
+              Reads the PDF's own text layer (no AI) with positions, columns, pictures and super/subscripts. Scanned pages are marked for OCR, which runs in your browser.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1102,7 +1026,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-500/15 text-green-700 dark:text-green-400">RECOMMENDED</span>
               </div>
               <p className="text-xs text-on-surface-variant mt-0.5">
-                Instant native text parser (&lt; 1ms/page). Preserves 100% Hindi Devanagari text, equations, and images without AI rate limits or lag.
+                Reads the PDF's text layer directly — fast, no AI limits. Unicode Hindi and English are kept; pages whose text cannot be decoded are flagged for OCR.
               </p>
             </div>
           </button>
@@ -1123,7 +1047,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-secondary/15 text-secondary">DEEP SYNTHESIS</span>
               </div>
               <p className="text-xs text-on-surface-variant mt-0.5">
-                Full parallel LLM analysis. Useful for complex unstructured multi-column layouts or handwritten scan OCR.
+                Same text reading, then an AI model groups the text into blocks. Slower and uses AI quota; it does not read scanned pages.
               </p>
             </div>
           </button>
@@ -1153,57 +1077,13 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
           </div>
         )}
 
-        {/* Live Progress Bar if Processing or Status Available */}
-        {(processing || jobStatus) && (
-          <div className="space-y-3 p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30">
-            <div className="flex items-center justify-between text-label-sm">
-              <span className="font-semibold text-primary flex items-center gap-2">
-                {processing && <span className="inline-block w-2 h-2 rounded-full bg-primary animate-ping" />}
-                {currentStageLabel(jobStatus?.stage || latestJob?.stage)}
-              </span>
-              <span className="font-bold text-on-surface">
-                {jobStatus?.progress ?? latestJob?.progress ?? 0}%
-                {jobStatus && jobStatus.totalPages > 0 ? ` (${jobStatus.completedPages} / ${jobStatus.totalPages} pages)` : ""}
-              </span>
-            </div>
-
-            <div className="w-full bg-surface-container-high rounded-full h-3 overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-primary to-secondary h-full rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${Math.max(4, jobStatus?.progress ?? latestJob?.progress ?? 0)}%` }}
-              />
-            </div>
-
-            {/* Page matrix visualizer */}
-            {jobStatus && Object.keys(jobStatus.pageStatuses).length > 0 && (
-              <div className="pt-2">
-                <p className="text-[11px] uppercase font-bold text-on-surface-variant mb-2">Page-Level Status Matrix</p>
-                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-surface-container-high/30 rounded-lg">
-                  {Object.values(jobStatus.pageStatuses).map((p) => {
-                    const bg =
-                      p.status === "COMPLETED"
-                        ? "bg-green-500 text-white"
-                        : p.status === "FAILED"
-                        ? "bg-red-500 text-white"
-                        : p.status === "PROCESSING"
-                        ? "bg-primary text-white animate-pulse"
-                        : "bg-surface-container-high text-on-surface-variant";
-
-                    return (
-                      <div
-                        key={p.pageNumber}
-                        title={`Page ${p.pageNumber}: ${p.status}${p.error ? ` - ${p.error}` : ""}${p.durationMs ? ` (${p.durationMs}ms)` : ""}`}
-                        className={`px-2 py-1 rounded text-[10px] font-mono font-bold cursor-default ${bg}`}
-                      >
-                        P{p.pageNumber}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <ImportProgressPanel
+          moduleId={moduleId}
+          pdfUrl={data.originalFileUrl}
+          processing={processing}
+          onContinue={() => void driveExtraction()}
+          onChanged={load}
+        />
 
         {/* Options accordion */}
         <details className="rounded-xl border border-outline-variant/30 p-3 bg-surface-container-lowest" open={!data.pageCount}>
