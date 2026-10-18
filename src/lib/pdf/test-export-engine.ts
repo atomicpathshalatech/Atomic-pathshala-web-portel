@@ -4,6 +4,7 @@ import katex from "katex";
 import { renderFormulaContent } from "@/lib/test-portal/formula";
 import { exportCamDrawToSvgString, parseCamDrawDocument } from "@/lib/camdraw/renderer";
 import { DPP_COVER_CSS } from "@/lib/dpp/cover-html";
+import { renderChapterTestCoverHtml } from "@/lib/pdf/chapter-test-cover";
 
 export interface TestExportOptions {
   withSolution: boolean;
@@ -69,6 +70,9 @@ export interface FormattedExportTest {
   createdAt: Date;
   seriesName?: string | null;
   batchName?: string | null;
+  /** A chapter test: its chapter (it gets its own front page) and when it is held. */
+  chapter?: { title: string; subject: string } | null;
+  openTime?: Date | null;
   sections: FormattedExportSection[];
   allQuestions: FormattedExportQuestion[];
 }
@@ -166,6 +170,7 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
       template: true,
       batchSchedule: { include: { batch: true } },
       testSeries: true,
+      chapter: { select: { title: true, subject: { select: { title: true } } } },
       sections: {
         orderBy: { order: "asc" },
         include: {
@@ -325,6 +330,8 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
     createdAt: test.createdAt,
     seriesName: test.testSeries?.name || null,
     batchName: test.batchSchedule?.batch?.name || null,
+    chapter: test.chapter ? { title: test.chapter.title, subject: test.chapter.subject.title } : null,
+    openTime: test.openTime ?? null,
     sections: formattedSections,
     allQuestions,
   };
@@ -555,7 +562,7 @@ export function generateTestPaperHtml(
   const actualTotalPages = 1 + totalQuestionPagesCount + subjectRoughCount + finalRoughCount + backCoverCount + solutionsPagesCount;
 
   // Render Front Cover (Exact User-Specified Authentic Layout Matching Requirements)
-  const frontCoverHtml = `
+  const examCoverHtml = `
     <div class="a4-sheet border-2 border-slate-900 rounded-xs cover-page">
       <div class="cover-border">
         <!-- TOP HEADER ROW -->
@@ -758,6 +765,26 @@ export function generateTestPaperHtml(
       </div>
     </div>
   `;
+
+  // A chapter test opens with its own one-page front page (chapter, subject,
+  // when it is held) instead of the full exam booklet cover.
+  const frontCoverHtml = test.chapter
+    ? renderChapterTestCoverHtml({
+        logoUrl: logoUrl || null,
+        testName: test.name,
+        testCode: test.code,
+        subject: test.chapter.subject,
+        chapter: test.chapter.title,
+        batchName: test.batchName,
+        heldAt: test.openTime ?? null,
+        durationMin: test.durationMin,
+        totalQuestions: test.totalQuestions,
+        correctMarks: test.correctMarks,
+        incorrectMarks: test.incorrectMarks,
+        totalMarks: test.totalMarks,
+        solutions: withSolution,
+      })
+    : examCoverHtml;
 
   // ---- Question pages ------------------------------------------------------
   // Each section's questions are emitted as ONE flow and cut into A4 pages in
