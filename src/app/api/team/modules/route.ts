@@ -6,7 +6,8 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { moduleCreateSchema, MODULE_STATUS_VALUES } from "@/lib/validation/module";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { uploadFile, StorageNotConfiguredError } from "@/lib/storage";
+import { StorageNotConfiguredError } from "@/lib/storage";
+import { adoptUploadedModuleFile, storeModuleFile, withModuleFileRoutes } from "@/lib/module-studio/module-files";
 import { looksLikePdf } from "@/lib/module-studio/pdf-inspect";
 
 const MAX_BYTES = 40 * 1024 * 1024; // 40MB — a multi-chapter coaching module PDF can be large
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { createdAt: "desc" },
     });
-    return apiSuccess({ modules });
+    return apiSuccess({ modules: modules.map(withModuleFileRoutes) });
   } catch (error) {
     return handleApiError(error);
   }
@@ -67,9 +68,11 @@ export async function POST(request: NextRequest) {
       if (asset.mimeType !== "application/pdf") return apiError("Please upload a PDF file.", 400);
       fileSize = Number(asset.sizeBytes) || (typeof body.fileSize === "number" ? body.fileSize : 0);
       if (fileSize > MAX_BYTES) return apiError("PDF is too large — please keep it under 40MB.", 400);
-      const publicBase = process.env.R2_PUBLIC_BASE_URL || process.env.STORAGE_PUBLIC_URL;
-      if (!publicBase) return apiError("File storage isn't configured for public files.", 503);
-      url = `${publicBase.replace(/\/$/, "")}/${asset.storageKey}`;
+      // With a private bucket the PDF moves there and the uploaded public copy is removed.
+      url = await adoptUploadedModuleFile(asset.storageKey, `modules/${code}/${asset.storageKey.split("/").pop() || "source.pdf"}`);
+      if (url.startsWith("private:")) {
+        await prisma.fileAsset.update({ where: { id: asset.id }, data: { status: "DELETED" } }).catch(() => {});
+      }
       fileName = asset.originalFilename;
       input = moduleCreateSchema.parse(body.metadata ?? {});
     } else {
@@ -86,7 +89,7 @@ export async function POST(request: NextRequest) {
       // Judge by the bytes, not the name or the browser-reported type.
       if (!looksLikePdf(buffer)) return apiError("This file is not a PDF (its contents do not start like one).", 400);
       const key = `modules/${code}/${file.name}`;
-      url = await uploadFile({ key, body: buffer, contentType: file.type });
+      url = await storeModuleFile({ key, body: buffer, contentType: "application/pdf" });
       fileName = file.name;
       fileSize = file.size;
     }
@@ -125,7 +128,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return apiSuccess({ module: created }, 201);
+    return apiSuccess({ module: withModuleFileRoutes(created) }, 201);
   } catch (error) {
     if (error instanceof StorageNotConfiguredError) return apiError(error.message, 503);
     return handleApiError(error);

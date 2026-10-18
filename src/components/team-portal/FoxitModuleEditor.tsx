@@ -742,7 +742,9 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   // Helper to trigger browser file download
   const triggerBrowserDownload = (url: string, fileName: string) => {
     const a = document.createElement("a");
-    a.href = url;
+    // Module files open through /file, which redirects to storage; a cross-origin
+    // redirect ignores `download`, so ask the route for a "save as" link instead.
+    a.href = url.startsWith("/api/team/modules/") && url.includes("/file?") ? `${url}&download=1` : url;
     a.download = fileName;
     a.target = "_blank";
     document.body.appendChild(a);

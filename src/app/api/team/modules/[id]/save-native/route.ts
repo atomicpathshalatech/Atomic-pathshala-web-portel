@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { uploadFile } from "@/lib/storage";
+import { readModuleFile, storeModuleFile, moduleFileRoute } from "@/lib/module-studio/module-files";
 import {
   processNativePdfEdits,
   type TextEditItem,
@@ -74,11 +74,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     };
 
     // 1. Fetch original / source PDF
-    const fileRes = await fetch(moduleRow.originalFileUrl);
-    if (!fileRes.ok) {
-      throw new Error(`Failed to download source PDF from storage (HTTP ${fileRes.status})`);
-    }
-    const originalPdfBuffer = Buffer.from(await fileRes.arrayBuffer());
+    const originalPdfBuffer = await readModuleFile(moduleRow.originalFileUrl);
 
     // 2. Process in-place native PDF edits
     const result = await processNativePdfEdits({
@@ -106,7 +102,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       : `modules/${moduleRow.id}/versions/${versionId}/${fileName}`;
 
     // 3. Upload new PDF revision to R2
-    const fileUrl = await uploadFile({
+    const fileUrl = await storeModuleFile({
       key: storageKey,
       body: Buffer.from(result.pdfBytes),
       contentType: "application/pdf",
@@ -177,7 +173,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return apiSuccess({
       success: true,
       versionId: versionRecord.id,
-      fileUrl,
+      fileUrl: moduleFileRoute(moduleRow.id, `version:${versionRecord.id}`),
       fileName,
       pageCount: result.pageCount,
       fileSizeBytes: result.fileSizeBytes,

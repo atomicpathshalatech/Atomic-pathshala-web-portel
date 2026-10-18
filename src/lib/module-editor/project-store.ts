@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { versionWithFileRoute } from "@/lib/module-studio/module-files";
 import { PROJECT_DRAFT_LABEL, PROJECT_KIND, PROJECT_SCHEMA } from "./overlay-model";
 
 /**
@@ -39,7 +40,7 @@ export async function loadEditorProject(moduleId: string) {
     revision: draft?.revision ?? 0,
     savedAt: useDraft ? draft!.savedAt : savedAt,
     source: useDraft ? ("working-copy" as const) : saved ? ("saved-version" as const) : ("none" as const),
-    project: useDraft ? draft!.project : saved ? saved.snapshot : null,
+    project: useDraft ? draft!.project : saved ? versionWithFileRoute(moduleId, saved).snapshot : null,
     savedVersionId: saved?.id ?? null,
   };
 }

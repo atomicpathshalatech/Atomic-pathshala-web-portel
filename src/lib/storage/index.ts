@@ -1,5 +1,6 @@
 import "server-only";
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, CopyObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
  * Thin S3-compatible object storage wrapper for the simple
@@ -179,4 +180,78 @@ export function keyFromPublicUrl(url: string): string | null {
   if (!base) return null;
   const prefix = base.replace(/\/$/, "") + "/";
   return url.startsWith(prefix) ? url.slice(prefix.length) : null;
+}
+
+/**
+ * A bucket with no public access, for files that must only be reached through
+ * a signed link (module PDFs). Optional: without it those files stay in the
+ * main bucket. Same credentials and endpoint as the main bucket.
+ */
+export function privateBucketName(): string | null {
+  const name = (process.env.R2_PRIVATE_BUCKET_NAME || "").replace(/^["']|["']$/g, "").trim();
+  return name || null;
+}
+
+/** The main (public) bucket's name, or null when storage isn't configured. */
+export function mainBucketName(): string | null {
+  return resolveStorage()?.bucket ?? null;
+}
+
+export async function putObject(params: { bucket: string; key: string; body: Buffer; contentType: string }): Promise<void> {
+  const s = requireStorage();
+  await getClient(s).send(
+    new PutObjectCommand({ Bucket: params.bucket, Key: params.key, Body: params.body, ContentType: params.contentType })
+  );
+}
+
+/** The object's bytes, or null when it does not exist. Other failures throw. */
+export async function getObjectBuffer(bucket: string, key: string): Promise<Buffer | null> {
+  const s = requireStorage();
+  try {
+    const res = await getClient(s).send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    if (!res.Body) return null;
+    return Buffer.from(await res.Body.transformToByteArray());
+  } catch (err) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e?.name === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404) return null;
+    throw err;
+  }
+}
+
+/** A GET link that works for `expiresInSeconds`, signed with the server's credentials. */
+export async function signedGetUrl(params: {
+  bucket: string;
+  key: string;
+  expiresInSeconds?: number;
+  contentDisposition?: string;
+  contentType?: string;
+}): Promise<string> {
+  const s = requireStorage();
+  return getSignedUrl(
+    getClient(s),
+    new GetObjectCommand({
+      Bucket: params.bucket,
+      Key: params.key,
+      ResponseContentDisposition: params.contentDisposition,
+      ResponseContentType: params.contentType,
+    }),
+    { expiresIn: params.expiresInSeconds ?? 600 }
+  );
+}
+
+export async function copyObject(params: { fromBucket: string; fromKey: string; toBucket: string; toKey: string }): Promise<void> {
+  const s = requireStorage();
+  await getClient(s).send(
+    new CopyObjectCommand({
+      Bucket: params.toBucket,
+      Key: params.toKey,
+      CopySource: `${params.fromBucket}/${params.fromKey.split("/").map(encodeURIComponent).join("/")}`,
+    })
+  );
+}
+
+export async function deleteObject(bucket: string, key: string): Promise<void> {
+  const s = resolveStorage();
+  if (!s) return;
+  await getClient(s).send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

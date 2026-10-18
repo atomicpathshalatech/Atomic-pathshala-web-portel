@@ -6,7 +6,8 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { uploadFile, StorageNotConfiguredError } from "@/lib/storage";
+import { StorageNotConfiguredError } from "@/lib/storage";
+import { storeModuleFile, moduleFileRoute } from "@/lib/module-studio/module-files";
 import { moduleElementSchema } from "@/lib/validation/module";
 import { designSchema, type ModuleDesign } from "@/lib/module-studio/design/model";
 import { loadDesign } from "@/lib/module-studio/design/store";
@@ -107,11 +108,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
     const m = await prisma.module.findUnique({ where: { id: params.id }, select: { code: true } });
     const fileName = `${m?.code ?? params.id}-design-${design.output.mode.toLowerCase()}-${Date.now()}.pdf`;
-    const fileUrl = await uploadFile({ key: `module-exports/${m?.code ?? params.id}/${fileName}`, body: result.pdf, contentType: "application/pdf" });
+    const storedUrl = await storeModuleFile({ key: `module-exports/${m?.code ?? params.id}/${fileName}`, body: result.pdf, contentType: "application/pdf" });
     const exportRecord = await prisma.moduleExport.create({
       data: {
         moduleId: params.id,
-        fileUrl,
+        fileUrl: storedUrl,
         fileName,
         fileSize: result.pdf.length,
         quality: design.output.mode === "PRINT" ? `PRINT_BLEED_${design.output.bleedMm}MM` : "DIGITAL",
@@ -121,7 +122,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
     await prisma.auditLog.create({ data: { userId: session.user.id, action: "MODULE_DESIGN_EXPORTED", entityType: "Module", entityId: params.id, metadata: { exportId: exportRecord.id, pages: result.pageCount, mode: design.output.mode } } }).catch(() => undefined);
-    return apiSuccess({ export: exportRecord, fileUrl, pageCount: result.pageCount, warnings, issues, sections: result.sections, contents: result.contents, timings: result.timings }, 201);
+    const fileUrl = moduleFileRoute(params.id, `export:${exportRecord.id}`);
+    return apiSuccess({ export: { ...exportRecord, fileUrl }, fileUrl, pageCount: result.pageCount, warnings, issues, sections: result.sections, contents: result.contents, timings: result.timings }, 201);
   } catch (error) {
     if (error instanceof StorageNotConfiguredError) return apiError(error.message, 503);
     return handleApiError(error);

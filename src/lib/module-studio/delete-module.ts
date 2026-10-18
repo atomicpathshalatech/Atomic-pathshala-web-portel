@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { deleteFile, keyFromPublicUrl } from "@/lib/storage";
+import { keyFromPublicUrl } from "@/lib/storage";
+import { deleteModuleFile, isPrivateModuleFile } from "./module-files";
 
 /**
  * Deletes a module together with its files in storage — the source PDF, page
@@ -14,7 +15,8 @@ import { deleteFile, keyFromPublicUrl } from "@/lib/storage";
 /** Every storage URL (ours) that appears anywhere inside a JSON value. */
 function collectUrls(value: unknown, out: Set<string>): void {
   if (typeof value === "string") {
-    if (/^https?:\/\//i.test(value) && keyFromPublicUrl(value)) out.add(value);
+    if (isPrivateModuleFile(value)) out.add(value);
+    else if (/^https?:\/\//i.test(value) && keyFromPublicUrl(value)) out.add(value);
     else if (value.includes("http")) {
       // Markdown / HTML text with embedded image links.
       for (const m of value.matchAll(/https?:\/\/[^\s"'()<>\\]+/g)) if (keyFromPublicUrl(m[0])) out.add(m[0]);
@@ -81,13 +83,10 @@ export async function deleteModuleWithFiles(moduleId: string): Promise<{ filesDe
   let filesDeleted = 0;
   for (const url of list) {
     if (shared.has(url)) continue;
-    const key = keyFromPublicUrl(url);
-    if (!key) continue;
     try {
-      await deleteFile(key);
-      filesDeleted++;
+      if (await deleteModuleFile(url)) filesDeleted++;
     } catch (err) {
-      console.warn("[module_delete_file_warning]", key, err instanceof Error ? err.message : err);
+      console.warn("[module_delete_file_warning]", err instanceof Error ? err.message : err);
     }
   }
   return { filesDeleted, filesKept: shared.size };

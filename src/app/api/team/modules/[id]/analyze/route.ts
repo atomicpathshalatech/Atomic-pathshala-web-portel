@@ -4,6 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { apiError, apiSuccess } from "@/lib/api/response";
 import { prisma } from "@/lib/db";
 import { analyzePdfDocument } from "@/lib/module-studio/pdf-analyzer";
+import { hasPermission } from "@/lib/rbac/guard";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { readModuleFile } from "@/lib/module-studio/module-files";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -17,6 +20,9 @@ export async function POST(
     if (!session?.user?.id) {
       return apiError("Authentication required", 401);
     }
+    if (!(await hasPermission(session.user.id, PERMISSIONS.MODULE_READ))) {
+      return apiError("You do not have permission to open modules.", 403);
+    }
 
     const moduleRow = await prisma.module.findUnique({
       where: { id: params.id },
@@ -27,12 +33,7 @@ export async function POST(
       return apiError("Module PDF not found", 404);
     }
 
-    const fileRes = await fetch(moduleRow.originalFileUrl);
-    if (!fileRes.ok) {
-      return apiError(`Failed to fetch source PDF (${fileRes.status})`, 502);
-    }
-
-    const buffer = Buffer.from(await fileRes.arrayBuffer());
+    const buffer = await readModuleFile(moduleRow.originalFileUrl);
     const report = await analyzePdfDocument(buffer);
 
     return apiSuccess(report);

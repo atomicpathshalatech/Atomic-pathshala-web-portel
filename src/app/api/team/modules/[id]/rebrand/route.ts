@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { uploadFile } from "@/lib/storage";
+import { readModuleFile, storeModuleFile, moduleFileRoute } from "@/lib/module-studio/module-files";
 import { applyModuleBranding, type ModuleBrandingOptions } from "@/lib/module-studio/rebranding-engine";
 import { generateModuleVerificationReport, formatVerificationReportMarkdown } from "@/lib/module-studio/verification-engine";
 import { z } from "zod";
@@ -45,9 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const options = rebrandInputSchema.parse(body);
 
     // 1. Fetch original PDF
-    const fileRes = await fetch(moduleRow.originalFileUrl);
-    if (!fileRes.ok) throw new Error(`Could not download the source PDF from storage (HTTP ${fileRes.status}).`);
-    const originalBuffer = Buffer.from(await fileRes.arrayBuffer());
+    const originalBuffer = await readModuleFile(moduleRow.originalFileUrl);
 
     // 2. Prepare rebranding options
     const brandingOptions: ModuleBrandingOptions = {
@@ -88,7 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // 5. Upload branded PDF to storage
     const fileName = `${moduleRow.code}-rebranded-${Date.now()}.pdf`;
     const key = `module-exports/${moduleRow.code}/${fileName}`;
-    const fileUrl = await uploadFile({
+    const fileUrl = await storeModuleFile({
       key,
       body: Buffer.from(result.brandedPdfBytes),
       contentType: "application/pdf",
@@ -134,7 +132,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     });
 
     return apiSuccess({
-      export: exportRecord,
+      export: { ...exportRecord, fileUrl: moduleFileRoute(params.id, `export:${exportRecord.id}`) },
       report,
       reportMarkdown: formatVerificationReportMarkdown(report),
       pageCount: result.pageCount,

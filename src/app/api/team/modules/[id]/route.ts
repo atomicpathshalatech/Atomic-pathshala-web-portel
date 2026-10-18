@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { moduleUpdateSchema } from "@/lib/validation/module";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { withModuleFileRoutes } from "@/lib/module-studio/module-files";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -24,7 +25,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       },
     });
     if (!module_) return apiError("Module not found", 404);
-    return apiSuccess({ module: module_ });
+    return apiSuccess({ module: withModuleFileRoutes(module_) });
   } catch (error) {
     return handleApiError(error);
   }
@@ -61,7 +62,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       },
     });
 
-    return apiSuccess({ module: updated });
+    return apiSuccess({ module: withModuleFileRoutes(updated) });
   } catch (error) {
     return handleApiError(error);
   }

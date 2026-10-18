@@ -6,7 +6,8 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { moduleExportSchema, moduleElementSchema } from "@/lib/validation/module";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { uploadFile, StorageNotConfiguredError } from "@/lib/storage";
+import { StorageNotConfiguredError } from "@/lib/storage";
+import { storeModuleFile, moduleFileRoute } from "@/lib/module-studio/module-files";
 import { generateModulePdf } from "@/lib/module-studio/pdf-export";
 import { buildPremiumModuleHtml, premiumHeaderFooter } from "@/lib/module-studio/premium-html";
 import { renderHtmlPdf } from "@/lib/pdf/html-to-pdf";
@@ -25,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       where: { moduleId: params.id },
       orderBy: { createdAt: "desc" },
     });
-    return apiSuccess({ exports });
+    return apiSuccess({ exports: exports.map((e) => ({ ...e, fileUrl: moduleFileRoute(params.id, `export:${e.id}`) })) });
   } catch (error) {
     return handleApiError(error);
   }
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const fileName = `${moduleRow.code}-${Date.now()}.pdf`;
     const key = `module-exports/${moduleRow.code}/${fileName}`;
-    const fileUrl = await uploadFile({ key, body: pdfBuffer, contentType: "application/pdf" });
+    const fileUrl = await storeModuleFile({ key, body: pdfBuffer, contentType: "application/pdf" });
 
     const exportRecord = await prisma.moduleExport.create({
       data: {
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
 
-    return apiSuccess({ export: exportRecord }, 201);
+    return apiSuccess({ export: { ...exportRecord, fileUrl: moduleFileRoute(params.id, `export:${exportRecord.id}`) } }, 201);
   } catch (error) {
     if (error instanceof StorageNotConfiguredError) return apiError(error.message, 503);
     return handleApiError(error);

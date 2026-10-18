@@ -274,7 +274,9 @@ async function readPdf(buf: Buffer) {
   check("export with an unresolved failed page stops and lists the problem (nothing stored)", ex1.status === 409 && ex1.body?.code === "EXPORT_HAS_ISSUES" && JSON.stringify(ex1.body?.details?.issues).includes("failed to import") && (await prisma.moduleExport.count({ where: { moduleId: mFail.id } })) === 0);
   const ex2 = await admin.json(`/api/team/modules/${mFail.id}/design/render`, { method: "POST", body: JSON.stringify({ mode: "export", acknowledgeIssues: true }) });
   if (ex2.status === 201) {
-    const dl = await fetch(ex2.body.data.fileUrl);
+    // The link is the signed-in /file route, which redirects to a short-lived storage link.
+    const viaRoute = await admin.fetch(ex2.body.data.fileUrl);
+    const dl = await fetch(viaRoute.headers.get("location") || "about:blank");
     const buf = Buffer.from(await dl.arrayBuffer());
     const ok = await PDFDocument.load(buf).then((d) => d.getPageCount() > 0).catch(() => false);
     check("export after confirming: stored, downloadable, opens", ok && (await prisma.moduleExport.count({ where: { moduleId: mFail.id } })) === 1, ex2.body.data.fileUrl);

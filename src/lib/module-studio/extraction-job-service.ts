@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { computePdfHash } from "./pdf-hash";
+import { readModuleFile, ModuleFileMissingError } from "./module-files";
 import { executeParallelPdfExtraction, type PageProcessingStatus } from "./parallel-extraction-engine";
 import { inspectPdf, PdfInputError, type PdfInspection } from "./pdf-inspect";
 import { layoutToBlocks, type LayoutLine, type PageLayout } from "./pdf-layout";
@@ -116,15 +117,13 @@ function counts(statuses: Record<string, PageProcessingStatus>) {
   };
 }
 
-async function downloadSource(url: string): Promise<Buffer> {
-  let res: Response;
+async function downloadSource(stored: string): Promise<Buffer> {
   try {
-    res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+    return await readModuleFile(stored);
   } catch (err) {
+    if (err instanceof ModuleFileMissingError) throw err;
     throw new Error(`Could not download the source PDF from storage (${err instanceof Error ? err.message : String(err)}). Try again in a moment.`);
   }
-  if (!res.ok) throw new Error(`Could not download the source PDF from storage (HTTP ${res.status}). Try again in a moment; if it keeps failing, upload the PDF again.`);
-  return Buffer.from(await res.arrayBuffer());
 }
 
 /**

@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { moduleVersionCreateSchema } from "@/lib/validation/module";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { versionWithFileRoute } from "@/lib/module-studio/module-files";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -17,7 +18,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       where: { moduleId: params.id },
       orderBy: { createdAt: "desc" },
     });
-    return apiSuccess({ versions });
+    return apiSuccess({ versions: versions.map((v) => versionWithFileRoute(params.id, v)) });
   } catch (error) {
     return handleApiError(error);
   }

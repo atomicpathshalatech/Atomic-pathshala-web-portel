@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/api/response";
 import { requirePermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { uploadFile } from "@/lib/storage";
+import { storeModuleFile } from "@/lib/module-studio/module-files";
 import { computePdfHash } from "@/lib/module-studio/pdf-hash";
 import { executeParallelPdfExtraction } from "@/lib/module-studio/parallel-extraction-engine";
 import { extractReferenceInsights, enrichMainASTWithReferences, ReferenceSource } from "@/lib/module-studio/reference-merger";
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Upload source PDF to R2
     const storageKey = `modules/sources/${Date.now()}-${mainPdfFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const originalFileUrl = await uploadFile({
+    const originalFileUrl = await storeModuleFile({
       key: storageKey,
       body: mainPdfBuffer,
       contentType: "application/pdf",
