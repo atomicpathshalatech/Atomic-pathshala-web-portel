@@ -108,6 +108,14 @@ const nextConfig = {
         "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
       ],
       "/api/team/modules/[id]/export": ["node_modules/@sparticuz/chromium/bin/**"],
+      // Design Studio: Chrome renders the module, pdf.js reads back the contents' page numbers.
+      "/api/team/modules/[id]/design/render": [
+        "node_modules/@sparticuz/chromium/bin/**",
+        "node_modules/pdfjs-dist/build/pdf.min.mjs",
+        "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
+      ],
+      // Original PDF editor: text boxes with Hindi are laid out by Chrome.
+      "/api/team/modules/[id]/save-native": ["node_modules/@sparticuz/chromium/bin/**"],
     },
   },
   async headers() {

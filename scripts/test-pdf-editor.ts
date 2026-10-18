@@ -3,9 +3,17 @@
  *
  *   npx tsx --tsconfig tsconfig.json scripts/test-pdf-editor.ts
  *
- * No database, no network. The exported PDFs are rendered with pdf.js and the
- * pixels / text positions are compared with what the editor shows.
+ * No database. The exported PDFs are rendered with pdf.js and the pixels / text
+ * positions are compared with what the editor shows. The Hindi cases need a
+ * local Chrome/Edge and internet (the Hindi web font), as the server does.
+ * HINDI_PNG=dir writes the rendered Hindi pages there for a look.
  */
+import Module from "node:module";
+const origResolve = (Module as any)._resolveFilename;
+(Module as any)._resolveFilename = function (req: string, ...a: any[]) {
+  if (req === "server-only") return require("node:path").join(__dirname, "fixtures/empty-module.cjs");
+  return origResolve.call(this, req, ...a);
+};
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -81,7 +89,15 @@ async function render(bytes: Uint8Array, pageNo: number) {
     for (let i = 0; i < d.length; i += 4) if (d[i]! < 90 && d[i + 1]! < 90 && d[i + 2]! < 90) n++;
     return n / (d.length / 4);
   };
-  const out = { width: viewport.width, height: viewport.height, items, px, dark, pages: doc.numPages };
+  const ink = (x: number, y: number, w: number, h: number) => {
+    // share of pixels that are not white (any colour of text)
+    const d = ctx.getImageData(Math.round(x), Math.round(y), Math.round(w), Math.round(h)).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i]! < 200 || d[i + 1]! < 200 || d[i + 2]! < 200) n++;
+    return n / (d.length / 4);
+  };
+  const png = () => canvas.toBuffer("image/png") as Buffer;
+  const out = { width: viewport.width, height: viewport.height, items, px, dark, ink, png, pages: doc.numPages };
   await doc.destroy();
   return out;
 }
@@ -242,7 +258,36 @@ async function render(bytes: Uint8Array, pageNo: number) {
     check("highlight drawn (see-through yellow)", hl[0]! > 230 && hl[1]! > 230 && hl[2]! < 160, `pixel ${hl.join(",")}`);
     check("underline drawn along the bottom of its box", ul[0]! > 200 && ul[1]! < 80, `pixel ${ul.join(",")}`);
     check("ellipse drawn in its box", circleEdge[1]! - circleEdge[0]! > 60, `pixel ${circleEdge.join(",")}`);
-    check("characters the PDF fonts cannot write are reported, not silently dropped", out.warnings.some((w) => /cannot be written/.test(w)) && /Hindi:.*ok/.test(r.items.map((i) => i.str).join(" ")), out.warnings.join(" | "));
+    check("a text box with Hindi is written (shaped by the browser engine), and said so", out.warnings.some((w) => /full Hindi shaping/.test(w)) && !out.warnings.some((w) => /left blank/.test(w)) && r.ink(40, 500, 300, 20) > 0.03, out.warnings.join(" | "));
+  }
+
+  {
+    // Hindi: joined letters and matras, bold, centred, wrapping, on a plain and on a turned page; English boxes unchanged.
+    const src = await sourcePdf(2);
+    let p = empty(2);
+    p = rotatePage(p, 2);
+    const hindi = "परमाणु की संरचना — Atomic structure (क्ष, त्र, ज्ञ, श्र, द्ध)";
+    p = addObject(p, { kind: "text", id: "h1", pageNumber: 1, x: 60, y: 120, width: 300, height: 60, newText: hindi, fontSize: 16, isBold: true, align: "center", color: "#1d4ed8" });
+    p = addObject(p, { kind: "text", id: "e1", pageNumber: 1, x: 60, y: 300, width: 300, height: 20, newText: "Plain English stays real text", fontSize: 12 });
+    p = addObject(p, { kind: "text", id: "h2", pageNumber: 2, x: 60, y: 60, width: 260, height: 40, newText: "मोल संकल्पना", fontSize: 18 });
+    const t0 = Date.now();
+    const out = await processNativePdfEdits({ originalPdfBuffer: src, ...p });
+    const ms = Date.now() - t0;
+    const r1 = await render(out.pdfBytes, 1);
+    const r2 = await render(out.pdfBytes, 2);
+    const t1 = r1.items.map((i) => i.str).join(" ");
+    check("Hindi boxes laid out, nothing left blank", out.warnings.some((w) => /2 text box\(es\) with Hindi/.test(w)) && !out.warnings.some((w) => /left blank/.test(w)), out.warnings.join(" | ") + ` (${ms} ms)`);
+    check("Hindi box drawn inside its own box (ink inside, none just outside)", r1.ink(60, 120, 300, 60) > 0.02 && r1.ink(60, 184, 300, 30) === 0 && r1.ink(364, 120, 60, 60) === 0, `in=${r1.ink(60, 120, 300, 60).toFixed(3)} below=${r1.ink(60, 184, 300, 30)} right=${r1.ink(364, 120, 60, 60)}`);
+    check("Hindi box colour kept (blue)", (() => { for (let y = 125; y < 175; y++) for (let x = 70; x < 350; x++) { const c = r1.px(x, y); if (c[2]! > 150 && c[0]! < 80) return true; } return false; })());
+    check("English box still written as real text with the PDF font", /Plain English stays real text/.test(t1), t1.slice(0, 120));
+    check("Hindi text is in the PDF text layer (searchable at least in part)", /[\u0900-\u097F]/.test(t1) && /Atomic structure/.test(t1), t1.slice(0, 160));
+    check("Hindi on a turned page lands where the editor shows it", r2.ink(60, 60, 260, 40) > 0.02 && r2.ink(60, 104, 260, 40) === 0, `ink=${r2.ink(60, 60, 260, 40).toFixed(3)}`);
+    check("output reopens with both pages", r1.pages === 2);
+    if (process.env.HINDI_PNG) {
+      const fs = await import("node:fs");
+      fs.writeFileSync(path.join(process.env.HINDI_PNG, "hindi-p1.png"), r1.png());
+      fs.writeFileSync(path.join(process.env.HINDI_PNG, "hindi-p2.png"), r2.png());
+    }
   }
 
   {

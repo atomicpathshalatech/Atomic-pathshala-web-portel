@@ -5,6 +5,7 @@ import {
   StandardFonts,
   PDFPage,
   PDFFont,
+  PDFEmbeddedPage,
   Color,
 } from "pdf-lib";
 import {
@@ -386,6 +387,29 @@ export async function processNativePdfEdits(
     return imageCache.get(src);
   };
 
+  // Text boxes the standard fonts cannot write (Hindi and other shaped scripts) are
+  // laid out by headless Chrome with the editor's box model and placed as vector pages.
+  const complexPages = new Map<string, PDFEmbeddedPage>();
+  const complexProblems: string[] = [];
+  const complexBoxes = textEdits.filter((t) => t.newText && t.newText.trim() && !canWrite(getFont(t.fontFamily, t.isBold, t.isItalic), t.newText));
+  if (complexBoxes.length) {
+    const { renderComplexTextBoxes } = await import("./complex-text");
+    const r = await renderComplexTextBoxes(
+      complexBoxes.map((t) => ({ id: t.id, text: t.newText, width: t.width, height: t.height, fontSize: Math.max(4, t.fontSize || 10), fontFamily: t.fontFamily, isBold: t.isBold, isItalic: t.isItalic, color: t.color, align: t.align, lineHeight: t.lineHeight }))
+    );
+    if (r.ok) {
+      const count = (await PDFDocument.load(r.pdf)).getPageCount();
+      if (count === r.ids.length) {
+        const embedded = await workingDoc.embedPdf(r.pdf, r.ids.map((_, i) => i));
+        r.ids.forEach((id, i) => complexPages.set(id, embedded[i]!));
+      } else {
+        complexProblems.push(`the text layout came back with ${count} page(s) for ${r.ids.length} box(es)`);
+      }
+    } else {
+      complexProblems.push(r.detail);
+    }
+  }
+
   // Strict Layer Processing
   for (let pIdx = 0; pIdx < pages.length; pIdx++) {
     const pageNum = pIdx + 1;
@@ -464,7 +488,7 @@ export async function processNativePdfEdits(
         } else if (rep.replacementType === "text" && rep.newText) {
           const font = getFont(rep.fontFamily, false, false);
           const fontSize = Math.max(6, rep.fontSize || 11);
-          page.drawText(rep.newText.replace(/[^\x20-\x7E]/g, " "), {
+          page.drawText(writable(font, rep.newText.replace(/\n/g, " "), dropped), {
             x: rep.x,
             y: Math.max(4, pdfY + rep.height - fontSize),
             size: fontSize,
@@ -486,7 +510,10 @@ export async function processNativePdfEdits(
           const m = frame.place(o.x - 2, o.y - 2, o.width + 4, o.height + 4, 0);
           page.drawRectangle({ ...m.at(0, 0), width: o.width + 4, height: o.height + 4, rotate: m.rotate, color: o.backgroundColor ? hexToRgb(o.backgroundColor) : rgb(1, 1, 1) });
         }
-        if (o.newText && o.newText.trim().length > 0) {
+        const laidOut = complexPages.get(o.id);
+        if (laidOut) {
+          page.drawPage(laidOut, { ...pl.at(0, 0), width: o.width, height: o.height, rotate: pl.rotate });
+        } else if (o.newText && o.newText.trim().length > 0) {
           const font = getFont(o.fontFamily, o.isBold, o.isItalic);
           const fontSize = Math.max(4, o.fontSize || 10);
           const lineHeight = o.lineHeight || TEXT_LINE_HEIGHT;
@@ -632,7 +659,15 @@ export async function processNativePdfEdits(
     throw new Error("The edited PDF lost pages while saving — nothing was saved.");
   }
   const warnings: string[] = [];
-  if (dropped.chars) warnings.push(`${dropped.chars} character(s) in your text boxes (for example Hindi) cannot be written with the PDF's built-in fonts and were left blank in the exported PDF.`);
+  if (dropped.chars) {
+    warnings.push(
+      `${dropped.chars} character(s) (for example Hindi) could not be written and were left blank in the exported PDF` +
+        (complexProblems.length ? ` — ${complexProblems.join("; ")}. Try saving again; if it keeps happening, check the server's internet access (the Hindi font is downloaded when the PDF is made).` : ".")
+    );
+  }
+  if (complexPages.size) {
+    warnings.push(`${complexPages.size} text box(es) with Hindi were laid out with full Hindi shaping. They print and look right; copying or searching that text inside the PDF may give some wrong letters.`);
+  }
   if (dropped.images) warnings.push(`${dropped.images} picture(s) could not be read (only PNG and JPEG can go into the PDF) and are missing from the export.`);
   return {
     pdfBytes,
@@ -708,6 +743,19 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): 
     out.push(line.trimEnd());
   }
   return out;
+}
+
+/** True when the standard font can write every character (line breaks aside). */
+function canWrite(font: PDFFont, text: string): boolean {
+  for (const ch of text) {
+    if (ch === "\n") continue;
+    try {
+      font.encodeText(ch);
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Characters the standard PDF fonts cannot write (Hindi, emoji…) become spaces — and are counted, not hidden. */
