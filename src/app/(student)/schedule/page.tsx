@@ -35,6 +35,7 @@ export default async function SchedulePage({
                 lecture: {
                   select: { id: true, videoUrl: true, chapterId: true },
                 },
+                test: { select: { id: true } },
                 liveWhiteboardSession: {
                   select: {
                     id: true,
@@ -154,6 +155,7 @@ export default async function SchedulePage({
           },
         }
       : null,
+    testId: s.test?.id ?? null,
     lectureId: s.lecture?.id || null,
     lectureVideoUrl: s.lecture?.videoUrl || null,
     liveWhiteboardSession: s.liveWhiteboardSession
@@ -232,8 +234,25 @@ export default async function SchedulePage({
       batchId: b.id,
       batch: { id: b.id, name: b.name, code: b.code },
       teacher: null,
+      testId: t.id,
     };
   });
+
+  // Tests the student already submitted: their schedule row offers the result.
+  const testIds = [...batchScheduleItems, ...chapterTestItems].map((i) => i.testId).filter((id): id is string => Boolean(id));
+  const submitted = testIds.length
+    ? new Set(
+        (
+          await prisma.attempt.findMany({
+            where: { studentId: student.id, testId: { in: testIds }, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
+            select: { testId: true },
+          })
+        ).map((a) => a.testId)
+      )
+    : new Set<string>();
+  for (const item of [...batchScheduleItems, ...chapterTestItems]) {
+    if (item.testId) item.testSubmitted = submitted.has(item.testId);
+  }
 
   const allSchedules: ScheduleItem[] = [...batchScheduleItems, ...doubtScheduleItems, ...chapterTestItems].sort(
     (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()

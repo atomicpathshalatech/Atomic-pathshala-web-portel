@@ -110,14 +110,14 @@ export function UpcomingTestCard({ test }: { test: UpcomingTestItem }) {
           </div>
 
           <Link
-            href="/tests"
+            href={isLive ? `/tests/${test.id}/attempt` : "/tests"}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md ${
               isLive
                 ? "bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white"
                 : "bg-blue-600 hover:bg-blue-500 text-white"
             }`}
           >
-            <span>{isLive ? "Attempt Test" : "View Test Series"}</span>
+            <span>{isLive ? "Start Test" : "View Tests"}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>

@@ -61,6 +61,10 @@ export interface ScheduleItem {
   } | null;
   bookingId?: string | null;
   studentName?: string | null;
+  /** A test item: the test itself, so the student starts it right here. */
+  testId?: string | null;
+  /** The student has already submitted this test. */
+  testSubmitted?: boolean;
 }
 
 export interface BatchOption {
@@ -835,7 +839,31 @@ function TimelineLectureRow({
                 <span>Join 1:1 Session</span>
               </Link>
             ) : item.type !== "LIVE_CLASS" ? (
-              item.type === "TEST" ? (
+              item.type === "TEST" && item.testId && role !== "TEACHER" ? (
+                // Straight from the schedule: Start / Result, or when it opens.
+                item.testSubmitted ? (
+                  <Link
+                    href={`/tests/${item.testId}/result`}
+                    className="inline-flex items-center gap-1 py-1 px-3 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">insights</span>
+                    <span>Result</span>
+                  </Link>
+                ) : clientNow.getTime() < new Date(item.startsAt).getTime() ? (
+                  <span className="inline-flex items-center gap-1 py-1 px-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg text-[11px] font-bold">
+                    <span className="material-symbols-outlined text-[14px]">schedule</span>
+                    <span>Opens {startTimeStr}</span>
+                  </span>
+                ) : (
+                  <Link
+                    href={`/tests/${item.testId}/attempt`}
+                    className="inline-flex items-center gap-1 py-1 px-3 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">play_arrow</span>
+                    <span>Start Test</span>
+                  </Link>
+                )
+              ) : item.type === "TEST" ? (
                 <Link
                   href="/tests"
                   className="inline-flex items-center gap-1 py-1 px-3 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95"
