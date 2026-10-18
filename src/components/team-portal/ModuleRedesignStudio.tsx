@@ -6,6 +6,24 @@ import { SUBJECT_THEMES, ModuleSubject } from "@/lib/module-studio/subject-desig
 import type { ModuleElementInput } from "@/lib/validation/module";
 import { ReplacementRule } from "@/lib/module-studio/find-replace-engine";
 import { toast } from "sonner";
+import { uploadFileToR2 } from "@/lib/storage/upload-client";
+
+/** The JSON body of an API answer, or a readable error when the answer is not JSON (e.g. "Request Entity Too Large"). */
+async function readApi(res: Response, what: string): Promise<any> {
+  const text = await res.text();
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    /* not JSON */
+  }
+  if (!res.ok || !data || data.success === false) {
+    if (res.status === 413) throw new Error(`${what}: the request is too large for the server (over about 4.5 MB).`);
+    if (res.status === 504) throw new Error(`${what}: the server took too long. Try a smaller PDF or split it.`);
+    throw new Error(data?.error || data?.message || `${what} failed (HTTP ${res.status}).`);
+  }
+  return data;
+}
 
 export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
   // Engine Selection Mode: Lossless Vector Rebranding vs AI Digital AST
@@ -97,8 +115,7 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || `Rebranding failed (HTTP ${res.status})`);
+        await readApi(res, "Rebranding");
       }
 
       const blob = await res.blob();
@@ -154,25 +171,37 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
     const toastId = toast.loading("Processing MAIN PDF and extracting academic content...");
 
     try {
-      const fd = new FormData();
-      fd.append("mainPdf", mainPdf);
-      referencePdfs.forEach((ref) => fd.append("referencePdfs", ref));
-      fd.append("subject", subject);
-      fd.append("moduleNumber", moduleNumber);
-      fd.append("chapterName", effectiveChapterName);
-      fd.append("targetExam", targetExam);
-      fd.append("facultyName", facultyName);
+      // The PDFs go straight to storage first: a request through the server is capped at ~4.5MB.
+      toast.loading("Uploading PDF...", { id: toastId });
+      const mainUp = await uploadFileToR2(mainPdf, { prefix: "modules", fileType: "PDF", visibility: "PUBLIC" });
+      const refUps = [];
+      for (const ref of referencePdfs) refUps.push(await uploadFileToR2(ref, { prefix: "modules", fileType: "PDF", visibility: "PROTECTED" }));
+      toast.loading("Processing MAIN PDF and extracting academic content...", { id: toastId });
 
       const res = await fetch("/api/modules/redesign/process", {
         method: "POST",
-        body: fd,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mainFileAssetId: mainUp.fileAssetId,
+          referenceFileAssetIds: refUps.map((u) => u.fileAssetId),
+          subject,
+          moduleNumber,
+          chapterName: effectiveChapterName,
+          targetExam,
+          facultyName,
+        }),
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to process PDF");
+      const data = await readApi(res, "Processing the PDF");
 
       if (data.data.moduleId) {
         setCreatedModuleId(data.data.moduleId);
+      }
+
+      // A very large result is not sent back in one answer: read it from the saved pages.
+      if (data.data.astTooLarge && data.data.moduleId) {
+        const m = await readApi(await fetch(`/api/team/modules/${data.data.moduleId}`), "Loading the extracted content");
+        data.data.ast = (m.data.module.pages ?? []).flatMap((p: { elements: ModuleElementInput[] }) => (Array.isArray(p.elements) ? p.elements : []));
+        if (data.data.referenceInsightsInserted) toast.message("This module is large: notes from the reference PDFs are not in this preview.");
       }
 
       setAst(data.data.ast);
@@ -215,10 +244,7 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to generate preview");
-      }
+      if (!res.ok) await readApi(res, "Preview");
 
       const html = await res.text();
       setPreviewHtml(html);
@@ -248,8 +274,7 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Translation failed");
+      const data = await readApi(res, "Translation");
 
       setAst(data.data.ast);
       toast.success(`Successfully translated ${data.data.totalElements} elements into ${targetLang}!`, { id: toastId });
