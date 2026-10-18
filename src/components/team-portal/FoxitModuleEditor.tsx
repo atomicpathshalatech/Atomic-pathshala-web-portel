@@ -1028,7 +1028,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const selectedObj = useMemo(() => (selectedObjectId ? findObject(project, selectedObjectId) : null), [project, selectedObjectId]);
   const selectedStack = useMemo(() => (selectedObj ? objectsOnPage(project, selectedObj.pageNumber) : []), [project, selectedObj]);
   // This editor's own saved PDFs (the working copy and the block editor's versions live in the same list).
-  const savedVersions = (moduleData?.versions ?? []).filter((v) => v.label !== PROJECT_DRAFT_LABEL && v.snapshot && !Array.isArray(v.snapshot));
+  const savedVersions = (moduleData?.versions ?? []).filter((v) => v.label !== PROJECT_DRAFT_LABEL && v.snapshot && !Array.isArray(v.snapshot) && Array.isArray(v.snapshot.textEdits));
   const fitZoom = (mode: "width" | "page") => {
     const c = canvasContainerRef.current;
     if (!c) return;
@@ -1040,7 +1040,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   return (
     <div
       onClick={() => setActiveMenu(null)}
-      className="flex flex-col h-[calc(100vh-68px)] bg-slate-950 text-slate-100 font-sans select-none overflow-hidden"
+      className="flex flex-col h-[calc(100vh-128px)] rounded-xl bg-slate-950 text-slate-100 font-sans select-none overflow-hidden"
     >
       {/* 1. TOP MENU & RIBBON TOOLBAR */}
       <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur shrink-0 z-30">
@@ -1068,6 +1068,13 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                 title="Extract this PDF into editable blocks (text, questions, pictures; OCR for scanned pages)"
               >
                 Extract to blocks
+              </Link>
+              <Link
+                href={`/team/modules/${moduleId}/design`}
+                className="px-2 py-0.5 rounded text-[10px] font-bold border border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+                title="Design the module from its blocks: templates, theme, page setup, print/digital PDF"
+              >
+                Design &amp; export
               </Link>
             </div>
 

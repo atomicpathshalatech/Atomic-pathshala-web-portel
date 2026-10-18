@@ -137,6 +137,17 @@ export const moduleElementSchema = z.object({
   source: z.enum(["TEXT", "OCR", "IMAGE_REGION"]).optional(),
   // OCR confidence 0–100 (low values are flagged for review).
   confidence: z.number().min(0).max(100).optional(),
+  // Layout decisions for the designed PDF that the teacher can override per
+  // block: start on a new page, keep (or allow) splitting across pages, and
+  // text wrapping around a picture.
+  layout: z
+    .object({
+      breakBefore: z.boolean().optional(),
+      keepTogether: z.boolean().optional(),
+      wrap: z.enum(["none", "left", "right"]).optional(),
+      widthPct: z.number().min(15).max(100).optional(),
+    })
+    .optional(),
 });
 export type ModuleElementInput = z.infer<typeof moduleElementSchema>;
 

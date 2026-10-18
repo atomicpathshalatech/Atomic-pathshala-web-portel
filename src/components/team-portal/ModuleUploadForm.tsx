@@ -83,7 +83,8 @@ export function ModuleUploadForm({ brandProfiles }: { brandProfiles: BrandProfil
         setProgress(0);
         return;
       }
-      router.push(`/team/modules/${body.data.module.id}`);
+      // Straight to the content import (it starts by itself), with progress on that page.
+      router.push(`/team/modules/${body.data.module.id}/blocks?extract=1`);
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Network connection error. Please try again.");
       setSubmitting(false);

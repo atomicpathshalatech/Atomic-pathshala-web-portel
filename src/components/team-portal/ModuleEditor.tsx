@@ -31,7 +31,11 @@ type ElementRow = {
   tableData?: string[][];
   variant?: string;
   label?: string;
+  layout?: BlockLayout;
 };
+
+/** How the block behaves in the designed PDF (Design Studio): page break, keep together, picture wrap. */
+type BlockLayout = { breakBefore?: boolean; keepTogether?: boolean; wrap?: "none" | "left" | "right"; widthPct?: number };
 
 const CALLOUT_COLORS: Record<string, string> = {
   CONCEPT: "#2563eb",
@@ -588,6 +592,21 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
       await load();
     }
   }
+
+  // Arriving straight from the upload (?extract=1): start the import once, or carry on an unfinished one.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current || !data) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("extract") !== "1") return;
+    autoStartedRef.current = true;
+    url.searchParams.delete("extract");
+    window.history.replaceState(null, "", url.toString());
+    const unfinished = data.processingJobs[0] && !data.processingJobs[0].finishedAt;
+    if (unfinished) void driveExtraction();
+    else if (!data.pages.length) void runProcess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   async function cancelCurrentJob() {
     try {
@@ -1522,6 +1541,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                   onChangeStyle={(style) => updateElement(selectedPageId!, selectedElement.id, { style })}
                   onChangeTable={(tableData) => updateElement(selectedPageId!, selectedElement.id, { tableData })}
                   onChangeMeta={(patch) => updateElement(selectedPageId!, selectedElement.id, patch)}
+                  onChangeLayout={(layout) => updateElement(selectedPageId!, selectedElement.id, { layout })}
                   onUploadImage={() => triggerImageUpload(selectedPageId!, selectedElement.id)}
                   uploading={uploadingImageFor === selectedElement.id}
                   onDelete={() => removeElement(selectedPageId!, selectedElement.id)}
@@ -2243,6 +2263,7 @@ function PropertiesPanel({
   onChangeStyle,
   onChangeTable,
   onChangeMeta,
+  onChangeLayout,
   onUploadImage,
   uploading,
   onDelete,
@@ -2252,6 +2273,7 @@ function PropertiesPanel({
   onChangeStyle: (style: ElementStyle) => void;
   onChangeTable: (tableData: string[][]) => void;
   onChangeMeta: (patch: { variant?: string; label?: string }) => void;
+  onChangeLayout: (layout: BlockLayout | undefined) => void;
   onUploadImage: () => void;
   uploading: boolean;
   onDelete: () => void;
@@ -2425,10 +2447,60 @@ function PropertiesPanel({
         </button>
       )}
 
+      <LayoutControls el={el} onChange={onChangeLayout} />
+
       <button type="button" onClick={onDelete} className="w-full text-red-500 border border-red-500/30 rounded-lg px-3 py-2 text-label-sm hover:bg-red-500/5 flex items-center justify-center gap-1.5 font-medium">
         <span className="material-symbols-outlined text-base">delete</span>
         Delete block
       </button>
+    </div>
+  );
+}
+
+/** Overrides of the Design Studio's automatic page-break rules for one block. */
+function LayoutControls({ el, onChange }: { el: ElementRow; onChange: (layout: BlockLayout | undefined) => void }) {
+  const l = el.layout ?? {};
+  const set = (patch: Partial<BlockLayout>) => {
+    const next = { ...l, ...patch };
+    (Object.keys(next) as (keyof BlockLayout)[]).forEach((k) => next[k] === undefined && delete next[k]);
+    onChange(Object.keys(next).length ? next : undefined);
+  };
+  const isPicture = el.type === "IMAGE" || el.type === "DIAGRAM" || el.type === "CHEMICAL_STRUCTURE";
+  return (
+    <div className="space-y-2 rounded-lg border border-outline-variant/30 p-2">
+      <p className="text-label-sm font-semibold text-on-surface">Layout in the designed PDF</p>
+      <label className="flex items-center gap-2 text-label-sm">
+        <input type="checkbox" checked={!!l.breakBefore} onChange={(e) => set({ breakBefore: e.target.checked || undefined })} />
+        Start on a new page
+      </label>
+      <label className="block text-label-sm text-on-surface-variant">
+        Splitting across pages
+        <select
+          value={l.keepTogether === undefined ? "auto" : l.keepTogether ? "keep" : "split"}
+          onChange={(e) => set({ keepTogether: e.target.value === "auto" ? undefined : e.target.value === "keep" })}
+          className="mt-1 w-full rounded-lg border border-outline-variant/40 px-2 py-1.5 text-label-sm bg-surface-container-lowest"
+        >
+          <option value="auto">Automatic (page-break rules)</option>
+          <option value="keep">Keep on one page</option>
+          <option value="split">Allow splitting</option>
+        </select>
+      </label>
+      {isPicture && (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block text-label-sm text-on-surface-variant">
+            Text wrap
+            <select value={l.wrap ?? "none"} onChange={(e) => set({ wrap: e.target.value === "none" ? undefined : (e.target.value as "left" | "right") })} className="mt-1 w-full rounded-lg border border-outline-variant/40 px-2 py-1.5 text-label-sm bg-surface-container-lowest">
+              <option value="none">None</option>
+              <option value="left">Picture left</option>
+              <option value="right">Picture right</option>
+            </select>
+          </label>
+          <label className="block text-label-sm text-on-surface-variant">
+            Width %
+            <input type="number" min={15} max={100} value={l.widthPct ?? ""} placeholder="auto" onChange={(e) => set({ widthPct: e.target.value ? Math.min(100, Math.max(15, Number(e.target.value))) : undefined })} className="mt-1 w-full rounded-lg border border-outline-variant/40 px-2 py-1.5 text-label-sm bg-surface-container-lowest" />
+          </label>
+        </div>
+      )}
     </div>
   );
 }

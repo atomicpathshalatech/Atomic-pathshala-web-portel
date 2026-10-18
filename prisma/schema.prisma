@@ -6944,3 +6944,18 @@ model QuestionCollectionItem {
   @@index([questionId])
   @@map("question_collection_items")
 }
+
+// A reusable Module Studio design (theme, page setup, header/footer, page
+// templates and their graphics) saved by the team — applied to any module.
+model ModuleDesignTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  data        Json
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
+  @@map("module_design_templates")
+}

@@ -624,6 +624,13 @@ export async function processNativePdfEdits(
   }
 
   const pdfBytes = await workingDoc.save();
+  // The file must open again with every page before anyone gets it.
+  const reopened = await PDFDocument.load(pdfBytes).catch((e) => {
+    throw new Error(`The edited PDF could not be re-opened (${e?.message ?? e}) — nothing was saved.`);
+  });
+  if (reopened.getPageCount() !== workingDoc.getPageCount() || reopened.getPageCount() === 0) {
+    throw new Error("The edited PDF lost pages while saving — nothing was saved.");
+  }
   const warnings: string[] = [];
   if (dropped.chars) warnings.push(`${dropped.chars} character(s) in your text boxes (for example Hindi) cannot be written with the PDF's built-in fonts and were left blank in the exported PDF.`);
   if (dropped.images) warnings.push(`${dropped.images} picture(s) could not be read (only PNG and JPEG can go into the PDF) and are missing from the export.`);

@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { moduleCreateSchema, MODULE_STATUS_VALUES } from "@/lib/validation/module";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { uploadFile, StorageNotConfiguredError } from "@/lib/storage";
+import { looksLikePdf } from "@/lib/module-studio/pdf-inspect";
 
 const MAX_BYTES = 40 * 1024 * 1024; // 40MB — a multi-chapter coaching module PDF can be large
 
@@ -82,6 +83,8 @@ export async function POST(request: NextRequest) {
       input = moduleCreateSchema.parse(metaRaw ? JSON.parse(String(metaRaw)) : {});
 
       const buffer = Buffer.from(await file.arrayBuffer());
+      // Judge by the bytes, not the name or the browser-reported type.
+      if (!looksLikePdf(buffer)) return apiError("This file is not a PDF (its contents do not start like one).", 400);
       const key = `modules/${code}/${file.name}`;
       url = await uploadFile({ key, body: buffer, contentType: file.type });
       fileName = file.name;

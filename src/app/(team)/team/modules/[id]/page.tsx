@@ -10,7 +10,7 @@ export default async function ModuleDetailPage({ params }: { params: { id: strin
   if (exists === 0) notFound();
 
   return (
-    <div className="w-full -m-6 p-0">
+    <div className="w-full">
       <ModuleEditor moduleId={params.id} />
     </div>
   );
