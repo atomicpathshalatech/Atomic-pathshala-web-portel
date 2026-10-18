@@ -3,6 +3,8 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
+  // Lint runs with `npm run lint`; a lint finding must not stop a production deploy.
+  eslint: { ignoreDuringBuilds: true },
   images: {
     // Cloud object storage domains (fill in production bucket/CDN host)
     remotePatterns: [

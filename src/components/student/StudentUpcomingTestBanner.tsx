@@ -72,10 +72,6 @@ export function StudentUpcomingTestBanner() {
       .finally(() => setLoading(false));
   }, [pathname]);
 
-  if (pathname !== "/dashboard") {
-    return null;
-  }
-
   // Live countdown timer ticking every 1s
   useEffect(() => {
     if (!testData?.scheduledAt) {
@@ -107,7 +103,8 @@ export function StudentUpcomingTestBanner() {
     return () => clearInterval(interval);
   }, [testData?.scheduledAt]);
 
-  if (loading || !testData || dismissed) {
+  // After every hook: returning before one breaks React's hook order.
+  if (pathname !== "/dashboard" || loading || !testData || dismissed) {
     return null;
   }
 

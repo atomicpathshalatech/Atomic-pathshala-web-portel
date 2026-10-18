@@ -15,7 +15,7 @@ export function backupBaseKey(sessionId: string, pageId: string) {
  * the slide was saved again since (e.g. from another device), the server
  * copy is newer and wins.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- slide objects are stored JSON
+// Slide objects are stored JSON, hence `any`.
 export function getHydratedObjects<T = any>(sessionId?: string | null, pageId?: string | null, serverObjects?: T[] | null, serverVersion?: number): T[] {
   const fallback: T[] = Array.isArray(serverObjects) ? serverObjects : [];
   if (typeof window === "undefined" || !sessionId || !pageId) return fallback;

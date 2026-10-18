@@ -23,7 +23,7 @@ Object.assign(process.env, { PUSHER_APP_ID: "1", PUSHER_KEY: "test-key", PUSHER_
 let sessionUserId = "";
 const fakeSession = async () => ({ user: { id: sessionUserId } });
 // next-auth re-exports getServerSession from next-auth/next through a getter, so replacing it there is enough.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// require(): patches the module instance the routes load.
 require("next-auth/next").getServerSession = fakeSession;
 
 let passed = 0;

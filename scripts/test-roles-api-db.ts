@@ -20,7 +20,7 @@ process.env.DATABASE_URL = testUrl;
 process.env.DIRECT_URL = testUrl;
 
 let sessionUserId = "";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// require(): patches the module instance the routes load.
 require("next-auth/next").getServerSession = async () => ({ user: { id: sessionUserId } });
 
 let passed = 0;
