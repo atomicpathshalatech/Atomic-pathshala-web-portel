@@ -77,13 +77,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
 
-    // If type is REFERENCE and question has no imageUrl, set it as primary
-    if (type === "REFERENCE" && !question.imageUrl) {
-      await prisma.question.update({
-        where: { id: params.id },
-        data: { imageUrl: publicUrl },
-      });
-    }
+    // A REFERENCE image is the source screenshot, for the editor only. It used
+    // to be copied into the question's imageUrl — the student-facing figure —
+    // so students saw the whole screenshot (text and options) in tests.
 
     await prisma.auditLog.create({
       data: {

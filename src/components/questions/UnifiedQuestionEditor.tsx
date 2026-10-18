@@ -360,11 +360,19 @@ export function UnifiedQuestionEditor({
   const refFileInputRef = useRef<HTMLInputElement>(null);
 
   // 2. Question Content Diagram / Figure (Genuine Diagram — Student Facing)
+  // An image that is the reference screenshot is not a diagram: an old upload
+  // bug copied the screenshot into imageUrl, and it showed here as "Student
+  // Facing" (students never got it — every student page and the PDF drop it).
+  // Saving the question now clears it.
+  const referenceUrls = new Set<string>(
+    [initialRefImg, ...(initialQuestion?.assets ?? []).filter((a: any) => a.type === "REFERENCE").map((a: any) => a.publicUrl)].filter(Boolean)
+  );
   const initialDiag =
-    initialQuestion?.imageUrl ||
-    initialQuestion?.figureUrl ||
-    initialQuestion?.assets?.find((a: any) => a.type === "DIAGRAM" || a.type === "FIGURE")?.publicUrl ||
-    null;
+    [
+      initialQuestion?.assets?.find((a: any) => a.type === "DIAGRAM" || a.type === "FIGURE")?.publicUrl,
+      initialQuestion?.imageUrl,
+      initialQuestion?.figureUrl,
+    ].find((u: string | null | undefined) => u && !referenceUrls.has(u)) || null;
   const [diagramUrl, setDiagramUrl] = useState<string | null>(initialDiag);
   const [isDiagramZoomed, setIsDiagramZoomed] = useState<boolean>(false);
 
@@ -536,7 +544,7 @@ export function UnifiedQuestionEditor({
           difficulty: extracted.difficulty || difficulty || "MEDIUM",
           type: extracted.type || questionType || "SINGLE_CORRECT",
           referenceImageUrl: imgUrl || referenceImageUrl || undefined,
-          figureUrl: diagramUrl || undefined,
+          figureUrl: diagramUrl || null,
           solutionImageUrl: solutionImageUrl || undefined,
           source,
         }),
@@ -1118,7 +1126,7 @@ export function UnifiedQuestionEditor({
         correctAnswer: [correctOption],
         solutionEn: solutionEn.trim() || undefined,
         solutionHi: solutionHi.trim() || undefined,
-        figureUrl: diagramUrl || undefined,
+        figureUrl: diagramUrl || null,
         referenceImageUrl: referenceImageUrl || undefined,
         solutionImageUrl: solutionImageUrl || undefined,
         camDrawData: camDrawData || undefined,
