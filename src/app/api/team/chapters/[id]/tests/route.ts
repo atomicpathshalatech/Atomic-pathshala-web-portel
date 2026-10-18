@@ -9,6 +9,7 @@ import { LanguageMode, TestStatus } from "@prisma/client";
 import { assertChapterAccess } from "@/lib/chapters/access";
 import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import { defaultChapterTestQuestionCount, parseQuestionCount, setChapterTestSection } from "@/lib/tests/chapter-test";
+import { assignChapterToBatches, chapterBatchIds } from "@/lib/tests/chapter-test-batches";
 
 export async function GET(
   request: NextRequest,
@@ -63,6 +64,7 @@ export async function POST(
       languageMode,
       openTime: openTimeRaw,
       questionCount: questionCountRaw,
+      batchIds,
     } = body;
 
     if (!name?.trim()) {
@@ -85,6 +87,12 @@ export async function POST(
         ? defaultChapterTestQuestionCount(chapter.subject.title)
         : parseQuestionCount(questionCountRaw);
     if (questionCount === null) return apiError("Number of questions must be a whole number from 1 to 200.", 400);
+
+    // The batches whose students get this test (assigns the chapter to them).
+    if (batchIds !== undefined) {
+      const assigned = await assignChapterToBatches(session.user.id, chapter.id, batchIds);
+      if (!assigned.ok) return apiError(assigned.error, assigned.status);
+    }
 
     // Unique test code
     const count = await prisma.test.count();
@@ -125,7 +133,17 @@ export async function POST(
       },
     });
 
-    return apiSuccess({ test }, 201);
+    const reachedBatches = await chapterBatchIds(chapter.id);
+    return apiSuccess(
+      {
+        test,
+        batchIds: reachedBatches,
+        ...(reachedBatches.length === 0 && {
+          warning: "This chapter is in no batch yet, so no student sees this test in a schedule. Choose its batch (someone who manages batches can).",
+        }),
+      },
+      201
+    );
   } catch (error) {
     return handleApiError(error);
   }

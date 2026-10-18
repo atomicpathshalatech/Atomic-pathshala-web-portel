@@ -51,6 +51,10 @@ export interface UnifiedChapterScheduleTimelineProps {
   canEdit: boolean;
   /** Old classes (YouTube link) — only for whoever manages the schedule. */
   canManageSchedule?: boolean;
+  /** Batches the chapter is in (its tests reach their students), all batches, and who may add more. */
+  chapterBatches?: { id: string; name: string }[];
+  batchOptions?: { id: string; name: string }[];
+  canAssignBatches?: boolean;
   reviews?: ReviewHistoryItem[];
   assignedBatches?: { id: string; name: string }[];
 }
@@ -90,6 +94,9 @@ export function UnifiedChapterScheduleTimeline({
   subjectTitle,
   canEdit,
   canManageSchedule = false,
+  chapterBatches = [],
+  batchOptions = [],
+  canAssignBatches = false,
   reviews = [],
   assignedBatches = [],
 }: UnifiedChapterScheduleTimelineProps) {
@@ -179,6 +186,9 @@ export function UnifiedChapterScheduleTimeline({
   const [testOpenTime, setTestOpenTime] = useState("");
   const [testQuestionCount, setTestQuestionCount] = useState<number>(45);
   const defaultQuestionCount = /bio|botany|zoology/i.test(subjectTitle ?? "") ? 90 : 45;
+  // Batches whose students get the test (starts with the batches the chapter is already in).
+  const [testBatchIds, setTestBatchIds] = useState<string[]>(() => chapterBatches.map((b) => b.id));
+  const [linkedBatchIds, setLinkedBatchIds] = useState<string[]>(() => chapterBatches.map((b) => b.id));
 
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
@@ -599,6 +609,7 @@ export function UnifiedChapterScheduleTimeline({
           instructions: testInstructions.trim() || undefined,
           openTime: new Date(testOpenTime).toISOString(),
           questionCount: Number(testQuestionCount),
+          ...(canAssignBatches && { batchIds: testBatchIds }),
         }),
       });
       const json = await res.json();
@@ -609,7 +620,9 @@ export function UnifiedChapterScheduleTimeline({
 
       setTests((prev) => [...prev, { ...json.data.test, questionCount: Number(testQuestionCount) }]);
       setShowAddTestModal(false);
-      toast.success("Test scheduled. Add its questions — it publishes itself at the set time.");
+      if (json.data.warning) toast.warning(json.data.warning);
+      else toast.success("Test scheduled. Add its questions — it publishes itself at the set time.");
+      if (canAssignBatches) setLinkedBatchIds((prev) => Array.from(new Set([...prev, ...testBatchIds])));
       router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Network error");
@@ -636,6 +649,7 @@ export function UnifiedChapterScheduleTimeline({
           incorrectMarks: Number(testIncorrect),
           examType: testExamType,
           questionCount: Number(testQuestionCount),
+          ...(canAssignBatches && { batchIds: testBatchIds }),
           ...(editingTest.status === "DRAFT" && testOpenTime && { openTime: new Date(testOpenTime).toISOString() }),
         }),
       });
@@ -648,6 +662,7 @@ export function UnifiedChapterScheduleTimeline({
       setTests((prev) => prev.map((t) => (t.id === editingTest.id ? { ...json.data.test, questionCount: Number(testQuestionCount) } : t)));
       setEditingTest(null);
       toast.success("Chapter test updated successfully!");
+      if (canAssignBatches) setLinkedBatchIds((prev) => Array.from(new Set([...prev, ...testBatchIds])));
       router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Network error");
@@ -827,6 +842,7 @@ export function UnifiedChapterScheduleTimeline({
                   setTestExamType("NEET");
                   setTestInstructions("Standard timed computer-based assessment.");
                   setTestQuestionCount(defaultQuestionCount);
+                  setTestBatchIds(linkedBatchIds);
                   {
                     const d = new Date(Date.now() + 24 * 3600 * 1000);
                     d.setHours(10, 0, 0, 0);
@@ -1253,6 +1269,7 @@ export function UnifiedChapterScheduleTimeline({
                                     setTestIncorrect(t.incorrectMarks || -1);
                                     setTestExamType(t.examType || "NEET");
                                     setTestQuestionCount(t.questionCount || defaultQuestionCount);
+                                    setTestBatchIds(linkedBatchIds);
                                     setTestOpenTime(t.openTime ? toLocalInput(new Date(t.openTime)) : "");
                                     setFormError("");
                                   }}
@@ -1840,6 +1857,43 @@ export function UnifiedChapterScheduleTimeline({
                 {subjectTitle ? `${subjectTitle} only (${defaultQuestionCount} is the NEET-style default; choose any number from 1 to 200). ` : ""}
                 Students see the test as Upcoming right away. Add and correct its questions until the set time — then it publishes itself and can no longer be changed.
               </p>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Batches</label>
+                {canAssignBatches ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {batchOptions.map((b) => {
+                      const on = testBatchIds.includes(b.id);
+                      const locked = linkedBatchIds.includes(b.id);
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          disabled={locked}
+                          onClick={() => setTestBatchIds((prev) => (on ? prev.filter((x) => x !== b.id) : [...prev, b.id]))}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition ${
+                            on
+                              ? "bg-emerald-600 border-emerald-600 text-white"
+                              : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-emerald-500"
+                          } disabled:opacity-80 disabled:cursor-default`}
+                          title={locked ? "This chapter is already in this batch" : on ? "Students of this batch get the test" : "Put this chapter (and its test) in this batch"}
+                        >
+                          {on ? "✓ " : ""}
+                          {b.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : linkedBatchIds.length ? (
+                  <p className="text-xs text-slate-600 dark:text-slate-300">{chapterBatches.map((b) => b.name).join(", ")}</p>
+                ) : null}
+                {testBatchIds.length === 0 && (
+                  <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                    This chapter is in no batch — no student will see this test in a schedule.{" "}
+                    {canAssignBatches ? "Choose a batch above." : "Ask someone who manages batches to add the chapter to a batch."}
+                  </p>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

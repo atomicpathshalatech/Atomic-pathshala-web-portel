@@ -9,6 +9,7 @@ import { deleteTestCascading } from "@/lib/team/resource-delete";
 import { assertChapterAccess } from "@/lib/chapters/access";
 import { isTestEditable, publishTestNow, testStartedReason } from "@/lib/tests/scheduled-publish";
 import { parseQuestionCount, setChapterTestSection } from "@/lib/tests/chapter-test";
+import { assignChapterToBatches } from "@/lib/tests/chapter-test-batches";
 
 export async function PATCH(
   request: NextRequest,
@@ -26,7 +27,7 @@ export async function PATCH(
     if (!test || test.chapterId !== params.id) return apiError("Test not found", 404);
 
     const body = await request.json();
-    const { name, durationMin, correctMarks, incorrectMarks, instructions, status, examType, openTime: openTimeRaw, questionCount: questionCountRaw } = body;
+    const { name, durationMin, correctMarks, incorrectMarks, instructions, status, examType, openTime: openTimeRaw, questionCount: questionCountRaw, batchIds } = body;
 
     // "Publish now" goes through the same checks as every publish (questions
     // in every section…). No other status can be set from here.
@@ -36,6 +37,14 @@ export async function PATCH(
       if (!result.ok) return apiError(result.error, result.status);
       const published = await prisma.test.findUnique({ where: { id: test.id } });
       return apiSuccess({ test: published });
+    }
+
+    // Batches can be added at any time (the chapter goes into them; nothing about the test changes).
+    if (batchIds !== undefined) {
+      const assigned = await assignChapterToBatches(session.user.id, params.id, batchIds);
+      if (!assigned.ok) return apiError(assigned.error, assigned.status);
+      const onlyBatches = [name, durationMin, correctMarks, incorrectMarks, instructions, examType, openTimeRaw, questionCountRaw].every((v) => v === undefined);
+      if (onlyBatches) return apiSuccess({ test });
     }
 
     // Name, time and marks: only before the test starts (and before anyone took it).

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { publishDueTests } from "@/lib/tests/scheduled-publish";
+import { canAssignChapterBatches } from "@/lib/tests/chapter-test-batches";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
@@ -33,6 +34,9 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   const canReviewPermission = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW);
   // Old classes (from a YouTube link) are added by whoever manages the schedule.
   const canManageSchedule = await hasPermission(session.user.id, PERMISSIONS.BATCH_SCHEDULE_MANAGE);
+  // Who may put this chapter (and its tests) into a batch, and the batches to choose from.
+  const canAssignBatches = await canAssignChapterBatches(session.user.id);
+  const batchOptions = canAssignBatches ? await prisma.batch.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [];
 
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.id },
@@ -253,6 +257,9 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
         canEdit={canUpdate}
         canReview={canReview}
         canManageSchedule={canManageSchedule}
+        chapterBatches={scheduledInBatches}
+        batchOptions={batchOptions}
+        canAssignBatches={canAssignBatches}
         reviews={reviews.map((r) => ({
           id: r.id,
           action: r.action,

@@ -146,6 +146,24 @@ async function run() {
     const q = await prisma.question.findUnique({ where: { id: question.id }, select: { isPublished: true } });
     assert(q?.isPublished === true, "Its questions were published with it");
 
+    console.log("A chapter in no batch");
+    asTeam();
+    const lone = await prisma.chapter.create({ data: { title: `STQ Lone ${tag}`, subjectId: (await prisma.subject.create({ data: { title: "Chemistry", courseId: (await prisma.course.create({ data: { title: `STQ2 ${tag}`, slug: `stq2-${tag}` } })).id } })).id } });
+    const soon = new Date(Date.now() + 3 * 3600_000).toISOString();
+    const noBatch = await call(chapterTests.POST, "POST", { id: lone.id }, { name: `STQ Lone test ${tag}`, openTime: soon });
+    if (noBatch.json?.data?.test?.id) created.push(noBatch.json.data.test.id);
+    assert(noBatch.status === 201 && /no batch/i.test(noBatch.json?.data?.warning ?? ""), "A test in a chapter with no batch is made, with a warning that no student will see it");
+    asStudent();
+    const before = await call(upcoming.GET, "GET", {});
+    assert(!JSON.stringify(before.json).includes(noBatch.json.data.test.id), "…and it is not in the student's upcoming tests");
+    asTeam();
+    const put = await call(chapterTest.PATCH, "PATCH", { id: lone.id, testId: noBatch.json.data.test.id }, { batchIds: [batch.id] });
+    const bc = await prisma.batchChapter.findFirst({ where: { batchId: batch.id, chapterId: lone.id } });
+    assert(put.status === 200 && Boolean(bc), `Choosing the batch puts the chapter in it (${put.status})`);
+    const { chaptersOfBatches } = await import("../src/lib/batch/batch-chapters");
+    assert((await chaptersOfBatches([batch.id])).has(lone.id), "…so the batch's schedule and batch page now include the chapter's test");
+    await prisma.batchChapter.deleteMany({ where: { chapterId: lone.id } });
+
     console.log("A test with no questions when its time comes");
     asTeam();
     const empty = await call(chapterTests.POST, "POST", { id: chapter.id }, { name: `STQ Empty ${tag}`, openTime: new Date(Date.now() + 3600_000).toISOString() });
