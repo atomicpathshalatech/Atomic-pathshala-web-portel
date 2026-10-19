@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 const MODULE_CARDS = [
+  { href: "/team/exercises", label: "Exercise Builder", icon: "assignment", description: "Build chapter-wise and topic-wise practice modules, bilingual printable PDFs with answer keys, and student online practice sheets.", permission: PERMISSIONS.QUESTION_READ, available: true },
   { href: "/team/students", label: "Student Management & Course Access", icon: "school", description: "Manage student directory, academic status, and grant/revoke batch and course access.", permission: PERMISSIONS.STUDENT_READ_ANY, available: true },
   { href: "/team/users", label: "Team & Staff Management", icon: "badge", description: "Super Admin console for educator directory, staff provisioning, and role assignment.", permission: PERMISSIONS.USER_READ, available: true },
   { href: "/team/roles", label: "Roles & Permission Matrix", icon: "security", description: "Visual action-permission matrix across primary and custom roles.", permission: PERMISSIONS.ROLE_MANAGE, available: true },

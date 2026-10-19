@@ -26,6 +26,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/study-material", label: "Study Material", icon: "folder_open", permission: PERMISSIONS.STUDY_MATERIAL_MANAGE },
       { href: "/team/tests", label: "Tests", icon: "quiz", permission: PERMISSIONS.TEST_READ },
       { href: "/team/test-series", label: "Test Series", icon: "collections_bookmark", permission: PERMISSIONS.TEST_READ },
+      { href: "/team/exercises", label: "Exercise Builder (Modules)", icon: "assignment", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/whiteboard", label: "Whiteboard", icon: "draw", permission: PERMISSIONS.WHITEBOARD_ACCESS },
       { href: "/team/dpp", label: "DPP", icon: "task_alt", permission: PERMISSIONS.DPP_READ },
       { href: "/team/ncert", label: "NCERT Practice Hub", icon: "menu_book", permission: PERMISSIONS.CHAPTER_READ },
@@ -39,12 +40,15 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     title: "Question Bank",
     items: [
       { href: "/team/questions", label: "Question Bank", icon: "database", permission: PERMISSIONS.QUESTION_READ },
+      { href: "/team/exercises", label: "Exercise Builder", icon: "assignment", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/my-question-bank", label: "My Question Bank", icon: "inventory_2", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/questions/reports", label: "Question Reports", icon: "flag", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/qc", label: "Question QC", icon: "verified_user", permission: PERMISSIONS.QUESTION_VERIFY },
       { href: "/team/questions/collections", label: "Question Collections", icon: "folder_special", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/questions/ai-generated", label: "AI Generated Questions", icon: "psychology", permission: PERMISSIONS.QUESTION_CREATE },
       { href: "/team/question-extract", label: "Question Extract", icon: "document_scanner", permission: PERMISSIONS.QUESTION_CREATE },
+      { href: "/team/pyq-library", label: "PYQ Library", icon: "history_edu", permission: PERMISSIONS.QUESTION_READ },
+      { href: "/team/pyq-library/import", label: "Import PYQ PDF", icon: "upload_file", permission: PERMISSIONS.QUESTION_IMPORT },
     ],
   },
   {
@@ -65,6 +69,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     items: [
       { href: "/team/modules/redesign", label: "Module Redesign Studio", icon: "auto_fix_high", permission: PERMISSIONS.MODULE_READ },
       { href: "/team/modules", label: "Module Studio", icon: "picture_as_pdf", permission: PERMISSIONS.MODULE_READ },
+      { href: "/team/pyq-modules", label: "Question Modules (PYQ)", icon: "library_books", permission: PERMISSIONS.MODULE_READ },
       { href: "/team/brand-profiles", label: "Brand Profiles", icon: "palette", permission: PERMISSIONS.MODULE_BRAND_PROFILE_MANAGE },
     ],
   },
@@ -126,12 +131,12 @@ export default async function TeamPortalLayout({ children }: { children: React.R
   // — this layout makes zero additional DB round trips.
   const { user, permissions } = await requireTeamSession();
   const hasTeacherProfile = Boolean(user.teacher);
-  const superAdmin = user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER";
+  const superAdmin = user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER" || user.role?.name === "ADMIN";
 
   const visibleSections: TeamNavSection[] = NAV_SECTIONS.map((section) => ({
     title: section.title,
     items: section.items
-      .filter((item) => (!item.superAdminOnly || superAdmin) && permissions.has(item.permission as (typeof PERMISSIONS)[keyof typeof PERMISSIONS]))
+      .filter((item) => (!item.superAdminOnly || superAdmin) && (superAdmin || permissions.has(item.permission as (typeof PERMISSIONS)[keyof typeof PERMISSIONS])))
       .map(({ href, label, icon }) => ({ href, label, icon })),
   })).filter((section) => section.items.length > 0);
 

@@ -170,6 +170,12 @@ export async function processChunkForJob(
     throw new Error(`Job ${jobId} not found`);
   }
 
+  // PYQ imports have their own deterministic, idempotent path.
+  if (job.isPyqImport) {
+    const { processPyqChunk } = await import("@/lib/pyq/import-pipeline");
+    return processPyqChunk(jobId, chunkIndex, async () => options.pdfBuffer ?? (await getJobPdfBuffer(job)));
+  }
+
   const report = (job.reportJson as any) || {};
   let chunkPlan = (report.chunkPlan as JobChunkPlan) || null;
 

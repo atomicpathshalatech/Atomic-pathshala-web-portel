@@ -116,6 +116,9 @@ const nextConfig = {
       ],
       // Original PDF editor: text boxes with Hindi are laid out by Chrome.
       "/api/team/modules/[id]/save-native": ["node_modules/@sparticuz/chromium/bin/**"],
+      // Exercise Builder and PYQ question-module PDFs are printed by Chrome.
+      "/api/team/exercises/[id]/export": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/team/pyq/modules/[id]/export": ["node_modules/@sparticuz/chromium/bin/**"],
     },
   },
   async headers() {

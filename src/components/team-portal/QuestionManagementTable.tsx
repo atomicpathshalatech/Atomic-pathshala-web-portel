@@ -1178,15 +1178,16 @@ export function QuestionManagementTable({
                           </Link>
                         )}
 
-                        {/* Full Review & AI Quality Workspace */}
-                        <Link
-                          href={`/team/questions/${q.id}/review${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`}
-                          className="px-2 py-1 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold transition flex items-center gap-1 shadow-2xs"
-                          title="Open Full AI Review & Audit Workspace (Next / Prev / CBT Preview)"
+                        {/* Full Review & AI Quality Workspace in Modal */}
+                        <button
+                          type="button"
+                          onClick={() => setStandaloneReviewQuestion(q)}
+                          className="px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                          title="Open Question Review & Preview (with Next / Prev navigation)"
                         >
                           <Sparkles className="w-3.5 h-3.5 text-purple-600" />
                           <span className="text-[11px] font-bold">Review</span>
-                        </Link>
+                        </button>
 
                         {/* View Question in Student CBT Interface */}
                         <button

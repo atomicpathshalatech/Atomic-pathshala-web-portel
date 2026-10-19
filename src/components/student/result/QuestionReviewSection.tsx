@@ -13,6 +13,17 @@ export function QuestionReviewSection({
   const [filter, setFilter] = useState<"ALL" | "CORRECT" | "INCORRECT" | "UNATTEMPTED">("ALL");
   const [subjectFilter, setSubjectFilter] = useState<string>("ALL");
   const [lang, setLang] = useState<"EN" | "HI">("EN");
+  // Solutions open on demand ("View Solution"), one question at a time or all.
+  const [openSolutions, setOpenSolutions] = useState<Set<string>>(new Set());
+  const [allOpen, setAllOpen] = useState(false);
+  const toggleSolution = (id: string) =>
+    setOpenSolutions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const optionLabel = (keys: string[]) => (keys.length ? keys.join(", ") : "—");
 
   const subjects = Array.from(new Set(questions.map((q) => q.subject)));
 
@@ -90,6 +101,38 @@ export function QuestionReviewSection({
         </div>
       </div>
 
+      {/* Question navigation */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+          {filteredQuestions.map((q) => (
+            <a
+              key={q.questionId}
+              href={`#review-q-${q.questionNumber}`}
+              className={`w-8 h-8 rounded-lg text-[11px] font-mono font-bold flex items-center justify-center border transition ${
+                q.isCorrect === true
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-300"
+                  : q.isCorrect === false
+                  ? "bg-red-50 border-red-300 text-red-700 dark:bg-red-950/50 dark:border-red-800 dark:text-red-300"
+                  : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-700"
+              }`}
+              title={`Question ${q.questionNumber}`}
+            >
+              {q.questionNumber}
+            </a>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setAllOpen((v) => !v);
+            setOpenSolutions(new Set());
+          }}
+          className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shrink-0"
+        >
+          {allOpen ? "Hide all solutions" : "Show all solutions"}
+        </button>
+      </div>
+
       {/* Question Cards List */}
       <div className="space-y-6">
         {filteredQuestions.map((q) => {
@@ -100,7 +143,8 @@ export function QuestionReviewSection({
           return (
             <div
               key={q.questionId}
-              className={`p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border shadow-sm space-y-5 transition ${
+              id={`review-q-${q.questionNumber}`}
+              className={`scroll-mt-24 p-4 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border shadow-sm space-y-5 transition ${
                 q.isCorrect === true
                   ? "border-emerald-200 dark:border-emerald-950/80"
                   : q.isCorrect === false
@@ -120,6 +164,15 @@ export function QuestionReviewSection({
                   <span className="text-xs text-slate-400 font-medium">
                     {q.chapter} &middot; {q.topic}
                   </span>
+                  {(q.pyqLabels ?? []).map((label) => (
+                    <span
+                      key={label}
+                      className="px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-bold"
+                      title="Verified previous-year question"
+                    >
+                      {label}
+                    </span>
+                  ))}
                 </div>
 
                 {/* Score & Status Badge */}
@@ -203,7 +256,7 @@ export function QuestionReviewSection({
                       >
                         {key}
                       </span>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 [overflow-wrap:anywhere]">
                         <FormulaText text={optVal} className="block" />
                       </div>
                       {isCorrectPick && (
@@ -221,8 +274,35 @@ export function QuestionReviewSection({
                 })}
               </div>
 
-              {/* Solution & Explanation Box */}
-              {solution && (
+              {/* Answer summary: what was picked, what is right, marking used */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+                <span className="text-slate-600 dark:text-slate-300">
+                  Your answer: <b className={q.isCorrect === false ? "text-red-600" : q.isCorrect ? "text-emerald-600" : ""}>{q.isAnswered ? optionLabel(q.userSelectedOptions) : "Not attempted"}</b>
+                </span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  Correct answer: <b className="text-emerald-600">{optionLabel(q.correctOptions)}</b>
+                </span>
+                <span className="text-slate-400">
+                  Marking: +{q.maxMarks}
+                  {Number(q.negativeMarks) ? `, −${Math.abs(Number(q.negativeMarks))}` : ", no negative"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleSolution(q.questionId)}
+                  className="ml-auto px-3 py-1.5 rounded-xl border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 font-sans font-bold hover:bg-blue-100"
+                  aria-expanded={allOpen !== openSolutions.has(q.questionId)}
+                >
+                  {allOpen !== openSolutions.has(q.questionId) ? "Hide Solution" : "View Solution"}
+                </button>
+              </div>
+
+              {/* Solution & Explanation Box (opens on "View Solution") */}
+              {allOpen !== openSolutions.has(q.questionId) && !solution && (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-dashed border-slate-300 dark:border-slate-700 text-xs text-slate-500">
+                  A detailed solution is not available for this question yet. The correct answer is shown above.
+                </div>
+              )}
+              {allOpen !== openSolutions.has(q.questionId) && solution && (
                 <div className="p-5 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2 text-xs">
                   <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300 font-bold uppercase tracking-wider font-mono text-[11px]">
                     <span className="material-symbols-outlined text-sm">lightbulb</span>

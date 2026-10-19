@@ -30,6 +30,7 @@
   "exclude": [
     "node_modules",
     "scripts",
+    "scratch",
     "_import-test-portal",
     "_import_atomic-ai-chat",
     "_import_white-board",

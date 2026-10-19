@@ -138,6 +138,8 @@ model User {
   emailTemplatesCreated  EmailTemplate[]   @relation("EmailTemplateCreatedBy")
   emailCampaignsCreated  EmailCampaign[]   @relation("EmailCampaignCreatedBy")
   adminDirectConversations TeacherDirectConversation[] @relation("AdminDirectConversations")
+  exercisesCreated       Exercise[]        @relation("ExerciseCreatedBy")
+  exerciseAttempts       ExerciseAttempt[]
   pageActivityLogs       PageActivityLog[]
 
   // --- AI Chat / Atomic Guru integration (imported from _import_atomic-ai-chat) ---
@@ -926,6 +928,7 @@ model Test {
   createdBy     User?          @relation("TestCreatedBy", fields: [createdById], references: [id])
   sections      Section[]
   attempts      Attempt[]
+  exercises     Exercise[]
 
   @@index([status])
   @@index([chapterId])
@@ -2504,6 +2507,10 @@ model Question {
   qcHash                  String?
   qcReviewedAt            DateTime?
 
+  // Normalised statement+options hash (src/lib/pyq/fingerprint.ts) for
+  // duplicate detection across imports. Never used to delete anything.
+  contentFingerprint      String?
+
   createdBy             User?                 @relation("QuestionCreatedBy", fields: [createdById], references: [id])
   publishedBy           User?                 @relation("QuestionPublishedBy", fields: [publishedById], references: [id])
   review1By             User?                 @relation("QuestionReview1By", fields: [review1ById], references: [id])
@@ -2526,6 +2533,10 @@ model Question {
   qcFindings            QcFinding[]
   qcCorrections         QcCorrection[]
   collectionItems       QuestionCollectionItem[]
+  pyqOccurrences        PyqOccurrence[]
+  moduleItems           QuestionModuleItem[]
+  exerciseLinks         ExerciseQuestion[]
+  exerciseAttemptAnswers ExerciseAttemptAnswer[]
   duplicatesAsA         QuestionDuplicateCandidate[] @relation("DuplicateCandidateA")
   duplicatesAsB         QuestionDuplicateCandidate[] @relation("DuplicateCandidateB")
 
@@ -2535,6 +2546,8 @@ model Question {
   @@index([correctionStatus])
   @@index([isPublished])
   @@index([pyqExam, pyqYear])
+  @@index([contentFingerprint])
+  @@index([subject, chapter])
   @@index([aiVerified])
   @@index([aiAuditStatus])
   @@index([qcStatus])
@@ -5224,6 +5237,24 @@ model ExtractionJob {
   subject         String?  // Configured or Auto-detected
   chapter         String?
   tags            String[] @default([])
+  // ---- PYQ import (isPyqImport = true) ----
+  isPyqImport     Boolean   @default(false)
+  pyqExamId       String?
+  // SINGLE: the whole PDF is one exam sitting, its year is inherited.
+  // MULTI: years come from section headings / question tags, else review.
+  yearMode        String    @default("SINGLE")
+  session         String?
+  shift           String?
+  paper           String?
+  language        String? // ENGLISH | HINDI | BILINGUAL
+  hasAnswerKey    Boolean?
+  hasSolutions    Boolean?
+  sourceReference String?
+  cancelRequested Boolean   @default(false)
+  // Only one runner processes a job at a time (claim = set into the future).
+  lockedUntil     DateTime?
+  pyqExamRef      PyqExam?        @relation(fields: [pyqExamId], references: [id])
+  pyqOccurrences  PyqOccurrence[]
   createdById     String
   createdBy       User     @relation("ExtractionJobCreatedBy", fields: [createdById], references: [id])
   questions       ExtractedQuestion[]
@@ -5276,6 +5307,30 @@ model ExtractedQuestion {
   originalSnapshot     Json          // Immutable initial extraction snapshot
   isEdited             Boolean       @default(false)
   draftQuestionId      String?       // Linked Question Bank ID when moved to Draft
+  // ---- PYQ import ----
+  // Identity within the job: "<section>#<number>" (falls back to page) so a
+  // multi-year PDF's repeated "Q1"s no longer overwrite each other.
+  sourceKey             String?
+  pyqExamId             String?
+  pyqSession            String?
+  pyqShift              String?
+  pyqPaper              String?
+  sectionLabel          String? // heading the question sat under ("NEET 2023")
+  // ADMIN_DOCUMENT | SECTION_HEADING | QUESTION_TAG | MANUAL | NONE
+  metadataMethod        String?
+  extractionMethod      String? // TEXT_PARSER | OCR_PARSER | AI_TEXT | AI_VISION
+  chapterCandidates     Json? // [{ subject, chapter, topic?, score }]
+  needsChapterReview    Boolean  @default(false)
+  contentFingerprint    String?
+  duplicateOfQuestionId String?
+  duplicateScore        Float?
+  // PENDING | LINKED | KEEP_SEPARATE | IGNORED
+  duplicateDecision     String?
+  // PENDING | APPROVED | REJECTED (independent of extraction status)
+  reviewDecision        String   @default("PENDING")
+  reviewedById          String?
+  reviewedAt            DateTime?
+  pyqExamRef            PyqExam? @relation(fields: [pyqExamId], references: [id])
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
@@ -5283,6 +5338,9 @@ model ExtractedQuestion {
   @@index([status])
   @@index([sourceName])
   @@index([originalNumber])
+  @@unique([jobId, sourceKey])
+  @@index([jobId, reviewDecision])
+  @@index([contentFingerprint])
   @@map("extracted_questions")
 }
 
@@ -6958,4 +7016,309 @@ model ModuleDesignTemplate {
 
   @@index([createdAt])
   @@map("module_design_templates")
+}
+
+// ---------------------------------------------------------------------------
+// PYQ Library
+//
+// Exams are rows, not an enum: an admin can import "IUPSC" (or any other
+// paper) without a code change, and aliases ("JEE Mains", "JEE-Main") resolve
+// to one canonical exam while the original wording stays on the occurrence.
+// A question can appear in several papers, so exam/year lives on
+// PyqOccurrence (one row per question per paper sitting) — never inferred
+// from text similarity. Question.pyqExam/pyqYear stay as legacy columns.
+// ---------------------------------------------------------------------------
+model PyqExam {
+  id            String   @id @default(cuid())
+  slug          String   @unique // "neet-ug", "jee-main", "iupsc"
+  name          String // display name: "NEET UG"
+  // NEET_UG | JEE_MAIN | JEE_ADVANCED | OTHER — groups the library tree.
+  canonicalType String   @default("OTHER")
+  // Normalised alias keys (see src/lib/pyq/exams.ts normalizeExamKey).
+  aliases       String[] @default([])
+  // Legacy Question.pyqExam value that maps here ("NEET", "JEE_MAINS"), if any.
+  legacyCode    String?
+  sortOrder     Int      @default(100)
+  isActive      Boolean  @default(true)
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  occurrences        PyqOccurrence[]
+  extractionJobs     ExtractionJob[]
+  extractedQuestions ExtractedQuestion[]
+
+  @@index([canonicalType])
+  @@map("pyq_exams")
+}
+
+model PyqOccurrence {
+  id                  String    @id @default(cuid())
+  questionId          String
+  examId              String
+  year                Int?
+  session             String? // "January", "April", "Phase 2"
+  shift               String? // "Shift 1", "Morning"
+  paper               String? // "Paper 1", set code "Q2"
+  questionNumber      String? // number printed in the original paper
+  // Exactly how the source labelled it ("JEE Mains 2021 (26 Feb Shift 1)").
+  sourceLabel         String?
+  sourceReference     String?
+  sourcePage          Int?
+  extractionJobId     String?
+  extractedQuestionId String?   @unique
+  // VERIFIED | UNVERIFIED | REJECTED — only VERIFIED rows show by default
+  // and drive badges ("NEET UG 2024") on tests, reviews and PDFs.
+  verificationStatus  String    @default("UNVERIFIED")
+  // ADMIN_DOCUMENT | SECTION_HEADING | QUESTION_TAG | MANUAL | LEGACY_BACKFILL
+  detectionMethod     String    @default("MANUAL")
+  // Normalised (question, exam, year, session, shift, paper, number) — makes
+  // retries and repeated imports idempotent despite the nullable columns.
+  occurrenceKey       String    @unique
+  verifiedById        String?
+  verifiedAt          DateTime?
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  question      Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  exam          PyqExam        @relation(fields: [examId], references: [id])
+  extractionJob ExtractionJob? @relation(fields: [extractionJobId], references: [id], onDelete: SetNull)
+
+  @@index([examId, year])
+  @@index([questionId])
+  @@index([verificationStatus, examId, year])
+  @@index([extractionJobId])
+  @@map("pyq_occurrences")
+}
+
+// A printable practice module assembled from the PYQ Library (or any bank
+// question): exercises in order, with display settings. Items point at the
+// canonical Question — module numbering/labels never edit the question.
+model QuestionModule {
+  id               String   @id @default(cuid())
+  title            String
+  subtitle         String?
+  subject          String?
+  chapter          String?
+  // QUESTION_ONLY | WITH_OPTIONS | ANSWER_KEY_END | SOLUTIONS_SECTION | SOLUTION_AFTER_EACH
+  displayFormat    String   @default("ANSWER_KEY_END")
+  showSourceLabels Boolean  @default(true)
+  pageSize         String   @default("A4") // A4 | LETTER | A5
+  coverPage        Boolean  @default(true)
+  contentsPage     Boolean  @default(true)
+  settings         Json? // spacing, font size, header/footer text
+  status           String   @default("DRAFT") // DRAFT | READY
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  sections QuestionModuleSection[]
+  exports  QuestionModuleExport[]
+
+  @@index([createdById])
+  @@map("question_modules")
+}
+
+model QuestionModuleSection {
+  id              String   @id @default(cuid())
+  moduleId        String
+  title           String // "Exercise 1: NEET PYQs"
+  instructions    String?
+  order           Int      @default(0)
+  pageBreakBefore Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  module QuestionModule       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  items  QuestionModuleItem[]
+
+  @@index([moduleId, order])
+  @@map("question_module_sections")
+}
+
+model QuestionModuleItem {
+  id           String   @id @default(cuid())
+  sectionId    String
+  order        Int      @default(0)
+  // QUESTION (bank question) | CUSTOM_QUESTION (written in the module) | NOTE (heading / instruction text)
+  kind         String   @default("QUESTION")
+  questionId   String?
+  // The occurrence whose label this item shows ("NEET UG 2024"), if any.
+  occurrenceId String?
+  // CUSTOM_QUESTION: { statement, options: {A..D}, answer, solution }; NOTE: { text }
+  content      Json?
+  // Module-only presentation: { labelOverride, pageBreakBefore, spaceAfterMm }
+  presentation Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  section  QuestionModuleSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  question Question?             @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@index([sectionId, order])
+  @@index([questionId])
+  @@map("question_module_items")
+}
+
+model QuestionModuleExport {
+  id          String   @id @default(cuid())
+  moduleId    String
+  storageKey  String
+  contentHash String
+  pageCount   Int?
+  warnings    Json?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  module QuestionModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId])
+  @@map("question_module_exports")
+}
+
+// ==========================================================================
+// ATOMIC PATHSHALA EXERCISE BUILDER
+// Chapter-wise & Topic-wise Question Practice Sheets & Assessment Modules
+// ==========================================================================
+
+model Exercise {
+  id                   String            @id @default(cuid())
+  exerciseCode         String            @unique
+  title                String
+  subtitle             String?
+  subject              String
+  chapter              String
+  topic                String?
+  subTopic             String?
+  description          String?
+  instructions         String?
+  exerciseType         String            @default("TOPIC_WISE") // TOPIC_WISE | BASIC_PRACTICE | ADVANCED | NEET_PYQ | JEE_PYQ | MIXED | CUSTOM
+  organizationMode     String            @default("TOPIC_WISE") // TOPIC_WISE | CUSTOM
+  status               String            @default("DRAFT") // DRAFT | PUBLISHED | ARCHIVED
+  languageMode         String            @default("BILINGUAL") // HINDI_ONLY | ENGLISH_ONLY | BILINGUAL
+  layoutSettings       Json?
+  answerKeyMode        String            @default("END_OF_DOCUMENT") // NONE | END_OF_EXERCISE | END_OF_DOCUMENT
+  solutionMode         String            @default("END_OF_DOCUMENT") // NONE | END_OF_EXERCISE | END_OF_DOCUMENT | AFTER_EACH_QUESTION
+  defaultMarks         Float             @default(4.0)
+  defaultNegativeMarks Float             @default(1.0)
+  testId               String?
+  test                 Test?             @relation(fields: [testId], references: [id], onDelete: SetNull)
+  createdById          String?
+  createdBy            User?             @relation("ExerciseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  sections             ExerciseSection[]
+  questions            ExerciseQuestion[]
+  exports              ExerciseExport[]
+  attempts             ExerciseAttempt[]
+
+  @@index([subject, chapter])
+  @@index([status])
+  @@index([createdById])
+  @@map("exercises")
+}
+
+model ExerciseSection {
+  id              String             @id @default(cuid())
+  exerciseId      String
+  exercise        Exercise           @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  topic           String?
+  subTopic        String?
+  order           Int                @default(0)
+  pageBreakBefore Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  questions       ExerciseQuestion[]
+
+  @@index([exerciseId, order])
+  @@map("exercise_sections")
+}
+
+model ExerciseQuestion {
+  id           String           @id @default(cuid())
+  exerciseId   String
+  exercise     Exercise         @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  sectionId    String?
+  section      ExerciseSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  questionId   String
+  question     Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  displayOrder Int              @default(0)
+  marks        Float?
+  negativeMarks Float?
+  notes        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([exerciseId, questionId])
+  @@index([exerciseId, displayOrder])
+  @@index([sectionId, displayOrder])
+  @@index([questionId])
+  @@map("exercise_questions")
+}
+
+model ExerciseExport {
+  id          String   @id @default(cuid())
+  exerciseId  String
+  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  exportType  String   @default("PDF")
+  language    String   @default("BILINGUAL")
+  format      String   @default("FULL_WITH_SOLUTIONS")
+  storageKey  String?
+  downloadUrl String?
+  fileSize    Int?
+  pageCount   Int?
+  warnings    Json?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([exerciseId])
+  @@map("exercise_exports")
+}
+
+model ExerciseAttempt {
+  id               String                  @id @default(cuid())
+  exerciseId       String
+  exercise         Exercise                @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mode             String                  @default("PRACTICE") // PRACTICE | TIMED_PRACTICE | TEST
+  status           String                  @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED | ABANDONED
+  score            Float                   @default(0)
+  totalMarks       Float                   @default(0)
+  correctCount     Int                     @default(0)
+  incorrectCount   Int                     @default(0)
+  unattemptedCount Int                     @default(0)
+  accuracy         Float                   @default(0)
+  timeSpentSeconds Int                     @default(0)
+  startedAt        DateTime                @default(now())
+  completedAt      DateTime?
+  answers          ExerciseAttemptAnswer[]
+
+  @@index([exerciseId, userId])
+  @@index([userId, status])
+  @@map("exercise_attempts")
+}
+
+model ExerciseAttemptAnswer {
+  id               String          @id @default(cuid())
+  attemptId        String
+  attempt          ExerciseAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption   String?
+  numericalAnswer  Float?
+  isCorrect        Boolean         @default(false)
+  marksAwarded     Float           @default(0)
+  timeSpentSeconds Int             @default(0)
+  createdAt        DateTime        @default(now())
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+  @@map("exercise_attempt_answers")
 }

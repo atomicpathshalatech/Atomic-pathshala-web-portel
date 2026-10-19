@@ -326,6 +326,15 @@ export default async function QuestionBankPage({
             </Link>
 
             <Link
+              href="/team/exercises"
+              className="flex items-center gap-2 bg-gradient-to-r from-amber-600 to-amber-700 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-amber-600/20 active:scale-95"
+              title="Build topic-wise and chapter-wise question practice modules & printable PDFs"
+            >
+              <span className="material-symbols-outlined text-sm text-amber-200">assignment</span>
+              <span>Exercise Builder</span>
+            </Link>
+
+            <Link
               href="/team/questions/ai-generated"
               className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-blue-500/20 active:scale-95"
               title="Generate production-grade questions via PDF grounding or AI syllabus engine"

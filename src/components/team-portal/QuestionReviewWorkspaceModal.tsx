@@ -72,11 +72,14 @@ export function QuestionReviewWorkspaceModal({
   userRole = "REVIEWER",
   onPrev,
   onNext,
-  hasPrev = false,
-  hasNext = false,
+  hasPrev: hasPrevProp,
+  hasNext: hasNextProp,
   currentIndex,
   totalCount,
 }: QuestionReviewWorkspaceModalProps) {
+  const canGoPrev = hasPrevProp !== undefined ? hasPrevProp : Boolean(onPrev);
+  const canGoNext = hasNextProp !== undefined ? hasNextProp : Boolean(onNext);
+
   const [activeTab, setActiveTab] = useState<"review" | "cbt-preview" | "ai-intelligence" | "history">("review");
   const [selectedLanguage, setSelectedLanguage] = useState<string>("ENGLISH");
   const [cbtSelectedOption, setCbtSelectedOption] = useState<string | null>(null);
@@ -217,7 +220,7 @@ export function QuestionReviewWorkspaceModal({
               <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 border border-slate-200 dark:border-slate-700">
                 <button
                   type="button"
-                  disabled={!hasPrev}
+                  disabled={!canGoPrev}
                   onClick={onPrev}
                   className="px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-0.5 transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
                   title="Previous Question"
@@ -234,7 +237,7 @@ export function QuestionReviewWorkspaceModal({
 
                 <button
                   type="button"
-                  disabled={!hasNext}
+                  disabled={!canGoNext}
                   onClick={onNext}
                   className="px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-0.5 transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
                   title="Next Question"
@@ -614,6 +617,58 @@ export function QuestionReviewWorkspaceModal({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Bottom Persistent Action & Navigation Bar */}
+        <div className="px-6 py-3.5 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            {(onPrev || onNext) && (
+              <button
+                type="button"
+                disabled={!canGoPrev}
+                onClick={onPrev}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                title="Previous Question"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </button>
+            )}
+
+            {currentIndex && totalCount && (
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 hidden sm:inline">
+                Question <span className="text-blue-600 dark:text-blue-400 font-black">{currentIndex}</span> of {totalCount}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab(activeTab === "cbt-preview" ? "review" : "cbt-preview")}
+              className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition border cursor-pointer ${
+                activeTab === "cbt-preview"
+                  ? "bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/60 dark:border-blue-900 dark:text-blue-300"
+                  : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+              }`}
+            >
+              <Eye className="w-4 h-4 text-blue-600" />
+              <span>{activeTab === "cbt-preview" ? "Switch to Review Mode" : "Preview Question (CBT)"}</span>
+            </button>
+
+            {(onPrev || onNext) && (
+              <button
+                type="button"
+                disabled={!canGoNext}
+                onClick={onNext}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm shadow-blue-500/20 cursor-pointer"
+                title="Next Question"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

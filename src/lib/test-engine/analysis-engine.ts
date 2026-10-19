@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { formatOccurrenceLabel } from "@/lib/pyq/keys";
+
 
 export type SubjectStat = {
   subject: string;
@@ -129,6 +131,8 @@ export type QuestionReviewItem = {
   optionsHi?: Record<string, string>;
   solutionEn?: string | null;
   solutionHi?: string | null;
+  /** "NEET UG 2024" — only from VERIFIED PyqOccurrence rows. */
+  pyqLabels?: string[];
   imageUrl?: string | null;
   camDrawData?: any;
   ncertReference?: {
@@ -1113,6 +1117,23 @@ export async function getStoredTestAnalysis(
         r.solutionHi = hi.solution || r.solutionHi;
       }
     }
+  }
+
+  // Verified PYQ source labels ("NEET UG 2024"). Read here, after results
+  // are released (this function is only reached from the result page), so
+  // nothing about the paper leaks while the test is running.
+  if (reviewIds.length) {
+    const occurrences = await prisma.pyqOccurrence.findMany({
+      where: { questionId: { in: reviewIds }, verificationStatus: "VERIFIED" },
+      orderBy: { year: "desc" },
+      select: { questionId: true, year: true, session: true, shift: true, paper: true, exam: { select: { name: true } } },
+    });
+    const labels = new Map<string, string[]>();
+    for (const o of occurrences) {
+      const label = formatOccurrenceLabel({ examName: o.exam.name, year: o.year, session: o.session, shift: o.shift, paper: o.paper });
+      labels.set(o.questionId, Array.from(new Set([...(labels.get(o.questionId) ?? []), label])));
+    }
+    for (const r of storedReviews) r.pyqLabels = labels.get(r.questionId) ?? [];
   }
 
   const questionTypeStats = (analysis.questionTypeStats as any[]) || [];
