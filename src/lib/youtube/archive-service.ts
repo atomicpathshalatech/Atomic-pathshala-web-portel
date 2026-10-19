@@ -22,10 +22,10 @@ import {
 } from "./metadata";
 
 /**
- * Orchestrates archiving a finished LiveKit recording to YouTube as an
- * unlisted video, once WhiteboardSession.recordingStatus reaches "READY"
- * (see the trigger points in src/app/api/webhooks/livekit/route.ts and
- * src/lib/livekit/egress.ts).
+ * Orchestrates archiving a finished (older, LiveKit-room) recording to
+ * YouTube as an unlisted video, once WhiteboardSession.recordingStatus is
+ * "READY" — run by the youtube-archive cron. New classes are recorded by
+ * YouTube itself; LiveKit room recording has been removed.
  *
  * Vercel serverless functions have no persistent worker and no guaranteed
  * background execution after a response is sent, so the upload is modeled

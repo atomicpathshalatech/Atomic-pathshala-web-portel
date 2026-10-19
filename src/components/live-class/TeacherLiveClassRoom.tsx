@@ -1078,7 +1078,7 @@ export function TeacherLiveClassRoom({
   }, [batchScheduleId, wbSession?.id]);
 
   // Start Class Mode (defaults to scheduled mode)
-  const [selectedStartMode, setSelectedStartMode] = useState<"LIVEKIT" | "YOUTUBE" | "BOTH">("LIVEKIT");
+  const [selectedStartMode, setSelectedStartMode] = useState<"LIVEKIT" | "YOUTUBE" | "BOTH">("YOUTUBE");
   const [youtubeInputUrl, setYoutubeInputUrl] = useState("");
   const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
   // Public class: the stream the team scheduled on YouTube themselves — its

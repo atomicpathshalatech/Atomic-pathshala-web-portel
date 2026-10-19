@@ -61,24 +61,6 @@ export async function endWhiteboardSession(
       openLiveSession.deliveryMode === "MAIN_YOUTUBE" ||
       openLiveSession.deliveryMode === "EXTERNAL_YOUTUBE");
 
-  // Stop LiveKit Room Recording if active. waitUntil() keeps this function
-  // alive past the HTTP response — a bare fire-and-forget import().then()
-  // has no guarantee of completing on Vercel serverless once the response
-  // is sent (this was silently losing the recording on every "End Class"
-  // click before this fix).
-  if (
-    existing.recordingEgressId &&
-    (existing.recordingStatus === "RECORDING" ||
-      existing.recordingStatus === "RECORDING_STARTING" ||
-      existing.recordingStatus === "STARTING")
-  ) {
-    waitUntil(
-      import("@/lib/livekit/egress")
-        .then(({ stopRoomRecording }) => stopRoomRecording(existing.recordingEgressId!))
-        .catch((err) => console.warn("[stopRoomRecording_on_end_error]", err))
-    );
-  }
-
   // Legacy path only (a session with no lifecycle row yet): the old
   // behaviour of completing the broadcast and linking the lecture at once.
   if (!openLiveSession) {

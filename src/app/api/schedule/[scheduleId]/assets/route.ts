@@ -6,7 +6,6 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { resolveBatchAccess } from "@/lib/batch/entitlement";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 import { currentClassNotes } from "@/lib/batch/class-notes";
 
@@ -212,18 +211,6 @@ export async function GET(
       });
       if (sibling?.liveWhiteboardSession) {
         wbSession = sibling.liveWhiteboardSession;
-      }
-    }
-
-    // Self-heal recording if active / processing
-    if (wbSession?.recordingEgressId && wbSession.recordingStatus !== "READY" && wbSession.recordingStatus !== "FAILED") {
-      const reconciled = await reconcileRecordingStatus({
-        id: wbSession.id,
-        recordingStatus: wbSession.recordingStatus,
-        recordingEgressId: wbSession.recordingEgressId,
-      });
-      if (reconciled) {
-        wbSession = { ...wbSession, ...reconciled };
       }
     }
 
