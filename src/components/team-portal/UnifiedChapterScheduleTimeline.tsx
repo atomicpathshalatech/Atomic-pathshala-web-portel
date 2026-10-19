@@ -141,6 +141,8 @@ export function UnifiedChapterScheduleTimeline({
     chapterMedium === "HINDI" ? "Hindi" : chapterMedium === "HINGLISH" ? "Hinglish" : "English"
   );
   const [lecVideoUrl, setLecVideoUrl] = useState("");
+  // The class's YouTube live stream (scheduled / unlisted on YouTube) — whoever manages the schedule saves it here; the teacher then only presses Start.
+  const [lecLiveLink, setLecLiveLink] = useState("");
   const [lecDuration, setLecDuration] = useState<number>(90);
   // Once a chapter has been submitted its classes are already in the batch
   // timetable, and it isn't submitted again — so a lecture added later gets
@@ -364,10 +366,12 @@ export function UnifiedChapterScheduleTimeline({
                   startTime: lecStartTime,
                   durationMin: lecDuration,
                 }),
+                ...(canManageSchedule && lecLiveLink.trim() && { liveYoutubeUrl: lecLiveLink.trim() }),
               }
         ),
       });
       const json = await res.json();
+      if (json.success && json.data?.liveLinkError) toast.error(json.data.liveLinkError);
       if (!json.success) {
         setFormError(json.error || "Failed to schedule lecture.");
         return;
@@ -420,6 +424,7 @@ export function UnifiedChapterScheduleTimeline({
                   startTime: lecStartTime,
                   durationMin: lecDuration,
                 }),
+                ...(canManageSchedule && !timingLocked && { liveYoutubeUrl: lecLiveLink.trim() }),
               }
         ),
       });
@@ -783,6 +788,7 @@ export function UnifiedChapterScheduleTimeline({
                   setLecTitle(`${chapterTitle} — Lecture ${String(lectures.length + 1).padStart(2, "0")}`);
                   setLecOrder(lectures.length + 1);
                   setLecVideoUrl("");
+                  setLecLiveLink("");
                   setFormError("");
                   setShowAddLectureModal(true);
                 }}
@@ -1159,6 +1165,7 @@ export function UnifiedChapterScheduleTimeline({
                                     setLecMode(lec.videoUrl ? "OLD_CLASS" : "LECTURE");
                                     setLecLanguage(lec.language || "Hindi");
                                     setLecVideoUrl(lec.videoUrl || "");
+                                    setLecLiveLink(lec.liveYoutubeUrl || "");
                                     setFormError("");
                                   }}
                                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left cursor-pointer"
@@ -1461,6 +1468,23 @@ export function UnifiedChapterScheduleTimeline({
                     <option value="English">English</option>
                   </select>
               </div>
+
+              {lecMode === "LECTURE" && canManageSchedule && (
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">YouTube live link</label>
+                  <input
+                    type="url"
+                    value={lecLiveLink}
+                    disabled={timingLocked}
+                    onChange={(e) => setLecLiveLink(e.target.value)}
+                    placeholder="https://youtube.com/live/… (the stream scheduled on YouTube for this class)"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-xs disabled:opacity-60"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Schedule the stream on YouTube (Unlisted is fine), paste its link here, and stream to it from OBS / the Teacher app. Every batch's class of this lecture uses it — the teacher only presses Start. Leave empty for an app-made stream.
+                  </p>
+                </div>
+              )}
 
               {lecMode === "OLD_CLASS" && (
               <div>

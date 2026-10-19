@@ -66,6 +66,7 @@ export async function POST(
       educatorVideoUrl,
       status,
       teacherId: passedTeacherId,
+      liveYoutubeUrl,
     } = body;
 
     if (!title?.trim()) {
@@ -313,6 +314,13 @@ export async function POST(
     // automatically (spec section 8-9) — never a manual re-upload.
     await regenerateCreativeAwaited("LECTURE", lecture.id);
     await regenerateCreativeAwaited("CHAPTER", chapter.id);
+
+    // The class's YouTube live stream, set by whoever manages the schedule.
+    if (liveYoutubeUrl !== undefined && liveYoutubeUrl !== "") {
+      const { setLectureLiveYouTubeLink } = await import("@/lib/live-class/class-youtube-link");
+      const linked = await setLectureLiveYouTubeLink(session.user.id, lecture.id, liveYoutubeUrl);
+      if (!linked.ok) return apiSuccess({ lecture, liveLinkError: linked.error }, 201);
+    }
 
     return apiSuccess({ lecture }, 201);
   } catch (error) {

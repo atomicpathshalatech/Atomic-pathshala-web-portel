@@ -2759,7 +2759,7 @@ export function TeacherLiveClassRoom({
       ytVideoIdOverride !== undefined
         ? ytVideoIdOverride
         : (typedLink ? extractYouTubeVideoId(typedLink) : null) ||
-          (classMode === "APP_AND_YOUTUBE" && scheduledYoutubeUrl ? extractYouTubeVideoId(scheduledYoutubeUrl) : null) ||
+          (classMode !== "APP_ONLY" && scheduledYoutubeUrl ? extractYouTubeVideoId(scheduledYoutubeUrl) : null) ||
           wbSession?.youtubeVideoId ||
           extractYouTubeVideoId(manualObsYtLink);
     const streamKey = streamKeyInput.trim();
@@ -2784,7 +2784,7 @@ export function TeacherLiveClassRoom({
 
     // The delivery mode chosen when the class was scheduled.
     if (classMode === "APP_AND_YOUTUBE" && !ytId) {
-      setYoutubeInputError("This class is scheduled as App + public YouTube but has no YouTube link yet — ask whoever schedules classes to add it to the schedule (or enter it here).");
+      setYoutubeInputError("This class has no YouTube link on its schedule — ask whoever manages the schedule to add it (chapter page → the lecture → YouTube live link), or enter it here.");
       setPublicSetupOpen(true);
       setStartingClass(false);
       return;

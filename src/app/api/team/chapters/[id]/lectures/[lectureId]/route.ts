@@ -25,7 +25,14 @@ export async function PATCH(
     if (!lecture) return apiError("Lecture not found", 404);
 
     const body = await request.json();
-    const { title, scheduledDate, startTime, slidesUrl, videoUrl, language } = body;
+    const { title, scheduledDate, startTime, slidesUrl, videoUrl, language, liveYoutubeUrl } = body;
+
+    // The class's YouTube live stream (whoever manages the schedule); checked first so a bad link changes nothing.
+    if (liveYoutubeUrl !== undefined) {
+      const { setLectureLiveYouTubeLink } = await import("@/lib/live-class/class-youtube-link");
+      const linked = await setLectureLiveYouTubeLink(session.user.id, params.lectureId, liveYoutubeUrl);
+      if (!linked.ok) return apiError(linked.error, linked.status);
+    }
     let { durationMin } = body;
     // A YouTube class's length comes from the video itself, never typed in.
     if (typeof videoUrl === "string" && videoUrl.trim()) {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import { canAssignChapterBatches } from "@/lib/tests/chapter-test-batches";
+import { lectureLiveLinks } from "@/lib/live-class/class-youtube-link";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
@@ -101,6 +102,8 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   // timetable, so this page and My Schedule always agree.
   const scheduled = await lecturesAsScheduled(lectures, scheduledInBatches.map((b) => b.id));
   const asScheduled = (l: (typeof lectures)[number]) => scheduled.get(l.id)!;
+  // Each lecture's YouTube live link saved on its classes (shown to whoever manages the schedule).
+  const liveLinks = canManageSchedule ? await lectureLiveLinks(lectures.map((l) => l.id)) : new Map<string, string>();
 
   const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
   const canReview = canReviewPermission && (isAdmin || chapter.createdById !== session.user.id);
@@ -219,6 +222,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           id: l.id,
           title: l.title,
           videoUrl: l.videoUrl,
+          liveYoutubeUrl: liveLinks.get(l.id) ?? null,
           educatorVideoUrl: l.educatorVideoUrl,
           slidesUrl: l.slidesUrl,
           ...asScheduled(l),

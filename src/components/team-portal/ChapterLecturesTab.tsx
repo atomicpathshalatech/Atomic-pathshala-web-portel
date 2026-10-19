@@ -12,6 +12,8 @@ export interface LectureItem {
   id: string;
   title: string;
   videoUrl: string;
+  /** The class's YouTube live stream saved on its schedule (for whoever manages the schedule). */
+  liveYoutubeUrl?: string | null;
   educatorVideoUrl?: string | null;
   slidesUrl?: string | null;
   scheduledDate?: string | Date | null;

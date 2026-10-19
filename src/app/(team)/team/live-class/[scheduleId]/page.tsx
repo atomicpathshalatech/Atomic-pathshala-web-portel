@@ -92,6 +92,12 @@ export default async function TeacherLiveClassPage({
 
   if (!schedule) notFound();
 
+  // The YouTube stream saved on the schedule before class (or on another
+  // batch's class of the same lecture): Start uses it without asking again.
+  const { scheduledLiveYouTubeId } = await import("@/lib/live-class/class-youtube-link");
+  const savedYoutubeId = await scheduledLiveYouTubeId(schedule as { id: string; lectureId?: string | null; youtubeUrl?: string | null; classMode?: string | null });
+  const scheduledYoutubeUrl = savedYoutubeId ? `https://www.youtube.com/watch?v=${savedYoutubeId}` : null;
+
   // Whiteboard Test Lab room — the caller already passed WHITEBOARD_ACCESS
   // above. A test session has no batch enrollment and no real start time, so
   // the assignment + T-15 gates below don't apply. Strictly gated on
@@ -103,7 +109,7 @@ export default async function TeacherLiveClassPage({
         scheduleTitle={schedule.title}
         batchName={schedule.batch?.name || "Whiteboard Test Lab"}
         classMode={(schedule as { classMode?: string | null }).classMode ?? null}
-        scheduledYoutubeUrl={(schedule as { youtubeUrl?: string | null }).youtubeUrl ?? null}
+        scheduledYoutubeUrl={scheduledYoutubeUrl}
         currentUserId={session.user.id}
         endsAt={schedule.endsAt.toISOString()}
       />
@@ -146,7 +152,7 @@ export default async function TeacherLiveClassPage({
       scheduleTitle={schedule.title}
       batchName={schedule.batch?.name || "Live Classroom"}
       classMode={(schedule as { classMode?: string | null }).classMode ?? null}
-        scheduledYoutubeUrl={(schedule as { youtubeUrl?: string | null }).youtubeUrl ?? null}
+        scheduledYoutubeUrl={scheduledYoutubeUrl}
       currentUserId={session.user.id}
       endsAt={schedule.endsAt.toISOString()}
     />

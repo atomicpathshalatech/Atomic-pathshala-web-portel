@@ -77,16 +77,17 @@ export async function POST(
     const bodyYouTubeId = body?.youtubeVideoId ? extractYouTubeVideoId(String(body.youtubeVideoId)) : null;
     // The delivery mode chosen when the class was scheduled (null: teacher's choice).
     const classMode = (schedule as { classMode?: string | null }).classMode ?? null;
-    // A public class uses the YouTube link put on the schedule by whoever
-    // scheduled it — the teacher only presses Start.
-    const scheduledLink = (schedule as { youtubeUrl?: string | null }).youtubeUrl;
-    const scheduledYouTubeId = classMode === "APP_AND_YOUTUBE" && scheduledLink ? extractYouTubeVideoId(scheduledLink) : null;
+    // The YouTube stream saved on the schedule before class (by whoever
+    // manages the schedule; or on another batch's class of the same lecture)
+    // — the teacher only presses Start and is not asked for the link again.
+    const { scheduledLiveYouTubeId } = await import("@/lib/live-class/class-youtube-link");
+    const scheduledYouTubeId = await scheduledLiveYouTubeId(schedule);
     const requestedYouTubeId = bodyYouTubeId ?? scheduledYouTubeId ?? (isNewOccurrence ? null : existingSession?.youtubeVideoId ?? null);
     if (classMode === "APP_ONLY" && bodyYouTubeId) {
       return apiError("This class is scheduled as an App-only class (its own unlisted stream); a public YouTube link cannot be used. Change the class to App + public YouTube in the schedule first.", 400, { code: "CLASS_MODE_APP_ONLY" });
     }
     if (classMode === "APP_AND_YOUTUBE" && !requestedYouTubeId) {
-      return apiError("This class is scheduled as App + public YouTube but has no YouTube link yet — ask whoever schedules classes to add it to the schedule (or enter it here).", 400, { code: "CLASS_MODE_NEEDS_LINK" });
+      return apiError("This class has no YouTube link on its schedule — ask whoever manages the schedule to add it (chapter page → the lecture → YouTube live link), or enter it here.", 400, { code: "CLASS_MODE_NEEDS_LINK" });
     }
 
     // Public class: the stream the team scheduled on YouTube themselves. Its
@@ -405,7 +406,7 @@ export async function POST(
         const { appYoutubePoolConfigured, beginAppYoutubeStart } = await import("@/lib/live-session/app-youtube");
         if (!youtubeLiveClassConfigured() || !(await appYoutubePoolConfigured())) {
           const stopped = await undoStart(
-            "The class could not start: YouTube class streaming isn't set up on this server (no stream slots). For a public class, enter the YouTube link and stream key, then press Start again."
+            "The class could not start: the app cannot create a YouTube stream on this server, and this class has no YouTube link on its schedule. Ask whoever manages the schedule to add the class's YouTube live link (chapter page → the lecture), or enter it here."
           );
           if (stopped) return stopped;
         } else {
@@ -432,7 +433,7 @@ export async function POST(
         const reason =
           youtubeError instanceof NoIngestCapacityError ? youtubeError.message : describeYoutubeError(youtubeError);
         const stopped = await undoStart(
-          `The class could not start: the YouTube broadcast could not be set up. ${reason} Press Start again in a moment — or, for a public class, enter the YouTube link and stream key.`
+          `The class could not start: the app could not create its YouTube stream (${reason}). Press Start again in a moment — or add the class's YouTube live link on its schedule (chapter page → the lecture), or enter it here.`
         );
         if (stopped) return stopped;
       }
