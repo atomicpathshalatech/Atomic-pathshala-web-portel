@@ -127,11 +127,24 @@ export function findExamTags(text: string, patterns: ExamPattern[] = BUILTIN_EXA
       const after = text.slice(start + m[0].length, start + m[0].length + 25);
       const y = after.match(YEAR_RE);
       if (!y || y.index === undefined || /[.?]\s/.test(after.slice(0, y.index))) continue;
-      // Details (session / shift / paper) live in the bracket or line right after.
-      const restStart = start + m[0].length + y.index + y[0].length;
-      const tailRaw = text.slice(restStart, restStart + 60);
-      const tail = tailRaw.split(/\n|\]\s|\)\s{2,}/)[0] ?? "";
-      const end = restStart + (tail.match(/^[^\n\]]*[\])]?/)?.[0].length ?? 0);
+      // Details (session / shift / paper) live in a bracket right after the year
+      // or explicitly match known session/shift/paper keywords.
+      const yearEnd = start + m[0].length + y.index + y[0].length;
+      const afterYear = text.slice(yearEnd, yearEnd + 60);
+
+      // Check if bracketed: e.g. " (24 Feb Shift 1)" or " [Phase II]"
+      let tail = "";
+      const bracketMatch = afterYear.match(/^\s*([(\[])([^)\]\n]+)[)\]]/);
+      if (bracketMatch) {
+        tail = bracketMatch[0];
+      } else {
+        // Only match explicit keywords like "Shift 1", "Paper 2", "Phase 1"
+        const kwMatch = afterYear.match(/^\s*(?:Shift[\s\-–:]*(?:I{1,3}|[1-3]|1st|2nd|3rd)|Paper[\s\-–:]*(?:I{1,2}|[12])|Set[\s\-–:]*[A-Z\d]+|Phase[\s\-–:]*\d+|Morning|Evening)\b/i);
+        if (kwMatch) {
+          tail = kwMatch[0];
+        }
+      }
+      const end = yearEnd + tail.length;
       tags.push({
         examId: p.examId,
         examLabel: m[0].trim(),

@@ -36,7 +36,10 @@ export function approvalBlockers(eq: Pick<ExtractedQuestion, "statement" | "opti
   const problems: string[] = [];
   const opts = (eq.options ?? {}) as Record<string, string>;
   if (!String(eq.statement || "").trim()) problems.push("Question text is empty.");
-  if (["A", "B", "C", "D"].some((k) => !String(opts[k] ?? "").trim())) problems.push("All four options are needed.");
+  const hasVisualCard = Boolean((eq as any).imageUrl) || Boolean((eq as any).hasImage);
+  if (!hasVisualCard && ["A", "B", "C", "D"].some((k) => !String(opts[k] ?? "").trim())) {
+    problems.push("All four options are needed.");
+  }
   if (!LETTER.test(String(eq.correctAnswer || ""))) problems.push("Correct answer is missing.");
   if (!eq.pyqExamId) problems.push("Exam is not set.");
   if (!eq.pyqYear) problems.push("Exam year is not set.");
@@ -218,8 +221,12 @@ export async function approveExtracted(ids: string[], userId: string, publish: b
               createdById: userId,
               translations: {
                 create: [
-                  { language: "ENGLISH", statement: eq.statement, options: eq.options as Prisma.InputJsonValue, correctOptionIds: answers, solution: eq.solution },
-                  ...(eq.statementHi ? [{ language: "HINDI", statement: eq.statementHi, options: eq.options as Prisma.InputJsonValue, correctOptionIds: answers, solution: eq.solutionHi ?? eq.solution }] : []),
+                  ...(!/[ऀ-ॿ]/.test(eq.statement)
+                    ? [{ language: "ENGLISH", statement: eq.statement, options: eq.options as Prisma.InputJsonValue, correctOptionIds: answers, solution: eq.solution }]
+                    : []),
+                  ...(eq.statementHi || /[ऀ-ॿ]/.test(eq.statement)
+                    ? [{ language: "HINDI", statement: eq.statementHi || eq.statement, options: eq.options as Prisma.InputJsonValue, correctOptionIds: answers, solution: eq.solutionHi ?? eq.solution }]
+                    : []),
                 ],
               },
             },

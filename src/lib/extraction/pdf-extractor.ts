@@ -131,7 +131,22 @@ export async function extractTextFromPdfBuffer(
       const mid = viewport.width / 2;
       const leftShare = items.length ? items.filter((it) => it.x + it.w <= mid + 4).length / items.length : 1;
       const rightShare = items.length ? items.filter((it) => it.x >= mid - 4).length / items.length : 0;
-      const twoColumns = items.length > 40 && leftShare > 0.3 && rightShare > 0.3 && leftShare + rightShare > 0.9;
+      // Group items into horizontal bands to check if lines cross the center.
+      // In a real two-column layout, almost no lines span across the center gutter.
+      // In a single-column layout, many lines cross through the center.
+      const lineSpans: { minX: number; maxX: number }[] = [];
+      for (const it of items) {
+        const span = lineSpans.find((l) => Math.abs((l as any).y - it.y) < 3);
+        if (span) {
+          span.minX = Math.min(span.minX, it.x);
+          span.maxX = Math.max(span.maxX, it.x + it.w);
+        } else {
+          lineSpans.push({ y: it.y, minX: it.x, maxX: it.x + it.w } as any);
+        }
+      }
+      const crossingCount = lineSpans.filter((l) => l.minX < mid - 25 && l.maxX > mid + 25).length;
+      const crossingShare = lineSpans.length ? crossingCount / lineSpans.length : 0;
+      const twoColumns = items.length > 40 && leftShare > 0.3 && rightShare > 0.3 && leftShare + rightShare > 0.85 && crossingShare < 0.12;
       const toLines = (list: typeof items) => {
         const sorted = [...list].sort((a, b) => b.y - a.y || a.x - b.x);
         const lines: { y: number; parts: typeof items }[] = [];
@@ -146,14 +161,16 @@ export async function extractTextFromPdfBuffer(
             // Join pieces WITHOUT a space when they touch: Hindi (Devanagari)
             // words arrive as several glyph runs, and a space between each
             // one turned "प्रश्न" into "प  श् न".
-            const parts = l.parts.sort((a, b) => a.x - b.x);
+            const parts = l.parts
+              .filter((p) => !/Open\s*solution/gi.test(p.str))
+              .sort((a, b) => a.x - b.x);
             let out = "";
             parts.forEach((p, i) => {
               const prev = parts[i - 1];
               const gap = prev ? p.x - (prev.x + prev.w) : 0;
               out += prev && gap > Math.max(1, p.h * 0.18) && !/\s$/.test(out) && !/^\s/.test(p.str) ? ` ${p.str}` : p.str;
             });
-            return out.replace(/\s+/g, " ").trim();
+            return out.replace(/Open\s*solution/gi, "").replace(/\s+/g, " ").trim();
           })
           .filter(Boolean);
       };

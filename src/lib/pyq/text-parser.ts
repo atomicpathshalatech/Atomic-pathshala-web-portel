@@ -45,7 +45,7 @@ export type ParseResult = {
   warnings: string[];
 };
 
-const Q_START = /^\s*(?:Q(?:uestion)?\.?\s*(?:No\.?)?\s*)?(\d{1,3})\s*[.):]\s*(?=\S)/i;
+const Q_START = /^\s*(?:Q(?:uestion)?\.?\s*(?:No\.?)?\s*)?(\d{1,3})\s*(?:\.(?!\d)|[):])\s*(?=\S)/i;
 const ANSWER_KEY_HEADING = /^\s*(?:answer\s*key|answers?\s*(?:key|sheet)?|key\s*answers?|उत्तर\s*कुंजी)\s*:?\s*$/i;
 const SOLUTIONS_HEADING = /^\s*(?:hints?\s*(?:&|and)\s*solutions?|solutions?|explanations?|हल)\s*:?\s*$/i;
 const INLINE_ANSWER = /(?:^|\s)(?:Ans(?:wer)?|Correct\s*(?:option|answer)|उत्तर)\s*[.:\-–]?\s*\(?\s*([1-4a-dA-D](?:\s*[,&]\s*[1-4a-dA-D])*)\s*\)?/;
@@ -96,13 +96,14 @@ export function splitOptions(block: string): { stem: string; options: { A: strin
     const stem = block.slice(0, positions[0]!.start).trim();
     if (!stem) continue;
     const opts = positions.map((p, i) => block.slice(p.end, i < 3 ? positions[i + 1]!.start : undefined).trim());
-    if (opts.some((o) => !o)) continue;
-    return { stem, options: { A: opts[0]!, B: opts[1]!, C: opts[2]!, D: opts[3]! } };
+    // In scientific questions, options may contain formulas or diagrams rendered as non-text glyphs.
+    // Do not discard options as long as stem is present and markers were in sequential order:
+    return { stem, options: { A: opts[0] || "", B: opts[1] || "", C: opts[2] || "", D: opts[3] || "" } };
   }
   return null;
 }
 
-/** "1. (3)  2. (4)", "1-c 2-a", "1) 3" — pairs of question number and answer. */
+/** "1. (3)  2. (4)", "1-c 2-a", "1) 3" — pairs of question number and answer, + grid reconstruction. */
 export function parseAnswerKey(text: string): Map<number, string> {
   const map = new Map<number, string>();
   const re = /(?:^|\s)(\d{1,3})\s*[.)\-–:]?\s*\(?\s*([1-4a-dA-D])\s*\)?(?=\s|$|,)/g;
@@ -112,6 +113,28 @@ export function parseAnswerKey(text: string): Map<number, string> {
     const a = toLetter(m[2]!);
     if (a && !map.has(n)) map.set(n, a);
   }
+
+  // Grid reconstruction for multi-column answer keys where font encodings dropped digits (like 6 and 8):
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (/examgoal|keep practising|chapter-wise|solutions|page/i.test(line)) continue;
+    const letters = Array.from(line.matchAll(/(?:^|\s|[.)])([A-D])(?=\s|$)/g)).map((x) => x[1]!);
+    if (letters.length === 5) {
+      const firstNumMatch = line.match(/^\s*(?:[^\d\s]*\s*)?(\d{1,3})\s*[.)]/);
+      let startNum = firstNumMatch ? Number(firstNumMatch[1]) : null;
+      if (!startNum) {
+        const secondNumMatch = line.match(/\s+(\d{1,3})\s*[.)]/);
+        if (secondNumMatch) startNum = Number(secondNumMatch[1]) - 1;
+      }
+      if (startNum) {
+        for (let col = 0; col < 5; col++) {
+          const qNum = startNum + col;
+          if (!map.has(qNum)) map.set(qNum, letters[col]!);
+        }
+      }
+    }
+  }
+
   return map;
 }
 
@@ -165,13 +188,22 @@ export function parsePyqText(pages: ParsedPage[], patterns?: ExamPattern[]): Par
         continue;
       }
 
+      const qPrefixMatch = line.match(/^\s*(?:Q(?:uestion)?\.?\s*(?:No\.?)?\s*)(\d{1,3})\s*(?:\.(?!\d)|[):])\s*(?=\S)/i);
+      const plainNumMatch = mode !== "ANSWER_KEY" ? line.match(/^\s*(\d{1,3})\s*(?:\.(?!\d)|[):])\s*(?=\S)/) : null;
+      const start = qPrefixMatch || plainNumMatch;
+      const hasQPrefix = Boolean(qPrefixMatch);
+
+      // If we see a Q-prefixed question start while in ANSWER_KEY or SOLUTIONS mode, exit back to QUESTIONS mode
+      if (qPrefixMatch && (mode === "ANSWER_KEY" || mode === "SOLUTIONS")) {
+        mode = "QUESTIONS";
+      }
+
       const sec = sections.length - 1;
       if (mode === "ANSWER_KEY") {
         answerKeyText[sec]!.push(line);
         continue;
       }
 
-      const start = line.match(Q_START);
       if (mode === "SOLUTIONS") {
         if (start) {
           currentSol = { section: sec, number: Number(start[1]), lines: [line.slice(start[0].length)] };
@@ -182,13 +214,13 @@ export function parsePyqText(pages: ParsedPage[], patterns?: ExamPattern[]): Par
 
       if (start) {
         const n = Number(start[1]);
-        // Accept the next number, or a restart at 1 (new section without a
-        // heading). Anything else is probably a numbered line inside a
-        // question (statements "1. ... 2. ...", match-the-column rows).
         const isNext = n === lastNumber + 1 || (lastNumber === 0 && n >= 1);
-        const isRestart = n === 1 && lastNumber > 1;
+        const currentLines = current?.lines ? current.lines.join(" ") : "";
+        const currentHasOptions = currentLines ? OPTION_STYLES.some((st) => st.some((re) => re.test(currentLines))) : true;
+        const isRestart = n === 1 && (lastNumber > 1 || sections.length > 1) && (hasQPrefix || currentHasOptions);
         if (isNext || isRestart) {
           if (isRestart) newSection(null);
+          mode = "QUESTIONS";
           current = { number: n, page: page.pageNumber, section: sections.length - 1, lines: [line.slice(start[0].length)] };
           blocks.push(current);
           lastNumber = n;

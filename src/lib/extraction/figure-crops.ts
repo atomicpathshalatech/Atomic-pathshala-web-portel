@@ -3,6 +3,7 @@ import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { lightThinking } from "@/lib/ai/gemini-models";
 import { withRenderedPdf } from "@/lib/pdf/page-renderer";
+import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
 
 /**
  * Chemical structures, diagrams, graphs and circuits can't be "read" from a
@@ -141,4 +142,90 @@ export function attachFigures<Q extends QuestionWithFigures>(questions: Q[], fig
     next.missingImageReason = "";
     return next;
   });
+}
+
+export type CroppedQuestionCard = {
+  page: number;
+  questionNumber: number;
+  png: Buffer;
+  box: [number, number, number, number];
+};
+
+/**
+ * Deterministically crops the full question reference card for each question:
+ * question number, sitting tag, statement, all math equations, diagrams, and options A, B, C, D.
+ * Rendered at ~180 DPI via headless Chromium / pdf.js. No AI calls or quota limits needed.
+ */
+export async function cropQuestionCards(
+  pdf: Buffer,
+  questions: { number: number; sourcePage: number }[]
+): Promise<CroppedQuestionCard[]> {
+  const pdfjs = await loadServerPdfJs();
+  const pdfDoc = await pdfjs.getDocument({
+    data: new Uint8Array(pdf),
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    disableFontFace: true,
+    verbosity: 0,
+  }).promise;
+
+  const byPage = new Map<number, number[]>();
+  for (const q of questions) {
+    if (!byPage.has(q.sourcePage)) byPage.set(q.sourcePage, []);
+    byPage.get(q.sourcePage)!.push(q.number);
+  }
+
+  const results: CroppedQuestionCard[] = [];
+
+  await withRenderedPdf(pdf, async (doc) => {
+    for (const [pageNum, qNums] of byPage.entries()) {
+      if (pageNum < 1 || pageNum > pdfDoc.numPages) continue;
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
+      const textContent = await page.getTextContent();
+      const pageHeight = viewport.height;
+
+      const items = (textContent.items as any[])
+        .filter((it) => "str" in it && String(it.str).trim() !== "")
+        .map((it) => ({
+          str: String(it.str).trim(),
+          x: Number(it.transform?.[4] ?? 0),
+          y: Number(it.transform?.[5] ?? 0),
+        }));
+
+      const Q_PREFIX = /^\s*(?:Q(?:uestion)?\.?\s*(?:No\.?)?\s*)(\d{1,3})\s*(?:\.(?!\d)|[):])/i;
+      const foundStarts: { qNum: number; y: number }[] = [];
+      for (const it of items) {
+        const m = it.str.match(Q_PREFIX);
+        if (m) {
+          const num = Number(m[1]);
+          if (qNums.includes(num) && !foundStarts.some((f) => f.qNum === num)) {
+            foundStarts.push({ qNum: num, y: it.y });
+          }
+        }
+      }
+
+      foundStarts.sort((a, b) => b.y - a.y);
+
+      for (let i = 0; i < foundStarts.length; i++) {
+        const curr = foundStarts[i]!;
+        const next = foundStarts[i + 1];
+
+        const topPdfY = Math.min(pageHeight, curr.y + 12);
+        const bottomPdfY = next ? next.y + 22 : 55;
+
+        const ymin = Math.max(0, Math.round(((pageHeight - topPdfY) / pageHeight) * 1000));
+        const ymax = Math.min(1000, Math.round(((pageHeight - bottomPdfY) / pageHeight) * 1000));
+        const box: [number, number, number, number] = [ymin, 35, ymax, 965];
+
+        const png = await doc.crop(pageNum, box);
+        if (png) {
+          results.push({ page: pageNum, questionNumber: curr.qNum, png, box });
+        }
+      }
+      await doc.release(pageNum);
+    }
+  });
+
+  return results;
 }

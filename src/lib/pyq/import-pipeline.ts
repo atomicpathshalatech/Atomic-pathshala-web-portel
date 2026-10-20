@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { uploadFile } from "@/lib/storage";
 import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
 import { extractTextFromPdfBuffer, extractQuestionsWithAiChunk, type ExtractedAiQuestion } from "@/lib/extraction/pdf-extractor";
-import { cropQuestionFigures } from "@/lib/extraction/figure-crops";
+import { cropQuestionFigures, cropQuestionCards } from "@/lib/extraction/figure-crops";
 import { examPatterns } from "./exams-service";
 import { findExamTags, headingTagForLine, resolveQuestionMeta, stripQuestionTag, type DetectedTag, type ExamPattern } from "./metadata-detect";
 import { parsePyqText, type ParsedPage } from "./text-parser";
@@ -279,18 +279,31 @@ export async function processPyqChunk(
       }
     }
 
-    // Figures: crop diagrams for questions that mention one.
-    if (pdf && drafts.some((d) => d.hasImageHint && !d.imageUrl)) {
+    // Full Question Reference Image Cropping:
+    // Every question gets an authoritative high-resolution reference card (180 DPI)
+    // preserving formulas, math, diagrams, chemical bonds, and all options A-D.
+    if (pdf && drafts.length > 0) {
       try {
-        const figPages = Array.from(new Set(drafts.filter((d) => d.hasImageHint).map((d) => d.sourcePage)));
-        const crops = await cropQuestionFigures(pdf, { pages: figPages, deadlineMs: 45_000 });
-        for (const [i, c] of crops.entries()) {
-          const d = drafts.find((x) => x.sourcePage === c.page && x.number === c.questionNumber && !x.imageUrl);
-          if (!d || c.place !== "STATEMENT") continue;
-          d.imageUrl = await uploadFile({ key: `questions/pyq-import/${jobId}/p${c.page}-q${c.questionNumber}-${i}.png`, body: c.png, contentType: "image/png" });
+        const uncropped = drafts.filter((d) => !d.imageUrl);
+        if (uncropped.length > 0) {
+          const cardCrops = await cropQuestionCards(
+            pdf,
+            uncropped.map((d) => ({ number: d.number, sourcePage: d.sourcePage }))
+          );
+          for (const c of cardCrops) {
+            const d = drafts.find((x) => x.sourcePage === c.page && x.number === c.questionNumber);
+            if (d && !d.imageUrl) {
+              d.imageUrl = await uploadFile({
+                key: `questions/pyq-import/${jobId}/p${c.page}-q${c.questionNumber}-card.png`,
+                body: c.png,
+                contentType: "image/png",
+              });
+              d.hasImageHint = true;
+            }
+          }
         }
       } catch (err) {
-        console.warn(`[pyq-import] figure cropping failed on chunk ${chunkIndex}:`, err);
+        console.warn(`[pyq-import] full question card cropping failed on chunk ${chunkIndex}:`, err);
       }
     }
 
@@ -441,6 +454,7 @@ async function saveDrafts(job: JobForSave, drafts: Draft[]): Promise<number> {
       sourcePdfName: job.fileName,
       sourcePage: d.sourcePage,
       statement: d.statement,
+      statementHi: /[ऀ-ॿ]/.test(d.statement) ? d.statement : null,
       options: d.options as unknown as Prisma.InputJsonValue,
       correctAnswer: d.answer ?? "",
       answerKeySource: d.answerSource,
