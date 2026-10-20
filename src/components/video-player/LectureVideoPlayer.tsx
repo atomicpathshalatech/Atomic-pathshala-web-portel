@@ -10,6 +10,7 @@ import React, {
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { useWatchHeartbeat } from "@/lib/video/use-watch-heartbeat";
+import { parseYouTubeVideoId } from "@/lib/youtube/video-link";
 
 export interface LectureVideoPlayerProps {
   mode?: "recorded" | "live";
@@ -104,20 +105,7 @@ function formatTime(seconds: number): string {
 }
 
 function extractYouTubeVideoId(url: string): string | null {
-  if (!url) return null;
-  if (url.includes("embed/")) {
-    return url.split("embed/")[1]?.split("?")[0] || null;
-  }
-  if (url.includes("watch?v=")) {
-    return url.split("watch?v=")[1]?.split("&")[0] || null;
-  }
-  if (url.includes("youtu.be/")) {
-    return url.split("youtu.be/")[1]?.split("?")[0] || null;
-  }
-  if (url.includes("/live/")) {
-    return url.split("/live/")[1]?.split(/[?&/]/)[0] || null;
-  }
-  return null;
+  return url ? parseYouTubeVideoId(url) : null;
 }
 
 export function LectureVideoPlayer({
@@ -172,6 +160,8 @@ export function LectureVideoPlayer({
   const [isAspectFill, setIsAspectFill] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+  // Set from YouTube's onError (2/5/100/101/150/153) — shown under the player.
+  const [ytErrorCode, setYtErrorCode] = useState<number | null>(null);
   // YouTube flashes its title / channel logo for a few seconds whenever
   // playback starts or resumes; keep the top edge veiled until it fades.
   const [ytTitleVeil, setYtTitleVeil] = useState(false);
@@ -198,6 +188,7 @@ export function LectureVideoPlayer({
 
   const youtubeVideoId = useMemo(() => extractYouTubeVideoId(videoUrl), [videoUrl]);
   const isYouTube = Boolean(youtubeVideoId);
+  useEffect(() => setYtErrorCode(null), [youtubeVideoId]);
   const ytPlayerElementId = useMemo(
     () => "atomic-yt-" + Math.random().toString(36).substring(2, 9),
     []
@@ -448,6 +439,7 @@ export function LectureVideoPlayer({
               } catch {}
             },
             onStateChange: (e: any) => handleYtState(e.data),
+            onError: (e: any) => setYtErrorCode(Number(e?.data) || 0),
           },
         });
       } catch (err) {
@@ -502,6 +494,8 @@ export function LectureVideoPlayer({
           if (typeof info.playerState === "number") handleYtState(info.playerState);
         } else if (msg.event === "onStateChange" && typeof msg.info === "number") {
           handleYtState(msg.info);
+        } else if (msg.event === "onError") {
+          setYtErrorCode(Number(msg.info) || 0);
         }
       } catch {}
     };
@@ -990,6 +984,27 @@ export function LectureVideoPlayer({
             allowFullScreen
           />
         </div>
+        {ytErrorCode !== null && (
+          <div role="alert" className="mt-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 flex flex-wrap items-center gap-2">
+            <span className="flex-1 min-w-[12rem]">
+              {ytErrorCode === 100
+                ? "यह वीडियो YouTube पर Private है या हटा दी गई है, इसलिए ऐप में नहीं चल सकती। (This video is private or was removed on YouTube.)"
+                : ytErrorCode === 101 || ytErrorCode === 150
+                ? "वीडियो के मालिक ने इसे दूसरी वेबसाइट/ऐप में चलाना बंद किया है (Allow embedding off)। (Embedding is turned off for this video.)"
+                : "YouTube इस वीडियो को अभी यहाँ नहीं चला पा रहा। (YouTube could not play this video here.)"}
+            </span>
+            {youtubeVideoId && (
+              <a
+                href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1 rounded-full bg-red-600 text-white font-semibold hover:bg-red-700"
+              >
+                YouTube पर देखें
+              </a>
+            )}
+          </div>
+        )}
         <div className="mt-1.5 px-1 flex items-center justify-between gap-2 text-[10px] text-slate-500">
           <span className="font-mono truncate select-none">{activeWatermark}</span>
           {showResumeBanner && !isLive && (

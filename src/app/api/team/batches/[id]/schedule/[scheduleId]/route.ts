@@ -1,4 +1,5 @@
-import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { parseYouTubeVideoId } from "@/lib/youtube/video-link";
+import { checkScheduleYouTubeLink } from "@/lib/youtube/schedule-link";
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -11,8 +12,8 @@ import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
 import { applyLateReschedulePenaltyIfDue } from "@/lib/batch/reschedule-penalty";
 import { clearAttemptsForSchedules } from "@/lib/team/resource-delete";
 
-/** A pasted YouTube link is stored as its video id (the player embeds by id). */
-const ytIdOf = (v: string | null | undefined) => (v && v.trim() ? extractYouTubeVideoId(v) ?? v.trim() : null);
+/** A pasted YouTube link is stored as its video id (the player embeds by id) — never the raw link. */
+const ytIdOf = (v: string | null | undefined) => (v && v.trim() ? parseYouTubeVideoId(v) : null);
 
 export async function PATCH(
   request: NextRequest,
@@ -62,6 +63,35 @@ export async function PATCH(
       }
     }
 
+    // A changed YouTube link is checked before saving (private / deleted /
+    // embedding off never plays in the app). An unchanged link is only
+    // normalised, so editing an old class never fails on its video.
+    const rawLink = (input.youtubeUrl || input.youtubeVideoId || "").trim();
+    let youtubeUrlToSave: string | null = null;
+    if (rawLink) {
+      const newId = parseYouTubeVideoId(rawLink);
+      const oldId = existing.youtubeUrl ? parseYouTubeVideoId(existing.youtubeUrl) : null;
+      if (newId && newId === oldId) {
+        youtubeUrlToSave = `https://www.youtube.com/watch?v=${newId}`;
+      } else {
+        const checked = await checkScheduleYouTubeLink(rawLink);
+        if (!checked.ok) return apiError(checked.error, 400, { code: "YOUTUBE_LINK_UNPLAYABLE" });
+        youtubeUrlToSave = checked.url;
+      }
+    }
+
+    // Editing an old class to add/keep its YouTube video makes it a recorded
+    // (COMPLETED) class, the same as adding it that way — otherwise a past
+    // SCHEDULED class reads as "Cancelled" to students.
+    const linkAfterEdit = youtubeUrlToSave ?? existing.youtubeUrl;
+    const isRecordedOldClass =
+      existing.type === "LIVE_CLASS" &&
+      Boolean(linkAfterEdit) &&
+      input.status === "SCHEDULED" &&
+      !existing.liveWhiteboardSession?.actualStartedAt &&
+      input.endsAt.getTime() <= Date.now();
+    const recordedVideoId = isRecordedOldClass && linkAfterEdit ? parseYouTubeVideoId(linkAfterEdit) : null;
+
     // A Live Class actually moving in time is a "reschedule" in the Phase D
     // sense (audit trail + notice-window penalty) — a same-time edit (just
     // the title/notes/teacher changing) or any non-LIVE_CLASS entry isn't.
@@ -82,10 +112,10 @@ export async function PATCH(
         durationMinutes: input.durationMinutes || null,
         // Kept unless the form sends a link: a video linked from the lecture
         // Sheet used to be wiped by any edit of the class.
-        ...(input.youtubeUrl ? { youtubeUrl: input.youtubeUrl } : {}),
+        ...(youtubeUrlToSave ? { youtubeUrl: youtubeUrlToSave } : {}),
         ...(input.classMode !== undefined ? { classMode: input.classMode } : {}),
         type: input.type,
-        status: input.status,
+        status: isRecordedOldClass ? "COMPLETED" : input.status,
         teacherId: input.teacherId || null,
         startsAt: input.startsAt,
         endsAt: input.endsAt,
@@ -146,13 +176,14 @@ export async function PATCH(
           update: {
             ...(input.videoTransport && { videoTransport: input.videoTransport }),
             ...(input.youtubeVideoId !== undefined && { youtubeVideoId: ytIdOf(input.youtubeVideoId) }),
+            ...(recordedVideoId && !ytIdOf(input.youtubeVideoId) && { youtubeVideoId: recordedVideoId }),
           },
           create: {
             batchScheduleId: schedule.id,
             teacherId: resolvedTeacherId,
             title: schedule.title,
             videoTransport: input.videoTransport || "LIVEKIT",
-            youtubeVideoId: ytIdOf(input.youtubeVideoId),
+            youtubeVideoId: ytIdOf(input.youtubeVideoId) ?? recordedVideoId,
           },
         });
 

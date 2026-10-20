@@ -1,4 +1,5 @@
-import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { parseYouTubeVideoId } from "@/lib/youtube/video-link";
+import { checkScheduleYouTubeLink } from "@/lib/youtube/schedule-link";
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -9,8 +10,8 @@ import { batchScheduleCreateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
 
-/** A pasted YouTube link is stored as its video id (the player embeds by id). */
-const ytIdOf = (v: string | null | undefined) => (v && v.trim() ? extractYouTubeVideoId(v) ?? v.trim() : null);
+/** A pasted YouTube link is stored as its video id (the player embeds by id) — never the raw link. */
+const ytIdOf = (v: string | null | undefined) => (v && v.trim() ? parseYouTubeVideoId(v) : null);
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -71,6 +72,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return apiError(conflict.message || "Schedule timing conflict detected.", 409);
     }
 
+    // A YouTube link is checked before anything is saved: a private /
+    // deleted video or one with embedding off never plays in the app.
+    const rawLink = (input.youtubeUrl || input.youtubeVideoId || "").trim();
+    let youtubeLink: { videoId: string; url: string } | null = null;
+    if (rawLink) {
+      const checked = await checkScheduleYouTubeLink(rawLink);
+      if (!checked.ok) return apiError(checked.error, 400, { code: "YOUTUBE_LINK_UNPLAYABLE" });
+      youtubeLink = checked;
+    }
+    // An old class added with its YouTube video (its time is already over)
+    // is a recorded class: saved as COMPLETED so students get "Watch". As a
+    // plain SCHEDULED class it would read as "Cancelled" (never started).
+    const isRecordedOldClass = input.type === "LIVE_CLASS" && Boolean(youtubeLink) && input.endsAt.getTime() <= Date.now();
+
     const schedule = await prisma.batchSchedule.create({
       data: {
         batchId: params.id,
@@ -78,9 +93,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         subject: input.subject || null,
         topic: input.topic || null,
         durationMinutes: input.durationMinutes || null,
-        youtubeUrl: input.youtubeUrl || null,
+        youtubeUrl: youtubeLink?.url ?? null,
         classMode: input.type === "LIVE_CLASS" ? input.classMode ?? null : null,
         type: input.type,
+        ...(isRecordedOldClass ? { status: "COMPLETED" as const } : {}),
         teacherId: input.teacherId || null,
         chapterId: input.chapterId || null,
         startsAt: input.startsAt,
@@ -111,7 +127,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           where: { batchScheduleId: schedule.id },
           update: {
             videoTransport,
-            youtubeVideoId: ytIdOf(input.youtubeVideoId),
+            youtubeVideoId: ytIdOf(input.youtubeVideoId) ?? (isRecordedOldClass ? youtubeLink!.videoId : null),
             scheduledStart: schedule.startsAt,
             scheduledEnd: schedule.endsAt,
           },
@@ -122,7 +138,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             status: "ACTIVE",
             livePhase: "SCHEDULED",
             videoTransport,
-            youtubeVideoId: ytIdOf(input.youtubeVideoId),
+            youtubeVideoId: ytIdOf(input.youtubeVideoId) ?? (isRecordedOldClass ? youtubeLink!.videoId : null),
             scheduledStart: schedule.startsAt,
             scheduledEnd: schedule.endsAt,
             pages: { create: { pageNumber: 1, objects: [] } },

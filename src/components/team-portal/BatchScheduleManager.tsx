@@ -239,11 +239,10 @@ export function BatchScheduleManager({
           form.type === "LIVE_CLASS" && teachingModel === "MODEL_2_DUAL"
             ? form.youtubeVideoId.trim() || undefined
             : undefined,
-        youtubeUrl: form.youtubeVideoId?.trim()
-          ? form.youtubeVideoId.includes("http")
-            ? form.youtubeVideoId.trim()
-            : `https://www.youtube.com/watch?v=${form.youtubeVideoId.trim()}`
-          : undefined,
+        // Sent as typed; the server reads the video id from any YouTube link
+        // form (with or without https://, shorts, youtu.be, a bare id…),
+        // checks YouTube will play it in the app, and stores a clean link.
+        youtubeUrl: form.youtubeVideoId?.trim() || undefined,
         durationMinutes: duration,
         startsAt: startsAtDate.toISOString(),
         endsAt: endsAtDate.toISOString(),
