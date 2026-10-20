@@ -391,6 +391,20 @@ type JobForSave = {
   pyqExamRef: { id: string; name: string } | null;
 };
 
+
+function cleanUtf8<T>(val: T): T {
+  if (typeof val === "string") return val.replace(/\0/g, "") as unknown as T;
+  if (Array.isArray(val)) return val.map(cleanUtf8) as unknown as T;
+  if (val && typeof val === "object") {
+    const res: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      res[k] = cleanUtf8(v);
+    }
+    return res;
+  }
+  return val;
+}
+
 async function saveDrafts(job: JobForSave, drafts: Draft[]): Promise<number> {
   if (!drafts.length) return 0;
 
@@ -487,13 +501,14 @@ async function saveDrafts(job: JobForSave, drafts: Draft[]): Promise<number> {
       } as unknown as Prisma.InputJsonValue,
     };
 
+    const cleanData = cleanUtf8(data);
     const existing = await prisma.extractedQuestion.findUnique({ where: { jobId_sourceKey: { jobId: job.id, sourceKey: d.sourceKey } } });
     if (existing) {
       // Never overwrite a reviewer's work on a retry.
       if (existing.isEdited || existing.reviewDecision !== "PENDING") continue;
-      await prisma.extractedQuestion.update({ where: { id: existing.id }, data });
+      await prisma.extractedQuestion.update({ where: { id: existing.id }, data: cleanData });
     } else {
-      await prisma.extractedQuestion.create({ data });
+      await prisma.extractedQuestion.create({ data: cleanData });
     }
     saved++;
   }

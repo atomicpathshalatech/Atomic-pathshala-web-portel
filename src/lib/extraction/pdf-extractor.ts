@@ -126,7 +126,7 @@ export async function extractTextFromPdfBuffer(
       // with two columns is read left column first, then right.
       const items = (textContent.items as any[])
         .filter((it) => "str" in it && String(it.str).trim() !== "")
-        .map((it) => ({ str: String(it.str), x: Number(it.transform?.[4] ?? 0), y: Number(it.transform?.[5] ?? 0), w: Number(it.width ?? 0), h: Math.abs(Number(it.transform?.[3] ?? it.height ?? 10)) || 10 }));
+        .map((it) => ({ str: String(it.str).replace(/\0/g, ""), x: Number(it.transform?.[4] ?? 0), y: Number(it.transform?.[5] ?? 0), w: Number(it.width ?? 0), h: Math.abs(Number(it.transform?.[3] ?? it.height ?? 10)) || 10 }));
       const viewport = page.getViewport({ scale: 1 });
       const mid = viewport.width / 2;
       const leftShare = items.length ? items.filter((it) => it.x + it.w <= mid + 4).length / items.length : 1;
