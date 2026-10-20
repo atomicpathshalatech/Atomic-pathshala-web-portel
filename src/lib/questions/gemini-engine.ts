@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { geminiKeyManager, CostEstimateResult } from "@/lib/ai/gemini-key-manager";
-import { GEMINI_TEXT_MODELS, classifyGeminiFailure, usableModels, isQuotaError, isQuotaOut, markQuotaOut } from "@/lib/ai/gemini-models";
+import { GEMINI_TEXT_MODELS, classifyGeminiFailure, usableModels, isQuotaError, isQuotaOut, markQuotaOut, markModelBusy } from "@/lib/ai/gemini-models";
 import { hedge, rotated } from "@/lib/ai/hedge";
 
 export interface ExtractedQuestionData {
@@ -73,8 +73,12 @@ export async function executeGeminiWithFailover<T>(
           continue;
         }
         lastError = err;
+        const msg = String(err?.message || err);
+        if (msg.includes("503") || msg.toLowerCase().includes("high demand") || msg.toLowerCase().includes("busy")) {
+          markModelBusy(modelName);
+        }
         // If model not found or transient model error, try next model in hierarchy
-        console.warn(`[Gemini Engine] Model ${modelName} failed, trying fallback: ${err?.message || err}`);
+        console.warn(`[Gemini Engine] Model ${modelName} failed, trying fallback: ${msg}`);
       }
     }
     // Only quota refusals on every model: the key really is used up (it is rested).

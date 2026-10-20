@@ -13,6 +13,8 @@ import {
   Plus,
   HelpCircle,
   FileSpreadsheet,
+  Pencil,
+  X,
 } from "lucide-react";
 
 interface Subject {
@@ -105,6 +107,14 @@ function NewExerciseContent() {
   const [showAddTopic, setShowAddTopic] = useState(false);
   const [newTopicName, setNewTopicName] = useState("");
   const [savingNewTopic, setSavingNewTopic] = useState(false);
+
+  // Editing existing topic state
+  const [editingTopic, setEditingTopic] = useState<{
+    id: string;
+    name: string;
+    nameHindi?: string;
+  } | null>(null);
+  const [savingTopicEdit, setSavingTopicEdit] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -260,6 +270,50 @@ function NewExerciseContent() {
   };
 
   // Submit exercise creation
+  // Update existing topic in academic hierarchy
+  const handleSaveEditedTopic = async () => {
+    if (!editingTopic || !editingTopic.name.trim()) return;
+    setSavingTopicEdit(true);
+    try {
+      const res = await fetch("/api/team/questions/academic-hierarchy", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "TOPIC",
+          id: editingTopic.id,
+          name: editingTopic.name.trim(),
+          nameHindi: editingTopic.nameHindi?.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        // Update local topics list
+        setTopics((prev) =>
+          prev.map((t) =>
+            t.id === editingTopic.id
+              ? {
+                  ...t,
+                  name: editingTopic.name.trim(),
+                  nameHindi: editingTopic.nameHindi?.trim() || null,
+                }
+              : t
+          )
+        );
+        const oldTopic = topics.find((t) => t.id === editingTopic.id);
+        if (oldTopic && selectedTopic.toLowerCase() === oldTopic.name.toLowerCase()) {
+          setSelectedTopic(editingTopic.name.trim());
+        }
+        setEditingTopic(null);
+      } else {
+        alert(json.error || "Failed to update topic");
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to update topic");
+    } finally {
+      setSavingTopicEdit(false);
+    }
+  };
+
   const handleCreateExercise = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !selectedSubject || !selectedChapter) {
@@ -536,31 +590,51 @@ function NewExerciseContent() {
                   {topics.map((t) => {
                     const isSelected = selectedTopic.toLowerCase() === t.name.toLowerCase();
                     return (
-                      <button
+                      <div
                         key={t.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedTopic(isSelected ? "" : t.name);
-                          setSelectedSubTopic("");
-                        }}
-                        className={`flex flex-col items-start rounded-lg border p-3 text-left transition-all ${
+                        className={`group relative flex items-center justify-between rounded-lg border p-3 transition-all ${
                           isSelected
                             ? "border-amber-500 bg-amber-50/50 dark:border-amber-500 dark:bg-amber-950/30"
                             : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
                         }`}
                       >
-                        <span className="text-xs font-bold text-slate-900 dark:text-white">
-                          {t.name}
-                        </span>
-                        {t.nameHindi && (
-                          <span className="text-[11px] text-slate-400">{t.nameHindi}</span>
-                        )}
-                        {t.subtopics.length > 0 && (
-                          <span className="mt-1 text-[10px] text-slate-400">
-                            {t.subtopics.length} subtopics
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTopic(isSelected ? "" : t.name);
+                            setSelectedSubTopic("");
+                          }}
+                          className="flex flex-1 flex-col items-start text-left cursor-pointer"
+                        >
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">
+                            {t.name}
                           </span>
-                        )}
-                      </button>
+                          {t.nameHindi && (
+                            <span className="text-[11px] text-slate-400">{t.nameHindi}</span>
+                          )}
+                          {t.subtopics.length > 0 && (
+                            <span className="mt-1 text-[10px] text-slate-400">
+                              {t.subtopics.length} subtopics
+                            </span>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTopic({
+                              id: t.id,
+                              name: t.name,
+                              nameHindi: t.nameHindi || "",
+                            });
+                          }}
+                          className="p-1.5 rounded-md text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800 transition cursor-pointer"
+                          title="Rename / Edit Topic"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -924,6 +998,91 @@ function NewExerciseContent() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* Edit Topic Modal */}
+      {editingTopic && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                  <Pencil className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Rename Topic
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Update this topic name in chapter syllabus.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTopic(null)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveEditedTopic();
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Topic Title (English) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingTopic.name}
+                  onChange={(e) =>
+                    setEditingTopic({ ...editingTopic, name: e.target.value })
+                  }
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Topic Title (Hindi) (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={editingTopic.nameHindi || ""}
+                  onChange={(e) =>
+                    setEditingTopic({ ...editingTopic, nameHindi: e.target.value })
+                  }
+                  placeholder="e.g. मूल संकल्पना"
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingTopic(null)}
+                  className="rounded-xl px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingTopicEdit || !editingTopic.name.trim()}
+                  className="rounded-xl bg-amber-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-amber-500 disabled:opacity-50"
+                >
+                  {savingTopicEdit ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -238,12 +238,9 @@ export async function extractQuestionsWithAiChunk({
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.1,
-        // Bilingual questions + solutions are long: with the default output
-        // limit the JSON was cut off, parsing failed and the whole document
-        // fell back to the weak regex parser.
-        maxOutputTokens: 32768,
+        maxOutputTokens: 16384,
       },
-    });
+    }, { timeout: 60_000 });
 
     const prompt = `You are the Master Academic Question Extraction & Ingestion Engine for NEET, JEE Main, and NCERT (Atomic Pathshala).
 Source Institute / Paper: "${sourceName || "Exam Document"}"

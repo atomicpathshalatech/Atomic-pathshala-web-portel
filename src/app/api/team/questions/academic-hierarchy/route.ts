@@ -148,3 +148,44 @@ export async function POST(req: NextRequest) {
     return handleApiError(error);
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+    await requirePermission(session.user.id, PERMISSIONS.QUESTION_CREATE);
+
+    const body = await req.json();
+    const { type, id, name, nameHindi } = body;
+
+    if (!id || !name?.trim()) {
+      return apiError("ID and name are required", 400);
+    }
+
+    if (type === "TOPIC" || !type) {
+      const updatedTopic = await prisma.academicTopic.update({
+        where: { id },
+        data: {
+          title: name.trim(),
+          ...(nameHindi !== undefined ? { titleHindi: nameHindi?.trim() || null } : {}),
+        },
+      });
+      return apiSuccess({ topic: updatedTopic });
+    }
+
+    if (type === "SUBTOPIC") {
+      const updatedSubtopic = await prisma.academicSubtopic.update({
+        where: { id },
+        data: {
+          title: name.trim(),
+          ...(nameHindi !== undefined ? { titleHindi: nameHindi?.trim() || null } : {}),
+        },
+      });
+      return apiSuccess({ subtopic: updatedSubtopic });
+    }
+
+    return apiError("Invalid hierarchy level type", 400);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

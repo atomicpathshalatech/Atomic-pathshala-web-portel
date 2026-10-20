@@ -73,6 +73,8 @@ export async function PATCH(
       const data: any = {};
       if (body.title !== undefined) data.title = body.title.trim();
       if (body.description !== undefined) data.description = body.description?.trim() || null;
+      if (body.topic !== undefined) data.topic = body.topic ? body.topic.trim() : null;
+      if (body.subTopic !== undefined) data.subTopic = body.subTopic ? body.subTopic.trim() : null;
       if (body.order !== undefined) data.order = Number(body.order);
       if (body.pageBreakBefore !== undefined) data.pageBreakBefore = Boolean(body.pageBreakBefore);
 

@@ -193,7 +193,7 @@ export async function cropQuestionCards(
           y: Number(it.transform?.[5] ?? 0),
         }));
 
-      const Q_PREFIX = /^\s*(?:Q(?:uestion)?\.?\s*(?:No\.?)?\s*)(\d{1,3})\s*(?:\.(?!\d)|[):])/i;
+      const Q_PREFIX = /^\s*(?:Q(?:uestion)?\.?\s*(?:No\.?)?\s*)?(\d{1,3})\s*(?:\.(?!\d)|[):]|\s|$)/i;
       const foundStarts: { qNum: number; y: number }[] = [];
       for (const it of items) {
         const m = it.str.match(Q_PREFIX);

@@ -33,7 +33,7 @@ export interface JobChunkPlan {
 }
 
 const MAX_CHUNK_CHARS = 14_000;
-const MAX_TEXT_PAGES_PER_CHUNK = 6;
+const MAX_TEXT_PAGES_PER_CHUNK = 2;
 const IMAGE_PAGES_PER_CHUNK = 2;
 
 const STOPWORDS = new Set([

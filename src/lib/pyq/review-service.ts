@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma, type ExtractedQuestion } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { withNewQuestionCode } from "@/lib/questions/create-with-code";
+import { withNewQuestionCode, toQuestionType, toDifficulty, isOptionBasedType } from "@/lib/questions/create-with-code";
 import { buildOccurrenceKey, formatOccurrenceLabel } from "./keys";
 import { questionFingerprint } from "./fingerprint";
 
@@ -27,18 +27,22 @@ export type ExtractedPatch = Partial<{
   subject: string;
   chapter: string | null;
   topic: string | null;
+  subTopic: string | null;
+  difficulty: string;
+  questionType: string;
 }>;
 
 const LETTER = /^[A-D](,[A-D])*$/;
 
 /** What still stops this record from being approved (empty = ready). */
-export function approvalBlockers(eq: Pick<ExtractedQuestion, "statement" | "options" | "correctAnswer" | "pyqExamId" | "pyqYear" | "chapter" | "duplicateOfQuestionId" | "duplicateDecision">): string[] {
+export function approvalBlockers(eq: Pick<ExtractedQuestion, "statement" | "options" | "correctAnswer" | "pyqExamId" | "pyqYear" | "chapter" | "duplicateOfQuestionId" | "duplicateDecision"> & { questionType?: string }): string[] {
   const problems: string[] = [];
   const opts = (eq.options ?? {}) as Record<string, string>;
   if (!String(eq.statement || "").trim()) problems.push("Question text is empty.");
-  const hasVisualCard = Boolean((eq as any).imageUrl) || Boolean((eq as any).hasImage);
-  if (!hasVisualCard && ["A", "B", "C", "D"].some((k) => !String(opts[k] ?? "").trim())) {
-    problems.push("All four options are needed.");
+  const qType = (eq as any).questionType || "SINGLE_CORRECT";
+  const needsOptions = isOptionBasedType(qType);
+  if (needsOptions && ["A", "B", "C", "D"].some((k) => !String(opts[k] ?? "").trim())) {
+    problems.push("All four options (A, B, C, D) are required.");
   }
   if (!LETTER.test(String(eq.correctAnswer || ""))) problems.push("Correct answer is missing.");
   if (!eq.pyqExamId) problems.push("Exam is not set.");
@@ -88,6 +92,9 @@ export async function updateExtracted(id: string, patch: ExtractedPatch, userId:
     data.needsChapterReview = !data.chapter;
   }
   if (patch.topic !== undefined) data.topic = patch.topic?.trim() || null;
+  if (patch.subTopic !== undefined) data.subTopic = patch.subTopic?.trim() || null;
+  if (patch.difficulty !== undefined) data.difficulty = patch.difficulty;
+  if (patch.questionType !== undefined) data.questionType = patch.questionType;
   if (patch.statement !== undefined || patch.options !== undefined) {
     data.contentFingerprint = questionFingerprint(
       (data.statement as string) ?? eq.statement,
@@ -201,8 +208,9 @@ export async function approveExtracted(ids: string[], userId: string, publish: b
               subject: eq.subject,
               chapter: eq.chapter,
               topic: eq.topic,
-              type: answers.length > 1 ? "MULTIPLE_CORRECT" : "SINGLE_CORRECT",
-              difficulty: "MEDIUM",
+              subTopic: eq.subTopic,
+              type: toQuestionType(eq.questionType || (answers.length > 1 ? "MULTIPLE_CORRECT" : "SINGLE_CORRECT")),
+              difficulty: toDifficulty(eq.difficulty),
               category: `${exam.legacyCode ?? exam.slug.toUpperCase()}_PYQ`,
               pyqExam: exam.legacyCode ?? exam.name,
               pyqYear: eq.pyqYear,
@@ -238,6 +246,39 @@ export async function approveExtracted(ids: string[], userId: string, publish: b
           await prisma.questionDuplicateCandidate
             .create({ data: { questionAId: a!, questionBId: b!, category: "NEEDS_MANUAL_REVIEW", score: eq.duplicateScore ?? 0, method: "PYQ_IMPORT", language: "ENGLISH", note: "Kept separate during PYQ import review", status: "KEEP_BOTH", decidedById: userId, decidedAt: now } })
             .catch(() => undefined);
+        }
+
+        // Folder / Coaching Module Collection Association
+        const collName = eq.job.sourceName?.trim() || eq.sourceName?.trim();
+        if (collName) {
+          try {
+            let coll = await prisma.questionCollection.findFirst({ where: { name: collName } });
+            if (!coll) {
+              coll = await prisma.questionCollection.create({
+                data: {
+                  name: collName,
+                  description: `Questions imported from ${eq.job.fileName || collName}`,
+                  createdById: userId,
+                },
+              });
+            }
+            await prisma.questionCollectionItem.upsert({
+              where: {
+                collectionId_questionId: {
+                  collectionId: coll.id,
+                  questionId,
+                },
+              },
+              create: {
+                collectionId: coll.id,
+                questionId,
+                addedById: userId,
+              },
+              update: {},
+            });
+          } catch (collErr) {
+            console.warn("[review-service] Failed to link question to collection:", collErr);
+          }
         }
       }
 

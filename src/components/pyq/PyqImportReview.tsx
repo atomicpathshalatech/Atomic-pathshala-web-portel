@@ -42,6 +42,9 @@ type Row = {
   subject: string;
   chapter: string | null;
   topic: string | null;
+  subTopic: string | null;
+  difficulty: string;
+  questionType: string;
   chapterCandidates: Candidate[] | null;
   needsChapterReview: boolean;
   duplicateOfQuestionId: string | null;
@@ -84,8 +87,15 @@ export function PyqImportReview({ jobId, canApprove }: { jobId: string; canAppro
   const [busy, setBusy] = useState(false);
   const [bulkChapter, setBulkChapter] = useState({ subject: "", chapter: "" });
   const [bulkYear, setBulkYear] = useState({ examId: "", year: "" });
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const runnerRef = useRef(false);
   const ocrAbort = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (status?.job.status !== "PROCESSING") return;
+    const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [status?.job.status]);
 
   const loadStatus = useCallback(async () => {
     const s = await api<Status>(`/api/team/pyq/imports/${jobId}`);
@@ -238,15 +248,44 @@ export function PyqImportReview({ jobId, canApprove }: { jobId: string; canAppro
             </a>
           </div>
         </div>
-        <div>
-          <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-            <div className="h-full bg-blue-600 transition-all" style={{ width: `${job.progress}%` }} />
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            {running ? "Working… " : ""}
-            {job.currentStep}
-          </p>
-        </div>
+        {(() => {
+          const processedPages = plan?.processedPages ?? 0;
+          const totalPages = plan?.totalPages ?? 1;
+          const speed = elapsedSeconds > 8 && processedPages > 0 ? ((processedPages / elapsedSeconds) * 60).toFixed(1) + " p/min" : null;
+          const remainingPages = Math.max(0, totalPages - processedPages);
+          const etaSec = speed && remainingPages > 0 ? Math.round(remainingPages / (processedPages / elapsedSeconds)) : null;
+          const formatSec = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+          return (
+            <div className="space-y-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 p-3.5">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-block w-2.5 h-2.5 rounded-full ${job.status === "PROCESSING" ? "bg-blue-600 animate-pulse" : job.status === "COMPLETED" || job.status === "REVIEW_REQUIRED" ? "bg-emerald-500" : "bg-slate-400"}`} />
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {job.status === "PROCESSING" ? "Processing PDF with AI Multimodal Engine..." : job.status === "REVIEW_REQUIRED" ? "Extraction Ready — Review Questions" : job.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                  {job.status === "PROCESSING" && (
+                    <>
+                      <span>⏱️ Elapsed: <b>{formatSec(elapsedSeconds)}</b></span>
+                      {etaSec ? <span>⏳ Est. remaining: <b>~{formatSec(etaSec)}</b></span> : null}
+                      {speed ? <span className="text-blue-600 dark:text-blue-400 font-bold">⚡ {speed}</span> : null}
+                    </>
+                  )}
+                  <span className="font-black text-slate-900 dark:text-white text-xs">{job.progress}%</span>
+                </div>
+              </div>
+              <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div className="h-full bg-blue-600 transition-all duration-300 rounded-full" style={{ width: `${job.progress}%` }} />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span>{running ? "⚡ Active: " : ""}{job.currentStep}</span>
+                {plan && <span>Chunk {(plan.chunks.filter((c) => c.status === "COMPLETED").length) + 1} of {plan.totalChunks}</span>}
+              </div>
+            </div>
+          );
+        })()}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-center text-xs">
           {[
             ["Pages", plan?.totalPages ?? 0],
@@ -403,6 +442,19 @@ export function PyqImportReview({ jobId, canApprove }: { jobId: string; canAppro
                     <span className={`px-2 py-0.5 rounded-full font-bold ${r.chapter ? "bg-slate-100 dark:bg-slate-800" : "bg-red-50 text-red-700"}`}>
                       {r.subject} · {r.chapter ?? "Needs Chapter Review"}
                       {r.topic ? ` · ${r.topic}` : ""}
+                      {r.subTopic ? ` › ${r.subTopic}` : ""}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                      r.difficulty === "EASY"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : r.difficulty === "HARD"
+                        ? "bg-rose-50 text-rose-700 border border-rose-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}>
+                      {r.difficulty || "MEDIUM"}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-sky-50 text-sky-700 border border-sky-200 font-mono">
+                      {(r.questionType || "SINGLE_CORRECT").replace(/_/g, " ")}
                     </span>
                     {r.extractionMethod && <span className="text-slate-400">{r.extractionMethod.replace("_", " ").toLowerCase()}</span>}
                     {r.reviewDecision !== "PENDING" && <span className="ml-auto font-bold">{r.reviewDecision}</span>}
@@ -540,6 +592,9 @@ function Editor({ row, exams, onSave, onCancel }: { row: Row; exams: Exam[]; onS
     subject: row.subject,
     chapter: row.chapter ?? "",
     topic: row.topic ?? "",
+    subTopic: row.subTopic ?? "",
+    difficulty: row.difficulty || "MEDIUM",
+    questionType: row.questionType || "SINGLE_CORRECT",
   });
   const [uploading, setUploading] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
@@ -571,7 +626,7 @@ function Editor({ row, exams, onSave, onCancel }: { row: Row; exams: Exam[]; onS
         <input value={f.pyqShift} onChange={set("pyqShift")} placeholder="Shift" className="pyq-input" />
         <input value={f.pyqPaper} onChange={set("pyqPaper")} placeholder="Paper" className="pyq-input" />
       </div>
-      <div className="grid sm:grid-cols-3 gap-2">
+      <div className="grid sm:grid-cols-2 gap-2">
         <select value={f.subject} onChange={(e) => setF((x) => ({ ...x, subject: e.target.value, chapter: "" }))} className="pyq-input">
           {Array.from(new Set([...SUBJECTS, f.subject])).map((s) => (
             <option key={s}>{s}</option>
@@ -586,7 +641,24 @@ function Editor({ row, exams, onSave, onCancel }: { row: Row; exams: Exam[]; onS
           ))}
           {f.chapter && !chapters.some((c) => c.title === f.chapter) && <option value={f.chapter}>{f.chapter}</option>}
         </select>
+      </div>
+      <div className="grid sm:grid-cols-4 gap-2">
         <input value={f.topic} onChange={set("topic")} placeholder="Topic" className="pyq-input" />
+        <input value={f.subTopic} onChange={set("subTopic")} placeholder="Subtopic" className="pyq-input" />
+        <select value={f.difficulty} onChange={set("difficulty")} className="pyq-input">
+          <option value="EASY">Easy</option>
+          <option value="MEDIUM">Medium</option>
+          <option value="HARD">Hard</option>
+          <option value="VERY_HARD">Very Hard</option>
+        </select>
+        <select value={f.questionType} onChange={set("questionType")} className="pyq-input">
+          <option value="SINGLE_CORRECT">Single Correct</option>
+          <option value="MULTIPLE_CORRECT">Multiple Correct</option>
+          <option value="INTEGER">Integer</option>
+          <option value="NUMERICAL">Numerical</option>
+          <option value="ASSERTION_REASON">Assertion Reason</option>
+          <option value="MATCH_THE_COLUMN">Match The Column</option>
+        </select>
       </div>
       <textarea value={f.solution} onChange={set("solution")} rows={3} placeholder="Solution" className="pyq-input w-full font-mono" />
       <div className="flex items-center gap-2 flex-wrap">
@@ -637,6 +709,9 @@ function Editor({ row, exams, onSave, onCancel }: { row: Row; exams: Exam[]; onS
               subject: f.subject,
               chapter: f.chapter || null,
               topic: f.topic || null,
+              subTopic: f.subTopic || null,
+              difficulty: f.difficulty,
+              questionType: f.questionType,
             })
           }
           className="pyq-btn-primary"

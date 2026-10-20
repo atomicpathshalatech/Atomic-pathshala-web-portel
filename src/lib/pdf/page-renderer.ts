@@ -44,21 +44,32 @@ export async function withRenderedPdf<T>(pdf: Buffer, fn: (doc: RenderedPdf) => 
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
-    await page.setContent("<!doctype html><html><body></body></html>");
+    await page.setRequestInterception(true);
+    page.on("request", (req: any) => {
+      const url = req.url();
+      if (url === "http://local-pdf/document.pdf") {
+        req.respond({ status: 200, contentType: "application/pdf", body: pdf });
+      } else if (url === "http://local-pdf/" || url === "http://local-pdf/index.html") {
+        req.respond({ status: 200, contentType: "text/html", body: "<!doctype html><html><body></body></html>" });
+      } else {
+        req.continue();
+      }
+    });
+
+    await page.goto("http://local-pdf/");
     await page.addScriptTag({
       type: "module",
       content: `import * as P from "${mainUrl}"; P.GlobalWorkerOptions.workerSrc = "${workerUrl}"; window.__pdfjs = P;`,
     });
     await page.waitForFunction("window.__pdfjs", { timeout: 20_000 });
 
-    const pageCount: number = await page.evaluate(async (b64: string) => {
+    const pageCount: number = await page.evaluate(async () => {
       const P = (window as any).__pdfjs;
-      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-      const doc = await P.getDocument({ data: bytes }).promise;
+      const doc = await P.getDocument({ url: "http://local-pdf/document.pdf" }).promise;
       (window as any).__doc = doc;
       (window as any).__canvases = {};
       return doc.numPages as number;
-    }, pdf.toString("base64"));
+    });
 
     const doc = makeDoc(page, pageCount);
     return await fn(doc);

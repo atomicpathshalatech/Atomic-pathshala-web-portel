@@ -22,6 +22,9 @@ const schema = z.object({
   subject: z.string().max(40).optional(),
   chapter: z.string().max(160).nullable().optional(),
   topic: z.string().max(200).nullable().optional(),
+  subTopic: z.string().max(200).nullable().optional(),
+  difficulty: z.string().max(40).optional(),
+  questionType: z.string().max(40).optional(),
 });
 
 /** PATCH — correct an extracted question (text, options, answer, solution, image, exam/year, chapter). */
