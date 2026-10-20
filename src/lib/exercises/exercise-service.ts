@@ -1,9 +1,37 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { getHierarchyTopics } from "@/lib/academic/academic-hierarchy-service";
 
 export interface ParseIdsResult {
   cleanedIds: string[];
   rawCount: number;
+}
+
+/**
+ * Extracts a 4-digit exam year (1980-2030) from question metadata
+ */
+export function extractPyqYear(q: {
+  pyqYear?: number | null;
+  pyqSource?: string | null;
+  tags?: string | null;
+  category?: string | null;
+}): number | null {
+  if (q.pyqYear && q.pyqYear >= 1980 && q.pyqYear <= 2030) return q.pyqYear;
+  const str = `${q.pyqSource || ""} ${q.tags || ""} ${q.category || ""}`;
+  const match = str.match(/\b(20[0-2][0-9]|19[89][0-9])\b/);
+  return match && match[1] ? parseInt(match[1], 10) : null;
+}
+
+/**
+ * Normalizes a topic string for reliable matching across section titles and Question Bank metadata
+ */
+export function cleanTopicKey(t?: string | null): string {
+  if (!t) return "";
+  return t
+    .replace(/^Topic\s*\d*:\s*/i, "")
+    .replace(/^\d+[\.:\s-]+/i, "")
+    .trim()
+    .toLowerCase();
 }
 
 /**
@@ -221,14 +249,65 @@ export async function importQuestionsToExercise(params: {
         },
       });
     }
-  } else if (exercise.organizationMode === "TOPIC_WISE") {
+  } else if (
+    exercise.organizationMode === "YEAR_WISE" ||
+    exercise.exerciseType === "NEET_PYQ" ||
+    exercise.exerciseType === "JEE_PYQ"
+  ) {
+    // Year-wise distribution for PYQ exercises
+    const examLabel = exercise.exerciseType === "JEE_PYQ" ? "JEE Main" : "NEET";
+    let nextSectionOrder = exercise.sections.length;
+
+    // Refresh section list in case needed
+    let currentSections = [...exercise.sections];
+
+    for (const q of toInsertQuestions) {
+      const year = extractPyqYear(q);
+      const targetYearStr = year ? String(year) : null;
+
+      let matchedSection = currentSections.find((sec) => {
+        if (!targetYearStr) return sec.title.toLowerCase().includes("general") || sec.title.toLowerCase().includes("earlier");
+        if (year && year <= 2019 && sec.title.toLowerCase().includes("earlier")) return true;
+        return sec.title.includes(targetYearStr);
+      });
+
+      if (!matchedSection) {
+        const title = targetYearStr
+          ? `${examLabel} ${targetYearStr}`
+          : `${examLabel} Past Questions`;
+        const newSec = await prisma.exerciseSection.create({
+          data: {
+            exerciseId,
+            title,
+            order: nextSectionOrder++,
+          },
+        });
+        matchedSection = newSec;
+        currentSections.push(newSec);
+      }
+
+      currentMaxDisplayOrder++;
+      await prisma.exerciseQuestion.create({
+        data: {
+          exerciseId,
+          sectionId: matchedSection.id,
+          questionId: q.id,
+          displayOrder: currentMaxDisplayOrder,
+          marks: exercise.defaultMarks,
+          negativeMarks: exercise.defaultNegativeMarks,
+        },
+      });
+    }
+  } else if (exercise.organizationMode === "TOPIC_WISE" || exercise.exerciseType === "TOPIC_WISE") {
     // Topic-wise distribution
-    // Map existing sections by topic name
+    // Map existing sections by normalized topic key and full title
     const sectionTopicMap = new Map<string, string>();
     for (const sec of exercise.sections) {
       if (sec.topic) {
+        sectionTopicMap.set(cleanTopicKey(sec.topic), sec.id);
         sectionTopicMap.set(sec.topic.trim().toLowerCase(), sec.id);
       }
+      sectionTopicMap.set(cleanTopicKey(sec.title), sec.id);
       sectionTopicMap.set(sec.title.trim().toLowerCase(), sec.id);
     }
 
@@ -248,8 +327,9 @@ export async function importQuestionsToExercise(params: {
     let nextSectionOrder = exercise.sections.length;
 
     for (const q of toInsertQuestions) {
-      const topicKey = (q.topic || "Unclassified Questions").trim();
-      let secId = sectionTopicMap.get(topicKey.toLowerCase());
+      const rawTopic = (q.topic || "Unclassified Questions").trim();
+      const normKey = cleanTopicKey(rawTopic);
+      let secId = sectionTopicMap.get(normKey) || sectionTopicMap.get(rawTopic.toLowerCase());
 
       if (!secId) {
         if (placeholderSectionId) {
@@ -262,7 +342,7 @@ export async function importQuestionsToExercise(params: {
             },
           });
           secId = updatedSection.id;
-          sectionTopicMap.set(topicKey.toLowerCase(), secId);
+          sectionTopicMap.set(normKey, secId);
           placeholderSectionId = null;
         } else {
           // Create new section for this topic
@@ -276,7 +356,7 @@ export async function importQuestionsToExercise(params: {
             },
           });
           secId = createdSection.id;
-          sectionTopicMap.set(topicKey.toLowerCase(), secId);
+          sectionTopicMap.set(normKey, secId);
         }
       }
 
@@ -561,6 +641,78 @@ export interface CreateExerciseDto {
 
 export async function createExercise(data: CreateExerciseDto) {
   const code = generateExerciseCode(data.subject);
+  const exType = data.exerciseType || "TOPIC_WISE";
+  const orgMode = data.organizationMode || (exType.includes("PYQ") ? "YEAR_WISE" : "TOPIC_WISE");
+
+  // Determine initial sections based on exercise type and academic taxonomy
+  let initialSections: {
+    title: string;
+    topic?: string | null;
+    subTopic?: string | null;
+    order: number;
+  }[] = [];
+
+  if (exType === "NEET_PYQ" || exType === "JEE_PYQ" || orgMode === "YEAR_WISE") {
+    const examName = exType === "JEE_PYQ" ? "JEE Main" : "NEET";
+    const years = [2024, 2023, 2022, 2021, 2020];
+    initialSections = [
+      ...years.map((y, idx) => ({
+        title: `${examName} ${y}`,
+        topic: null,
+        subTopic: null,
+        order: idx,
+      })),
+      {
+        title: `${examName} 2019 & Earlier`,
+        topic: null,
+        subTopic: null,
+        order: years.length,
+      },
+    ];
+  } else if (exType === "TOPIC_WISE" || orgMode === "TOPIC_WISE") {
+    try {
+      const hierarchyTopics = await getHierarchyTopics(data.subject, data.chapter);
+      if (hierarchyTopics && hierarchyTopics.length > 0) {
+        initialSections = hierarchyTopics.map((t, idx) => ({
+          title: `Topic ${idx + 1}: ${t.name}`,
+          topic: t.name,
+          subTopic: null,
+          order: idx,
+        }));
+      }
+    } catch (e) {
+      console.warn("Could not load hierarchy topics for exercise pre-population", e);
+    }
+
+    if (initialSections.length === 0) {
+      initialSections = [
+        {
+          title: data.topic ? `Topic: ${data.topic}` : "Section 1",
+          topic: data.topic || null,
+          subTopic: data.subTopic || null,
+          order: 0,
+        },
+      ];
+    }
+  } else if (exType === "ADVANCED") {
+    initialSections = [
+      {
+        title: "Section 1: Multi-Concept & Advanced Level Questions",
+        topic: null,
+        subTopic: null,
+        order: 0,
+      },
+    ];
+  } else {
+    initialSections = [
+      {
+        title: data.topic ? `Topic: ${data.topic}` : "Section 1",
+        topic: data.topic || null,
+        subTopic: data.subTopic || null,
+        order: 0,
+      },
+    ];
+  }
 
   return await prisma.exercise.create({
     data: {
@@ -573,8 +725,8 @@ export async function createExercise(data: CreateExerciseDto) {
       subTopic: data.subTopic,
       description: data.description,
       instructions: data.instructions,
-      exerciseType: data.exerciseType || "TOPIC_WISE",
-      organizationMode: data.organizationMode || "TOPIC_WISE",
+      exerciseType: exType,
+      organizationMode: orgMode,
       languageMode: data.languageMode || "BILINGUAL",
       answerKeyMode: data.answerKeyMode || "END_OF_DOCUMENT",
       solutionMode: data.solutionMode || "END_OF_DOCUMENT",
@@ -590,20 +742,246 @@ export async function createExercise(data: CreateExerciseDto) {
       },
       createdById: data.createdById,
       sections: {
-        create: [
-          {
-            title: data.topic ? `Topic: ${data.topic}` : "Section 1",
-            topic: data.topic || null,
-            subTopic: data.subTopic || null,
-            order: 0,
-          },
-        ],
+        create: initialSections,
       },
     },
     include: {
-      sections: true,
+      sections: {
+        orderBy: { order: "asc" },
+      },
     },
   });
+}
+
+/**
+ * Synchronizes/populates an exercise's sections with the complete list of topics for its chapter
+ * or with standard exam years for PYQ exercises.
+ */
+export async function syncExerciseTopics(exerciseId: string) {
+  const exercise = await prisma.exercise.findUnique({
+    where: { id: exerciseId },
+    include: {
+      sections: {
+        orderBy: { order: "asc" },
+      },
+      questions: {
+        include: {
+          question: {
+            select: {
+              id: true,
+              topic: true,
+              subTopic: true,
+              pyqExam: true,
+              pyqYear: true,
+              pyqSource: true,
+              tags: true,
+              category: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!exercise) throw new Error("Exercise not found");
+
+  const isPyq =
+    exercise.exerciseType === "NEET_PYQ" ||
+    exercise.exerciseType === "JEE_PYQ" ||
+    exercise.organizationMode === "YEAR_WISE";
+
+  let createdSectionsCount = 0;
+  let routedQuestionsCount = 0;
+
+  if (isPyq) {
+    const exam = exercise.exerciseType === "JEE_PYQ" ? "JEE Main" : "NEET";
+    const targetYears = [2024, 2023, 2022, 2021, 2020];
+    const existingTitles = new Set(exercise.sections.map((s) => s.title.toLowerCase().trim()));
+
+    let nextOrder = exercise.sections.length;
+    for (const yr of targetYears) {
+      const title = `${exam} ${yr}`;
+      if (!existingTitles.has(title.toLowerCase())) {
+        await prisma.exerciseSection.create({
+          data: {
+            exerciseId,
+            title,
+            order: nextOrder++,
+          },
+        });
+        createdSectionsCount++;
+      }
+    }
+    if (!existingTitles.has(`${exam.toLowerCase()} 2019 & earlier`)) {
+      await prisma.exerciseSection.create({
+        data: {
+          exerciseId,
+          title: `${exam} 2019 & Earlier`,
+          order: nextOrder++,
+        },
+      });
+      createdSectionsCount++;
+    }
+
+    // Refresh sections
+    const updatedSections = await prisma.exerciseSection.findMany({
+      where: { exerciseId },
+      orderBy: { order: "asc" },
+    });
+
+    // Route questions without section or in placeholder to matching year
+    for (const eq of exercise.questions) {
+      const year = extractPyqYear(eq.question);
+      if (year) {
+        const matchingSec = updatedSections.find(
+          (s) => s.title.includes(String(year)) || (year <= 2019 && s.title.toLowerCase().includes("earlier"))
+        );
+        if (matchingSec && eq.sectionId !== matchingSec.id) {
+          await prisma.exerciseQuestion.update({
+            where: { id: eq.id },
+            data: { sectionId: matchingSec.id },
+          });
+          routedQuestionsCount++;
+        }
+      }
+    }
+  } else {
+    // Topic-wise sync
+    const topics = await getHierarchyTopics(exercise.subject, exercise.chapter);
+    const existingTopicKeys = new Set(
+      exercise.sections.map((s) => cleanTopicKey(s.topic || s.title))
+    );
+
+    let nextOrder = exercise.sections.length;
+    for (const [idx, t] of topics.entries()) {
+      const tKey = cleanTopicKey(t.name);
+      if (!existingTopicKeys.has(tKey)) {
+        await prisma.exerciseSection.create({
+          data: {
+            exerciseId,
+            title: `Topic ${idx + 1}: ${t.name}`,
+            topic: t.name,
+            order: nextOrder++,
+          },
+        });
+        createdSectionsCount++;
+      }
+    }
+
+    // Refresh sections
+    const updatedSections = await prisma.exerciseSection.findMany({
+      where: { exerciseId },
+      orderBy: { order: "asc" },
+    });
+
+    // Route unassigned questions to matching topic
+    for (const eq of exercise.questions) {
+      if (eq.question.topic) {
+        const qKey = cleanTopicKey(eq.question.topic);
+        const matchingSec = updatedSections.find(
+          (s) => cleanTopicKey(s.topic) === qKey || cleanTopicKey(s.title) === qKey
+        );
+        if (matchingSec && eq.sectionId !== matchingSec.id) {
+          await prisma.exerciseQuestion.update({
+            where: { id: eq.id },
+            data: { sectionId: matchingSec.id },
+          });
+          routedQuestionsCount++;
+        }
+      }
+    }
+  }
+
+  return {
+    success: true,
+    createdSectionsCount,
+    routedQuestionsCount,
+  };
+}
+
+/**
+ * Returns all exercises associated with a particular subject and chapter
+ */
+export async function getExercisesForChapter(subject: string, chapter: string) {
+  return await prisma.exercise.findMany({
+    where: {
+      subject: { equals: subject, mode: "insensitive" },
+      chapter: { equals: chapter, mode: "insensitive" },
+    },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      sections: {
+        orderBy: { order: "asc" },
+        select: { id: true, title: true, order: true },
+      },
+      _count: {
+        select: {
+          questions: true,
+          sections: true,
+          attempts: true,
+          exports: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+/**
+ * Returns chapter directory grouping all exercises by chapter
+ */
+export async function getChapterModulesDirectory(subject?: string, search?: string) {
+  const where: Prisma.ExerciseWhereInput = {};
+  if (subject && subject !== "ALL") {
+    where.subject = { equals: subject, mode: "insensitive" };
+  }
+  if (search && search.trim()) {
+    where.OR = [
+      { chapter: { contains: search.trim(), mode: "insensitive" } },
+      { title: { contains: search.trim(), mode: "insensitive" } },
+    ];
+  }
+
+  const allExercises = await prisma.exercise.findMany({
+    where,
+    include: {
+      createdBy: { select: { name: true } },
+      _count: {
+        select: {
+          questions: true,
+          sections: true,
+        },
+      },
+    },
+    orderBy: [{ subject: "asc" }, { chapter: "asc" }, { createdAt: "asc" }],
+  });
+
+  const chapterMap = new Map<
+    string,
+    {
+      subject: string;
+      chapter: string;
+      totalQuestions: number;
+      exercises: typeof allExercises;
+    }
+  >();
+
+  for (const ex of allExercises) {
+    const key = `${ex.subject.trim().toLowerCase()}:::${ex.chapter.trim().toLowerCase()}`;
+    if (!chapterMap.has(key)) {
+      chapterMap.set(key, {
+        subject: ex.subject,
+        chapter: ex.chapter,
+        totalQuestions: 0,
+        exercises: [],
+      });
+    }
+    const entry = chapterMap.get(key)!;
+    entry.exercises.push(ex);
+    entry.totalQuestions += ex._count.questions;
+  }
+
+  return Array.from(chapterMap.values());
 }
 
 /**

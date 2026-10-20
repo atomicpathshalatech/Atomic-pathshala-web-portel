@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -41,6 +41,16 @@ interface Topic {
   }[];
 }
 
+interface ExistingExerciseItem {
+  id: string;
+  title: string;
+  exerciseType: string;
+  _count?: {
+    questions: number;
+    sections: number;
+  };
+}
+
 const EXERCISE_NAME_PRESETS = [
   "Exercise 1 — Topic-wise Questions",
   "Exercise 2 — Basic Practice",
@@ -50,24 +60,31 @@ const EXERCISE_NAME_PRESETS = [
   "Exercise 6 — Mixed Practice",
 ];
 
-export default function NewExercisePage() {
+function NewExerciseContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlSubject = searchParams.get("subject");
+  const urlChapter = searchParams.get("chapter");
 
   // Step state
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(urlSubject && urlChapter ? 4 : 1);
 
   // Hierarchy state
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
 
+  // Existing sibling exercises in this chapter
+  const [existingChapterExercises, setExistingChapterExercises] = useState<ExistingExerciseItem[]>([]);
+  const [loadingExisting, setLoadingExisting] = useState(false);
+
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(false);
 
   // Selection state
-  const [selectedSubject, setSelectedSubject] = useState<string>("");
-  const [selectedChapter, setSelectedChapter] = useState<string>("");
+  const [selectedSubject, setSelectedSubject] = useState<string>(urlSubject || "");
+  const [selectedChapter, setSelectedChapter] = useState<string>(urlChapter || "");
   const [selectedTopic, setSelectedTopic] = useState<string>("");
   const [selectedSubTopic, setSelectedSubTopic] = useState<string>("");
 
@@ -92,9 +109,44 @@ export default function NewExercisePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Fetch subjects on mount
+  // Helper to load sibling exercises for a given chapter
+  const loadExistingExercises = async (subj: string, chap: string) => {
+    try {
+      setLoadingExisting(true);
+      const res = await fetch(
+        `/api/team/exercises/chapter?subject=${encodeURIComponent(subj)}&chapter=${encodeURIComponent(chap)}`
+      );
+      const json = await res.json();
+      if (json.success && json.data?.exercises) {
+        const exs: ExistingExerciseItem[] = json.data.exercises;
+        setExistingChapterExercises(exs);
+        const count = exs.length;
+        if (count === 1) {
+          setTitle("Exercise 2 — Advanced Questions");
+          setExerciseType("ADVANCED");
+        } else if (count === 2) {
+          setTitle("Exercise 3 — NEET PYQs");
+          setExerciseType("NEET_PYQ");
+          setOrganizationMode("YEAR_WISE");
+        } else if (count === 3) {
+          setTitle("Exercise 4 — JEE Main PYQs");
+          setExerciseType("JEE_PYQ");
+          setOrganizationMode("YEAR_WISE");
+        } else if (count >= 4) {
+          setTitle(`Exercise ${count + 1} — Mixed Practice`);
+          setExerciseType("MIXED");
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load existing chapter exercises", err);
+    } finally {
+      setLoadingExisting(false);
+    }
+  };
+
+  // On mount: fetch subjects, and if URL params provided, load existing chapter exercises
   useEffect(() => {
-    async function loadSubs() {
+    async function init() {
       try {
         setLoadingSubjects(true);
         const res = await fetch("/api/team/questions/academic-hierarchy");
@@ -107,9 +159,13 @@ export default function NewExercisePage() {
       } finally {
         setLoadingSubjects(false);
       }
+
+      if (urlSubject && urlChapter) {
+        loadExistingExercises(urlSubject, urlChapter);
+      }
     }
-    loadSubs();
-  }, []);
+    init();
+  }, [urlSubject, urlChapter]);
 
   // Fetch chapters when subject changes
   const handleSelectSubject = async (subj: string) => {
@@ -117,6 +173,7 @@ export default function NewExercisePage() {
     setSelectedChapter("");
     setSelectedTopic("");
     setSelectedSubTopic("");
+    setExistingChapterExercises([]);
     setChapters([]);
     setTopics([]);
     setLoadingChapters(true);
@@ -135,7 +192,7 @@ export default function NewExercisePage() {
     }
   };
 
-  // Fetch topics when chapter changes
+  // Fetch topics and existing exercises when chapter changes
   const handleSelectChapter = async (chap: string) => {
     setSelectedChapter(chap);
     setSelectedTopic("");
@@ -143,6 +200,9 @@ export default function NewExercisePage() {
     setTopics([]);
     setLoadingTopics(true);
     setCurrentStep(3);
+
+    // Also load existing exercises to suggest title in step 4
+    loadExistingExercises(selectedSubject, chap);
 
     try {
       const res = await fetch(
@@ -599,14 +659,74 @@ export default function NewExercisePage() {
       {/* STEP 4: CONFIGURATION & TITLE */}
       {currentStep === 4 && (
         <form onSubmit={handleCreateExercise} className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-6">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
-              4
-            </span>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Exercise Configuration & Details
-            </h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
+                4
+              </span>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                Exercise Configuration & Details
+              </h2>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                className="text-slate-500 hover:underline"
+              >
+                Change Chapter
+              </button>
+            </div>
           </div>
+
+          {/* Existing Chapter Exercises Notification */}
+          {selectedSubject && selectedChapter && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/60 dark:bg-blue-950/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                    Chapter Practice Module: {selectedSubject} &rarr; {selectedChapter}
+                  </span>
+                </div>
+                {existingChapterExercises.length > 0 ? (
+                  <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-black text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                    {existingChapterExercises.length} {existingChapterExercises.length === 1 ? "Exercise" : "Exercises"} already created
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    First Exercise in this Chapter
+                  </span>
+                )}
+              </div>
+
+              {existingChapterExercises.length > 0 && (
+                <div>
+                  <p className="text-[11px] text-blue-800/80 dark:text-blue-300 mb-2">
+                    Exercises already part of this chapter module (click to inspect in new tab):
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {existingChapterExercises.map((ex, exIdx) => (
+                      <Link
+                        key={ex.id}
+                        href={`/team/exercises/${ex.id}`}
+                        target="_blank"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-900 hover:border-blue-400 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-200 shadow-2xs transition"
+                      >
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                          {exIdx + 1}
+                        </span>
+                        <span className="font-semibold">{ex.title}</span>
+                        <span className="text-slate-400 text-[10px]">
+                          ({ex._count?.questions || 0} Qs)
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Quick Preset Selector */}
           <div>
@@ -620,12 +740,25 @@ export default function NewExercisePage() {
                   type="button"
                   onClick={() => {
                     setTitle(p);
-                    if (p.includes("NEET")) setExerciseType("NEET_PYQ");
-                    else if (p.includes("JEE")) setExerciseType("JEE_PYQ");
-                    else if (p.includes("Advanced")) setExerciseType("ADVANCED");
-                    else if (p.includes("Basic")) setExerciseType("BASIC_PRACTICE");
-                    else if (p.includes("Mixed")) setExerciseType("MIXED");
-                    else setExerciseType("TOPIC_WISE");
+                    if (p.includes("NEET")) {
+                      setExerciseType("NEET_PYQ");
+                      setOrganizationMode("YEAR_WISE");
+                    } else if (p.includes("JEE")) {
+                      setExerciseType("JEE_PYQ");
+                      setOrganizationMode("YEAR_WISE");
+                    } else if (p.includes("Advanced")) {
+                      setExerciseType("ADVANCED");
+                      setOrganizationMode("TOPIC_WISE");
+                    } else if (p.includes("Basic")) {
+                      setExerciseType("BASIC_PRACTICE");
+                      setOrganizationMode("TOPIC_WISE");
+                    } else if (p.includes("Mixed")) {
+                      setExerciseType("MIXED");
+                      setOrganizationMode("TOPIC_WISE");
+                    } else {
+                      setExerciseType("TOPIC_WISE");
+                      setOrganizationMode("TOPIC_WISE");
+                    }
                   }}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                     title === p
@@ -677,7 +810,13 @@ export default function NewExercisePage() {
               </label>
               <select
                 value={exerciseType}
-                onChange={(e) => setExerciseType(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setExerciseType(val);
+                  if (val.includes("PYQ")) {
+                    setOrganizationMode("YEAR_WISE");
+                  }
+                }}
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               >
                 <option value="TOPIC_WISE">Topic-wise Questions</option>
@@ -698,8 +837,9 @@ export default function NewExercisePage() {
                 onChange={(e) => setOrganizationMode(e.target.value)}
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               >
-                <option value="TOPIC_WISE">Mode A: Automatic Topic-wise Grouping</option>
-                <option value="CUSTOM">Mode B: Custom / Mixed Sections</option>
+                <option value="TOPIC_WISE">Mode A: Automatic Topic-wise Grouping (Syllabus Topics)</option>
+                <option value="YEAR_WISE">Mode B: Year-wise Grouping (for PYQs: 2024, 2023, 2022...)</option>
+                <option value="CUSTOM">Mode C: Custom / Mixed Sections</option>
               </select>
             </div>
           </div>
@@ -786,5 +926,19 @@ export default function NewExercisePage() {
         </form>
       )}
     </div>
+  );
+}
+
+export default function NewExercisePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-5xl px-4 py-16 text-center text-sm text-slate-400">
+          Loading exercise builder...
+        </div>
+      }
+    >
+      <NewExerciseContent />
+    </Suspense>
   );
 }

@@ -695,6 +695,601 @@ export function generateExerciseHtml(exercise: ExercisePdfData, opts: ExercisePd
 </html>`;
 }
 
+export interface ChapterModulePdfData {
+  subject: string;
+  chapter: string;
+  exercises: ExercisePdfData[];
+}
+
+/**
+ * Generates self-contained, publication-grade coaching institute HTML combining all exercises
+ * of a chapter into one consolidated multi-part practice module.
+ */
+export function generateChapterModuleHtml(
+  moduleData: ChapterModulePdfData,
+  opts: ExercisePdfOptions = {}
+): string {
+  const langMode = opts.languageMode || "BILINGUAL";
+  const format = opts.format || "FULL_WITH_SOLUTIONS";
+  const instituteName = opts.instituteName || "ATOMIC PATHSHALA";
+  const watermarkText = opts.watermarkText || instituteName;
+  const showPyqBadge = opts.showPyqBadge !== false;
+
+  let totalModuleQuestions = 0;
+  let totalModuleMarks = 0;
+  for (const ex of moduleData.exercises) {
+    for (const sec of ex.sections) {
+      totalModuleQuestions += sec.questions.length;
+      totalModuleMarks += sec.questions.length * ex.defaultMarks;
+    }
+  }
+
+  // Pre-process questions and answer keys across all exercises
+  let globalQNum = 1;
+  const exercisesHtmlBlocks: string[] = [];
+  const allAnswerKeys: { exerciseTitle: string; keys: { num: number; ans: string }[] }[] = [];
+  const allSolutions: { exerciseTitle: string; sols: { num: number; ans: string; hiSol?: string; enSol?: string }[] }[] = [];
+
+  for (const [exIdx, ex] of moduleData.exercises.entries()) {
+    const exAnsKeys: { num: number; ans: string }[] = [];
+    const exSols: { num: number; ans: string; hiSol?: string; enSol?: string }[] = [];
+
+    const sectionsHtml: string[] = [];
+    for (const sec of ex.sections) {
+      const qCardsHtml: string[] = [];
+      for (const qItem of sec.questions) {
+        const thisNum = globalQNum++;
+        const en = qItem.question.translations.find((t) => t.language.toUpperCase() === "ENGLISH");
+        const hi = qItem.question.translations.find((t) => t.language.toUpperCase() === "HINDI");
+
+        // Answers
+        let correctAnswers: string[] = [];
+        const primaryTrans = en || hi;
+        if (primaryTrans && primaryTrans.correctOptionIds) {
+          if (Array.isArray(primaryTrans.correctOptionIds)) {
+            correctAnswers = primaryTrans.correctOptionIds.map(String);
+          } else if (typeof primaryTrans.correctOptionIds === "string") {
+            correctAnswers = [primaryTrans.correctOptionIds];
+          }
+        }
+        const ansString = correctAnswers.join(", ") || "-";
+        exAnsKeys.push({ num: thisNum, ans: ansString });
+
+        if (primaryTrans?.solution) {
+          exSols.push({
+            num: thisNum,
+            ans: ansString,
+            hiSol: hi?.solution || undefined,
+            enSol: en?.solution || undefined,
+          });
+        }
+
+        // Render Question statement
+        let statementHtml = "";
+        if (langMode === "HINDI_ONLY" && hi) {
+          statementHtml = `<div class="lang-block lang-hi">${renderFormulaContent(hi.statement)}</div>`;
+        } else if (langMode === "ENGLISH_ONLY" && en) {
+          statementHtml = `<div class="lang-block lang-en">${renderFormulaContent(en.statement)}</div>`;
+        } else {
+          // BILINGUAL
+          if (en && hi) {
+            statementHtml = `
+              <div class="lang-block lang-en">${renderFormulaContent(en.statement)}</div>
+              <div class="lang-block lang-hi">${renderFormulaContent(hi.statement)}</div>
+            `;
+          } else if (en) {
+            statementHtml = `<div class="lang-block lang-en">${renderFormulaContent(en.statement)}</div>`;
+          } else if (hi) {
+            statementHtml = `<div class="lang-block lang-hi">${renderFormulaContent(hi.statement)}</div>`;
+          }
+        }
+
+        // Options
+        const OPTION_KEYS = ["A", "B", "C", "D"] as const;
+        const optionsHtml: string[] = [];
+        for (const optKey of OPTION_KEYS) {
+          const enVal = (en?.options as any)?.[optKey];
+          const hiVal = (hi?.options as any)?.[optKey];
+          if (!enVal && !hiVal) continue;
+
+          let optContent = "";
+          if (langMode === "HINDI_ONLY" && hiVal) {
+            optContent = `<span class="opt-text lang-hi">${renderFormulaContent(hiVal)}</span>`;
+          } else if (langMode === "ENGLISH_ONLY" && enVal) {
+            optContent = `<span class="opt-text lang-en">${renderFormulaContent(enVal)}</span>`;
+          } else {
+            if (enVal && hiVal && enVal.trim() !== hiVal.trim()) {
+              optContent = `
+                <div class="opt-bilingual">
+                  <span class="opt-text lang-en">${renderFormulaContent(enVal)}</span>
+                  <span class="opt-text lang-hi">${renderFormulaContent(hiVal)}</span>
+                </div>
+              `;
+            } else {
+              optContent = `<span class="opt-text">${renderFormulaContent(enVal || hiVal)}</span>`;
+            }
+          }
+
+          optionsHtml.push(`
+            <div class="option-item">
+              <span class="opt-key">(${optKey})</span>
+              ${optContent}
+            </div>
+          `);
+        }
+
+        // PYQ badge
+        let pyqBadgeHtml = "";
+        if (showPyqBadge && (qItem.question.pyqExam || qItem.question.pyqYear)) {
+          pyqBadgeHtml = `<span class="pyq-badge">[${escapeHtml(qItem.question.pyqExam || "PYQ")} ${qItem.question.pyqYear || ""}]</span>`;
+        }
+
+        qCardsHtml.push(`
+          <article class="question-card">
+            <div class="q-header">
+              <span class="q-num">Q.${thisNum}</span>
+              ${pyqBadgeHtml}
+            </div>
+            <div class="q-body">
+              ${statementHtml}
+              <div class="options-grid">
+                ${optionsHtml.join("")}
+              </div>
+            </div>
+          </article>
+        `);
+      }
+
+      sectionsHtml.push(`
+        <section class="section-container">
+          <div class="section-banner">
+            <h3 class="section-title">${escapeHtml(sec.title)}</h3>
+            <span class="section-count">${sec.questions.length} Questions</span>
+          </div>
+          <div class="questions-layout two-column">
+            ${qCardsHtml.join("")}
+          </div>
+        </section>
+      `);
+    }
+
+    allAnswerKeys.push({ exerciseTitle: ex.title, keys: exAnsKeys });
+    allSolutions.push({ exerciseTitle: ex.title, sols: exSols });
+
+    exercisesHtmlBlocks.push(`
+      <div class="chapter-exercise-part ${exIdx > 0 ? "exercise-page-break" : ""}">
+        <div class="exercise-module-divider">
+          <span class="exercise-tag">EXERCISE ${String(exIdx + 1).padStart(2, "0")}</span>
+          <h2 class="exercise-part-title">${escapeHtml(ex.title)}</h2>
+          <span class="exercise-count-badge">${ex.sections.reduce((acc, s) => acc + s.questions.length, 0)} Questions</span>
+        </div>
+        ${ex.instructions ? `<div class="instructions-text">Instructions: ${escapeHtml(ex.instructions)}</div>` : ""}
+        ${sectionsHtml.join("")}
+      </div>
+    `);
+  }
+
+  // Answer Key
+  let answerKeyHtml = "";
+  if (format === "WITH_ANSWER_KEY" || format === "FULL_WITH_SOLUTIONS") {
+    const exKeyTables = allAnswerKeys.map((exKey) => {
+      const rows: string[] = [];
+      for (let i = 0; i < exKey.keys.length; i += 10) {
+        const slice = exKey.keys.slice(i, i + 10);
+        const headers = slice.map((k) => `<th>${k.num}</th>`).join("");
+        const values = slice.map((k) => `<td><strong>${escapeHtml(k.ans)}</strong></td>`).join("");
+        rows.push(`<tr>${headers}</tr><tr>${values}</tr>`);
+      }
+      return `
+        <div class="ex-ans-subtable">
+          <h4 class="subtable-title">${escapeHtml(exKey.exerciseTitle)}</h4>
+          <table class="ans-grid"><tbody>${rows.join("")}</tbody></table>
+        </div>
+      `;
+    }).join("");
+
+    answerKeyHtml = `
+      <section class="answer-key-section page-break">
+        <div class="section-divider-title">
+          <span>ANSWER KEY &bull; उत्तर तालिका (CHAPTER MODULE)</span>
+        </div>
+        ${exKeyTables}
+      </section>
+    `;
+  }
+
+  // Step-by-Step Solutions
+  let solutionsHtml = "";
+  if (format === "FULL_WITH_SOLUTIONS") {
+    const exSolBlocks = allSolutions.map((exSol) => {
+      const solCards = exSol.sols.map((s) => `
+        <div class="solution-card">
+          <div class="sol-header">
+            <span class="sol-qnum">Question ${s.num}</span>
+            <span class="sol-correct">Correct Option: <strong>(${escapeHtml(s.ans)})</strong></span>
+          </div>
+          <div class="sol-body">
+            ${s.enSol ? `<div class="sol-en">${renderFormulaContent(s.enSol)}</div>` : ""}
+            ${s.hiSol ? `<div class="sol-hi">${renderFormulaContent(s.hiSol)}</div>` : ""}
+          </div>
+        </div>
+      `).join("");
+
+      return `
+        <div class="ex-sol-block">
+          <h4 class="subtable-title">${escapeHtml(exSol.exerciseTitle)}</h4>
+          <div class="solutions-grid">${solCards}</div>
+        </div>
+      `;
+    }).join("");
+
+    solutionsHtml = `
+      <section class="solutions-section page-break">
+        <div class="section-divider-title">
+          <span>HINTS &amp; STEP-BY-STEP SOLUTIONS &bull; विस्तृत व्याख्या</span>
+        </div>
+        ${exSolBlocks}
+      </section>
+    `;
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(moduleData.subject)} - ${escapeHtml(moduleData.chapter)} Module</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" />
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm 10mm 14mm 10mm;
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-family: Arial, sans-serif;
+        font-size: 8pt;
+        color: #64748b;
+      }
+      @bottom-left {
+        content: "${escapeHtml(instituteName)} &bull; ${escapeHtml(moduleData.chapter)}";
+        font-family: Arial, sans-serif;
+        font-size: 8pt;
+        color: #64748b;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, "Noto Sans Devanagari", sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.45;
+      color: #0f172a;
+      background: #ffffff;
+      margin: 0;
+      padding: 0;
+    }
+    .page-break { page-break-before: always; }
+    .exercise-page-break { page-break-before: always; margin-top: 16px; }
+
+    .institute-banner {
+      text-align: center;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .inst-name {
+      font-size: 16pt;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      margin: 0;
+      color: #0f172a;
+    }
+    .inst-sub {
+      font-size: 8pt;
+      font-weight: 700;
+      color: #b45309;
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+    .chapter-meta-box {
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+    }
+    .meta-row-1 {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .ch-title {
+      font-size: 13pt;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .module-badge {
+      font-size: 7.5pt;
+      font-weight: 700;
+      background: #dbeafe;
+      color: #1e40af;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .meta-row-2 {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 8.5pt;
+      color: #334155;
+    }
+    .toc-box {
+      border: 1px dashed #cbd5e1;
+      background: #fffbeb;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      font-size: 8.5pt;
+    }
+    .toc-title {
+      font-weight: 800;
+      color: #92400e;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      font-size: 7.5pt;
+      letter-spacing: 0.5px;
+    }
+    .toc-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .exercise-module-divider {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 6px 12px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 14px 0 10px 0;
+    }
+    .exercise-tag {
+      font-size: 7.5pt;
+      font-weight: 900;
+      background: #f59e0b;
+      color: #0f172a;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .exercise-part-title {
+      font-size: 11pt;
+      font-weight: 800;
+      margin: 0;
+      letter-spacing: 0.5px;
+      flex: 1;
+      margin-left: 10px;
+    }
+    .exercise-count-badge {
+      font-size: 8pt;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+
+    .section-container {
+      margin-bottom: 12px;
+    }
+    .section-banner {
+      background: #f1f5f9;
+      border-left: 3.5px solid #0284c7;
+      padding: 4px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: 9.5pt;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0;
+    }
+    .section-count {
+      font-size: 7.5pt;
+      font-weight: 700;
+      color: #64748b;
+    }
+    .questions-layout.two-column {
+      column-count: 2;
+      column-gap: 16px;
+      column-rule: 0.5px solid #e2e8f0;
+    }
+    .question-card {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 0.5px dotted #cbd5e1;
+    }
+    .q-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+    .q-num {
+      font-size: 9.5pt;
+      font-weight: 800;
+      color: #0284c7;
+    }
+    .pyq-badge {
+      font-size: 7pt;
+      font-weight: 700;
+      background: #f3e8ff;
+      color: #7e22ce;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .lang-block {
+      margin-bottom: 4px;
+    }
+    .lang-hi {
+      color: #1e293b;
+      font-size: 9pt;
+    }
+    .lang-en {
+      color: #0f172a;
+    }
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 3px;
+      margin-top: 5px;
+    }
+    .option-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 4px;
+      font-size: 8.5pt;
+    }
+    .opt-key {
+      font-weight: 700;
+      color: #334155;
+      min-width: 18px;
+    }
+    .opt-bilingual {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .section-divider-title {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 6px 12px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 10pt;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+    .ex-ans-subtable {
+      margin-bottom: 12px;
+    }
+    .subtable-title {
+      font-size: 9pt;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 4px 0;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 2px;
+    }
+    table.ans-grid {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 6px;
+      font-size: 7.5pt;
+      text-align: center;
+    }
+    table.ans-grid th {
+      background: #f1f5f9;
+      border: 0.5px solid #cbd5e1;
+      padding: 3px;
+      color: #475569;
+    }
+    table.ans-grid td {
+      border: 0.5px solid #cbd5e1;
+      padding: 3px;
+      color: #0f172a;
+    }
+    .solutions-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .solution-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 8pt;
+      background: #f8fafc;
+      break-inside: avoid;
+    }
+    .sol-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 3px;
+      border-bottom: 0.5px solid #e2e8f0;
+      padding-bottom: 2px;
+    }
+    .sol-qnum {
+      font-weight: 800;
+      color: #0284c7;
+    }
+    .sol-correct {
+      color: #15803d;
+    }
+    .instructions-text {
+      font-size: 8pt;
+      font-style: italic;
+      color: #64748b;
+      margin: 4px 0 8px 0;
+    }
+    .katex { font-size: 0.95em !important; }
+  </style>
+</head>
+<body>
+  <div class="institute-banner">
+    <h1 class="inst-name">${escapeHtml(instituteName)}</h1>
+    <div class="inst-sub">CHAPTER PRACTICE MODULE &bull; ALL EXERCISES &bull; OFFICIAL STUDY PACKAGE</div>
+  </div>
+
+  <div class="chapter-meta-box">
+    <div class="meta-row-1">
+      <span class="ch-title">${escapeHtml(moduleData.chapter)}</span>
+      <span class="module-badge">${escapeHtml(moduleData.subject)}</span>
+    </div>
+    <div class="meta-row-2">
+      <span><strong>Total Exercises:</strong> ${moduleData.exercises.length}</span>
+      <span><strong>Total Questions:</strong> ${totalModuleQuestions}</span>
+      <span><strong>Total Marks:</strong> ${totalModuleMarks}</span>
+    </div>
+  </div>
+
+  <div class="toc-box">
+    <div class="toc-title">MODULE CONTENTS &bull; अभ्यास तालिका</div>
+    <div class="toc-list">
+      ${moduleData.exercises.map((e, idx) => `<span>Exercise ${idx + 1}: ${escapeHtml(e.title)} (${e.sections.reduce((acc, s) => acc + s.questions.length, 0)} Qs)</span>`).join(" &bull; ")}
+    </div>
+  </div>
+
+  <main>
+    ${exercisesHtmlBlocks.join("")}
+  </main>
+
+  ${answerKeyHtml}
+  ${solutionsHtml}
+</body>
+</html>`;
+}
+
+/**
+ * Generates vector PDF buffer for the complete Chapter Module using headless Chromium
+ */
+export async function generateChapterModulePdf(
+  moduleData: ChapterModulePdfData,
+  opts: ExercisePdfOptions = {}
+): Promise<Buffer> {
+  const { renderHtmlPdf } = await import("@/lib/pdf/html-to-pdf");
+  const html = generateChapterModuleHtml(moduleData, opts);
+  return await renderHtmlPdf(html, {
+    timeoutMs: 180_000,
+  });
+}
+
 /**
  * Escapes plain text for HTML embedding
  */

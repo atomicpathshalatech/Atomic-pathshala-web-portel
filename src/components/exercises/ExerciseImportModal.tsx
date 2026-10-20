@@ -40,6 +40,8 @@ interface ExerciseImportModalProps {
   onClose: () => void;
   onSuccess: () => void;
   sections: SectionOption[];
+  defaultSectionId?: string;
+  defaultSectionTitle?: string;
 }
 
 export function ExerciseImportModal({
@@ -48,12 +50,21 @@ export function ExerciseImportModal({
   onClose,
   onSuccess,
   sections,
+  defaultSectionId,
+  defaultSectionTitle,
 }: ExerciseImportModalProps) {
   const [rawInput, setRawInput] = useState("");
-  const [targetSectionId, setTargetSectionId] = useState("");
+  const [targetSectionId, setTargetSectionId] = useState(defaultSectionId || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
+
+  // Sync defaultSectionId whenever modal is opened
+  useState(() => {
+    if (defaultSectionId) {
+      setTargetSectionId(defaultSectionId);
+    }
+  });
 
   if (!isOpen) return null;
 
@@ -122,6 +133,21 @@ export function ExerciseImportModal({
         {errorMsg && (
           <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800">
             {errorMsg}
+          </div>
+        )}
+
+        {targetSectionId && (
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 px-3.5 py-2 text-xs text-amber-900 border border-amber-200 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-300">
+            <span>
+              Direct Destination: <strong>{sections.find((s) => s.id === targetSectionId)?.title || defaultSectionTitle || "Target Section"}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setTargetSectionId("")}
+              className="text-[11px] underline font-bold hover:text-amber-950 dark:hover:text-amber-200"
+            >
+              Switch to Auto-Sort by Topic/Year
+            </button>
           </div>
         )}
 

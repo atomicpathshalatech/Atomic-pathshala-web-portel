@@ -154,6 +154,7 @@ export function getMasterNcertTopics(
       // Match chapter title
       if (
         chClean === cleanChap ||
+        cleanChap.replace(/[^a-z0-9]/g, "") === chClean.replace(/[^a-z0-9]/g, "") ||
         cleanChap.includes(chClean) ||
         chClean.includes(cleanChap)
       ) {

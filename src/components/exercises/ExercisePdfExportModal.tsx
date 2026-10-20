@@ -14,26 +14,37 @@ import {
 interface ExercisePdfExportModalProps {
   exerciseId: string;
   exerciseTitle: string;
-  exerciseCode: string;
+  exerciseCode?: string;
   isOpen: boolean;
   onClose: () => void;
-  audit: {
+  audit?: {
     totalQuestions: number;
     missingEnglishCount: number;
     missingHindiCount: number;
     chapterMismatchCount: number;
   };
+  defaultLanguageMode?: string;
 }
 
 export function ExercisePdfExportModal({
   exerciseId,
   exerciseTitle,
-  exerciseCode,
+  exerciseCode = "EX-01",
   isOpen,
   onClose,
-  audit,
+  audit = {
+    totalQuestions: 0,
+    missingEnglishCount: 0,
+    missingHindiCount: 0,
+    chapterMismatchCount: 0,
+  },
+  defaultLanguageMode = "BILINGUAL",
 }: ExercisePdfExportModalProps) {
-  const [languageMode, setLanguageMode] = useState<"BILINGUAL" | "HINDI_ONLY" | "ENGLISH_ONLY">("BILINGUAL");
+  const [languageMode, setLanguageMode] = useState<"BILINGUAL" | "HINDI_ONLY" | "ENGLISH_ONLY">(
+    (defaultLanguageMode === "HINDI_ONLY" || defaultLanguageMode === "ENGLISH_ONLY")
+      ? defaultLanguageMode
+      : "BILINGUAL"
+  );
   const [format, setFormat] = useState<"QUESTION_ONLY" | "WITH_ANSWER_KEY" | "FULL_WITH_SOLUTIONS">("FULL_WITH_SOLUTIONS");
   const [instituteName, setInstituteName] = useState("ATOMIC PATHSHALA");
   const [isExporting, setIsExporting] = useState(false);
