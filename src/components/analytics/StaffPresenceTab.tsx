@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { UserActivityHistoryModal } from "./UserActivityHistoryModal";
 
 interface ActionTrailItem {
   id: string;
@@ -28,6 +29,7 @@ interface StaffPresenceRecord {
   totalActiveMinutes: number;
   firstActive: string | null;
   lastActive: string | null;
+  lastLoginAt?: string | null;
   ipAddress: string;
   city: string;
   country: string;
@@ -45,6 +47,13 @@ export function StaffPresenceTab() {
   const [summary, setSummary] = useState({ totalStaffCount: 0, activeTodayCount: 0, onlineNowCount: 0 });
   const [loading, setLoading] = useState(true);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+
+  // User History Modal State
+  const [selectedUserForModal, setSelectedUserForModal] = useState<{
+    id: string;
+    name: string;
+    email: string;
+  } | null>(null);
 
   const fetchStaffData = useCallback(async () => {
     try {
@@ -78,9 +87,21 @@ export function StaffPresenceTab() {
     return `${h}h ${m}m`;
   };
 
-  const formatTimeOnly = (iso: string | null) => {
+  const formatDateTime = (iso: string | null | undefined) => {
     if (!iso) return "—";
-    return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+    const d = new Date(iso);
+    const datePart = d.toLocaleDateString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "numeric",
+      month: "short",
+    });
+    const timePart = d.toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return `${datePart}, ${timePart}`;
   };
 
   return (
@@ -103,7 +124,7 @@ export function StaffPresenceTab() {
           </div>
           <div>
             <p className="text-2xl font-bold text-slate-900 dark:text-white">{summary.activeTodayCount}</p>
-            <p className="text-xs text-slate-500 font-medium">Active On-Duty Today</p>
+            <p className="text-xs text-slate-500 font-medium">Active On-Duty on Selected Date</p>
           </div>
         </div>
 
@@ -123,7 +144,10 @@ export function StaffPresenceTab() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Date Selector */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">Date:</span>
+            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">calendar_month</span>
+              <span>Date:</span>
+            </span>
             <input
               type="date"
               value={date}
@@ -234,47 +258,67 @@ export function StaffPresenceTab() {
                           </span>
                         </div>
                         <p className="text-xs text-slate-500">{member.email}</p>
-                        {member.department && (
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            Dept: {member.department} {member.employeeCode ? `• (${member.employeeCode})` : ""}
-                          </p>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {member.department && (
+                            <span className="text-[11px] text-slate-400">
+                              Dept: {member.department} {member.employeeCode ? `• (${member.employeeCode})` : ""}
+                            </span>
+                          )}
+                          {member.lastLoginAt && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300 font-mono">
+                              <span className="material-symbols-outlined text-[11px]">login</span>
+                              <span>Last Login: {formatDateTime(member.lastLoginAt)}</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Presence Timestamps */}
+                    {/* Presence Timestamps (With Date and Time!) */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <p className="text-slate-400 font-medium text-[10px]">First Active (Login)</p>
-                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono">
-                          {formatTimeOnly(member.firstActive)}
+                        <p className="text-slate-400 font-medium text-[10px] flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">login</span>
+                          <span>First Active on Date</span>
+                        </p>
+                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono text-xs">
+                          {formatDateTime(member.firstActive)}
                         </p>
                       </div>
 
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <p className="text-slate-400 font-medium text-[10px]">Last Active</p>
-                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono">
-                          {formatTimeOnly(member.lastActive)}
+                        <p className="text-slate-400 font-medium text-[10px] flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">schedule</span>
+                          <span>Last Active on Date</span>
+                        </p>
+                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono text-xs">
+                          {formatDateTime(member.lastActive)}
                         </p>
                       </div>
 
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <p className="text-slate-400 font-medium text-[10px]">Active Duration</p>
-                        <p className="font-bold text-primary mt-0.5 font-mono">
+                        <p className="text-slate-400 font-medium text-[10px] flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">timer</span>
+                          <span>Active Duration</span>
+                        </p>
+                        <p className="font-bold text-primary mt-0.5 font-mono text-xs">
                           {member.totalActiveMinutes > 0 ? formatHours(member.totalActiveMinutes) : "0m"}
                         </p>
                       </div>
 
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <p className="text-slate-400 font-medium text-[10px]">Pages/Actions Today</p>
-                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono">
+                        <p className="text-slate-400 font-medium text-[10px] flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">visibility</span>
+                          <span>Actions Recorded</span>
+                        </p>
+                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono text-xs">
                           {member.totalActionsToday} actions
                         </p>
                       </div>
                     </div>
 
                     {/* Device / Location & Action Trail Toggle */}
-                    <div className="flex items-center justify-between lg:justify-end gap-3 shrink-0">
+                    <div className="flex items-center justify-between lg:justify-end gap-2.5 shrink-0">
                       <div className="text-right text-[11px] text-slate-400 hidden sm:block">
                         <p className="font-medium text-slate-600 dark:text-slate-300">
                           {member.city}, {member.country}
@@ -282,9 +326,26 @@ export function StaffPresenceTab() {
                         <p className="font-mono text-[10px]">{member.ipAddress}</p>
                       </div>
 
+                      {/* Complete All-Dates Audit Modal Button */}
+                      <button
+                        onClick={() =>
+                          setSelectedUserForModal({
+                            id: member.userId,
+                            name: member.name,
+                            email: member.email,
+                          })
+                        }
+                        className="px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300 transition cursor-pointer"
+                        title="View complete date-by-date history across all days"
+                      >
+                        <span className="material-symbols-outlined text-sm">history_toggle_off</span>
+                        <span>Date-wise Audit</span>
+                      </button>
+
+                      {/* Daily Trail Accordion */}
                       <button
                         onClick={() => setSelectedStaffId(isSelected ? null : member.userId)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                           isSelected
                             ? "bg-primary text-white shadow-md shadow-primary/20"
                             : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
@@ -293,7 +354,7 @@ export function StaffPresenceTab() {
                         <span className="material-symbols-outlined text-sm">
                           {isSelected ? "expand_less" : "history"}
                         </span>
-                        <span>{isSelected ? "Hide Trail" : "Action Trail"}</span>
+                        <span>{isSelected ? "Hide Day Trail" : "Day Trail"}</span>
                       </button>
                     </div>
                   </div>
@@ -324,12 +385,12 @@ export function StaffPresenceTab() {
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <span className="font-mono text-[11px] text-primary font-bold shrink-0">
-                                  {item.time}
+                                  {date} &bull; {item.time}
                                 </span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0 uppercase">
                                   {item.action}
                                 </span>
-                                <span className="font-mono text-slate-800 dark:text-slate-200 truncate">
+                                <span className="font-mono text-slate-800 dark:text-slate-200 truncate font-semibold">
                                   {item.path}
                                 </span>
                                 {item.title && item.title !== item.path && (
@@ -354,6 +415,17 @@ export function StaffPresenceTab() {
           </div>
         )}
       </div>
+
+      {/* User Date-wise History Audit Modal */}
+      {selectedUserForModal && (
+        <UserActivityHistoryModal
+          userId={selectedUserForModal.id}
+          email={selectedUserForModal.email}
+          userName={selectedUserForModal.name}
+          isOpen={Boolean(selectedUserForModal)}
+          onClose={() => setSelectedUserForModal(null)}
+        />
+      )}
     </div>
   );
 }

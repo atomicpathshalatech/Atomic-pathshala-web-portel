@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
         name: true,
         email: true,
         photoUrl: true,
+        lastLoginAt: true,
         role: { select: { id: true, name: true, label: true } },
         teacher: {
           select: {
@@ -160,6 +161,7 @@ export async function GET(request: NextRequest) {
           department: u.teacher?.department || null,
           employeeCode: u.teacher?.employeeCode || null,
           subjects: u.teacher?.subjects || [],
+          lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
           isOnline,
           totalActionsToday,
           totalActiveMinutes,

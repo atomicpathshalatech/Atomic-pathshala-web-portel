@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -20,10 +22,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const roleFilter = searchParams.get("role") || "ALL";
     const dateStr = searchParams.get("date"); // YYYY-MM-DD
+    const userIdFilter = searchParams.get("userId");
     const query = searchParams.get("q")?.trim() || "";
-    const limit = Math.min(200, Math.max(10, parseInt(searchParams.get("limit") || "100", 10)));
+    const limit = Math.min(300, Math.max(10, parseInt(searchParams.get("limit") || "150", 10)));
 
     const where: Record<string, unknown> = {};
+
+    if (userIdFilter) {
+      where.userId = userIdFilter;
+    }
 
     if (roleFilter !== "ALL") {
       if (roleFilter === "STAFF") {
@@ -69,6 +76,7 @@ export async function GET(request: NextRequest) {
               name: true,
               email: true,
               photoUrl: true,
+              lastLoginAt: true,
               role: { select: { name: true, label: true } },
             },
           },
@@ -94,6 +102,7 @@ export async function GET(request: NextRequest) {
         userName: log.userName || log.user?.name || "Guest Visitor",
         userEmail: log.userEmail || log.user?.email || null,
         userPhotoUrl: log.user?.photoUrl || null,
+        userLastLoginAt: log.user?.lastLoginAt ? log.user.lastLoginAt.toISOString() : null,
         role: log.role || "GUEST",
         roleLabel: log.user?.role?.label || log.role,
         path: log.path,

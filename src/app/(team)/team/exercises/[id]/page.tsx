@@ -144,6 +144,14 @@ export default function ExerciseBuilderWorkspacePage() {
   } | null>(null);
   const [isUpdatingSection, setIsUpdatingSection] = useState(false);
 
+  // Edit Exercise Name & Metadata State
+  const [showEditExerciseModal, setShowEditExerciseModal] = useState(false);
+  const [editExerciseTitle, setEditExerciseTitle] = useState("");
+  const [editExerciseSubtitle, setEditExerciseSubtitle] = useState("");
+  const [editExerciseType, setEditExerciseType] = useState("TOPIC_WISE");
+  const [editExerciseDescription, setEditExerciseDescription] = useState("");
+  const [isUpdatingExercise, setIsUpdatingExercise] = useState(false);
+
   // Available chapter topics from academic hierarchy
   const [availableChapterTopics, setAvailableChapterTopics] = useState<{ id: string; name: string }[]>([]);
 
@@ -219,6 +227,79 @@ export default function ExerciseBuilderWorkspacePage() {
       }
     } catch (err) {
       console.error("Failed to update status", err);
+    }
+  };
+
+  // Open Edit Exercise Name Modal
+  const openEditExerciseModal = () => {
+    if (!exercise) return;
+    setEditExerciseTitle(exercise.title || "");
+    setEditExerciseSubtitle(exercise.subtitle || "");
+    setEditExerciseType(exercise.exerciseType || "TOPIC_WISE");
+    setEditExerciseDescription(exercise.description || "");
+    setShowEditExerciseModal(true);
+  };
+
+  // Save Exercise Name & Metadata
+  const handleUpdateExercise = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!exercise || !editExerciseTitle.trim()) return;
+
+    setIsUpdatingExercise(true);
+    try {
+      const res = await fetch(`/api/team/exercises/${exerciseId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editExerciseTitle.trim(),
+          subtitle: editExerciseSubtitle.trim() || null,
+          exerciseType: editExerciseType,
+          description: editExerciseDescription.trim() || null,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to update exercise");
+      }
+
+      const updatedTitle = editExerciseTitle.trim();
+      const updatedSubtitle = editExerciseSubtitle.trim() || null;
+      const updatedType = editExerciseType;
+      const updatedDesc = editExerciseDescription.trim() || null;
+
+      setExercise((prev) =>
+        prev
+          ? {
+              ...prev,
+              title: updatedTitle,
+              subtitle: updatedSubtitle,
+              exerciseType: updatedType,
+              description: updatedDesc,
+            }
+          : null
+      );
+
+      // Also update sibling list in local state
+      setSiblingExercises((prev) =>
+        prev.map((s) =>
+          s.id === exerciseId
+            ? {
+                ...s,
+                title: updatedTitle,
+                exerciseType: updatedType,
+              }
+            : s
+        )
+      );
+
+      setSuccessToast("Exercise name updated successfully!");
+      setTimeout(() => setSuccessToast(""), 3500);
+      setShowEditExerciseModal(false);
+    } catch (err: any) {
+      alert(err.message || "Failed to update exercise name");
+    } finally {
+      setIsUpdatingExercise(false);
     }
   };
 
@@ -668,9 +749,18 @@ export default function ExerciseBuilderWorkspacePage() {
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
               {exercise.title}
             </h1>
+            <button
+              type="button"
+              onClick={openEditExerciseModal}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+              title="Edit Exercise Name and Details"
+            >
+              <Pencil className="h-3 w-3 text-blue-600" />
+              <span>Edit Name</span>
+            </button>
             <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               {exercise.exerciseCode}
             </span>
@@ -749,6 +839,17 @@ export default function ExerciseBuilderWorkspacePage() {
           >
             <Plus className="h-4 w-4" />
             <span>+ Add Section / Topic</span>
+          </button>
+
+          {/* Edit Exercise Name */}
+          <button
+            type="button"
+            onClick={openEditExerciseModal}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+            title="Edit Exercise Name, Subtitle & Type"
+          >
+            <Pencil className="h-3.5 w-3.5 text-blue-600" />
+            <span>Edit Exercise Name</span>
           </button>
 
           {/* Import Questions CTA */}
@@ -1384,6 +1485,246 @@ export default function ExerciseBuilderWorkspacePage() {
                   className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
                 >
                   {isAddingSection ? "Adding..." : "Add Section"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Exercise Name & Details */}
+      {showEditExerciseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                  <Pencil className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Edit Exercise Name &amp; Details
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Rename this exercise (e.g. &quot;Exercise 2: Advanced Practice&quot;) and update its metadata.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditExerciseModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateExercise} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Exercise Name / Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editExerciseTitle}
+                  onChange={(e) => setEditExerciseTitle(e.target.value)}
+                  placeholder="e.g. Exercise 2 — Advanced Practice or NEET PYQs"
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                />
+
+                {/* Quick Name Presets */}
+                <div className="mt-2">
+                  <span className="text-[11px] text-slate-400">Quick name presets:</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {[
+                      "Exercise 1 — Foundational Questions",
+                      "Exercise 2 — Advanced Practice",
+                      "Exercise 3 — NEET Past Year Questions (PYQs)",
+                      "Exercise 4 — JEE Main PYQs",
+                      "Exercise — Speed & Accuracy Drill",
+                    ].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setEditExerciseTitle(preset)}
+                        className={`rounded-md border px-2 py-0.5 text-[11px] transition cursor-pointer ${
+                          editExerciseTitle === preset
+                            ? "border-blue-600 bg-blue-50 text-blue-700 font-bold dark:bg-blue-950 dark:text-blue-300"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Exercise Type &amp; Category
+                </label>
+                <select
+                  value={editExerciseType}
+                  onChange={(e) => setEditExerciseType(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="TOPIC_WISE">Topic-Wise (Foundational / Syllabus Order)</option>
+                  <option value="BASIC_PRACTICE">Level 1: Basic &amp; Conceptual</option>
+                  <option value="ADVANCED">Level 2: Advanced / Multi-Concept</option>
+                  <option value="NEET_PYQ">NEET Past Year Questions (PYQ)</option>
+                  <option value="JEE_PYQ">JEE Main Past Year Questions (PYQ)</option>
+                  <option value="MIXED">Mixed Concept &amp; Speed Test</option>
+                  <option value="CUSTOM">Custom Practice Sheet</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Subtitle / Target Audience (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={editExerciseSubtitle}
+                  onChange={(e) => setEditExerciseSubtitle(e.target.value)}
+                  placeholder="e.g. Recommended for NEET &amp; JEE Droppers / 12th Board"
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Instructions / Description (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editExerciseDescription}
+                  onChange={(e) => setEditExerciseDescription(e.target.value)}
+                  placeholder="Optional instructions for students or print module header..."
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditExerciseModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingExercise || !editExerciseTitle.trim()}
+                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-500 disabled:opacity-50 transition cursor-pointer"
+                >
+                  {isUpdatingExercise ? "Saving..." : "Save Exercise"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Exercise Name & Details */}
+      {showEditExerciseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                  <Pencil className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Edit Exercise Name &amp; Details
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Change the exercise title, subtitle, or practice format.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditExerciseModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateExercise} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Exercise Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editExerciseTitle}
+                  onChange={(e) => setEditExerciseTitle(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Subtitle (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={editExerciseSubtitle}
+                  onChange={(e) => setEditExerciseSubtitle(e.target.value)}
+                  placeholder="e.g. Master level conceptual practice"
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Exercise Format / Type
+                </label>
+                <select
+                  value={editExerciseType}
+                  onChange={(e) => setEditExerciseType(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                >
+                  <option value="TOPIC_WISE">Topic-Wise (Standard Practice)</option>
+                  <option value="ADVANCED">Advanced / Multi-Concept Questions</option>
+                  <option value="NEET_PYQ">NEET Past Year Questions (PYQs)</option>
+                  <option value="JEE_PYQ">JEE Main Past Year Questions (PYQs)</option>
+                  <option value="MIXED">Mixed Mock Practice</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Description / Student Instructions
+                </label>
+                <textarea
+                  rows={2}
+                  value={editExerciseDescription}
+                  onChange={(e) => setEditExerciseDescription(e.target.value)}
+                  placeholder="Instructions for students taking this exercise"
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditExerciseModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingExercise || !editExerciseTitle.trim()}
+                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {isUpdatingExercise ? "Saving..." : "Save Exercise Details"}
                 </button>
               </div>
             </form>
