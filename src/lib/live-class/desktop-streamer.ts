@@ -36,7 +36,6 @@ export class DesktopClassStreamer {
   private chain: Promise<void> = Promise.resolve();
   private unsubscribe: (() => void) | null = null;
   private sourceTimer: ReturnType<typeof setInterval> | null = null;
-  private silentAudio: AudioContext | null = null;
   encoderName: string | null = null;
   private cameraOff = false;
   private micMuted = false;
@@ -53,9 +52,68 @@ export class DesktopClassStreamer {
   }
 
   private applyMicMute() {
-    for (const t of this.stream?.getAudioTracks() ?? []) {
-      if (t !== this.silentTrack) t.enabled = !this.micMuted;
-    }
+    if (this.micGain) this.micGain.gain.value = this.micMuted ? 0 : 1;
+  }
+
+  // ---- Audio mix: teacher mic + students on a call ---------------------------
+  // The stream's single audio track is a WebAudio mix, built once at start
+  // (MediaRecorder can't take a track added later). The teacher's mic goes
+  // in through micGain (the mute switch); a student on a call is added with
+  // addCallAudio(), so the whole class hears the doubt on YouTube — before,
+  // only the teacher's mic was sent and the student's voice never reached
+  // the stream.
+  private mixCtx: AudioContext | null = null;
+  private micGain: GainNode | null = null;
+  private mixDest: MediaStreamAudioDestinationNode | null = null;
+  private callAudio = new Map<string, { source: MediaStreamAudioSourceNode; element: HTMLAudioElement }>();
+
+  private buildAudioMix(stream: MediaStream): MediaStreamTrack {
+    const ctx = new AudioContext({ sampleRate: 48000 });
+    this.mixCtx = ctx;
+    const dest = ctx.createMediaStreamDestination();
+    this.mixDest = dest;
+    // Inaudible keep-alive: the recorder always has audio, mic or not.
+    const silent = ctx.createGain();
+    silent.gain.value = 0;
+    const osc = ctx.createOscillator();
+    osc.connect(silent).connect(dest);
+    osc.start();
+    const micGain = ctx.createGain();
+    micGain.connect(dest);
+    this.micGain = micGain;
+    for (const t of stream.getAudioTracks()) ctx.createMediaStreamSource(new MediaStream([t])).connect(micGain);
+    // Started explicitly: with no visible app window Chromium may leave it
+    // suspended — the recorder then waits for audio and sends NOTHING.
+    void ctx.resume().catch(() => undefined);
+    return dest.stream.getAudioTracks()[0]!;
+  }
+
+  /** Mixes a call participant's voice (a remote WebRTC audio track) into the stream. */
+  addCallAudio(key: string, track: MediaStreamTrack) {
+    if (!this.mixCtx || !this.mixDest || this.callAudio.has(key)) return;
+    const media = new MediaStream([track]);
+    // Chrome only feeds a remote WebRTC track into WebAudio while it is also
+    // playing in a media element; muted, so nothing is heard on this machine.
+    const element = new Audio();
+    element.muted = true;
+    element.srcObject = media;
+    void element.play().catch(() => undefined);
+    const source = this.mixCtx.createMediaStreamSource(media);
+    source.connect(this.mixDest);
+    this.callAudio.set(key, { source, element });
+    void this.mixCtx.resume().catch(() => undefined);
+  }
+
+  removeCallAudio(key: string) {
+    const entry = this.callAudio.get(key);
+    if (!entry) return;
+    entry.source.disconnect();
+    entry.element.srcObject = null;
+    this.callAudio.delete(key);
+  }
+
+  clearCallAudio() {
+    for (const key of Array.from(this.callAudio.keys())) this.removeCallAudio(key);
   }
 
   private chroma: ChromaSettings | null = null;
@@ -70,8 +128,6 @@ export class DesktopClassStreamer {
     const s = { ...this.readSources(), chroma: this.chroma };
     return this.cameraOff ? { ...s, showCamera: false } : s;
   }
-
-  private silentTrack: MediaStreamTrack | null = null;
 
   constructor(
     private readonly bridge: AtomicDesktopBridge,
@@ -88,11 +144,9 @@ export class DesktopClassStreamer {
     const compositor = new StageCompositor({ width: 1920, height: 1080, fps: 30 });
     this.compositor = compositor;
     compositor.setSources(this.currentSources());
-    const stream = await compositor.start({ camera: true, microphone: true });
-    if (stream.getAudioTracks().length === 0) {
-      this.silentTrack = this.silentAudioTrack();
-      stream.addTrack(this.silentTrack);
-    }
+    const stage = await compositor.start({ camera: true, microphone: true });
+    // Video from the stage, audio from the mix (teacher mic + any call).
+    const stream = new MediaStream([...stage.getVideoTracks(), this.buildAudioMix(stage)]);
     this.stream = stream;
     this.applyMicMute();
 
@@ -163,21 +217,6 @@ export class DesktopClassStreamer {
     }, RECORDER_STALL_MS);
   }
 
-  private silentAudioTrack(): MediaStreamTrack {
-    const ctx = new AudioContext({ sampleRate: 48000 });
-    this.silentAudio = ctx;
-    const dest = ctx.createMediaStreamDestination();
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    const osc = ctx.createOscillator();
-    osc.connect(gain).connect(dest);
-    osc.start();
-    // Started explicitly: with no visible app window Chromium may leave it
-    // suspended — the recorder then waits for audio and sends NOTHING.
-    void ctx.resume().catch(() => undefined);
-    return dest.stream.getAudioTracks()[0]!;
-  }
-
   async stop() {
     if (this.recorderWatchdog) clearTimeout(this.recorderWatchdog);
     this.recorderWatchdog = null;
@@ -195,8 +234,12 @@ export class DesktopClassStreamer {
     if (runId) await this.bridge.encoder.stop(runId).catch(() => undefined);
     this.compositor?.stop();
     this.compositor = null;
+    this.clearCallAudio();
+    this.stream?.getAudioTracks().forEach((t) => t.stop());
     this.stream = null;
-    await this.silentAudio?.close().catch(() => undefined);
-    this.silentAudio = null;
+    await this.mixCtx?.close().catch(() => undefined);
+    this.mixCtx = null;
+    this.mixDest = null;
+    this.micGain = null;
   }
 }

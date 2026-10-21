@@ -12,6 +12,8 @@ import { isBrandedTemplate, parseFreeCameraLayout, toStagePoll } from "@/lib/liv
 
 type StageData = {
   sessionId?: string;
+  callActive?: boolean;
+  teacherIdentity?: string | null;
   status: string;
   livePhase: string;
   title: string;
@@ -584,6 +586,13 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
     channel.bind(WB_EVENTS.HAND_RAISE_LIST, () => {
       fetchStage();
     });
+    // A call starting / ending switches the student's voice into the stream at once.
+    channel.bind(WB_EVENTS.HAND_RAISE_UPDATED, () => {
+      fetchStage();
+    });
+    channel.bind(WB_EVENTS.TEACHER_CONNECT_UPDATED, () => {
+      fetchStage();
+    });
 
     return () => {
       channel.unbind_all();
@@ -667,6 +676,11 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
             cameraPosition: liveCamera?.position ?? data.cameraPosition,
             poll: toStagePoll(data.activeQuiz, data.quizMetrics),
           }}
+          call={
+            data.sessionId
+              ? { active: Boolean(data.callActive), sessionId: data.sessionId, stageToken: token, teacherIdentity: data.teacherIdentity ?? null }
+              : undefined
+          }
         />
       )}
     </div>

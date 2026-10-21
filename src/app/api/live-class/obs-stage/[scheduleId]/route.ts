@@ -41,6 +41,7 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
         classroomTheme: true,
         cameraShape: true,
         cameraPosition: true,
+        teacher: { select: { userId: true } },
       },
     });
 
@@ -117,8 +118,25 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
       select: { id: true, requestType: true, status: true },
     });
 
+    // Is a student on a call right now (approved hand raise or a teacher
+    // connect)? The desktop stage then joins the call room listen-only and
+    // mixes the student's voice into the YouTube stream, so the whole class
+    // hears the doubt — not just the teacher.
+    const callActive =
+      activeHandRaise?.status === "APPROVED" ||
+      (await prisma.teacherStudentConnection.count({
+        where: {
+          whiteboardSessionId: wbSession.id,
+          OR: [{ audioStatus: "CONNECTED" }, { videoStatus: "CONNECTED" }],
+        },
+      })) > 0;
+
     return apiSuccess({
       sessionId: wbSession.id,
+      callActive,
+      // The teacher's own call identity, so the stage never mixes the
+      // teacher's voice in twice (it is already the stream's microphone).
+      teacherIdentity: wbSession.teacher?.userId ?? null,
       status: wbSession.status,
       livePhase: wbSession.livePhase,
       title: wbSession.title,

@@ -23,15 +23,25 @@ type StageLook = {
 export function DesktopStageStreamer({
   getBoard,
   look,
+  call,
 }: {
   /** The mirror's container + its canvases (null until mounted). */
   getBoard: () => { container: HTMLElement | null; layers: HTMLCanvasElement[] };
   look: StageLook;
+  /**
+   * While a student is on a call, the stage joins the class's call room
+   * listen-only and mixes the student's voice into the YouTube stream (the
+   * teacher's own call identity is skipped — their mic is already in it).
+   */
+  call?: { active: boolean; sessionId: string; stageToken: string; teacherIdentity: string | null };
 }) {
   const lookRef = useRef(look);
   lookRef.current = look;
   const getBoardRef = useRef(getBoard);
   getBoardRef.current = getBoard;
+  const streamerRef = useRef<DesktopClassStreamer | null>(null);
+  const teacherIdentityRef = useRef(call?.teacherIdentity ?? null);
+  teacherIdentityRef.current = call?.teacherIdentity ?? null;
 
   useEffect(() => {
     const bridge = getDesktopBridge();
@@ -60,6 +70,7 @@ export function DesktopStageStreamer({
       const job = await bridge.stage!.job();
       if (cancelled || !job) return;
       streamer = new DesktopClassStreamer(bridge, readSources, () => undefined);
+      streamerRef.current = streamer;
       if (job.control) {
         streamer.setCameraOff(job.control.cameraOff);
         streamer.setMicMuted(job.control.micMuted);
@@ -81,9 +92,50 @@ export function DesktopStageStreamer({
     return () => {
       cancelled = true;
       unsubscribeControl?.();
+      streamerRef.current = null;
       void streamer?.stop();
     };
   }, []);
+
+  // Call audio → stream: connect only while a call is on (no idle room minutes).
+  const callActive = Boolean(call?.active);
+  const callSessionId = call?.sessionId ?? null;
+  const stageToken = call?.stageToken ?? null;
+  useEffect(() => {
+    if (!callActive || !callSessionId || !stageToken) return;
+    let cancelled = false;
+    let room: import("livekit-client").Room | null = null;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/whiteboard/sessions/${callSessionId}/video-token?broadcast_token=${encodeURIComponent(stageToken)}`
+        );
+        const json = await res.json().catch(() => null);
+        if (cancelled || !res.ok || !json?.success || !json.data?.url || !json.data?.token) return;
+        const { Room, RoomEvent, Track } = await import("livekit-client");
+        const r = new Room({ adaptiveStream: false, dynacast: false });
+        room = r;
+        const isCaller = (identity: string) => identity !== teacherIdentityRef.current && !identity.startsWith("OBS:");
+        r.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          if (track.kind === Track.Kind.Audio && isCaller(participant.identity)) {
+            streamerRef.current?.addCallAudio(publication.trackSid, track.mediaStreamTrack);
+          }
+        });
+        r.on(RoomEvent.TrackUnsubscribed, (_track, publication) => {
+          streamerRef.current?.removeCallAudio(publication.trackSid);
+        });
+        await r.connect(json.data.url, json.data.token, { autoSubscribe: true });
+        if (cancelled) await r.disconnect();
+      } catch (err) {
+        console.warn("[desktop_stage_call_audio]", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      streamerRef.current?.clearCallAudio();
+      void room?.disconnect();
+    };
+  }, [callActive, callSessionId, stageToken]);
 
   return null;
 }

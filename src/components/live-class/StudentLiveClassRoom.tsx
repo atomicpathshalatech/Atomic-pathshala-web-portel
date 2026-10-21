@@ -1766,21 +1766,24 @@ export function StudentLiveClassRoom({
               </div>
             </div>
           ) : (isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) ? (
-            <div className="hidden">
-              <VideoStrip
-                whiteboardSessionId={wbSession?.id || batchScheduleId}
-                variant="panel"
-                role="STUDENT"
-                teacherName={teacherName}
-                isApprovedSpeaker={isApprovedSpeaker}
-                speakerRequestType={speakerRequestType}
-                speakerToken={speakerToken}
-                teacherAudioConnected={teacherAudioConnected}
-                teacherVideoConnected={teacherVideoConnected}
-                teacherConnectionToken={teacherConnectionToken}
-                onEndCall={handleEndCall}
-              />
-            </div>
+            // YouTube class: the class is on the YouTube player, so only the
+            // call itself mounts here — teacher's voice + a visible mic /
+            // camera / end dock. (It used to sit in a display:none box, which
+            // hid the student's own call controls on laptops.)
+            <VideoStrip
+              whiteboardSessionId={wbSession?.id || batchScheduleId}
+              variant="panel"
+              role="STUDENT"
+              teacherName={teacherName}
+              isApprovedSpeaker={isApprovedSpeaker}
+              speakerRequestType={speakerRequestType}
+              speakerToken={speakerToken}
+              teacherAudioConnected={teacherAudioConnected}
+              teacherVideoConnected={teacherVideoConnected}
+              teacherConnectionToken={teacherConnectionToken}
+              onEndCall={handleEndCall}
+              callOnly
+            />
           ) : null}
 
           {/* Approved Speaker Banner */}

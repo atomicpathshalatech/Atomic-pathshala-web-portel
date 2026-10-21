@@ -60,7 +60,7 @@ const ROOM_OPTIONS: RoomOptions = {
  * nothing — with no hint why. The first tap anywhere turns the sound on; if
  * it is still blocked a clear button says so.
  */
-function AudioUnlock({ role }: { role: "TEACHER" | "STUDENT" }) {
+function AudioUnlock({ role, floating = false }: { role: "TEACHER" | "STUDENT"; floating?: boolean }) {
   const { canPlayAudio, startAudio } = useAudioPlayback();
   useEffect(() => {
     if (canPlayAudio) return;
@@ -79,7 +79,7 @@ function AudioUnlock({ role }: { role: "TEACHER" | "STUDENT" }) {
     <button
       type="button"
       onClick={() => startAudio().catch(() => undefined)}
-      className="absolute inset-x-2 bottom-2 z-50 flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 py-2.5 text-xs font-black text-slate-950 shadow-2xl animate-pulse"
+      className={`${floating ? "fixed left-1/2 -translate-x-1/2 bottom-40 z-[60]" : "absolute inset-x-2 bottom-2 z-50"} flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 py-2.5 text-xs font-black text-slate-950 shadow-2xl animate-pulse`}
     >
       <span className="material-symbols-outlined text-base">volume_off</span>
       {role === "STUDENT" ? "Tap to turn on the teacher's sound" : "Tap to turn on sound"}
@@ -125,6 +125,13 @@ export interface VideoStripProps {
   forceLocalOnly?: boolean;
   cleanOverlay?: boolean;
   chromaKey?: boolean;
+  /**
+   * STUDENT only — the class itself is watched on YouTube, so no video tile:
+   * just the call (teacher's voice, mic/camera/end dock, "tap for sound").
+   * Replaces mounting the full tile inside a display:none box, which hid the
+   * student's call controls on laptops.
+   */
+  callOnly?: boolean;
 }
 
 export function VideoStrip({
@@ -147,6 +154,7 @@ export function VideoStrip({
   forceLocalOnly = false,
   cleanOverlay = false,
   chromaKey = false,
+  callOnly = false,
 }: VideoStripProps) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -254,6 +262,7 @@ export function VideoStrip({
         compact={compact}
         cleanOverlay={cleanOverlay}
         chromaKey={chromaKey}
+        callOnly={callOnly}
       />
     </LiveKitRoom>
   );
@@ -278,6 +287,7 @@ function VideoStripInner({
   compact = false,
   cleanOverlay = false,
   chromaKey = false,
+  callOnly = false,
 }: {
   variant: "header" | "panel";
   role?: "TEACHER" | "STUDENT";
@@ -294,6 +304,7 @@ function VideoStripInner({
   compact?: boolean;
   cleanOverlay?: boolean;
   chromaKey?: boolean;
+  callOnly?: boolean;
 }) {
   const connectionState = useConnectionState();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
@@ -319,9 +330,16 @@ function VideoStripInner({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoElemRef = useRef<HTMLVideoElement | null>(null);
 
-  // Teacher media initialization: Camera & Mic enabled on join (Teacher only)
+  // Mic / camera follow the grant — but only once the room is CONNECTED.
+  // A student's grant swaps the subscribe-only token for a speaker token,
+  // which reconnects the room; turning the mic on before that finished
+  // (the old code did) was refused or lost in the reconnect, so the
+  // student "was on the call" but nothing they said reached anyone.
+  // Re-runs on every (re)connect, so a network blip can't drop the voice either.
+  const isRoomConnected = connectionState === ConnectionState.Connected;
   useEffect(() => {
     let cancelled = false;
+    if (!isRoomConnected) return;
     if (role === "TEACHER") {
       (async () => {
         try {
@@ -387,7 +405,7 @@ function VideoStripInner({
     return () => {
       cancelled = true;
     };
-  }, [localParticipant, role, isApprovedSpeaker, speakerRequestType, teacherAudioConnected, teacherVideoConnected]);
+  }, [isRoomConnected, localParticipant, role, isApprovedSpeaker, speakerRequestType, teacherAudioConnected, teacherVideoConnected]);
 
   // Handle speaker sink selection if supported
   const handleSpeakerSelect = async (deviceId: string) => {
@@ -594,6 +612,24 @@ function VideoStripInner({
   // ===========================================================================
   // STUDENT VIEW — FULL PRODUCTION VIDEO PLAYER
   // ===========================================================================
+  if (callOnly) {
+    return (
+      <>
+        <RoomAudioRenderer />
+        <AudioUnlock role="STUDENT" floating />
+        <LiveVideoCallModal
+          role="STUDENT"
+          isApprovedSpeaker={isApprovedSpeaker}
+          requestType={speakerRequestType || "AUDIO"}
+          teacherAudioConnected={teacherAudioConnected}
+          teacherVideoConnected={teacherVideoConnected}
+          onEndCall={onEndCall}
+          classSpeaker={classSpeaker}
+        />
+      </>
+    );
+  }
+
   const hasTeacherVideo = Boolean(cameraTrack?.publication && !cameraTrack.publication.isMuted && !isPaused);
 
   return (
