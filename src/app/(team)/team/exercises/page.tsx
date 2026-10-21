@@ -23,6 +23,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { getChapterModulesDirectory } from "@/lib/exercises/exercise-service";
+import { ChapterModulesGrid } from "@/components/exercises/ChapterModulesGrid";
 
 export const metadata: Metadata = {
   title: "Exercise Builder | Atomic Pathshala",
@@ -306,105 +307,10 @@ export default async function ExercisesDashboardPage({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {chapterModules.map((cm, cmIdx) => (
-                <div
-                  key={`${cm.subject}-${cm.chapter}-${cmIdx}`}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-amber-400/80 hover:shadow-md transition dark:border-slate-800 dark:bg-slate-900 flex flex-col justify-between"
-                >
-                  <div className="space-y-4">
-                    {/* Chapter Header */}
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${subjectBadgeStyle(
-                            cm.subject
-                          )}`}
-                        >
-                          {cm.subject}
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-bold">
-                          {cm.exercises.length} {cm.exercises.length === 1 ? "Exercise" : "Exercises"}
-                        </span>
-                      </div>
-
-                      <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-black text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                        {cm.totalQuestions} Questions Total
-                      </span>
-                    </div>
-
-                    <div>
-                      <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                        {cm.chapter}
-                      </h2>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Coaching Practice Module &bull; Click any exercise below to open its workspace
-                      </p>
-                    </div>
-
-                    {/* Interactive Exercises List inside this Chapter */}
-                    <div className="space-y-2">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                        Included Exercises:
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-2">
-                        {cm.exercises.map((ex, exIndex) => (
-                          <Link
-                            key={ex.id}
-                            href={`/team/exercises/${ex.id}`}
-                            className="group flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-3 hover:border-amber-400 hover:bg-amber-50/50 transition dark:border-slate-800 dark:bg-slate-850 dark:hover:bg-slate-800"
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-[11px] font-black group-hover:bg-amber-600 group-hover:text-white transition">
-                                {exIndex + 1}
-                              </span>
-                              <div>
-                                <h4 className="text-xs font-bold text-slate-900 group-hover:text-amber-800 dark:text-white transition line-clamp-1">
-                                  {ex.title}
-                                </h4>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                  {ex.exerciseType.replace(/_/g, " ")} &bull; {ex._count.sections} sections
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-300">
-                                {ex._count.questions} Qs
-                              </span>
-                              <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-amber-600 transition" />
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Chapter Card Bottom Actions */}
-                  <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-                    <Link
-                      href={`/team/exercises/new?subject=${encodeURIComponent(cm.subject)}&chapter=${encodeURIComponent(cm.chapter)}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 transition"
-                    >
-                      <Plus className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Add Exercise {cm.exercises.length + 1}</span>
-                    </Link>
-
-                    {/* Open Primary Exercise */}
-                    {cm.exercises[0] && (
-                      <Link
-                        href={`/team/exercises/${cm.exercises[0].id}`}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-500"
-                      >
-                        <span>Open Exercise Hub</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ChapterModulesGrid
+              chapterModules={chapterModules}
+              canCreate={canCreate}
+            />
           )}
         </div>
       ) : (
