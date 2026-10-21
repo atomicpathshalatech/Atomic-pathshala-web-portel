@@ -143,7 +143,7 @@ export async function sendSms(opts: { to: string; text: string }): Promise<SmsRe
   const mobile = toE164Digits(opts.to);
 
   // --- MSG91 (Flow API) -------------------------------------------------
-  const msg91Key = process.env.MSG91_AUTHKEY;
+  const msg91Key = process.env.MSG91_AUTHKEY || process.env.MSG91_WIDGET_AUTHKEY;
   const flowTemplateId = process.env.MSG91_FLOW_TEMPLATE_ID;
   if (msg91Key && flowTemplateId) {
     try {

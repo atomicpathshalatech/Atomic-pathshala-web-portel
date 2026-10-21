@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Bell,
   Calendar,
@@ -17,12 +18,15 @@ import {
   ChevronRight,
   Sparkles,
   Info,
+  AlertTriangle,
+  KeyRound,
 } from "lucide-react";
 
 export function TomorrowScheduleAutomationCard() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [targetDay, setTargetDay] = useState<"tomorrow" | "today">("tomorrow");
 
   // Modal State
   const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -34,11 +38,11 @@ export function TomorrowScheduleAutomationCard() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [testingMe, setTestingMe] = useState(false);
 
-  const fetchPreview = async () => {
+  const fetchPreview = async (day: "tomorrow" | "today" = targetDay) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/team/communication/schedule-digest/preview");
+      const res = await fetch(`/api/team/communication/schedule-digest/preview?targetDay=${day}`);
       const json = await res.json();
       if (res.ok && json.success) {
         setData(json.data);
@@ -53,8 +57,8 @@ export function TomorrowScheduleAutomationCard() {
   };
 
   useEffect(() => {
-    fetchPreview();
-  }, []);
+    fetchPreview(targetDay);
+  }, [targetDay]);
 
   const handleSendTestToMe = async () => {
     setTestingMe(true);
@@ -63,12 +67,12 @@ export function TomorrowScheduleAutomationCard() {
       const res = await fetch("/api/team/communication/schedule-digest/trigger", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send_test" }),
+        body: JSON.stringify({ action: "send_test", targetDay }),
       });
       const json = await res.json();
       if (res.ok && json.success) {
         alert(
-          `Test digest successfully sent to ${json.recipient?.email || "your email"} and ${json.recipient?.phone || "your phone"}!`
+          `Test message dispatched to your account! Email status: ${json.results?.email?.delivered ? "Delivered" : "Queued/Check Resend"}, WhatsApp: ${json.results?.whatsapp?.queued ? "Queued" : "Check Provider Key"}`
         );
       } else {
         alert(json.error || "Failed to send test message");
@@ -87,7 +91,7 @@ export function TomorrowScheduleAutomationCard() {
       const res = await fetch("/api/team/communication/schedule-digest/trigger", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send_all", force: true }),
+        body: JSON.stringify({ action: "send_all", targetDay, force: true }),
       });
       const json = await res.json();
       if (res.ok && json.success) {
@@ -115,10 +119,10 @@ export function TomorrowScheduleAutomationCard() {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Nightly Class Schedule Automation
+                Class Schedule Notifications Automation
               </h2>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400">
-                <Sparkles className="w-3 h-3" /> 10:00 PM IST Active
+                <Sparkles className="w-3 h-3" /> 10:00 PM Nightly Cron Active
               </span>
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -127,9 +131,34 @@ export function TomorrowScheduleAutomationCard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Day Mode Toggle & Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Target Day Selector */}
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold">
+            <button
+              onClick={() => setTargetDay("tomorrow")}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${
+                targetDay === "tomorrow"
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              Tomorrow (10 PM)
+            </button>
+            <button
+              onClick={() => setTargetDay("today")}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${
+                targetDay === "today"
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              Today's Schedule
+            </button>
+          </div>
+
           <button
-            onClick={fetchPreview}
+            onClick={() => fetchPreview(targetDay)}
             disabled={loading}
             className="p-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 transition-colors"
             title="Refresh schedule data"
@@ -138,28 +167,49 @@ export function TomorrowScheduleAutomationCard() {
           </button>
           <button
             onClick={() => setShowPreviewModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
           >
-            <Eye className="w-4 h-4 text-slate-500" /> Preview Digest
+            <Eye className="w-4 h-4 text-slate-500" /> Preview
           </button>
           <button
             onClick={handleSendTestToMe}
             disabled={testingMe}
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
           >
             <Send className="w-3.5 h-3.5" />
-            {testingMe ? "Sending Test..." : "Send Test to Me"}
+            {testingMe ? "Sending..." : "Test to Me"}
           </button>
           <button
             onClick={() => setShowConfirmModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+            disabled={data?.totalClasses === 0}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm text-white ${
+              data?.totalClasses === 0
+                ? "bg-slate-400 cursor-not-allowed"
+                : "bg-emerald-600 hover:bg-emerald-500"
+            }`}
           >
             <Send className="w-3.5 h-3.5" /> Send to Students Now
           </button>
         </div>
       </div>
 
-      {/* Trigger Result Banner if any */}
+      {/* WhatsApp Configuration Warning if API Key is missing */}
+      {data?.channelStatus && !data.channelStatus.whatsapp?.configured && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="font-semibold text-amber-900 dark:text-amber-200">
+              WhatsApp Provider API Key is not yet configured
+            </p>
+            <p className="text-amber-700 dark:text-amber-300 mt-0.5">
+              To send real WhatsApp messages directly to students' phone numbers, please go to the{" "}
+              <strong>Automation Settings</strong> tab and enter your Interakt / Meta WhatsApp API key.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Trigger Result Banner */}
       {triggerResult && (
         <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-start gap-3">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
@@ -169,7 +219,7 @@ export function TomorrowScheduleAutomationCard() {
             </p>
             <p className="text-emerald-700 dark:text-emerald-400 text-xs mt-1">
               Total Students: <strong>{triggerResult.totalStudents}</strong> • Emails Sent:{" "}
-              <strong>{triggerResult.emailsSent}</strong> • WhatsApp Queued/Sent:{" "}
+              <strong>{triggerResult.emailsSent}</strong> • WhatsApp Queued:{" "}
               <strong>{triggerResult.whatsAppQueued}</strong> • SMS Sent:{" "}
               <strong>{triggerResult.smsSent}</strong>
             </p>
@@ -182,7 +232,7 @@ export function TomorrowScheduleAutomationCard() {
         {/* Next Scheduled Run */}
         <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-            <span>SCHEDULED TRIGGER</span>
+            <span>AUTOMATION CRON</span>
             <Clock className="w-4 h-4 text-indigo-500" />
           </div>
           <div className="text-xl font-bold text-slate-900 dark:text-white">
@@ -193,7 +243,7 @@ export function TomorrowScheduleAutomationCard() {
           </p>
         </div>
 
-        {/* Tomorrow's Date */}
+        {/* Selected Target Date */}
         <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
             <span>TARGET DATE</span>
@@ -203,7 +253,7 @@ export function TomorrowScheduleAutomationCard() {
             {data?.dateFormatted || "Loading..."}
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            {data?.dateKey || "Tomorrow"}
+            Mode: {data?.targetDayLabel || "Tomorrow"}
           </p>
         </div>
 
@@ -217,7 +267,7 @@ export function TomorrowScheduleAutomationCard() {
             {data?.totalClasses ?? (loading ? "..." : 0)}
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Active across all batches
+            In database for {targetDay}
           </p>
         </div>
 
@@ -231,7 +281,7 @@ export function TomorrowScheduleAutomationCard() {
             {data?.totalStudents ?? (loading ? "..." : 0)}
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            {data?.emailRecipientsCount ?? 0} Email • {data?.phoneRecipientsCount ?? 0} WhatsApp/SMS
+            {data?.emailRecipientsCount ?? 0} Email • {data?.phoneRecipientsCount ?? 0} Phone
           </p>
         </div>
       </div>
@@ -250,10 +300,10 @@ export function TomorrowScheduleAutomationCard() {
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-slate-900 dark:text-white">1. Email (Resend)</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className={`w-2 h-2 rounded-full ${data?.channelStatus?.email?.configured ? "bg-emerald-500" : "bg-amber-500"}`}></span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Sends branded HTML email with subject badges & buttons
+                {data?.channelStatus?.email?.configured ? "Active (noreply@atomicpathshala.in)" : "Configured"}
               </p>
             </div>
           </div>
@@ -266,10 +316,10 @@ export function TomorrowScheduleAutomationCard() {
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-slate-900 dark:text-white">2. WhatsApp Message</span>
-                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                <span className={`w-2 h-2 rounded-full ${data?.channelStatus?.whatsapp?.configured ? "bg-green-500" : "bg-amber-500"}`}></span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Direct WhatsApp with clickable watch links & faculty
+                {data?.channelStatus?.whatsapp?.configured ? "Active" : "Add API Key in Settings"}
               </p>
             </div>
           </div>
@@ -285,22 +335,22 @@ export function TomorrowScheduleAutomationCard() {
                 <span className="w-2 h-2 rounded-full bg-blue-500"></span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Automatic fallback if student phone doesn't have WhatsApp
+                Automatic fallback for students
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tomorrow's Scheduled Classes List */}
+      {/* Scheduled Classes List */}
       {data?.schedules?.length > 0 ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              Tomorrow's Scheduled Classes ({data.schedules.length})
+              Scheduled Classes ({data.schedules.length}) for {data.dateFormatted}
             </h3>
-            <span className="text-xs text-slate-500">
-              {data.dateFormatted}
+            <span className="text-xs text-slate-500 font-semibold text-emerald-600 dark:text-emerald-400">
+              Ready to send to {data.totalStudents} enrolled student(s)
             </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -334,14 +384,22 @@ export function TomorrowScheduleAutomationCard() {
           </div>
         </div>
       ) : (
-        <div className="text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+        <div className="text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6">
           <Calendar className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-            No classes scheduled for tomorrow yet
+          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+            No classes scheduled for {targetDay} yet ({data?.dateFormatted || "Selected Date"})
           </p>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-            When teachers or coordinators schedule classes in Batch Calendar, they will automatically appear here and get delivered at 10:00 PM tonight.
+          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
+            Messages are sent when classes are scheduled in the batch timetable. Since 0 classes are scheduled right now, no schedule messages were sent.
           </p>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href="/team/batches"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm inline-flex items-center gap-1.5"
+            >
+              Go to Batches to Schedule Classes <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       )}
 
@@ -352,12 +410,12 @@ export function TomorrowScheduleAutomationCard() {
             <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
               <AlertCircle className="w-6 h-6" />
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                Send Tomorrow's Schedule Now?
+                Send {data?.targetDayLabel || "Tomorrow"}'s Schedule Now?
               </h3>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              This will immediately send tomorrow's schedule digest for{" "}
-              <strong>{data?.dateFormatted || "tomorrow"}</strong> to all{" "}
+              This will immediately send the schedule digest for{" "}
+              <strong>{data?.dateFormatted || "target date"}</strong> to all{" "}
               <strong>{data?.totalStudents || 0} active students</strong> via Email, WhatsApp, and SMS Fallback.
             </p>
             <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-xs space-y-1 text-slate-600 dark:text-slate-400">
@@ -393,7 +451,7 @@ export function TomorrowScheduleAutomationCard() {
             <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Schedule Digest Preview ({data?.dateFormatted || "Tomorrow"})
+                  Schedule Digest Preview ({data?.dateFormatted || "Schedule"})
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Sample formatted message generated for student
@@ -445,7 +503,7 @@ export function TomorrowScheduleAutomationCard() {
             <div className="p-6 overflow-y-auto flex-1">
               {previewTab === "whatsapp" && (
                 <div className="bg-[#efeae2] dark:bg-slate-950 p-4 rounded-xl font-mono text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed shadow-inner max-w-lg mx-auto border border-emerald-900/10">
-                  {data?.sampleWhatsApp || "No preview available yet"}
+                  {data?.sampleWhatsApp || "No classes scheduled yet to generate preview"}
                 </div>
               )}
 
@@ -458,7 +516,7 @@ export function TomorrowScheduleAutomationCard() {
                       className="w-full h-[450px] border-0"
                     />
                   ) : (
-                    <p className="p-6 text-sm text-slate-500 text-center">No email template available</p>
+                    <p className="p-6 text-sm text-slate-500 text-center">No classes scheduled yet to generate email preview</p>
                   )}
                 </div>
               )}

@@ -53,7 +53,7 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
   const destinationNumber = isValid ? formattedE164 : params.to;
 
   // 1. MOCK / DEV PROVIDER
-  if (provider === "MOCK" || !settings.apiKey) {
+  if (provider === "MOCK") {
     console.log(`[WHATSAPP_MOCK_DISPATCH] To: ${destinationNumber}`);
     console.log(`[WHATSAPP_MOCK_DISPATCH] Body:\n${params.bodyText}`);
     return {
@@ -62,6 +62,18 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
       status: "SENT",
       provider: "MOCK",
       rawResponse: { mock: true, timestamp: new Date().toISOString() },
+    };
+  }
+
+  // Check if API key is configured for live provider
+  if (!settings.apiKey) {
+    console.warn(`[WHATSAPP_KEY_NOT_CONFIGURED] Provider ${provider} has no API key set. Go to /team/whatsapp Settings to configure.`);
+    return {
+      success: false,
+      messageId: `not_configured_${Date.now()}`,
+      status: "FAILED",
+      provider,
+      error: "WhatsApp API Key is not configured. Go to WhatsApp Automation Settings to enter your Interakt/Meta API key.",
     };
   }
 

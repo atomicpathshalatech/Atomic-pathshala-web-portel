@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { getWhatsAppSettings } from "@/lib/whatsapp/settings";
 import {
   buildTomorrowStudentDigests,
   generateScheduleEmailHtml,
@@ -29,17 +30,22 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const batchId = searchParams.get("batchId") || undefined;
-  const dateStr = searchParams.get("date"); // optional reference date ISO
+  const targetDay = (searchParams.get("targetDay") as "tomorrow" | "today") || "tomorrow";
+  const dateStr = searchParams.get("date");
 
   const referenceDate = dateStr ? new Date(dateStr) : new Date();
 
   try {
-    const { digests, schedules, dateFormatted, dateKey } =
-      await buildTomorrowStudentDigests({
+    const [scheduleData, waSettings] = await Promise.all([
+      buildTomorrowStudentDigests({
         referenceDate,
+        targetDay,
         filterBatchId: batchId,
-      });
+      }),
+      getWhatsAppSettings(),
+    ]);
 
+    const { digests, schedules, dateFormatted, dateKey, targetDayLabel } = scheduleData;
     const sampleDigest = digests[0] || null;
 
     let sampleWhatsApp = "";
@@ -55,15 +61,32 @@ export async function GET(req: NextRequest) {
     const emailRecipientsCount = digests.filter((d) => d.email && d.email.includes("@")).length;
     const phoneRecipientsCount = digests.filter((d) => Boolean(d.phone)).length;
 
+    // Check channel health
+    const channelStatus = {
+      email: {
+        configured: Boolean(process.env.RESEND_API_KEY),
+        from: process.env.MAIL_FROM || "Atomic Pathshala <noreply@atomicpathshala.in>",
+      },
+      whatsapp: {
+        configured: Boolean(waSettings.apiKey),
+        provider: waSettings.provider || "INTERAKT",
+      },
+      sms: {
+        configured: Boolean(process.env.MSG91_AUTHKEY || process.env.MSG91_WIDGET_AUTHKEY || process.env.TWILIO_ACCOUNT_SID),
+      },
+    };
+
     return NextResponse.json({
       success: true,
       data: {
         dateFormatted,
         dateKey,
+        targetDayLabel,
         totalClasses: schedules.length,
         totalStudents: digests.length,
         emailRecipientsCount,
         phoneRecipientsCount,
+        channelStatus,
         schedules: schedules.map((s) => ({
           id: s.id,
           title: s.title,

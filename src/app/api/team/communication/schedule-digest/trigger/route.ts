@@ -40,8 +40,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const action = body.action || "send_all"; // "send_all" | "send_batch" | "send_test"
     const batchId = body.batchId || undefined;
+    const targetDay = (body.targetDay as "tomorrow" | "today") || "tomorrow";
     const force = Boolean(body.force);
-    const dateStr = body.date; // optional custom date
+    const dateStr = body.date;
     const channels = body.channels || { email: true, whatsapp: true, sms: true };
 
     const referenceDate = dateStr ? new Date(dateStr) : new Date();
@@ -57,9 +58,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "User not found" }, { status: 404 });
       }
 
-      const { digests, schedules, dateFormatted, dateKey } =
+      const { digests, schedules, dateFormatted, dateKey, targetDayLabel } =
         await buildTomorrowStudentDigests({
           referenceDate,
+          targetDay,
           filterBatchId: batchId,
         });
 
@@ -108,6 +110,7 @@ export async function POST(req: NextRequest) {
         classes: testClasses,
         dateFormatted,
         dateKey,
+        targetDayLabel,
       };
 
       const testResults: { email?: any; whatsapp?: any; sms?: any } = {};
@@ -118,7 +121,7 @@ export async function POST(req: NextRequest) {
         const text = generateScheduleEmailText(testDigest);
         const emailRes = await sendMail({
           to: user.email,
-          subject: `[TEST] Tomorrow's Class Schedule (${dateFormatted})`,
+          subject: `[TEST] ${targetDayLabel}'s Class Schedule (${dateFormatted})`,
           html,
           text,
         });
@@ -165,6 +168,7 @@ export async function POST(req: NextRequest) {
     // 2. ACTION: SEND ALL OR BATCH
     const result = await sendTomorrowClassSchedules({
       referenceDate,
+      targetDay,
       filterBatchId: batchId,
       force,
       channels,

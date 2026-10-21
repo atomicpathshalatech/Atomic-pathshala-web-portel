@@ -33,10 +33,12 @@ export interface StudentScheduleDigest {
   classes: ClassScheduleItem[];
   dateFormatted: string;
   dateKey: string;
+  targetDayLabel: "Today" | "Tomorrow";
 }
 
 export interface ScheduleDispatchResult {
   dateStr: string;
+  targetDayLabel: "Today" | "Tomorrow";
   totalClasses: number;
   totalStudents: number;
   emailsSent: number;
@@ -57,14 +59,23 @@ export interface ScheduleDispatchResult {
 }
 
 /**
- * Get start and end dates for tomorrow in Asia/Kolkata timezone
+ * Get start and end dates for a target day ("tomorrow" | "today") in Asia/Kolkata timezone
  */
-export function getTomorrowKolkataBounds(referenceDate: Date = new Date()): {
+export function getKolkataDateBounds(
+  target: "tomorrow" | "today" | Date = "tomorrow",
+  referenceDate: Date = new Date()
+): {
+  startOfDay: Date;
+  endOfDay: Date;
+  dateFormatted: string;
+  dateKey: string;
+  dayName: string;
+  targetDayLabel: "Today" | "Tomorrow";
+  // Backwards compatibility aliases
   startOfTomorrow: Date;
   endOfTomorrow: Date;
   tomorrowDateFormatted: string;
   tomorrowDateKey: string;
-  dayName: string;
 } {
   const istFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Kolkata",
@@ -79,16 +90,17 @@ export function getTomorrowKolkataBounds(referenceDate: Date = new Date()): {
   const month = parseInt(parts.find((p) => p.type === "month")!.value, 10) - 1;
   const day = parseInt(parts.find((p) => p.type === "day")!.value, 10);
 
-  // Tomorrow in IST (+1 day)
-  const tomorrowIST = new Date(Date.UTC(year, month, day + 1));
-  const tYear = tomorrowIST.getUTCFullYear();
-  const tMonth = tomorrowIST.getUTCMonth();
-  const tDay = tomorrowIST.getUTCDate();
+  const dayOffset = target === "today" ? 0 : target === "tomorrow" ? 1 : 0;
+  const targetIST = target instanceof Date ? target : new Date(Date.UTC(year, month, day + dayOffset));
+
+  const tYear = targetIST.getUTCFullYear();
+  const tMonth = targetIST.getUTCMonth();
+  const tDay = targetIST.getUTCDate();
 
   // IST is UTC+5:30 -> 00:00:00 IST is previous day 18:30:00 UTC
-  const startOfTomorrow = new Date(Date.UTC(tYear, tMonth, tDay, 0, 0, 0) - 5.5 * 3600 * 1000);
+  const startOfDay = new Date(Date.UTC(tYear, tMonth, tDay, 0, 0, 0) - 5.5 * 3600 * 1000);
   // 23:59:59.999 IST
-  const endOfTomorrow = new Date(Date.UTC(tYear, tMonth, tDay, 23, 59, 59, 999) - 5.5 * 3600 * 1000);
+  const endOfDay = new Date(Date.UTC(tYear, tMonth, tDay, 23, 59, 59, 999) - 5.5 * 3600 * 1000);
 
   const displayFormatter = new Intl.DateTimeFormat("en-IN", {
     timeZone: "Asia/Kolkata",
@@ -98,22 +110,32 @@ export function getTomorrowKolkataBounds(referenceDate: Date = new Date()): {
     year: "numeric",
   });
 
-  const tomorrowDateFormatted = displayFormatter.format(startOfTomorrow);
-  const tomorrowDateKey = `${tYear}-${String(tMonth + 1).padStart(2, "0")}-${String(tDay).padStart(2, "0")}`;
+  const dateFormatted = displayFormatter.format(startOfDay);
+  const dateKey = `${tYear}-${String(tMonth + 1).padStart(2, "0")}-${String(tDay).padStart(2, "0")}`;
 
   const dayFormatter = new Intl.DateTimeFormat("en-IN", {
     timeZone: "Asia/Kolkata",
     weekday: "long",
   });
-  const dayName = dayFormatter.format(startOfTomorrow);
+  const dayName = dayFormatter.format(startOfDay);
+  const targetDayLabel: "Today" | "Tomorrow" = target === "today" ? "Today" : "Tomorrow";
 
   return {
-    startOfTomorrow,
-    endOfTomorrow,
-    tomorrowDateFormatted,
-    tomorrowDateKey,
+    startOfDay,
+    endOfDay,
+    dateFormatted,
+    dateKey,
     dayName,
+    targetDayLabel,
+    startOfTomorrow: startOfDay,
+    endOfTomorrow: endOfDay,
+    tomorrowDateFormatted: dateFormatted,
+    tomorrowDateKey: dateKey,
   };
+}
+
+export function getTomorrowKolkataBounds(referenceDate: Date = new Date()) {
+  return getKolkataDateBounds("tomorrow", referenceDate);
 }
 
 /**
@@ -151,15 +173,18 @@ export function normalizeYouTubeUrl(rawUrl?: string | null): string | null {
  */
 export async function buildTomorrowStudentDigests(options?: {
   referenceDate?: Date;
+  targetDay?: "tomorrow" | "today";
   filterBatchId?: string;
 }): Promise<{
   digests: StudentScheduleDigest[];
   schedules: any[];
   dateFormatted: string;
   dateKey: string;
+  targetDayLabel: "Today" | "Tomorrow";
 }> {
-  const { startOfTomorrow, endOfTomorrow, tomorrowDateFormatted, tomorrowDateKey } =
-    getTomorrowKolkataBounds(options?.referenceDate);
+  const target = options?.targetDay || "tomorrow";
+  const { startOfDay, endOfDay, dateFormatted, dateKey, targetDayLabel } =
+    getKolkataDateBounds(target, options?.referenceDate);
 
   const baseUrl = (
     process.env.APP_BASE_URL ||
@@ -167,12 +192,12 @@ export async function buildTomorrowStudentDigests(options?: {
     "https://ap.atomicpathshala.in"
   ).replace(/\/$/, "");
 
-  // 1. Fetch all schedules for tomorrow
+  // 1. Fetch all schedules for target date
   const schedules = await prisma.batchSchedule.findMany({
     where: {
       startsAt: {
-        gte: startOfTomorrow,
-        lte: endOfTomorrow,
+        gte: startOfDay,
+        lte: endOfDay,
       },
       status: { in: ["SCHEDULED", "LIVE"] },
       isTest: false,
@@ -192,8 +217,9 @@ export async function buildTomorrowStudentDigests(options?: {
     return {
       digests: [],
       schedules: [],
-      dateFormatted: tomorrowDateFormatted,
-      dateKey: tomorrowDateKey,
+      dateFormatted,
+      dateKey,
+      targetDayLabel,
     };
   }
 
@@ -243,8 +269,9 @@ export async function buildTomorrowStudentDigests(options?: {
         phone: studentUser.phone?.trim() || student.emergencyContact?.trim() || null,
         batchNames: [enrollment.batch.name],
         classes: [],
-        dateFormatted: tomorrowDateFormatted,
-        dateKey: tomorrowDateKey,
+        dateFormatted,
+        dateKey,
+        targetDayLabel,
       };
       studentDigestMap.set(student.id, digest);
     } else {
@@ -254,7 +281,6 @@ export async function buildTomorrowStudentDigests(options?: {
     }
 
     for (const s of batchSchedules) {
-      // Deduplicate class entries
       if (!digest.classes.some((c) => c.id === s.id)) {
         const durationMin =
           s.durationMinutes || Math.round((s.endsAt.getTime() - s.startsAt.getTime()) / 60_000);
@@ -265,7 +291,6 @@ export async function buildTomorrowStudentDigests(options?: {
             ? `https://www.youtube.com/watch?v=${s.liveWhiteboardSession.youtubeVideoId}`
             : null);
 
-        // Chapter Name & Lecture Name resolution
         const chapterName = s.chapter?.title?.trim() || s.topic?.trim() || "General Academic";
         const lectureName = s.lecture?.title?.trim() || s.title?.trim() || "Scheduled Lecture";
         const subjectName = s.subject?.trim() || "Academic";
@@ -300,8 +325,9 @@ export async function buildTomorrowStudentDigests(options?: {
   return {
     digests,
     schedules,
-    dateFormatted: tomorrowDateFormatted,
-    dateKey: tomorrowDateKey,
+    dateFormatted,
+    dateKey,
+    targetDayLabel,
   };
 }
 
@@ -309,11 +335,13 @@ export async function buildTomorrowStudentDigests(options?: {
  * Generate Structured WhatsApp Message Text
  */
 export function generateScheduleWhatsAppMessage(digest: StudentScheduleDigest): string {
+  const dayHeader = digest.targetDayLabel === "Today" ? "Today's Class Schedule" : "Tomorrow's Class Schedule";
+
   let msg = `🔔 *ATOMIC PATHSHALA*\n`;
-  msg += `*Tomorrow's Class Schedule*\n\n`;
+  msg += `*${dayHeader}*\n\n`;
   msg += `📅 *${digest.dateFormatted}*\n`;
   msg += `👤 Dear *${digest.studentName}*,\n`;
-  msg += `Here is your complete class schedule for tomorrow:\n\n`;
+  msg += `Here is your complete class schedule for ${digest.targetDayLabel.toLowerCase()}:\n\n`;
 
   digest.classes.forEach((c, index) => {
     const startTime = formatTimeIST(c.startsAt);
@@ -360,6 +388,8 @@ export function generateScheduleEmailHtml(digest: StudentScheduleDigest): string
     zoology: { bg: "#faf5ff", text: "#6b21a8", border: "#a855f7" },
     mathematics: { bg: "#fffbeb", text: "#92400e", border: "#f59e0b" },
   };
+
+  const dayHeader = digest.targetDayLabel === "Today" ? "Today's Live Classes" : "Tomorrow's Live Classes";
 
   const classCardsHtml = digest.classes
     .map((c) => {
@@ -414,7 +444,7 @@ export function generateScheduleEmailHtml(digest: StudentScheduleDigest): string
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tomorrow's Class Schedule — Atomic Pathshala</title>
+    <title>${dayHeader} — Atomic Pathshala</title>
   </head>
   <body style="margin:0;padding:0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;padding:24px 0;">
@@ -429,7 +459,7 @@ export function generateScheduleEmailHtml(digest: StudentScheduleDigest): string
                   ATOMIC PATHSHALA
                 </h1>
                 <p style="color:#94a3b8;margin:0;font-size:13px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">
-                  Tomorrow's Live Classes & Lecture Schedule
+                  ${dayHeader} & Lecture Schedule
                 </p>
                 <div style="margin-top:14px;display:inline-block;background:#059669;color:#ffffff;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:700;">
                   📅 ${digest.dateFormatted}
@@ -444,7 +474,7 @@ export function generateScheduleEmailHtml(digest: StudentScheduleDigest): string
                   Hello <strong>${digest.studentName}</strong>,
                 </p>
                 <p style="font-size:14px;color:#475569;margin:0 0 20px 0;line-height:1.5;">
-                  Your classes for tomorrow have been scheduled. Please find the complete subject-wise details and direct joining links below:
+                  Your classes for ${digest.targetDayLabel.toLowerCase()} have been scheduled. Please find the complete subject-wise details and direct joining links below:
                 </p>
 
                 <!-- Class Cards -->
@@ -452,7 +482,7 @@ export function generateScheduleEmailHtml(digest: StudentScheduleDigest): string
 
                 <!-- Important Instructions Box -->
                 <div style="background:#f1f5f9;border-left:4px solid #0284c7;border-radius:6px;padding:14px 16px;margin:20px 0;font-size:13px;color:#334155;line-height:1.5;">
-                  <strong>💡 Pro Tips for Tomorrow's Classes:</strong>
+                  <strong>💡 Pro Tips:</strong>
                   <ul style="margin:8px 0 0 0;padding-left:18px;">
                     <li>Be ready 5 minutes before scheduled start time.</li>
                     <li>Keep your NCERT textbook, notebooks, and pens ready.</li>
@@ -491,10 +521,11 @@ export function generateScheduleEmailHtml(digest: StudentScheduleDigest): string
  * Generate Plain Text Email Fallback
  */
 export function generateScheduleEmailText(digest: StudentScheduleDigest): string {
-  let text = `ATOMIC PATHSHALA - TOMORROW'S CLASS SCHEDULE\n`;
+  const dayHeader = digest.targetDayLabel === "Today" ? "TODAY'S CLASS SCHEDULE" : "TOMORROW'S CLASS SCHEDULE";
+  let text = `ATOMIC PATHSHALA - ${dayHeader}\n`;
   text += `Date: ${digest.dateFormatted}\n`;
   text += `Hello ${digest.studentName},\n\n`;
-  text += `Here is your schedule for tomorrow:\n\n`;
+  text += `Here is your schedule for ${digest.targetDayLabel.toLowerCase()}:\n\n`;
 
   digest.classes.forEach((c, index) => {
     const startTime = formatTimeIST(c.startsAt);
@@ -523,8 +554,9 @@ export function generateScheduleSmsText(digest: StudentScheduleDigest): string {
     .join(", ");
 
   const firstLink = digest.classes[0]?.appWatchUrl || "https://ap.atomicpathshala.in/dashboard";
+  const dayLabel = digest.targetDayLabel;
 
-  return `Atomic Pathshala: Tomorrow's Schedule (${digest.dateFormatted}) for ${digest.studentName}: ${classSummary}. Watch live: ${firstLink} - Atomic Pathshala`;
+  return `Atomic Pathshala: ${dayLabel}'s Schedule (${digest.dateFormatted}) for ${digest.studentName}: ${classSummary}. Watch live: ${firstLink} - Atomic Pathshala`;
 }
 
 /**
@@ -533,6 +565,7 @@ export function generateScheduleSmsText(digest: StudentScheduleDigest): string {
  */
 export async function sendTomorrowClassSchedules(options?: {
   referenceDate?: Date;
+  targetDay?: "tomorrow" | "today";
   filterBatchId?: string;
   force?: boolean;
   channels?: {
@@ -545,13 +578,15 @@ export async function sendTomorrowClassSchedules(options?: {
   const whatsappEnabled = options?.channels?.whatsapp !== false;
   const smsEnabled = options?.channels?.sms !== false;
 
-  const { digests, schedules, dateFormatted, dateKey } = await buildTomorrowStudentDigests({
+  const { digests, schedules, dateFormatted, dateKey, targetDayLabel } = await buildTomorrowStudentDigests({
     referenceDate: options?.referenceDate,
+    targetDay: options?.targetDay,
     filterBatchId: options?.filterBatchId,
   });
 
   const result: ScheduleDispatchResult = {
     dateStr: dateFormatted,
+    targetDayLabel,
     totalClasses: schedules.length,
     totalStudents: digests.length,
     emailsSent: 0,
@@ -577,8 +612,8 @@ export async function sendTomorrowClassSchedules(options?: {
       await prisma.notification.create({
         data: {
           userId: digest.userId,
-          title: `📅 Tomorrow's Class Schedule (${digest.dateFormatted})`,
-          body: `You have ${digest.classes.length} live class(es) scheduled for tomorrow. Check your subjects and join on time!`,
+          title: `📅 ${digest.targetDayLabel}'s Class Schedule (${digest.dateFormatted})`,
+          body: `You have ${digest.classes.length} live class(es) scheduled for ${digest.targetDayLabel.toLowerCase()}. Check your subjects and join on time!`,
           channel: "IN_APP",
         },
       });
@@ -591,11 +626,10 @@ export async function sendTomorrowClassSchedules(options?: {
     if (emailEnabled && digest.email && digest.email.includes("@")) {
       const emailHtml = generateScheduleEmailHtml(digest);
       const emailText = generateScheduleEmailText(digest);
-      const emailSubject = `📅 Tomorrow's Class Schedule — Atomic Pathshala (${digest.dateFormatted})`;
+      const emailSubject = `📅 ${digest.targetDayLabel}'s Class Schedule — Atomic Pathshala (${digest.dateFormatted})`;
       const idempotencyKey = `class-schedule:email:${digest.studentId}:${digest.dateKey}`;
 
       try {
-        // Check if already sent unless forced
         let alreadySent = false;
         if (!options?.force) {
           const existing = await prisma.emailLog.findUnique({
@@ -615,7 +649,6 @@ export async function sendTomorrowClassSchedules(options?: {
             text: emailText,
           });
 
-          // Log in EmailLog table
           await prisma.emailLog
             .upsert({
               where: { idempotencyKey },
@@ -691,8 +724,7 @@ export async function sendTomorrowClassSchedules(options?: {
       }
     }
 
-    // 4. SMS / TEXT MESSAGE CHANNEL
-    // Fallback if WhatsApp is not available or if WhatsApp queue failed, or if explicit SMS channel enabled
+    // 4. SMS / TEXT MESSAGE CHANNEL (Fallback)
     if (smsEnabled && digest.phone && (!whatsAppSuccess || whatsAppStatus === "FAILED")) {
       const smsText = generateScheduleSmsText(digest);
       try {
