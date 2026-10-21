@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { TomorrowScheduleAutomationCard } from "./TomorrowScheduleAutomationCard";
 import {
   MessageSquare,
   Users,
@@ -34,7 +35,7 @@ export function WhatsAppAutomationDashboard({
   batches,
   canManage,
 }: WhatsAppAutomationDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "contacts" | "campaigns" | "settings">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "schedule-digest" | "contacts" | "campaigns" | "settings">("overview");
   const [settings, setSettings] = useState(initialSettings);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -344,6 +345,16 @@ export function WhatsAppAutomationDashboard({
             Message Queue
           </button>
           <button
+            onClick={() => setActiveTab("schedule-digest")}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+              activeTab === "schedule-digest"
+                ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+            }`}
+          >
+            🔔 Tomorrow's Schedule (10 PM)
+          </button>
+          <button
             onClick={() => setActiveTab("contacts")}
             className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
               activeTab === "contacts"
@@ -378,9 +389,19 @@ export function WhatsAppAutomationDashboard({
         </div>
       </div>
 
+      {/* TAB: TOMORROW'S CLASS SCHEDULE DIGEST */}
+      {activeTab === "schedule-digest" && (
+        <div className="space-y-6">
+          <TomorrowScheduleAutomationCard />
+        </div>
+      )}
+
       {/* TAB 1: OVERVIEW & QUEUE LOGS */}
       {activeTab === "overview" && (
         <div className="space-y-6">
+          {/* Nightly Schedule Digest Feature Card */}
+          <TomorrowScheduleAutomationCard />
+
           {/* Stats Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">

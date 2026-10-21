@@ -68,6 +68,12 @@ const CARDS = [
     label: "Today Special",
     description: "Recurring date-based content, combined into birthday messages when it targets the subject.",
   },
+  {
+    href: "/team/whatsapp",
+    icon: "schedule_send",
+    label: "10 PM Class Schedule Digest",
+    description: "Automated nightly multi-channel alerts (Email, WhatsApp, SMS) with chapter, lecture and direct watch links.",
+  },
 ];
 
 export default async function CommunicationCenterPage() {

@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { sendMail } from "@/lib/mail";
+import { sendSms } from "@/lib/sms";
 import type { NotificationChannel } from "@prisma/client";
 
 export type WhatsAppPayload = {
@@ -63,7 +65,7 @@ export type DispatchOptions = {
 };
 
 /**
- * Unified notification dispatcher delivering to In-App, WhatsApp, and Email.
+ * Unified notification dispatcher delivering to In-App, WhatsApp, Email, and SMS fallback.
  */
 export async function dispatchNotification({
   userId,
@@ -96,16 +98,17 @@ export async function dispatchNotification({
   }
 
   // 2. WhatsApp Dispatch
+  let waSuccess = false;
   if (channelsToSend.includes("WHATSAPP") && user.phone) {
-    await sendWhatsAppMessage({
+    const waRes = await sendWhatsAppMessage({
       toPhone: user.phone,
       body: `🔔 *${title}*\n\n${body}\n\n— *Atomic Pathshala*`,
     });
+    waSuccess = waRes.success;
   }
 
-  // 3. Email Record / Dispatch
+  // 3. Email Dispatch via Resend
   if (channelsToSend.includes("EMAIL") && user.email) {
-    // In-app log for email channel
     await prisma.notification.create({
       data: {
         userId: user.id,
@@ -114,6 +117,32 @@ export async function dispatchNotification({
         channel: "EMAIL",
       },
     }).catch(() => {});
+
+    await sendMail({
+      to: user.email,
+      subject: title,
+      html: `
+        <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;">
+          <div style="background:#0f172a;padding:16px;border-radius:8px;text-align:center;margin-bottom:20px;">
+            <h2 style="color:#ffffff;margin:0;font-size:18px;">ATOMIC PATHSHALA</h2>
+          </div>
+          <h3 style="margin:0 0 12px;color:#0f172a;">${title}</h3>
+          <p style="color:#334155;line-height:1.6;margin:0 0 20px;">${body.replace(/\n/g, "<br/>")}</p>
+          <div style="border-top:1px solid #e2e8f0;padding-top:16px;font-size:12px;color:#64748b;text-align:center;">
+            Team Atomic Pathshala • <a href="https://ap.atomicpathshala.in" style="color:#059669;">ap.atomicpathshala.in</a>
+          </div>
+        </div>
+      `,
+      text: `${title}\n\n${body}\n\nTeam Atomic Pathshala\nhttps://ap.atomicpathshala.in`,
+    }).catch((err) => console.error("[dispatchNotification] email error:", err));
+  }
+
+  // 4. SMS Fallback if WhatsApp was requested but phone failed or unconfigured
+  if (channelsToSend.includes("WHATSAPP") && !waSuccess && user.phone) {
+    await sendSms({
+      to: user.phone,
+      text: `Atomic Pathshala: ${title} - ${body}`,
+    }).catch((err) => console.error("[dispatchNotification] SMS fallback error:", err));
   }
 }
 
