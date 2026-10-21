@@ -20,10 +20,12 @@ export async function GET(_request: NextRequest, { params }: { params: { teacher
     const slots = await prisma.doubtSlot.findMany({
       where: { teacherId: params.teacherId, status: "OPEN", startTime: { gt: new Date() } },
       orderBy: { startTime: "asc" },
-      select: { id: true, date: true, startTime: true, endTime: true },
+      select: { id: true, date: true, startTime: true, endTime: true, capacity: true, bookedCount: true },
     });
 
-    return apiSuccess({ slots });
+    return apiSuccess({
+      slots: slots.map(({ bookedCount, ...s }) => ({ ...s, seatsLeft: Math.max(0, s.capacity - bookedCount) })),
+    });
   } catch (error) {
     return handleApiError(error);
   }

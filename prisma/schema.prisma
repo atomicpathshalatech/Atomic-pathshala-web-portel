@@ -2825,11 +2825,18 @@ model DoubtSlot {
   startTime DateTime
   endTime   DateTime
   status    DoubtSlotStatus @default(OPEN)
+  // Seats in this slot. 1 = the original 1:1 session; more = a group doubt
+  // session where every booked student joins the same call. bookedCount is
+  // the number of active (CONFIRMED/COMPLETED/NO_SHOW) bookings, moved only
+  // by one conditional UPDATE in the book/cancel routes so two students
+  // racing for the last seat can't both get it. status is BOOKED once full.
+  capacity    Int             @default(1)
+  bookedCount Int             @default(0)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
-  teacher Teacher       @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  booking DoubtBooking?
+  teacher  Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  bookings DoubtBooking[]
 
   @@unique([teacherId, startTime])
   @@index([teacherId, date, status])
@@ -2846,7 +2853,7 @@ enum DoubtBookingStatus {
 
 model DoubtBooking {
   id           String             @id @default(cuid())
-  slotId             String             @unique
+  slotId             String
   studentId          String
   teacherId          String
   topic              String?
@@ -2866,6 +2873,7 @@ model DoubtBooking {
   student Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   teacher Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
+  @@index([slotId])
   @@index([studentId])
   @@index([teacherId])
   @@map("doubt_bookings")

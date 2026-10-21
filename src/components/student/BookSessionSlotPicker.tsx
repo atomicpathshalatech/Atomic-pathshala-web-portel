@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-type Slot = { id: string; date: string; startTime: string; endTime: string };
+type Slot = { id: string; date: string; startTime: string; endTime: string; capacity?: number; seatsLeft?: number };
+
+/** "Group · 3 seats left" for a group slot, nothing for a 1:1 slot. */
+function groupLabel(s: Slot) {
+  if (!s.capacity || s.capacity <= 1) return null;
+  const left = s.seatsLeft ?? s.capacity;
+  return `Group · ${left} seat${left === 1 ? "" : "s"} left`;
+}
 
 async function getJson(url: string) {
   const res = await fetch(url);
@@ -151,6 +158,11 @@ export function BookSessionSlotPicker({ teacherId }: { teacherId: string }) {
                     className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50 transition"
                   >
                     {fmtTime(s.startTime)} – {fmtTime(s.endTime)}
+                    {groupLabel(s) && (
+                      <span className="block text-[10px] font-semibold text-violet-600 dark:text-violet-400 mt-0.5">
+                        {groupLabel(s)}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -171,6 +183,7 @@ export function BookSessionSlotPicker({ teacherId }: { teacherId: string }) {
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {fmtDate(selectedSlot.startTime)} · {fmtTime(selectedSlot.startTime)} – {fmtTime(selectedSlot.endTime)}
+                  {groupLabel(selectedSlot) && <> · {groupLabel(selectedSlot)}</>}
                 </p>
               </div>
               <button

@@ -6,13 +6,13 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { hasAnyBatchAccess } from "@/lib/batch/entitlement";
 import { pusherServer, doubtBookingChannel } from "@/lib/realtime/pusher-server";
+import { claimDoubtSlotSeat, releaseDoubtSlotSeat } from "@/lib/doubt-booking/seats";
 
 /**
- * Student books an OPEN slot. Race-safe: two students hitting this at the
- * same instant for the same slot must not both succeed. The claim is a
- * conditional updateMany (status must still be OPEN) — Postgres serializes
- * concurrent UPDATEs to the same row, so only one caller ever sees count:1;
- * the loser sees count:0 and gets a clean 409, never a duplicate booking.
+ * Student books a seat in an OPEN slot (one seat for a 1:1 slot, up to
+ * capacity for a group slot). Race-safe: claimDoubtSlotSeat is a single
+ * conditional UPDATE, so students hitting this at the same instant for the
+ * last seat can't both succeed — the loser gets a clean 409.
  * Mirrors the exact reclaim pattern already used by email dispatch
  * idempotency (src/lib/email/dispatch.ts's reclaimFailedLog) and by
  * activateBatchOrder (src/server/services/batch-order-service.ts) for the
@@ -54,12 +54,20 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     if (!slot) return apiError("Slot not found.", 404);
     if (slot.startTime <= new Date()) return apiError("This slot has already passed.", 409);
 
-    const claim = await prisma.doubtSlot.updateMany({
-      where: { id: slot.id, status: "OPEN" },
-      data: { status: "BOOKED" },
+    // Group slots take several students, but each student only once.
+    const alreadyBooked = await prisma.doubtBooking.findFirst({
+      where: { slotId: slot.id, studentId: student.id, status: "CONFIRMED" },
+      select: { id: true },
     });
-    if (claim.count === 0) {
-      return apiError("This slot was just booked by someone else. Please pick another.", 409);
+    if (alreadyBooked) return apiSuccess({ booking: alreadyBooked });
+
+    if (!(await claimDoubtSlotSeat(slot.id))) {
+      return apiError(
+        slot.capacity > 1
+          ? "This group session just filled up. Please pick another slot."
+          : "This slot was just booked by someone else. Please pick another.",
+        409
+      );
     }
 
     const booking = await prisma.doubtBooking.create({
@@ -77,6 +85,9 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         teacher: { select: { userId: true } },
         slot: true,
       },
+    }).catch(async (err) => {
+      await releaseDoubtSlotSeat(slot.id);
+      throw err;
     });
 
     try {

@@ -5,11 +5,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { MAX_DOUBT_SLOT_CAPACITY } from "@/lib/doubt-booking/seats";
 
 const createSlotSchema = z.object({
   date: z.string().min(1), // "YYYY-MM-DD"
   startTime: z.string().min(1), // ISO datetime
   endTime: z.string().min(1), // ISO datetime
+  // Students per slot: 1 = a 1:1 session, more = a group doubt session.
+  capacity: z.number().int().min(1).max(MAX_DOUBT_SLOT_CAPACITY).optional(),
 });
 
 async function resolveTeacher(userId: string) {
@@ -31,7 +34,7 @@ export async function POST(request: NextRequest) {
     const teacher = await resolveTeacher(session.user.id);
     if (!teacher) throw new ForbiddenError("Only teachers can publish doubt session slots.");
 
-    const { date, startTime, endTime } = createSlotSchema.parse(await request.json());
+    const { date, startTime, endTime, capacity } = createSlotSchema.parse(await request.json());
     const start = new Date(startTime);
     const end = new Date(endTime);
     if (!(start < end)) return apiError("Start time must be before end time.", 400);
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
     }
 
     const slot = await prisma.doubtSlot.create({
-      data: { teacherId: teacher.id, date: new Date(date), startTime: start, endTime: end },
+      data: { teacherId: teacher.id, date: new Date(date), startTime: start, endTime: end, capacity: capacity ?? 1 },
     });
 
     return apiSuccess({ slot }, 201);
@@ -88,7 +91,8 @@ export async function GET(request: NextRequest) {
       where: { teacherId: targetTeacherId },
       orderBy: { startTime: "asc" },
       include: {
-        booking: {
+        bookings: {
+          orderBy: { createdAt: "asc" },
           include: {
             student: {
               include: {

@@ -112,6 +112,14 @@ export function doubtBookingRoomName(bookingId: string) {
   return `doubt-booking-${bookingId}`;
 }
 
+/** One shared LiveKit room for a group doubt slot (capacity > 1) — every
+ * student booked into the slot plus the teacher. Membership is still
+ * enforced by the booking join route: a token is only minted for a caller
+ * who holds a CONFIRMED booking in this slot (or is its teacher/admin). */
+export function doubtSlotRoomName(slotId: string) {
+  return `doubt-slot-${slotId}`;
+}
+
 /**
  * Symmetric participant token for a 1:1 doubt-booking call. Every other
  * token function above grants a fixed publisher-or-viewer role for a

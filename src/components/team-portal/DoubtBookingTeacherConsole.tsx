@@ -3,13 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 
-type Slot = {
-  id: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  status: "OPEN" | "BOOKED" | "CANCELLED";
-  booking: {
+type SlotBooking = {
     id: string;
     status: string;
     topic?: string | null;
@@ -26,8 +20,23 @@ type Slot = {
         photoUrl: string | null;
       };
     };
-  } | null;
 };
+
+/** As the slots API returns it: a slot holds 1 (1:1) or more (group) seats. */
+type RawSlot = {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: "OPEN" | "BOOKED" | "CANCELLED";
+  capacity: number;
+  bookedCount: number;
+  bookings: SlotBooking[];
+};
+
+/** One row per booked student, so the cards below stay one-student-per-card;
+ * a group slot simply contributes several rows. */
+type Slot = Omit<RawSlot, "bookings"> & { booking: SlotBooking | null };
 
 type TeacherOption = {
   id: string;
@@ -68,7 +77,7 @@ export function DoubtBookingTeacherConsole({
   hasOwnTeacherProfile = true,
 }: Props) {
   const [selectedTeacherId, setSelectedTeacherId] = useState(initialTeacherId);
-  const [slots, setSlots] = useState<Slot[]>([]);
+  const [slots, setSlots] = useState<RawSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -78,6 +87,7 @@ export function DoubtBookingTeacherConsole({
   const [startTime, setStartTime] = useState("16:00");
   const [endTime, setEndTime] = useState("18:00");
   const [duration, setDuration] = useState(30);
+  const [capacity, setCapacity] = useState(1);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [claimingBookingId, setClaimingBookingId] = useState<string | null>(null);
@@ -143,6 +153,7 @@ export function DoubtBookingTeacherConsole({
             date,
             startTime: g.start.toISOString(),
             endTime: g.end.toISOString(),
+            capacity,
           }),
         });
         if (!res.ok) failures++;
@@ -161,7 +172,7 @@ export function DoubtBookingTeacherConsole({
   }
 
   async function handleCancel(slotId: string) {
-    if (!confirm("Cancel this slot? If it's already booked, the student will be notified.")) return;
+    if (!confirm("Cancel this slot? Any student who booked it will be notified.")) return;
     try {
       const res = await fetch(`/api/doubt-booking/slots/${slotId}`, { method: "DELETE" });
       const json = await res.json();
@@ -195,21 +206,20 @@ export function DoubtBookingTeacherConsole({
     const pastB: Slot[] = [];
     const open: Slot[] = [];
 
-    for (const s of slots) {
-      const sEnd = new Date(s.endTime);
-      if (s.status === "CANCELLED") continue;
+    for (const raw of slots) {
+      const sEnd = new Date(raw.endTime);
+      if (raw.status === "CANCELLED") continue;
+      const { bookings, ...base } = raw;
 
-      if (s.booking && s.booking.status === "CONFIRMED") {
+      const confirmed = bookings.filter((b) => b.status === "CONFIRMED");
+      for (const b of confirmed) {
+        (sEnd >= now ? upcomingB : pastB).push({ ...base, booking: b });
+      }
+      if (raw.status === "OPEN") {
         if (sEnd >= now) {
-          upcomingB.push(s);
-        } else {
-          pastB.push(s);
-        }
-      } else if (s.status === "OPEN") {
-        if (sEnd >= now) {
-          open.push(s);
-        } else {
-          pastB.push(s);
+          open.push({ ...base, booking: null });
+        } else if (confirmed.length === 0) {
+          pastB.push({ ...base, booking: bookings[bookings.length - 1] ?? null });
         }
       }
     }
@@ -390,7 +400,7 @@ export function DoubtBookingTeacherConsole({
 
                 return (
                   <div
-                    key={s.id}
+                    key={`${s.id}-${s.booking?.id ?? "open"}`}
                     className={`rounded-3xl border p-5 transition flex flex-col justify-between ${
                       isLiveNow
                         ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm"
@@ -449,6 +459,7 @@ export function DoubtBookingTeacherConsole({
                         <span className="material-symbols-outlined text-sm text-slate-400">schedule</span>
                         <span>
                           {fmtTime(s.startTime)} – {fmtTime(s.endTime)}
+                          {s.capacity > 1 && ` · Group ${s.bookedCount}/${s.capacity}`}
                         </span>
                       </div>
 
@@ -584,7 +595,7 @@ export function DoubtBookingTeacherConsole({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {openSlots.map((s) => (
                 <div
-                  key={s.id}
+                  key={`${s.id}-${s.booking?.id ?? "open"}`}
                   className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
@@ -593,7 +604,7 @@ export function DoubtBookingTeacherConsole({
                       {fmtTime(s.startTime)} – {fmtTime(s.endTime)}
                     </p>
                     <span className="inline-block mt-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
-                      Open for Booking
+                      {s.capacity > 1 ? `Group · ${s.bookedCount}/${s.capacity} booked` : "Open for Booking"}
                     </span>
                   </div>
                   <button
@@ -617,12 +628,13 @@ export function DoubtBookingTeacherConsole({
           <div>
             <h2 className="text-base font-black text-slate-900 dark:text-white">Publish New Availability Window</h2>
             <p className="text-xs text-slate-500 mt-1">
-              Specify a date and time window. The system will automatically slice the window into 1:1 bookable slots
-              that students can reserve.
+              Specify a date and time window. The system will automatically slice the window into bookable slots
+              that students can reserve. Set &ldquo;Students per Slot&rdquo; above 1 for a group doubt session — every
+              student who books the slot joins the same call.
             </p>
           </div>
 
-          <form onSubmit={handleCreateSlots} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+          <form onSubmit={handleCreateSlots} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
             <div>
               <label className="text-xs font-bold text-slate-600 dark:text-slate-400 block mb-1.5">Date</label>
               <input
@@ -669,8 +681,24 @@ export function DoubtBookingTeacherConsole({
                 ))}
               </select>
             </div>
+            <div>
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-400 block mb-1.5">
+                Students per Slot
+              </label>
+              <select
+                value={capacity}
+                onChange={(e) => setCapacity(Number(e.target.value))}
+                className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2.5 outline-none focus:border-blue-500"
+              >
+                {[1, 2, 3, 4, 5, 6, 8, 10, 15, 20].map((n) => (
+                  <option key={n} value={n}>
+                    {n === 1 ? "1 (one-to-one)" : `${n} (group)`}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <div className="sm:col-span-2 md:col-span-4 flex justify-end gap-3 pt-2">
+            <div className="sm:col-span-2 md:col-span-5 flex justify-end gap-3 pt-2">
               <button
                 type="submit"
                 disabled={submitting}
@@ -698,7 +726,7 @@ export function DoubtBookingTeacherConsole({
             <div className="space-y-2">
               {pastBookings.map((s) => (
                 <div
-                  key={s.id}
+                  key={`${s.id}-${s.booking?.id ?? "open"}`}
                   className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">

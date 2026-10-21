@@ -7,8 +7,8 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, doubtBookingChannel } from "@/lib/realtime/pusher-server";
 
 /**
- * Teacher cancels one of their own slots. If it was already booked, the
- * booking is cancelled too (CANCELLED_BY_TEACHER) rather than left dangling
+ * Teacher cancels one of their own slots. Every booking still on it (one,
+ * or several in a group slot) is cancelled too (CANCELLED_BY_TEACHER) rather than left dangling
  * — a student must never be able to "join" a cancelled slot.
  */
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
@@ -21,7 +21,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
 
     const slot = await prisma.doubtSlot.findUnique({
       where: { id: params.id },
-      include: { booking: true },
+      include: { bookings: { where: { status: "CONFIRMED" }, select: { id: true } } },
     });
     if (!slot || slot.teacherId !== teacher.id) {
       return apiError("Slot not found.", 404);
@@ -32,20 +32,16 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
 
     await prisma.$transaction([
       prisma.doubtSlot.update({ where: { id: slot.id }, data: { status: "CANCELLED" } }),
-      ...(slot.booking
-        ? [
-            prisma.doubtBooking.update({
-              where: { id: slot.booking.id },
-              data: { status: "CANCELLED_BY_TEACHER", cancelReason: "Teacher cancelled the slot." },
-            }),
-          ]
-        : []),
+      prisma.doubtBooking.updateMany({
+        where: { slotId: slot.id, status: "CONFIRMED" },
+        data: { status: "CANCELLED_BY_TEACHER", cancelReason: "Teacher cancelled the slot." },
+      }),
     ]);
 
-    if (slot.booking) {
+    for (const booking of slot.bookings) {
       try {
-        await pusherServer.trigger(doubtBookingChannel(slot.booking.id), "doubt-booking-cancelled", {
-          bookingId: slot.booking.id,
+        await pusherServer.trigger(doubtBookingChannel(booking.id), "doubt-booking-cancelled", {
+          bookingId: booking.id,
         });
       } catch (err) {
         console.error("[doubt-booking] cancellation notify error:", err);

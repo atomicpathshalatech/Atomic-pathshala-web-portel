@@ -5,7 +5,17 @@ import { prisma } from "@/lib/db";
 import { UnauthorizedError } from "@/lib/rbac/guard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { resolveDoubtBookingCaller } from "@/lib/doubt-booking/access";
+import { releaseDoubtSlotSeat } from "@/lib/doubt-booking/seats";
 import { pusherServer, doubtBookingChannel } from "@/lib/realtime/pusher-server";
+
+type GroupDoubt = {
+  bookingId: string;
+  studentName: string;
+  photoUrl: string | null;
+  topic: string | null;
+  description: string | null;
+  attachmentUrls: string[];
+};
 
 /**
  * Booking detail for the join/status screen — same generic 404 for "no
@@ -20,7 +30,37 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const caller = await resolveDoubtBookingCaller(session.user.id, params.id);
     if (!caller.role) return apiError("Booking not found.", 404);
 
+    // Group slot: the teacher (or admin) sees every booked student's doubt;
+    // a student only learns how many are joining, not the others' questions.
+    const slot = caller.booking.slot;
+    let group: { capacity: number; bookedCount: number; doubts?: GroupDoubt[] } | null = null;
+    if (slot.capacity > 1) {
+      group = { capacity: slot.capacity, bookedCount: slot.bookedCount };
+      if (caller.role !== "STUDENT") {
+        const rows = await prisma.doubtBooking.findMany({
+          where: { slotId: slot.id, status: { in: ["CONFIRMED", "COMPLETED"] } },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            topic: true,
+            description: true,
+            attachmentUrls: true,
+            student: { select: { user: { select: { name: true, photoUrl: true } } } },
+          },
+        });
+        group.doubts = rows.map((r) => ({
+          bookingId: r.id,
+          studentName: r.student.user.name,
+          photoUrl: r.student.user.photoUrl,
+          topic: r.topic,
+          description: r.description,
+          attachmentUrls: r.attachmentUrls,
+        }));
+      }
+    }
+
     return apiSuccess({
+      group,
       id: caller.booking.id,
       status: caller.booking.status,
       slot: {
@@ -70,16 +110,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     const newStatus = caller.role === "STUDENT" ? "CANCELLED_BY_STUDENT" : "CANCELLED_BY_TEACHER";
 
-    await prisma.$transaction([
-      prisma.doubtBooking.update({
-        where: { id: caller.booking.id },
-        data: { status: newStatus, cancelReason: reason },
-      }),
-      prisma.doubtSlot.update({
-        where: { id: caller.booking.slotId },
-        data: { status: "OPEN" },
-      }),
-    ]);
+    // Only the booking that is still CONFIRMED gives its seat back, so a
+    // double-tapped cancel can't free two seats.
+    const cancelled = await prisma.doubtBooking.updateMany({
+      where: { id: caller.booking.id, status: "CONFIRMED" },
+      data: { status: newStatus, cancelReason: reason },
+    });
+    if (cancelled.count > 0) await releaseDoubtSlotSeat(caller.booking.slotId);
 
     try {
       await pusherServer.trigger(doubtBookingChannel(caller.booking.id), "doubt-booking-cancelled", {

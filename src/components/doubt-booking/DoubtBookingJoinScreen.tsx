@@ -15,6 +15,19 @@ type BookingDetail = {
   attachmentUrls?: string[];
   voiceAnswerUrl?: string | null;
   voiceDurationSec?: number | null;
+  /** Set for a group slot. doubts is only sent to the teacher/admin. */
+  group?: {
+    capacity: number;
+    bookedCount: number;
+    doubts?: Array<{
+      bookingId: string;
+      studentName: string;
+      photoUrl: string | null;
+      topic: string | null;
+      description: string | null;
+      attachmentUrls: string[];
+    }>;
+  } | null;
 };
 
 async function getJson(url: string) {
@@ -81,6 +94,20 @@ export function DoubtBookingJoinScreen({ bookingId, backHref }: { bookingId: str
 
   if (inCall && liveKit) {
     const isTeacher = booking?.role === "TEACHER" || booking?.role === "ADMIN";
+    // In a group session the teacher's doubt panel lists every student's
+    // question, not just the one booking this page was opened from.
+    const groupDoubts = isTeacher ? booking?.group?.doubts : undefined;
+    const topic = groupDoubts?.length
+      ? `Group doubt session · ${groupDoubts.length} student${groupDoubts.length === 1 ? "" : "s"}`
+      : booking?.topic ?? undefined;
+    const description = groupDoubts?.length
+      ? groupDoubts
+          .map((d) => `${d.studentName}: ${[d.topic, d.description].filter(Boolean).join(" — ") || "(no details)"}`)
+          .join("\n")
+      : booking?.description ?? undefined;
+    const attachmentUrls = groupDoubts?.length
+      ? groupDoubts.flatMap((d) => d.attachmentUrls)
+      : booking?.attachmentUrls ?? [];
     return (
       <div className="h-[78vh] max-w-5xl mx-auto">
         <DoubtSessionRoom
@@ -88,9 +115,9 @@ export function DoubtBookingJoinScreen({ bookingId, backHref }: { bookingId: str
           token={liveKit.token}
           serverUrl={liveKit.serverUrl}
           isTeacher={isTeacher}
-          topic={booking?.topic ?? undefined}
-          description={booking?.description ?? undefined}
-          attachmentUrls={booking?.attachmentUrls ?? []}
+          topic={topic}
+          description={description}
+          attachmentUrls={attachmentUrls}
           onLeave={() => {
             setInCall(false);
             setLiveKit(null);
@@ -128,10 +155,44 @@ export function DoubtBookingJoinScreen({ bookingId, backHref }: { bookingId: str
           )}
           <div>
             <p className="text-sm font-bold text-slate-900 dark:text-white">
-              Doubt Session with {booking.counterpart.name}
+              {booking.group && booking.role !== "STUDENT"
+                ? "Group Doubt Session"
+                : `Doubt Session with ${booking.counterpart.name}`}
             </p>
             <p className="text-xs text-slate-500 mt-1">{fmtRange(booking.slot.startTime, booking.slot.endTime)}</p>
+            {booking.group && (
+              <p className="inline-block mt-2 text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40 px-2.5 py-1 rounded-lg">
+                Group session · {booking.group.bookedCount} of {booking.group.capacity} students booked
+              </p>
+            )}
           </div>
+
+          {booking.group?.doubts && booking.group.doubts.length > 0 && (
+            <div className="text-left space-y-2">
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-400">Students&rsquo; doubts</p>
+              {booking.group.doubts.map((d) => (
+                <div
+                  key={d.bookingId}
+                  className="p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40"
+                >
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{d.studentName}</p>
+                  {d.topic && <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5">{d.topic}</p>}
+                  {d.description && (
+                    <p className="text-[11px] text-slate-500 mt-0.5 whitespace-pre-wrap">{d.description}</p>
+                  )}
+                  {d.attachmentUrls.length > 0 && (
+                    <div className="flex gap-1.5 mt-2 flex-wrap">
+                      {d.attachmentUrls.map((u) => (
+                        <a key={u} href={u} target="_blank" rel="noreferrer">
+                          <img src={u} alt="Question" className="w-14 h-14 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {booking.voiceAnswerUrl && (
             <div className="pt-2 text-left">

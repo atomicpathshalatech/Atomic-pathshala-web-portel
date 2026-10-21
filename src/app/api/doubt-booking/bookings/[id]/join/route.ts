@@ -4,11 +4,12 @@ import { authOptions } from "@/lib/auth";
 import { UnauthorizedError } from "@/lib/rbac/guard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { resolveDoubtBookingCaller } from "@/lib/doubt-booking/access";
-import { createDoubtSessionToken, doubtBookingRoomName } from "@/lib/livekit/server";
+import { createDoubtSessionToken, doubtBookingRoomName, doubtSlotRoomName } from "@/lib/livekit/server";
 import { doubtBookingChannel } from "@/lib/realtime/pusher-server";
 
 /**
- * Mints a LiveKit token scoped to this one booking's private room. Knowing
+ * Mints a LiveKit token scoped to this booking's room (the slot's shared
+ * room for a group session). Knowing
  * a booking id is NOT enough to join — resolveDoubtBookingCaller re-derives
  * the caller's relationship to this specific booking from the session on
  * every call; a student who isn't the booked one (or an unrelated teacher)
@@ -33,7 +34,12 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
           ? caller.booking.teacher.user.name
           : "Admin";
 
-    const roomName = doubtBookingRoomName(caller.booking.id);
+    // A group slot is one call for every booked student; a 1:1 slot keeps
+    // its private per-booking room.
+    const roomName =
+      caller.booking.slot.capacity > 1
+        ? doubtSlotRoomName(caller.booking.slot.id)
+        : doubtBookingRoomName(caller.booking.id);
     const token = await createDoubtSessionToken({ identity, name, roomName });
     const serverUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL || "";
 
