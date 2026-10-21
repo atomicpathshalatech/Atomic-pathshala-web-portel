@@ -220,6 +220,19 @@ export async function ensureYoutubeChannelIdentity(key: YoutubeChannelKey): Prom
   const hit = verifiedIdentity.get(key);
   if (hit && hit.channelId === cfg.expectedChannelId && Date.now() - hit.at < IDENTITY_TTL_MS) return;
 
+  // A channel id looks like UC + 22 characters. Anything else (a refresh
+  // token pasted into the wrong variable has happened) is reported by name
+  // only — the value itself never goes into an error or a log.
+  if (!/^UC[\w-]{22}$/.test(cfg.expectedChannelId)) {
+    throw new YoutubeApiError({
+      kind: "CONFIG",
+      status: null,
+      reason: "channelIdInvalid",
+      operation: `${key} channel identity check`,
+      detail: `${cfg.channelIdEnv} is not a YouTube channel id (it must look like UC… — 24 characters). Fix that variable and redeploy.`,
+    });
+  }
+
   const channel = await fetchAuthorizedChannel(key);
   if (!channel || channel.id !== cfg.expectedChannelId) {
     throw new YoutubeApiError({
@@ -227,7 +240,7 @@ export async function ensureYoutubeChannelIdentity(key: YoutubeChannelKey): Prom
       status: null,
       reason: "channelIdentityMismatch",
       operation: `${key} channel identity check`,
-      detail: `channel identity mismatch: ${cfg.refreshTokenEnv} belongs to ${channel?.id ?? "no channel"}, expected ${cfg.expectedChannelId} (${cfg.channelIdEnv}).`,
+      detail: `channel identity mismatch: ${cfg.refreshTokenEnv} belongs to ${channel?.id ?? "no channel"}, not the channel set in ${cfg.channelIdEnv}.`,
     });
   }
   verifiedIdentity.set(key, { channelId: channel.id, at: Date.now() });

@@ -20,7 +20,11 @@ export async function GET(request: NextRequest) {
       const { youtubeApi } = await import("@/lib/youtube/client");
       const describe = (e: unknown) => {
         const err = e as { kind?: string; status?: number; reason?: string; message?: string };
-        return { ok: false, kind: err?.kind ?? "UNKNOWN", status: err?.status ?? null, reason: String(err?.reason ?? "").slice(0, 80), message: String(err?.message ?? e).replace(/ya29\.[\w.-]+/g, "<token>").slice(0, 200) };
+        // Status words only — this route is public. Error messages can carry
+        // configured values (a mis-pasted refresh token once leaked here), so
+        // they are never returned; the server log has the kind/reason.
+        console.warn("[health_youtube]", err?.kind, err?.reason);
+        return { ok: false, kind: err?.kind ?? "UNKNOWN", status: err?.status ?? null, reason: String(err?.reason ?? "").replace(/[^\w.-]/g, "").slice(0, 60) };
       };
       try {
         const me = await youtubeApi<{ items?: Array<{ snippet?: { title?: string } }> }>("APP", "/channels", { operation: "channels.list", query: { part: "snippet", mine: "true" } });
@@ -42,7 +46,8 @@ export async function GET(request: NextRequest) {
       }
     }
   } catch (e) {
-    body.error = String((e as Error)?.message ?? e).slice(0, 200);
+    console.warn("[health_youtube_error]", e instanceof Error ? e.name : typeof e);
+    body.error = "CHECK_FAILED";
   }
   cached = { at: Date.now(), body };
   return NextResponse.json(body);
