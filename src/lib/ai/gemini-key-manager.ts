@@ -94,13 +94,13 @@ export class GeminiKeyManager {
 
   public getAvailableKeysSummary() {
     const now = Date.now();
-    const freeAvailable = this.freeKeys.filter((k) => (this.cooldowns.get(k) || 0) <= now).length;
-    const paidAvailable = this.paidKeys.filter((k) => (this.cooldowns.get(k) || 0) <= now).length;
+    const freeAvailable = this.freeKeys.filter((k) => (this.cooldowns.get(k) || 0) <= now && !isKeyDead(k)).length;
+    const paidAvailable = this.paidKeys.filter((k) => (this.cooldowns.get(k) || 0) <= now && !isKeyDead(k)).length;
 
     return {
-      totalFree: this.freeKeys.length,
+      totalFree: this.freeKeys.filter((k) => !isKeyDead(k)).length,
       availableFree: freeAvailable,
-      totalPaid: this.paidKeys.length,
+      totalPaid: this.paidKeys.filter((k) => !isKeyDead(k)).length,
       availablePaid: paidAvailable,
     };
   }

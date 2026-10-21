@@ -98,6 +98,22 @@ export async function runPyqImport(jobId: string, opts: { pdf?: Buffer | null; b
 }
 
 /** Puts failed (and OCR-waiting) page groups back in the queue. */
+export async function requeueSingleChunk(jobId: string, chunkIndex: number) {
+  const job = await prisma.extractionJob.findUniqueOrThrow({ where: { id: jobId } });
+  const report = ((job.reportJson as PyqReport | null) ?? {}) as PyqReport;
+  const plan = report.chunkPlan;
+  if (!plan) throw new Error("Import has no page plan.");
+  const chunk = plan.chunks.find((c) => c.index === chunkIndex);
+  if (!chunk) throw new Error("Chunk not found.");
+  chunk.status = "PENDING";
+  chunk.error = undefined;
+  await prisma.extractionJob.update({
+    where: { id: jobId },
+    data: { reportJson: report as unknown as any, cancelRequested: false, status: "PROCESSING" },
+  });
+  return 1;
+}
+
 export async function requeueChunks(jobId: string, which: "FAILED" | "NEEDS_OCR" | "ALL_UNFINISHED") {
   const job = await prisma.extractionJob.findUniqueOrThrow({ where: { id: jobId } });
   const report = ((job.reportJson as PyqReport | null) ?? {}) as PyqReport;

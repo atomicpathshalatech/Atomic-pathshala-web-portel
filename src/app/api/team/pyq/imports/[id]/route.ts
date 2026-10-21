@@ -5,7 +5,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { requireTeam } from "@/lib/pyq/api";
 import { processPyqChunk, pagesNeedingOcr, aiFallbackAvailable, type PyqReport } from "@/lib/pyq/import-pipeline";
-import { requeueChunks } from "@/lib/pyq/import-service";
+import { requeueChunks, requeueSingleChunk } from "@/lib/pyq/import-service";
 import { getJobPdfBuffer } from "@/lib/extraction/chunk-pipeline";
 
 export const maxDuration = 300;
@@ -55,7 +55,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   }
 }
 
-const actionSchema = z.object({ action: z.enum(["run", "cancel", "resume", "retry-failed"]) });
+const actionSchema = z.object({ action: z.enum(["run", "cancel", "resume", "retry-failed", "retry-chunk"]), chunkIndex: z.number().optional() });
 
 /**
  * POST { action }
@@ -67,13 +67,17 @@ const actionSchema = z.object({ action: z.enum(["run", "cancel", "resume", "retr
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const userId = await requireTeam(PERMISSIONS.QUESTION_IMPORT);
-    const { action } = actionSchema.parse(await request.json());
+    const { action, chunkIndex } = actionSchema.parse(await request.json());
     const job = await loadJob(params.id);
     if (!job) return apiError("Import not found", 404);
 
     if (action === "cancel") {
       await prisma.extractionJob.update({ where: { id: job.id }, data: { cancelRequested: true, currentStep: "Cancelling after the current page group…" } });
       return apiSuccess({ cancelRequested: true });
+    }
+    if (action === "retry-chunk" && typeof chunkIndex === "number") {
+      const n = await requeueSingleChunk(job.id, chunkIndex);
+      return apiSuccess({ requeued: n });
     }
     if (action === "resume" || action === "retry-failed") {
       const n = await requeueChunks(job.id, action === "resume" ? "ALL_UNFINISHED" : "FAILED");

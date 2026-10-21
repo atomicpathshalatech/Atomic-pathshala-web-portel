@@ -91,12 +91,6 @@ export function PyqImportReview({ jobId, canApprove }: { jobId: string; canAppro
   const runnerRef = useRef(false);
   const ocrAbort = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (status?.job.status !== "PROCESSING") return;
-    const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
-    return () => clearInterval(interval);
-  }, [status?.job.status]);
-
   const loadStatus = useCallback(async () => {
     const s = await api<Status>(`/api/team/pyq/imports/${jobId}`);
     setStatus(s);
@@ -108,6 +102,28 @@ export function PyqImportReview({ jobId, canApprove }: { jobId: string; canAppro
     setRows(d.items);
     setTotal(d.total);
   }, [jobId, view, issue, page]);
+
+  useEffect(() => {
+    if (status?.job.status !== "PROCESSING" && !running) return;
+    const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [status?.job.status, running]);
+
+  // Periodic polling to keep import progress, chunks, and questions dynamically in sync
+  useEffect(() => {
+    if (status?.job.status !== "PROCESSING" && !running) return;
+    const pollInterval = setInterval(async () => {
+      try {
+        const s = await loadStatus();
+        if (s?.job.extractedCount !== status?.job.extractedCount) {
+          loadRows().catch(() => {});
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 2500);
+    return () => clearInterval(pollInterval);
+  }, [status?.job.status, status?.job.extractedCount, running, loadStatus, loadRows]);
 
   useEffect(() => {
     loadStatus().catch((e) => toast.error(e.message));
@@ -151,11 +167,21 @@ export function PyqImportReview({ jobId, canApprove }: { jobId: string; canAppro
     releasePyqOcr();
   }, []);
 
-  async function act(action: "cancel" | "resume" | "retry-failed") {
+  async function act(action: "cancel" | "resume" | "retry-failed" | "retry-chunk", chunkIndex?: number) {
     try {
-      const r = await api<{ requeued?: number }>(`/api/team/pyq/imports/${jobId}`, { method: "POST", json: { action } });
-      if (action !== "cancel") toast.success(`${r.requeued ?? 0} page group(s) queued.`);
+      const r = await api<{ requeued?: number }>(`/api/team/pyq/imports/${jobId}`, {
+        method: "POST",
+        json: { action, chunkIndex },
+      });
+      if (action === "retry-chunk") {
+        toast.success(`Chunk ${Number(chunkIndex) + 1} queued for retry.`);
+      } else if (action !== "cancel") {
+        toast.success(`${r.requeued ?? 0} page group(s) queued.`);
+      }
       await loadStatus();
+      if (action !== "cancel") {
+        runImport();
+      }
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -251,38 +277,176 @@ export function PyqImportReview({ jobId, canApprove }: { jobId: string; canAppro
         {(() => {
           const processedPages = plan?.processedPages ?? 0;
           const totalPages = plan?.totalPages ?? 1;
-          const speed = elapsedSeconds > 8 && processedPages > 0 ? ((processedPages / elapsedSeconds) * 60).toFixed(1) + " p/min" : null;
+          const completedChunks = plan?.chunks.filter((c) => c.status === "COMPLETED").length ?? 0;
+          const failedChunks = plan?.chunks.filter((c) => c.status === "FAILED").length ?? 0;
+          const totalChunks = plan?.totalChunks ?? 1;
+          const displayPercent = Math.max(
+            job.progress,
+            Math.round(((completedChunks + failedChunks) / Math.max(1, totalChunks)) * 100)
+          );
+          const speed = elapsedSeconds > 5 && processedPages > 0 ? ((processedPages / elapsedSeconds) * 60).toFixed(1) + " p/min" : null;
           const remainingPages = Math.max(0, totalPages - processedPages);
-          const etaSec = speed && remainingPages > 0 ? Math.round(remainingPages / (processedPages / elapsedSeconds)) : null;
+          const etaSec = speed && remainingPages > 0 && processedPages > 0 ? Math.round(remainingPages / (processedPages / elapsedSeconds)) : null;
           const formatSec = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
           return (
-            <div className="space-y-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 p-3.5">
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block w-2.5 h-2.5 rounded-full ${job.status === "PROCESSING" ? "bg-blue-600 animate-pulse" : job.status === "COMPLETED" || job.status === "REVIEW_REQUIRED" ? "bg-emerald-500" : "bg-slate-400"}`} />
-                  <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {job.status === "PROCESSING" ? "Processing PDF with AI Multimodal Engine..." : job.status === "REVIEW_REQUIRED" ? "Extraction Ready — Review Questions" : job.status}
+            <div className="space-y-3">
+              <div className="space-y-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 p-3.5">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block w-2.5 h-2.5 rounded-full ${job.status === "PROCESSING" ? "bg-blue-600 animate-pulse" : job.status === "COMPLETED" || job.status === "REVIEW_REQUIRED" ? "bg-emerald-500" : "bg-slate-400"}`} />
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {job.status === "PROCESSING" ? "Processing PDF (Multimodal AI & Text Extraction)..." : job.status === "REVIEW_REQUIRED" ? "Extraction Ready — Review Questions" : job.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                    {job.status === "PROCESSING" && (
+                      <>
+                        <span>⏱️ Elapsed: <b>{formatSec(elapsedSeconds)}</b></span>
+                        {etaSec ? <span>⏳ Est. remaining: <b>~{formatSec(etaSec)}</b></span> : null}
+                        {speed ? <span className="text-blue-600 dark:text-blue-400 font-bold">⚡ {speed}</span> : null}
+                      </>
+                    )}
+                    <span className="font-black text-blue-600 dark:text-blue-400 text-sm">{displayPercent}%</span>
+                  </div>
+                </div>
+                <div className="h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden p-0.5">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-300 rounded-full"
+                    style={{ width: `${Math.min(100, Math.max(displayPercent, 2))}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    {running ? "⚡ Active: " : ""}{job.currentStep || "Reading document structure..."}
                   </span>
-                </div>
-                <div className="flex items-center gap-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                  {job.status === "PROCESSING" && (
-                    <>
-                      <span>⏱️ Elapsed: <b>{formatSec(elapsedSeconds)}</b></span>
-                      {etaSec ? <span>⏳ Est. remaining: <b>~{formatSec(etaSec)}</b></span> : null}
-                      {speed ? <span className="text-blue-600 dark:text-blue-400 font-bold">⚡ {speed}</span> : null}
-                    </>
+                  {plan && (
+                    <span className="font-semibold text-slate-600 dark:text-slate-400">
+                      Page {processedPages} of {totalPages} • Chunk {Math.min(completedChunks + 1, plan.totalChunks)} of {plan.totalChunks}
+                    </span>
                   )}
-                  <span className="font-black text-slate-900 dark:text-white text-xs">{job.progress}%</span>
                 </div>
               </div>
-              <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div className="h-full bg-blue-600 transition-all duration-300 rounded-full" style={{ width: `${job.progress}%` }} />
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>{running ? "⚡ Active: " : ""}{job.currentStep}</span>
-                {plan && <span>Chunk {(plan.chunks.filter((c) => c.status === "COMPLETED").length) + 1} of {plan.totalChunks}</span>}
-              </div>
+
+              {/* Chunk Progress Pipeline */}
+              {plan && plan.chunks && plan.chunks.length > 0 && (
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden text-xs">
+                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                        Page Groups Pipeline ({plan.chunks.length} Chunks)
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        • {completedChunks} Done • {plan.chunks.filter(c => c.status === "PROCESSING").length} Active • {plan.chunks.filter(c => c.status === "PENDING").length} Queued{failedChunks > 0 ? ` • ${failedChunks} Failed` : ''}
+                      </span>
+                    </div>
+                    {job.status === "PROCESSING" && !running && (
+                      <button
+                        type="button"
+                        onClick={() => runImport()}
+                        className="px-2.5 py-1 rounded bg-blue-600 text-white font-bold hover:bg-blue-700 text-[11px] flex items-center gap-1 shadow-sm transition-colors"
+                      >
+                        ⚡ Resume / Next Chunk
+                      </button>
+                    )}
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-60 overflow-y-auto">
+                    {plan.chunks.map((c) => {
+                      const isActive = running && c.status === "PROCESSING";
+                      return (
+                        <div
+                          key={c.index}
+                          className={`flex items-center justify-between px-3.5 py-2 gap-3 transition-colors ${
+                            isActive ? 'bg-blue-50/70 dark:bg-blue-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-[150px]">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                c.status === 'COMPLETED'
+                                  ? 'bg-emerald-500'
+                                  : c.status === 'PROCESSING'
+                                  ? 'bg-blue-500 animate-pulse'
+                                  : c.status === 'FAILED'
+                                  ? 'bg-red-500'
+                                  : c.status === 'NEEDS_OCR'
+                                  ? 'bg-amber-500'
+                                  : 'bg-slate-300 dark:bg-slate-600'
+                              }`}
+                            />
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              Chunk {c.index + 1}
+                            </span>
+                            <span className="text-slate-500 text-[11px]">
+                              (Pages {c.firstPage}–{c.lastPage})
+                            </span>
+                          </div>
+
+                          <div className="flex-1 flex items-center gap-2 text-[11px] truncate">
+                            {c.status === 'COMPLETED' && (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
+                                ✓ Extracted {c.extractedQuestionsCount} question{c.extractedQuestionsCount === 1 ? '' : 's'}
+                                {c.method && (
+                                  <span className="text-slate-400 text-[10px]">
+                                    ({c.method.replace('_', ' ')})
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                            {c.status === 'PROCESSING' && (
+                              <span className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-semibold animate-pulse">
+                                <span className="inline-block animate-spin">⏳</span> Reading pages and extracting questions...
+                              </span>
+                            )}
+                            {c.status === 'PENDING' && (
+                              <span className="text-slate-400">
+                                Queued in pipeline
+                              </span>
+                            )}
+                            {c.status === 'FAILED' && (
+                              <span className="text-red-600 dark:text-red-400 font-medium truncate" title={c.error}>
+                                Failed: {c.error || 'Check pages or OCR'}
+                              </span>
+                            )}
+                            {c.status === 'NEEDS_OCR' && (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                Scanned pages — run OCR above
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {c.status === 'FAILED' && (
+                              <button
+                                type="button"
+                                onClick={() => act("retry-chunk", c.index)}
+                                className="px-2 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-semibold text-[10px] transition-colors"
+                              >
+                                🔄 Retry
+                              </button>
+                            )}
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                c.status === 'COMPLETED'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : c.status === 'PROCESSING'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                  : c.status === 'FAILED'
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                                  : c.status === 'NEEDS_OCR'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                              }`}
+                            >
+                              {c.status}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}

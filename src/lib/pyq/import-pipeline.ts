@@ -26,7 +26,7 @@ import { compareQuestions, questionFingerprint, DUPLICATE_WARNING_SCORE } from "
  * overwritten by a re-run.
  */
 
-const LOCK_MS = 4 * 60_000;
+const LOCK_MS = 60_000;
 
 export type PyqChunkStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "NEEDS_OCR";
 export type PyqChunk = {
@@ -49,9 +49,15 @@ export type PyqReport = {
   [k: string]: unknown;
 };
 
+function isQuotaOrTimeoutError(err: string | null): boolean {
+  if (!err) return false;
+  const m = err.toLowerCase();
+  return m.includes("402") || m.includes("429") || m.includes("quota") || m.includes("aborted") || m.includes("timeout") || m.includes("high demand") || m.includes("503");
+}
+
 export function aiFallbackAvailable(): boolean {
   const s = geminiKeyManager.getAvailableKeysSummary();
-  return s.totalFree + s.totalPaid > 0;
+  return s.availableFree + s.availablePaid > 0;
 }
 
 /** Pages that need OCR text before their chunk can be parsed. */
@@ -196,6 +202,16 @@ async function extractDocumentAnswerKey(
 
   if (!targetPageNum) return {};
 
+  if (!aiFallbackAvailable()) {
+    const { extractAnswerKey } = await import("@/lib/extraction/answer-key-engine");
+    const p = textPages.find((x) => x.pageNumber === targetPageNum);
+    if (!p) return {};
+    const map = extractAnswerKey(p.text, 1, 999);
+    const res: Record<string, string> = {};
+    for (const [k, v] of map.entries()) res[String(k)] = v.answer;
+    return res;
+  }
+
   try {
     const { withRenderedPdf } = await import("@/lib/pdf/page-renderer");
     const { executeGeminiWithFailover } = await import("@/lib/questions/gemini-engine");
@@ -290,6 +306,15 @@ export async function processPyqChunk(
       return { success: true, chunkIndex, nextChunkIndex: null, isComplete: true, questionsExtracted: 0 };
     }
 
+    chunk.status = "PROCESSING";
+    await prisma.extractionJob.update({
+      where: { id: jobId },
+      data: {
+        currentStep: `Processing Chunk ${chunkIndex + 1} of ${plan.totalChunks} (Pages ${chunk.firstPage}–${chunk.lastPage})...`,
+        reportJson: report as unknown as Prisma.InputJsonValue,
+      },
+    }).catch(() => {});
+
     const pdf = await getPdf();
     const textPages = pdf ? (await extractTextFromPdfBuffer(pdf)).pages : [];
     const patterns = await examPatterns();
@@ -320,10 +345,51 @@ export async function processPyqChunk(
     const inChunk = (p: number) => p >= chunk.firstPage && p <= chunk.lastPage;
     const ocrMissing = chunk.isVision && Array.from({ length: chunk.lastPage - chunk.firstPage + 1 }, (_, i) => chunk.firstPage + i).some((p) => !report.ocrPages?.[String(p)]);
 
-    // 1. High-Accuracy AI Extraction (Multimodal Vision / Text)
-    // Exam papers contain math fonts, symbols, equations, chemical structures, and figures
-    // that standard PDF text decoders strip or corrupt. Multimodal AI reads them directly.
-    if (aiFallbackAvailable()) {
+    // 1. High-Speed Deterministic Parser: Instant, zero-latency extraction for standard PDFs
+    if (!chunk.isVision && !ocrMissing) {
+      const parsed = parsePyqText(pages, patterns);
+      const chunkQuestions = parsed.questions.filter((q) => inChunk(q.sourcePage));
+      if (chunkQuestions.length > 0) {
+        method = "TEXT_PARSER";
+        const currentAnswerKey = (report.documentAnswerKey as Record<string, string> | undefined) || {};
+        drafts = chunkQuestions.map((q) => {
+          const hasEmptyOpts = !q.options.A || !q.options.B || !q.options.C || !q.options.D;
+          const issues = [...q.issues];
+          if (hasEmptyOpts) {
+            issues.push("Options missing or formulas stripped — verify with original paper.");
+          }
+          let ans = q.answer;
+          let ansSource = q.answerSource;
+          const matchedAnswer = currentAnswerKey[String(q.number)];
+          if (matchedAnswer) {
+            ans = matchedAnswer;
+            ansSource = "ANSWER_KEY_SECTION";
+          }
+          return {
+            sourceKey: q.sourceKey,
+            number: q.number,
+            sourcePage: q.sourcePage,
+            statement: q.statement,
+            options: q.options,
+            answer: ans,
+            answerSource: ansSource,
+            solution: q.solution,
+            hasImageHint: q.hasImageHint,
+            questionTag: q.questionTag,
+            sectionTag: q.sectionTag,
+            issues,
+            method: "TEXT_PARSER" as const,
+            subject: job.subject ?? undefined,
+            chapter: job.chapter ?? undefined,
+            difficulty: "MEDIUM",
+            questionType: "SINGLE_CORRECT",
+          };
+        });
+      }
+    }
+
+    // 2. High-Accuracy AI Extraction: For scanned chunks (isVision) or chunks where text parser returned 0 questions
+    if (!drafts.length && aiFallbackAvailable()) {
       let aiExtracted: ExtractedAiQuestion[] = [];
       let usedMethod: "AI_VISION" | "AI_TEXT" = "AI_TEXT";
       let aiError: string | null = null;
@@ -357,8 +423,8 @@ export async function processPyqChunk(
         }
       }
 
-      // If vision wasn't available or failed, try AI on extracted text
-      if (!aiExtracted.length) {
+      // If vision wasn't available or failed, try AI on extracted text (only if not quota/timeout)
+      if (!aiExtracted.length && aiFallbackAvailable() && !isQuotaOrTimeoutError(aiError)) {
         try {
           const chunkPages = pages.filter((p) => inChunk(p.pageNumber));
           const textChunk = chunkPages.map((p) => `--- [Page ${p.pageNumber}] ---\n${p.text}`).join("\n\n");
@@ -430,45 +496,14 @@ export async function processPyqChunk(
       }
     }
 
-    // 2. Offline / Deterministic Parser Fallback (only if AI is not available or returned no drafts)
+    // 3. Fallback error state if neither parser nor AI found questions
     if (!drafts.length && chunkStatus !== "NEEDS_OCR") {
       if (ocrMissing) {
         chunkStatus = "NEEDS_OCR";
         chunkError = `Pages ${chunk.firstPage}–${chunk.lastPage} are scanned images — run OCR on this import page to read them.`;
       } else {
-        const parsed = parsePyqText(pages, patterns);
-        drafts = parsed.questions
-          .filter((q) => inChunk(q.sourcePage))
-          .map((q) => {
-            const hasEmptyOpts = !q.options.A || !q.options.B || !q.options.C || !q.options.D;
-            const issues = [...q.issues];
-            if (hasEmptyOpts) {
-              issues.push("Options missing or formulas stripped — verify with original paper.");
-            }
-            return {
-              sourceKey: q.sourceKey,
-              number: q.number,
-              sourcePage: q.sourcePage,
-              statement: q.statement,
-              options: q.options,
-              answer: q.answer,
-              answerSource: q.answerSource,
-              solution: q.solution,
-              hasImageHint: q.hasImageHint,
-              questionTag: q.questionTag,
-              sectionTag: q.sectionTag,
-              issues,
-              method: "TEXT_PARSER" as const,
-              subject: job.subject ?? undefined,
-              chapter: job.chapter ?? undefined,
-              difficulty: "MEDIUM",
-              questionType: "SINGLE_CORRECT",
-            };
-          });
-        if (!drafts.length) {
-          chunkStatus = "FAILED";
-          chunkError = `No questions could be read on pages ${chunk.firstPage}–${chunk.lastPage}.`;
-        }
+        chunkStatus = "FAILED";
+        chunkError = `No questions could be read on pages ${chunk.firstPage}–${chunk.lastPage}.`;
       }
     }
 

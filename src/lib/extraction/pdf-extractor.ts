@@ -240,7 +240,7 @@ export async function extractQuestionsWithAiChunk({
         temperature: 0.1,
         maxOutputTokens: 16384,
       },
-    }, { timeout: 60_000 });
+    }, { timeout: 18_000 });
 
     const prompt = `You are the Master Academic Question Extraction & Ingestion Engine for NEET, JEE Main, and NCERT (Atomic Pathshala).
 Source Institute / Paper: "${sourceName || "Exam Document"}"
