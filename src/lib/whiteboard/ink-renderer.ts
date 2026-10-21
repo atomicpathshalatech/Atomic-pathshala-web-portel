@@ -15,6 +15,9 @@ import { VIRTUAL_HEIGHT, VIRTUAL_WIDTH } from "@/lib/canvas/canvas-engine";
  * from one slide can appear on another.
  */
 
+/** Pixel density of the exported ink layer (see renderInkLayers). */
+export const INK_RENDER_SCALE = 2;
+
 export type InkLayer = {
   /** PNG data URL (1920×1080, transparent), or null when the slide has no objects. */
   png: string | null;
@@ -53,7 +56,10 @@ export async function renderInkLayers(
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: VIRTUAL_WIDTH, height: VIRTUAL_HEIGHT, deviceScaleFactor: 1 });
+    // 2× pixels: the ink layer is a picture inside the PDF, and at 1× (1920
+    // wide) handwriting printed or zoomed came out soft and jagged. 3840 wide
+    // is ~330 dpi across an A4 page; the transparent PNG stays small.
+    await page.setViewport({ width: VIRTUAL_WIDTH, height: VIRTUAL_HEIGHT, deviceScaleFactor: INK_RENDER_SCALE });
     await page.goto(`${opts.baseUrl}/board-render`, { waitUntil: "load", timeout });
     await page.waitForFunction("window.__boardRenderReady === true", { timeout });
 

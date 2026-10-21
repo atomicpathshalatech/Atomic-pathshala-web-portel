@@ -614,6 +614,68 @@ const INK_MIN_STEP = 0.2;
  * from INK_SMOOTHING for a barely-moving pen up to 0.9 for a fast one. `step`
  * is the distance from the last ink point to the pointer, in virtual px.
  */
+/**
+ * A variable-width stroke drawn as ONE filled outline (like PowerPoint ink):
+ * the left and right edges are offset from the centre line by half the width
+ * at each point, joined with smooth curves and round ends. Drawing each
+ * segment as its own line (the old way) left visible joints and a beaded,
+ * broken look in pressure pens.
+ */
+export function fillVariableWidthStroke(
+  ctx: CanvasRenderingContext2D,
+  points: StrokePoint[],
+  widthAt: (p: StrokePoint, i: number) => number
+): void {
+  const n = points.length;
+  if (n < 2) return;
+  const left: { x: number; y: number }[] = [];
+  const right: { x: number; y: number }[] = [];
+  const half: number[] = [];
+  let nx = 0;
+  let ny = -1;
+  for (let i = 0; i < n; i++) {
+    const a = points[Math.max(0, i - 1)]!;
+    const b = points[Math.min(n - 1, i + 1)]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len > 1e-6) {
+      nx = -dy / len;
+      ny = dx / len;
+    }
+    // Neighbour-averaged width so it changes smoothly along the line.
+    const w =
+      (widthAt(points[Math.max(0, i - 1)]!, Math.max(0, i - 1)) + 2 * widthAt(points[i]!, i) + widthAt(points[Math.min(n - 1, i + 1)]!, Math.min(n - 1, i + 1))) / 8;
+    half.push(w);
+    const p = points[i]!;
+    left.push({ x: p.x + nx * w, y: p.y + ny * w });
+    right.push({ x: p.x - nx * w, y: p.y - ny * w });
+  }
+  const edge = (pts: { x: number; y: number }[], first: boolean) => {
+    if (first) ctx.moveTo(pts[0]!.x, pts[0]!.y);
+    else ctx.lineTo(pts[0]!.x, pts[0]!.y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const p1 = pts[i]!;
+      const p2 = pts[i + 1]!;
+      ctx.quadraticCurveTo(p1.x, p1.y, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+    }
+    const last = pts[pts.length - 1]!;
+    ctx.lineTo(last.x, last.y);
+  };
+  const angle = (from: StrokePoint, to: StrokePoint) => Math.atan2(to.y - from.y, to.x - from.x);
+  const endA = angle(points[n - 2]!, points[n - 1]!);
+  const startA = angle(points[0]!, points[1]!);
+  ctx.beginPath();
+  edge(left, true);
+  // Round end: from the left edge around the tip to the right edge.
+  ctx.arc(points[n - 1]!.x, points[n - 1]!.y, half[n - 1]!, endA + Math.PI / 2, endA - Math.PI / 2, true);
+  edge(right.slice().reverse(), false);
+  // Round start: from the right edge around the back to the left edge.
+  ctx.arc(points[0]!.x, points[0]!.y, half[0]!, startA - Math.PI / 2, startA + Math.PI / 2, true);
+  ctx.closePath();
+  ctx.fill();
+}
+
 /** Repeatable 0..1 "grain" for segment i (graphite pen texture). */
 function grain(i: number): number {
   const v = Math.sin(i * 12.9898) * 43758.5453;
@@ -1347,6 +1409,18 @@ export class CanvasEngine {
           ctx.stroke();
         }
       }
+      ctx.restore();
+      return;
+    }
+
+    // Pressure pens with a single colour/alpha: one smooth filled outline.
+    if (penStyle === "fountain" || penStyle === "art") {
+      ctx.fillStyle = color;
+      ctx.globalAlpha = (penStyle === "art" ? 0.85 : 1) * extraAlpha;
+      fillVariableWidthStroke(ctx, points, (p) => {
+        const pressure = p.pressure && p.pressure > 0 ? p.pressure : 0.5;
+        return penStyle === "fountain" ? Math.max(0.5, size * (0.3 + pressure * 1.5)) : Math.max(0.8, size * (1.0 + pressure * 1.2));
+      });
       ctx.restore();
       return;
     }
