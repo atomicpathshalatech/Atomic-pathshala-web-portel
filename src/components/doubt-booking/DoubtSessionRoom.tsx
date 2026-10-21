@@ -84,15 +84,22 @@ function DoubtSessionRoomInner({
 }) {
   const room = useRoomContext();
   const connectionState = useConnectionState();
-  const { localParticipant } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
   const [micError, setMicError] = useState<string | null>(null);
   const [whiteboardActive, setWhiteboardActive] = useState(false);
 
+  // Mic and camera on once the room is connected (and again after a
+  // reconnect) — turning them on while still connecting could fail
+  // silently and leave a participant unheard until they toggled.
   useEffect(() => {
-    localParticipant.setMicrophoneEnabled(true).catch((err) => setMicError(describeMediaError(err)));
+    if (connectionState !== ConnectionState.Connected) return;
+    localParticipant
+      .setMicrophoneEnabled(true)
+      .then(() => setMicError(null))
+      .catch((err) => setMicError(describeMediaError(err)));
     localParticipant.setCameraEnabled(true).catch(() => {});
-  }, [localParticipant]);
+  }, [localParticipant, connectionState]);
 
   // Synchronize whiteboard toggle state via LiveKit data channel
   useEffect(() => {
@@ -151,7 +158,13 @@ function DoubtSessionRoomInner({
   };
 
   const localTrack = tracks.find((t) => t.participant.isLocal);
-  const remoteTrack = tracks.find((t) => !t.participant.isLocal);
+  // Everyone else in the room (a session can have more than two people):
+  // people with their camera on first, so a camera-off participant never
+  // hides someone whose video is running.
+  const remoteTracks = tracks
+    .filter((t) => !t.participant.isLocal)
+    .sort((a, b) => Number(Boolean(b.publication && !b.publication.isMuted)) - Number(Boolean(a.publication && !a.publication.isMuted)));
+  const remoteTrack = remoteTracks[0];
 
   return (
     <div className="relative h-full w-full bg-[#0a0b12] rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
@@ -199,7 +212,22 @@ function DoubtSessionRoomInner({
         /* Full-screen Video Call View */
         <div className="relative h-full w-full">
           <div className="absolute inset-0 flex items-center justify-center">
-            {remoteTrack?.publication ? (
+            {remoteTracks.length > 1 ? (
+              <div className={`grid w-full h-full gap-1 p-1 ${remoteTracks.length <= 2 ? "grid-cols-2" : remoteTracks.length <= 4 ? "grid-cols-2 grid-rows-2" : "grid-cols-3"}`}>
+                {remoteTracks.map((t) => (
+                  <div key={t.participant.identity} className="relative bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center">
+                    {t.publication && !t.publication.isMuted ? (
+                      <VideoTrack trackRef={t} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="material-symbols-outlined text-4xl text-slate-600">person</span>
+                    )}
+                    <span className="absolute bottom-1.5 left-1.5 text-[11px] font-bold text-white bg-black/60 px-2 py-0.5 rounded-full">
+                      {t.participant.name || "Participant"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : remoteTrack?.publication ? (
               <VideoTrack trackRef={remoteTrack} className="w-full h-full object-cover" />
             ) : (
               <div className="text-slate-500 text-sm flex flex-col items-center gap-2">
@@ -230,17 +258,23 @@ function DoubtSessionRoomInner({
         <TrackToggle
           source={Track.Source.Microphone}
           showIcon={false}
-          className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center transition shadow-xs"
+          className={`w-9 h-9 rounded-full text-white flex items-center justify-center transition shadow-xs ${
+            isMicrophoneEnabled ? "bg-slate-800 hover:bg-slate-700" : "bg-rose-600 hover:bg-rose-500"
+          }`}
+          title={isMicrophoneEnabled ? "Mute" : "Unmute"}
         >
-          <span className="material-symbols-outlined text-lg">mic</span>
+          <span className="material-symbols-outlined text-lg">{isMicrophoneEnabled ? "mic" : "mic_off"}</span>
         </TrackToggle>
 
         <TrackToggle
           source={Track.Source.Camera}
           showIcon={false}
-          className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center transition shadow-xs"
+          className={`w-9 h-9 rounded-full text-white flex items-center justify-center transition shadow-xs ${
+            isCameraEnabled ? "bg-slate-800 hover:bg-slate-700" : "bg-rose-600 hover:bg-rose-500"
+          }`}
+          title={isCameraEnabled ? "Camera off" : "Camera on"}
         >
-          <span className="material-symbols-outlined text-lg">videocam</span>
+          <span className="material-symbols-outlined text-lg">{isCameraEnabled ? "videocam" : "videocam_off"}</span>
         </TrackToggle>
 
         {/* Dedicated Activate Whiteboard Button for Teacher */}
