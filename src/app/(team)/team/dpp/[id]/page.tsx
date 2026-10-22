@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { DppStatusActions } from "@/components/team-portal/DppStatusActions";
 import { DppQuestionPicker } from "@/components/team-portal/DppQuestionPicker";
+import { dppSyllabus } from "@/lib/tests/paper-syllabus";
 import { DPP_LEVELS } from "@/lib/dpp/levels";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { DppDetailsEditor } from "@/components/team-portal/DppDetailsEditor";
@@ -161,6 +162,7 @@ export default async function DppDetailPage({ params }: { params: { id: string }
         linkedQuestionIds={linkedQuestionIds}
         dppSubject={dpp.subject}
         dppChapter={dpp.chapter}
+        syllabus={dppSyllabus(dpp)}
       />
     </div>
   );

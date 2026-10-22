@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { DualColumnQuestionStudio } from "@/components/questions/DualColumnQuestionStudio";
+import { dppSyllabus } from "@/lib/tests/paper-syllabus";
 
 export const metadata: Metadata = {
   title: "DPP Question Authoring Studio — Atomic Pathshala",
@@ -95,6 +96,7 @@ export default async function DppAuthorPage({ params }: { params: { id: string }
       subjects={subjects}
       initialQuestions={initialQuestions.length > 0 ? initialQuestions : undefined}
       backHref={`/team/dpp/${dpp.id}`}
+      syllabus={dppSyllabus(dpp)}
     />
   );
 }

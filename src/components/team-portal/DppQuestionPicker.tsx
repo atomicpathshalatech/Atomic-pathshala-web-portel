@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { UnifiedQuestionEditor } from "@/components/questions/UnifiedQuestionEditor";
+import { UnifiedQuestionEditor, type SyllabusChapter } from "@/components/questions/UnifiedQuestionEditor";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import type { DppImportValidationItem, DppQuickImportSummary } from "@/lib/questions/dpp-quick-import";
 
@@ -30,11 +30,14 @@ export function DppQuestionPicker({
   linkedQuestionIds,
   dppSubject,
   dppChapter,
+  syllabus,
 }: {
   dppId: string;
   linkedQuestionIds: string[];
   dppSubject?: string;
   dppChapter?: string;
+  /** Limits a new question's chapter/topic to this DPP's own. */
+  syllabus?: SyllabusChapter[];
 }) {
   const router = useRouter();
   const [activeMode, setActiveMode] = useState<"search" | "quick-import" | "create">("search");
@@ -460,6 +463,8 @@ export function DppQuestionPicker({
           <UnifiedQuestionEditor
             mode="dpp"
             dppId={dppId}
+            initialQuestion={dppSubject ? { subject: dppSubject } : undefined}
+            syllabus={syllabus}
             onSaveSuccess={(created: any) => handleCreated(created?.id)}
           />
         </div>

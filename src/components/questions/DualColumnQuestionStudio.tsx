@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Plus, Download, ChevronRight, ChevronDown, ArrowLeft, Save, Sliders, CheckCircle2, FileText, Search, Sparkles, PanelLeftClose, PanelLeftOpen, EyeOff } from "lucide-react";
-import { UnifiedQuestionEditor } from "./UnifiedQuestionEditor";
+import { UnifiedQuestionEditor, type SyllabusChapter } from "./UnifiedQuestionEditor";
 
 export interface QuestionEntry {
   id?: string;
@@ -51,6 +51,8 @@ interface DualColumnQuestionStudioProps {
   /** A scheduled test: questions can change until this time, then it publishes itself. */
   opensAt?: string | null;
   onSave?: (question: QuestionEntry) => Promise<void>;
+  /** The paper's syllabus — limits each question's chapter/topic (see UnifiedQuestionEditor). */
+  syllabus?: SyllabusChapter[];
 }
 
 export function DualColumnQuestionStudio({
@@ -68,6 +70,7 @@ export function DualColumnQuestionStudio({
   backHref = "/team/tests",
   isPublished = false,
   opensAt = null,
+  syllabus,
 }: DualColumnQuestionStudioProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
@@ -139,49 +142,6 @@ export function DualColumnQuestionStudio({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  const [sidebarTab, setSidebarTab] = useState<"palette" | "metadata">("palette");
-
-  // Dynamic taxonomy lists for Left Sidebar Metadata editing
-  const [sidebarChapters, setSidebarChapters] = useState<Array<{ id: string; title: string }>>([]);
-  const [sidebarTopics, setSidebarTopics] = useState<Array<{ id: string; title: string }>>([]);
-
-  useEffect(() => {
-    if (!activeSubject) return;
-    fetch(`/api/team/ai-questions/taxonomy?subject=${encodeURIComponent(activeSubject)}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success && Array.isArray(json.data?.chapters)) {
-          setSidebarChapters(json.data.chapters);
-        }
-      })
-      .catch(() => {});
-  }, [activeSubject]);
-
-  useEffect(() => {
-    if (!activeSubject || !currentQ.chapter) {
-      setSidebarTopics([]);
-      return;
-    }
-    fetch(`/api/team/ai-questions/taxonomy?subject=${encodeURIComponent(activeSubject)}&chapter=${encodeURIComponent(currentQ.chapter)}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success && Array.isArray(json.data?.topics)) {
-          setSidebarTopics(json.data.topics);
-        }
-      })
-      .catch(() => {});
-  }, [activeSubject, currentQ.chapter]);
-
-  const updateCurrentQuestionMeta = (updates: Partial<QuestionEntry>) => {
-    setQuestionsMap((prev) => ({
-      ...prev,
-      [currentQuestionNumber]: {
-        ...currentQ,
-        ...updates,
-      },
-    }));
-  };
 
   const isQuestionPopulated = Boolean(
     currentQ.isSaved ||
@@ -406,39 +366,11 @@ export function DualColumnQuestionStudio({
                 </p>
               </div>
 
-              {/* Sidebar Tabs: Palette vs Metadata */}
-              <div className="flex items-center bg-[#092e7a] p-1 rounded-xl text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setSidebarTab("palette")}
-                  className={`flex-1 py-1.5 rounded-lg transition text-center flex items-center justify-center gap-1.5 ${
-                    sidebarTab === "palette"
-                      ? "bg-white text-[#0c3ea4] shadow-sm font-black"
-                      : "text-blue-200 hover:text-white"
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Q. Palette</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSidebarTab("metadata")}
-                  className={`flex-1 py-1.5 rounded-lg transition text-center flex items-center justify-center gap-1.5 ${
-                    sidebarTab === "metadata"
-                      ? "bg-white text-[#0c3ea4] shadow-sm font-black"
-                      : "text-blue-200 hover:text-white"
-                  }`}
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Metadata</span>
-                </button>
-              </div>
             </div>
           )}
         </div>
 
-        {/* TAB 1: SECTION ACCORDIONS & QUESTION PALETTE */}
-        {sidebarTab === "palette" && (
+        {/* SECTION ACCORDIONS & QUESTION PALETTE (metadata is edited above Save, in the question itself) */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {subjects.map((sub) => {
               const isSubActive = activeSubject === sub.name;
@@ -519,114 +451,6 @@ export function DualColumnQuestionStudio({
               );
             })}
           </div>
-        )}
-
-        {/* TAB 2: METADATA & TAXONOMY CONTROLS IN LEFT SIDEBAR */}
-        {sidebarTab === "metadata" && (
-          <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs animate-in fade-in">
-            <div className="p-2.5 rounded-2xl bg-[#092e7a]/80 border border-white/10 space-y-3">
-              <span className="text-[11px] font-black uppercase text-blue-200 tracking-wider block">
-                Q.{currentQuestionNumber} Metadata Settings
-              </span>
-
-              {/* Subject */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-blue-100">Subject</label>
-                <select
-                  value={currentQ.subject || activeSubject}
-                  onChange={(e) => updateCurrentQuestionMeta({ subject: e.target.value })}
-                  className="w-full px-2.5 py-1.5 bg-white text-slate-900 rounded-xl font-bold text-xs outline-none"
-                >
-                  {subjects.map((s) => (
-                    <option key={s.name} value={s.name}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Chapter */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-blue-100">Chapter</label>
-                <select
-                  value={currentQ.chapter || ""}
-                  onChange={(e) => updateCurrentQuestionMeta({ chapter: e.target.value, topic: "" })}
-                  className="w-full px-2.5 py-1.5 bg-white text-slate-900 rounded-xl font-medium text-xs outline-none"
-                >
-                  <option value="">-- Select Chapter --</option>
-                  {sidebarChapters.map((c) => (
-                    <option key={c.id} value={c.title}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Topic */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-blue-100">Topic</label>
-                <select
-                  value={currentQ.topic || ""}
-                  onChange={(e) => updateCurrentQuestionMeta({ topic: e.target.value })}
-                  className="w-full px-2.5 py-1.5 bg-white text-slate-900 rounded-xl font-medium text-xs outline-none"
-                >
-                  <option value="">-- Select Topic --</option>
-                  {sidebarTopics.map((t) => (
-                    <option key={t.id} value={t.title}>
-                      {t.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Difficulty */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-blue-100">Difficulty</label>
-                <div className="grid grid-cols-3 gap-1 text-[10px] font-black">
-                  {(["EASY", "MEDIUM", "HARD"] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => updateCurrentQuestionMeta({ difficulty: d })}
-                      className={`py-1 rounded-lg transition ${
-                        currentQ.difficulty === d
-                          ? "bg-white text-[#0c3ea4] shadow-sm"
-                          : "bg-[#0c3ea4] text-blue-200 border border-white/20 hover:bg-white/10"
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Marks */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-blue-100">Marking Scheme</label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center bg-white px-2 py-1 rounded-xl text-slate-900">
-                    <span className="text-emerald-600 font-bold mr-1">+</span>
-                    <input
-                      type="number"
-                      value={currentQ.marks || 4}
-                      onChange={(e) => updateCurrentQuestionMeta({ marks: Number(e.target.value) })}
-                      className="w-full bg-transparent font-black text-xs outline-none"
-                    />
-                  </div>
-                  <div className="flex-1 flex items-center bg-white px-2 py-1 rounded-xl text-slate-900">
-                    <span className="text-rose-600 font-bold mr-1">-</span>
-                    <input
-                      type="number"
-                      value={currentQ.negativeMarks || 1}
-                      onChange={(e) => updateCurrentQuestionMeta({ negativeMarks: Number(e.target.value) })}
-                      className="w-full bg-transparent font-black text-xs outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Footer info and collapse toggle */}
         <div className="p-3 border-t border-white/10 text-xs text-blue-200 flex items-center justify-between">
@@ -875,6 +699,7 @@ export function DualColumnQuestionStudio({
                   onNext={handleNextQuestion}
                   onPrev={handlePrevQuestion}
                   onCancelHref={backHref}
+                  syllabus={syllabus}
                 />
               );
             })()}

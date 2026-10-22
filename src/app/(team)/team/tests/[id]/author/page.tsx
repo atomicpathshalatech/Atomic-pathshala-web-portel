@@ -8,6 +8,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { DualColumnQuestionStudio } from "@/components/questions/DualColumnQuestionStudio";
 import { isTestEditable, publishDueTests } from "@/lib/tests/scheduled-publish";
 import { ensureChapterTestSection } from "@/lib/tests/chapter-test";
+import { testSyllabus } from "@/lib/tests/paper-syllabus";
 
 export const metadata: Metadata = {
   title: "Test Question Authoring Studio — Atomic Pathshala",
@@ -27,6 +28,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
   const test = await prisma.test.findUnique({
     where: { id: params.id },
     include: {
+      chapter: { select: { title: true, subject: { select: { title: true } } } },
       sections: {
         orderBy: { order: "asc" },
         include: {
@@ -138,6 +140,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
       subjects={subjects.length > 0 ? subjects : undefined}
       initialQuestions={initialQuestions.length > 0 ? initialQuestions : undefined}
       backHref={`/team/tests/${test.id}`}
+      syllabus={testSyllabus(test)}
       isPublished={isPublished}
       opensAt={opensAt}
     />

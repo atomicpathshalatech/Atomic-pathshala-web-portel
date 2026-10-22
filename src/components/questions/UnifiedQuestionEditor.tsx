@@ -37,6 +37,7 @@ import { EquationLivePreview } from "./EquationLivePreview";
 import { FormulaInsertToolbar } from "./FormulaInsertToolbar";
 import { QuestionIdBadge } from "./QuestionIdBadge";
 import { QuestionMetadataDrawer } from "./QuestionMetadataDrawer";
+import { QuestionMetadataPanel } from "./QuestionMetadataPanel";
 import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
 import { CamDrawEditor } from "@/components/camdraw/CamDrawEditor";
 
@@ -57,6 +58,20 @@ export interface UnifiedQuestionEditorProps {
   onNext?: () => void;
   onPrev?: () => void;
   onCancelHref?: string;
+  /**
+   * The test/DPP syllabus: a question added to it can only belong to one of
+   * these chapters (and, when a chapter lists topics, one of those topics).
+   * Empty topics = the whole chapter.
+   */
+  syllabus?: SyllabusChapter[];
+}
+
+export type SyllabusChapter = { subject: string; chapter: string; topics: string[] };
+
+/** Case/spacing/punctuation-insensitive name for matching chapter & topic titles. */
+function sameName(a?: string | null, b?: string | null) {
+  const norm = (s?: string | null) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  return norm(a) !== "" && norm(a) === norm(b);
 }
 
 export function UnifiedQuestionEditor({
@@ -76,8 +91,14 @@ export function UnifiedQuestionEditor({
   onNext,
   onPrev,
   onCancelHref = "/team/questions",
+  syllabus,
 }: UnifiedQuestionEditorProps) {
   const router = useRouter();
+  // Metadata is checked at the bottom, just before Save. A question already
+  // saved was checked when it was saved; a new one needs the click.
+  const [metadataConfirmed, setMetadataConfirmed] = useState<boolean>(Boolean(questionId));
+  const [metadataFromAi, setMetadataFromAi] = useState<boolean>(false);
+  const metadataPanelRef = useRef<HTMLDivElement | null>(null);
 
   // Translations initial data
   const translationEn = initialQuestion?.translations?.find((t: any) => t.language === "ENGLISH");
@@ -276,20 +297,35 @@ export function UnifiedQuestionEditor({
     type?: string;
   } | null>(null);
 
+  // The AI's metadata is filled in straight away (no separate approve step);
+  // the teacher checks it in the panel above Save. Inside a test/DPP the
+  // subject comes from the section and the chapter must be in the syllabus.
   const handleApplySuggestedMetadata = async () => {
     if (!aiSuggestedMetadata) return;
 
-    const appliedSubject = aiSuggestedMetadata.subject || subject;
-    const appliedChapter = aiSuggestedMetadata.chapter || chapter;
-    const appliedTopic = aiSuggestedMetadata.topic || topic;
-    const appliedSubTopic = aiSuggestedMetadata.subTopic || subTopic;
+    const appliedSubject = mode === "bank" ? aiSuggestedMetadata.subject || subject : subject;
+    const allowed = (syllabus ?? []).filter((s) => sameName(s.subject, appliedSubject));
+    let appliedChapter = aiSuggestedMetadata.chapter || chapter;
+    let appliedTopic = aiSuggestedMetadata.topic || topic;
+    if (allowed.length > 0) {
+      const match = allowed.find((s) => sameName(s.chapter, appliedChapter));
+      // One chapter in the syllabus: it is that chapter, whatever the AI says.
+      const entry = match ?? (allowed.length === 1 ? allowed[0] : undefined);
+      appliedChapter = entry?.chapter ?? "";
+      if (entry && entry.topics.length > 0) {
+        appliedTopic = entry.topics.find((t) => sameName(t, appliedTopic)) ?? "";
+      }
+    }
+    const appliedSubTopic = appliedTopic ? aiSuggestedMetadata.subTopic || subTopic : "";
 
-    if (aiSuggestedMetadata.subject) setSubject(aiSuggestedMetadata.subject);
-    if (aiSuggestedMetadata.chapter) setChapter(aiSuggestedMetadata.chapter);
-    if (aiSuggestedMetadata.topic) setTopic(aiSuggestedMetadata.topic);
-    if (aiSuggestedMetadata.subTopic) setSubTopic(aiSuggestedMetadata.subTopic);
+    if (mode === "bank" && aiSuggestedMetadata.subject) setSubject(aiSuggestedMetadata.subject);
+    setChapter(appliedChapter);
+    setTopic(appliedTopic);
+    setSubTopic(appliedSubTopic);
     if (aiSuggestedMetadata.difficulty) setDifficulty(aiSuggestedMetadata.difficulty);
     if (aiSuggestedMetadata.type) setQuestionType(aiSuggestedMetadata.type);
+    setMetadataConfirmed(false);
+    setMetadataFromAi(true);
 
     setMissingFieldErrors((prev) => {
       const next = { ...prev };
@@ -328,9 +364,14 @@ export function UnifiedQuestionEditor({
       }
     }
 
-    toast.success("AI suggested curriculum metadata approved, applied & saved to catalog!");
+    toast.info("AI filled the metadata — check it at the bottom before saving.");
     setAiSuggestedMetadata(null);
   };
+
+  useEffect(() => {
+    if (aiSuggestedMetadata) void handleApplySuggestedMetadata();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiSuggestedMetadata]);
 
   // 2. QUESTION CONTENT STATES (Dual Column)
   const [statementEn, setStatementEn] = useState<string>(translationEn?.statement || initialQuestion?.statementEn || "");
@@ -600,10 +641,11 @@ export function UnifiedQuestionEditor({
         const json = await res.json();
         if (json.success && Array.isArray(json.data?.chapters)) {
           setChaptersList(json.data.chapters);
-          // If current chapter not in list, pick first
-          if (!chapter && json.data.chapters.length > 0) {
-            setChapter(json.data.chapters[0].title);
-          }
+          // No guessing: the first chapter of the subject used to be picked
+          // here, so questions landed in unrelated chapters. Only a syllabus
+          // with exactly one chapter for this subject decides it.
+          const own = (syllabus ?? []).filter((s) => sameName(s.subject, subject));
+          if (!chapter && own.length === 1 && own[0]) setChapter(own[0].chapter);
         }
       } catch {
         toast.error("Failed to load NCERT chapters for subject.");
@@ -612,6 +654,20 @@ export function UnifiedQuestionEditor({
 
     fetchChapters();
   }, [subject]);
+
+  // What the metadata panel offers. With a syllabus (test/DPP) only its
+  // chapters for this subject — and only the listed topics when the chapter
+  // names some; without one, the subject's whole catalog.
+  const syllabusForSubject = (syllabus ?? []).filter((s) => sameName(s.subject, subject));
+  const chapterOptions =
+    syllabusForSubject.length > 0
+      ? syllabusForSubject.map((s) => chaptersList.find((c) => sameName(c.title, s.chapter))?.title ?? s.chapter)
+      : chaptersList.map((c) => c.title);
+  const syllabusChapter = syllabusForSubject.find((s) => sameName(s.chapter, chapter));
+  const topicOptions =
+    syllabusChapter && syllabusChapter.topics.length > 0
+      ? syllabusChapter.topics.map((t) => topicsList.find((x) => sameName(x.title, t)) ?? { title: t, subtopics: [] })
+      : topicsList;
 
   // C. Fetch Topics when Chapter changes
   useEffect(() => {
@@ -628,9 +684,6 @@ export function UnifiedQuestionEditor({
         const json = await res.json();
         if (json.success && Array.isArray(json.data?.topics)) {
           setTopicsList(json.data.topics);
-          if (!topic && json.data.topics.length > 0) {
-            setTopic(json.data.topics[0].title);
-          }
         }
       } catch {
         toast.error("Failed to load topics for chapter.");
@@ -1076,6 +1129,9 @@ export function UnifiedQuestionEditor({
       errors.correctOption = true;
     }
 
+    // The metadata panel above Save must have been checked (✓ Confirm).
+    if (!errors.chapter && !errors.topic && !metadataConfirmed) errors.metadata = true;
+
     if (Object.keys(errors).length > 0) {
       setMissingFieldErrors(errors);
       const missingNames = [];
@@ -1085,8 +1141,12 @@ export function UnifiedQuestionEditor({
       if (errors.statement) missingNames.push("Question Statement");
       if (errors.options) missingNames.push("All 4 Options (A, B, C, D)");
       if (errors.correctOption) missingNames.push("Correct Answer");
+      if (errors.metadata) missingNames.push("Metadata check (✓ Confirm metadata)");
 
-      toast.error(`Please complete mandatory fields before saving: ${missingNames.join(", ")}`);
+      if (errors.subject || errors.chapter || errors.topic || errors.metadata) {
+        metadataPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      toast.error(`Please complete before saving: ${missingNames.join(", ")}`);
       return;
     }
 
@@ -1197,148 +1257,9 @@ export function UnifiedQuestionEditor({
 
   return (
     <div className="space-y-3.5 select-none font-sans pb-20">
-      {/* AI SUGGESTED METADATA BANNER (Interactive Teacher Approval) */}
-      {aiSuggestedMetadata && (
-        <div className="bg-blue-50 border-2 border-blue-300/80 rounded-3xl p-5 sm:p-6 shadow-md animate-in fade-in slide-in-from-top-3">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600 text-white text-xs font-black uppercase tracking-wider shadow-sm">
-                  <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                  ✨ AI Suggested Metadata
-                </span>
-                <span className="text-xs text-blue-700 font-bold">
-                  Detected from question text/image
-                </span>
-              </div>
-              <p className="text-xs text-slate-600">
-                The AI engine analyzed your question and identified the recommended NCERT curriculum mapping. Click <strong>Approve & Apply</strong> to automatically set these fields:
-              </p>
-
-              {/* Badges preview */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {aiSuggestedMetadata.subject && (
-                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-black text-blue-900 shadow-xs">
-                    <span className="text-slate-400 font-medium mr-1.5">Subject:</span>
-                    {aiSuggestedMetadata.subject}
-                  </span>
-                )}
-                {aiSuggestedMetadata.chapter && (
-                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-800 shadow-xs">
-                    <span className="text-slate-400 font-medium mr-1.5">Chapter:</span>
-                    {aiSuggestedMetadata.chapter}
-                  </span>
-                )}
-                {aiSuggestedMetadata.topic && (
-                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-800 shadow-xs">
-                    <span className="text-slate-400 font-medium mr-1.5">Topic:</span>
-                    {aiSuggestedMetadata.topic}
-                  </span>
-                )}
-                {aiSuggestedMetadata.subTopic && (
-                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs">
-                    <span className="text-slate-400 font-medium mr-1.5">Subtopic:</span>
-                    {aiSuggestedMetadata.subTopic}
-                  </span>
-                )}
-                {aiSuggestedMetadata.difficulty && (
-                  <span className="px-3 py-1 bg-white border border-amber-200 rounded-xl text-xs font-bold text-amber-800 shadow-xs">
-                    <span className="text-slate-400 font-medium mr-1.5">Level:</span>
-                    {aiSuggestedMetadata.difficulty}
-                  </span>
-                )}
-                {aiSuggestedMetadata.type && (
-                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-bold text-blue-800 shadow-xs">
-                    <span className="text-slate-400 font-medium mr-1.5">Type:</span>
-                    {aiSuggestedMetadata.type}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 shrink-0 self-start md:self-center">
-              <button
-                type="button"
-                onClick={handleApplySuggestedMetadata}
-                className="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md shadow-emerald-600/25 flex items-center gap-2 transition"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Approve & Apply</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiSuggestedMetadata(null)}
-                className="px-3 py-2.5 rounded-2xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-xs transition"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. COMPACT METADATA STRIP & QUESTION CODE BADGE */}
-      <div
-        className={`bg-white rounded-2xl p-3 sm:p-4 shadow-xs border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
-          missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic
-            ? "border-rose-400 ring-2 ring-rose-500/20 bg-rose-50/20"
-            : "border-slate-200"
-        }`}
-      >
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-            <BookOpen className="w-3.5 h-3.5 text-blue-600" />
-            <span>Metadata:</span>
-          </span>
-
-          <span className="px-2.5 py-0.5 bg-blue-100/80 text-[#0c3ea4] font-black text-xs rounded-lg shadow-xs border border-blue-200">
-            {subject}
-          </span>
-
-          <span
-            className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border shadow-xs max-w-[220px] truncate ${
-              chapter
-                ? "bg-slate-100 text-slate-800 border-slate-200"
-                : "bg-rose-100 text-rose-700 border-rose-200"
-            }`}
-          >
-            {chapter ? chapter : "⚠ No Chapter Selected"}
-          </span>
-
-          {topic && (
-            <span className="px-2 py-0.5 bg-slate-50 text-slate-700 font-medium text-xs rounded-lg border border-slate-200 max-w-[180px] truncate hidden sm:inline-block">
-              {topic}
-            </span>
-          )}
-
-          <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-            {difficulty}
-          </span>
-
-          <span className="px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-            +{marks} / -{negativeMarks}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <QuestionIdBadge questionCode={generatedCode} subjectName={subject} isSaving={isSaving} />
-
-          <button
-            type="button"
-            onClick={() => setIsMetadataDrawerOpen(true)}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-black text-xs transition shadow-xs cursor-pointer ${
-              missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic
-                ? "bg-rose-600 hover:bg-rose-700 text-white animate-pulse shadow-rose-500/30"
-                : "bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 hover:border-blue-300"
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>Edit Metadata</span>
-            {(missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic) && (
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-            )}
-          </button>
-        </div>
+      {/* Question code only — the metadata is checked at the bottom, above Save. */}
+      <div className="flex items-center justify-end">
+        <QuestionIdBadge questionCode={generatedCode} subjectName={subject} isSaving={isSaving} />
       </div>
 
       {/* DEDICATED SLIDING METADATA DRAWER / POPUP */}
@@ -2328,6 +2249,51 @@ export function UnifiedQuestionEditor({
           </div>
         </div>
       </div>
+
+      {/* METADATA — last thing before Save */}
+      <QuestionMetadataPanel
+        ref={metadataPanelRef}
+        slotLabel={mode === "bank" ? undefined : `Q.${slotNumber}`}
+        subject={subject}
+        chapter={chapter}
+        setChapter={setChapter}
+        topic={topic}
+        setTopic={setTopic}
+        subTopic={subTopic}
+        setSubTopic={setSubTopic}
+        difficulty={difficulty}
+        setDifficulty={setDifficulty}
+        questionType={questionType}
+        setQuestionType={setQuestionType}
+        marks={marks}
+        setMarks={setMarks}
+        negativeMarks={negativeMarks}
+        setNegativeMarks={setNegativeMarks}
+        chapterOptions={chapterOptions}
+        topicOptions={topicOptions}
+        syllabusLocked={syllabusForSubject.length > 0}
+        fromAi={metadataFromAi}
+        confirmed={metadataConfirmed}
+        onConfirm={() => {
+          if (!chapter.trim() || !topic.trim()) {
+            setMissingFieldErrors((prev) => ({ ...prev, chapter: !chapter.trim(), topic: !topic.trim() }));
+            toast.error("Choose the chapter and topic first.");
+            return;
+          }
+          setMissingFieldErrors((prev) => {
+            const next = { ...prev };
+            delete next.chapter;
+            delete next.topic;
+            delete next.metadata;
+            return next;
+          });
+          setMetadataConfirmed(true);
+        }}
+        missing={missingFieldErrors}
+        onMore={() => setIsMetadataDrawerOpen(true)}
+        onAddTopic={(title) => void handleSaveNewTopic(title)}
+        isSavingTaxonomy={isSavingTaxonomy}
+      />
 
       {/* 5. STICKY BOTTOM ACTION BAR (Save & Slot Navigation) */}
       <footer className="sticky bottom-0 z-30 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-xl flex flex-wrap items-center justify-between gap-3 mt-4">
