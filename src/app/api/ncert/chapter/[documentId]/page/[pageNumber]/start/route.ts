@@ -7,6 +7,9 @@ import {
 } from "@/lib/ncert/question-pool";
 import { NCERTPageProgressStatus } from "@prisma/client";
 
+// Generating a page set asks the AI and can take a while.
+export const maxDuration = 60;
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { documentId: string; pageNumber: string } }

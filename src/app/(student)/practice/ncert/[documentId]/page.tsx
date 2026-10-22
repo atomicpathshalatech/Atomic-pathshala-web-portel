@@ -308,6 +308,20 @@ export default function NcertChapterReaderPage() {
     };
   }, [documentId, currentPageNum]);
 
+  // Once this page is ready, have the server prepare the NEXT page's
+  // questions in the background — so "Next page" opens with questions
+  // instead of a wait for the AI. Asked once per page per visit.
+  const preparedPagesRef = React.useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (loadingPage || generatingQuestions) return;
+    const next = currentPageNum + 1;
+    if (next > totalPages || preparedPagesRef.current.has(next)) return;
+    preparedPagesRef.current.add(next);
+    fetch(`/api/ncert/chapter/${documentId}/page/${next}/prepare`, { method: "POST" }).catch(() => {
+      preparedPagesRef.current.delete(next);
+    });
+  }, [documentId, currentPageNum, totalPages, loadingPage, generatingQuestions]);
+
   // Handle NEXT / Start Practice
   const handleStartPractice = async () => {
     setGeneratingQuestions(true);

@@ -5,7 +5,6 @@ import {
   sanitizeQuestionsForClient,
   extractStructuredQuestionData,
   MAX_REATTEMPTS_PER_PAGE,
-  syncExistingPageQuestionsToQuestionBank,
 } from "@/lib/ncert/question-pool";
 import { NCERTPageProgressStatus, NCERTVerificationStatus } from "@prisma/client";
 
@@ -26,69 +25,65 @@ export async function GET(
       return NextResponse.json({ error: "Invalid page number" }, { status: 400 });
     }
 
-    // 1. Fetch document and page
-    const document = await prisma.ncertDocument.findUnique({
-      where: { id: documentId },
-      include: {
-        academicChapter: true,
-        academicSubject: true,
-        academicClass: true,
-      },
-    });
+    // 1. Document and page together (one round trip instead of two).
+    const [document, page] = await Promise.all([
+      prisma.ncertDocument.findUnique({
+        where: { id: documentId },
+        include: {
+          academicChapter: true,
+          academicSubject: true,
+          academicClass: true,
+        },
+      }),
+      prisma.ncertPage.findUnique({
+        where: {
+          documentId_pageNumber: {
+            documentId,
+            pageNumber,
+          },
+        },
+      }),
+    ]);
 
     if (!document) {
       return NextResponse.json({ error: "NCERT Document not found" }, { status: 404 });
     }
 
-    const page = await prisma.ncertPage.findUnique({
-      where: {
-        documentId_pageNumber: {
-          documentId,
-          pageNumber,
-        },
-      },
-    });
-
     if (!page) {
       return NextResponse.json({ error: "NCERT Page not found" }, { status: 404 });
     }
 
-    // 2. Fetch student's progress for this page
-    const pageProgress = await prisma.ncertStudentPageProgress.findUnique({
-      where: {
-        studentId_pageId: {
-          studentId: auth.student.id,
+    // 2. The student's progress and the page's approved questions together.
+    // The pool set depends on the progress, so all sets are read (a page has
+    // at most a few) and the current one picked below.
+    const [pageProgress, approvedOnPage] = await Promise.all([
+      prisma.ncertStudentPageProgress.findUnique({
+        where: {
+          studentId_pageId: {
+            studentId: auth.student.id,
+            pageId: page.id,
+          },
+        },
+        include: {
+          attempts: {
+            orderBy: { attemptNumber: "desc" },
+            take: 1,
+          },
+        },
+      }),
+      prisma.ncertPageQuestion.findMany({
+        where: {
           pageId: page.id,
+          verificationStatus: NCERTVerificationStatus.APPROVED,
         },
-      },
-      include: {
-        attempts: {
-          orderBy: { attemptNumber: "desc" },
-          take: 1,
-        },
-      },
-    });
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
 
-    // 3. Check if questions exist for current poolSet
+    // 3. Questions of the current poolSet. (Copying to the Question Bank is
+    // done when a pool is created, not on every page view.)
     const currentPoolSet = pageProgress?.attemptCount || 1;
-    const existingQuestions = await prisma.ncertPageQuestion.findMany({
-      where: {
-        pageId: page.id,
-        poolSet: currentPoolSet,
-        verificationStatus: NCERTVerificationStatus.APPROVED,
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (existingQuestions.length > 0) {
-      syncExistingPageQuestionsToQuestionBank(
-        page.id,
-        existingQuestions,
-        auth.student.userId
-      ).catch((err) => {
-        console.warn("[NCERT Page GET] Background QB sync error:", err);
-      });
-    }
+    const existingQuestions = approvedOnPage.filter((q) => q.poolSet === currentPoolSet);
 
     const isCompleted = pageProgress?.status === NCERTPageProgressStatus.COMPLETED;
     const isSkipped = pageProgress?.status === NCERTPageProgressStatus.SKIPPED;

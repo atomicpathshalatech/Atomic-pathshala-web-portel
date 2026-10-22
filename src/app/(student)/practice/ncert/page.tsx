@@ -39,6 +39,25 @@ interface LanguageOption {
   totalPages: number;
 }
 
+/**
+ * Class / subject / chapter lists hardly ever change while the page is open:
+ * each is fetched once and reused, so switching back to a class or subject
+ * shows its boxes instantly. A failed fetch is forgotten so it can be retried.
+ */
+const jsonCache = new Map<string, Promise<any>>();
+function cachedJson(url: string): Promise<any> {
+  let hit = jsonCache.get(url);
+  if (!hit) {
+    hit = fetch(url).then((res) => {
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      return res.json();
+    });
+    hit.catch(() => jsonCache.delete(url));
+    jsonCache.set(url, hit);
+  }
+  return hit;
+}
+
 export default function NcertSelectionPage() {
   const router = useRouter();
 
@@ -69,10 +88,13 @@ export default function NcertSelectionPage() {
     async function loadClasses() {
       setLoadingClasses(true);
       try {
-        const res = await fetch("/api/ncert/classes");
-        const data = await res.json();
+        const data = await cachedJson("/api/ncert/classes");
         if (data.classes && data.classes.length > 0) {
           setClasses(data.classes);
+          // Warm every class's subject list so switching class is instant.
+          for (const c of data.classes as NcertClass[]) {
+            cachedJson(`/api/ncert/subjects?classId=${c.id}`).catch(() => {});
+          }
           const c11 = data.classes.find((c: NcertClass) => c.numericValue === 11) || data.classes[0];
           setSelectedClass(c11);
         }
@@ -97,10 +119,13 @@ export default function NcertSelectionPage() {
     async function loadSubjects() {
       setLoadingSubjects(true);
       try {
-        const res = await fetch(`/api/ncert/subjects?classId=${classId}`);
-        const data = await res.json();
+        const data = await cachedJson(`/api/ncert/subjects?classId=${classId}`);
         if (data.subjects && data.subjects.length > 0) {
           setSubjects(data.subjects);
+          // Warm each subject box's chapter list before it is clicked.
+          for (const sub of data.subjects as NcertSubject[]) {
+            cachedJson(`/api/ncert/chapters?subjectId=${sub.id}`).catch(() => {});
+          }
           const bio = data.subjects.find((s: NcertSubject) => s.name.toLowerCase() === "biology") || data.subjects[0];
           setSelectedSubject(bio);
         } else {
@@ -128,8 +153,7 @@ export default function NcertSelectionPage() {
     async function loadChapters() {
       setLoadingChapters(true);
       try {
-        const res = await fetch(`/api/ncert/chapters?subjectId=${subjectId}`);
-        const data = await res.json();
+        const data = await cachedJson(`/api/ncert/chapters?subjectId=${subjectId}`);
         if (data.chapters && data.chapters.length > 0) {
           setChapters(data.chapters);
           const firstWithContent = data.chapters.find((ch: NcertChapter) => ch.hasContent) || data.chapters[0];
@@ -159,8 +183,7 @@ export default function NcertSelectionPage() {
     async function loadLanguages() {
       setLoadingLanguages(true);
       try {
-        const res = await fetch(`/api/ncert/languages?chapterId=${chapterId}`);
-        const data = await res.json();
+        const data = await cachedJson(`/api/ncert/languages?chapterId=${chapterId}`);
         if (data.languages && data.languages.length > 0) {
           setLanguages(data.languages);
           const firstAvail = data.languages.find((l: LanguageOption) => l.available);
@@ -180,6 +203,11 @@ export default function NcertSelectionPage() {
 
   // Find targeted document ID based on selected language
   const activeDocumentId = languages.find((l) => l.language === selectedLanguage)?.documentId;
+
+  // Load the reader's code while the student is still choosing.
+  useEffect(() => {
+    if (activeDocumentId) router.prefetch(`/practice/ncert/${activeDocumentId}`);
+  }, [activeDocumentId, router]);
 
   const handleOpenSubjectModal = (sub: NcertSubject) => {
     setSelectedSubject(sub);

@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getR2Client } from "@/lib/storage/r2-client";
+import { getR2Client, createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 
+/**
+ * The chapter PDF for the NCERT reader.
+ *
+ *   ?as=url  → { url } — a short-lived direct storage link. The reader loads
+ *              from it with byte-range requests, so page 1 shows after a few
+ *              hundred KB instead of after the whole chapter.
+ *   default  → the file streamed through this route, honouring Range — the
+ *              fallback when the direct link can't be fetched from the
+ *              browser. It used to read the whole file into memory first,
+ *              which was slow and could exceed the platform's response limit.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: { documentId: string } }
@@ -11,19 +22,35 @@ export async function GET(
     const { documentId } = params;
     const document = await prisma.ncertDocument.findUnique({
       where: { id: documentId },
+      select: { fileUrl: true, fileName: true },
     });
 
     if (!document) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
-    // 1. If fileUrl is already a direct public HTTP(S) URL, redirect to it
-    if (document.fileUrl.startsWith("http://") || document.fileUrl.startsWith("https://")) {
-      return NextResponse.redirect(document.fileUrl, 302);
+    const wantsUrl = request.nextUrl.searchParams.get("as") === "url";
+    const isHttp = document.fileUrl.startsWith("http://") || document.fileUrl.startsWith("https://");
+
+    // 1. If fileUrl is already a direct public HTTP(S) URL, use it as is
+    if (isHttp) {
+      return wantsUrl
+        ? NextResponse.json({ url: document.fileUrl })
+        : NextResponse.redirect(document.fileUrl, 302);
     }
 
-    // 2. Otherwise retrieve from R2 storage using the key
+    // 2. Otherwise it is a key in R2 storage
     const r2Key = document.fileUrl.replace(/^\/uploads\//, "").replace(/^\//, "");
+
+    if (wantsUrl) {
+      const url = await createPresignedDownloadUrl({
+        key: r2Key,
+        expiresInSeconds: 3600,
+        contentType: "application/pdf",
+      });
+      return NextResponse.json({ url }, { headers: { "Cache-Control": "private, max-age=1800" } });
+    }
+
     try {
       const client = getR2Client();
       const bucketName =
@@ -31,32 +58,25 @@ export async function GET(
         process.env.STORAGE_BUCKET_NAME ||
         "atomic-pathshala";
 
-      const command = new GetObjectCommand({
-        Bucket: bucketName,
-        Key: r2Key,
-      });
-
-      const response = await client.send(command);
+      const range = request.headers.get("range") || undefined;
+      const response = await client.send(
+        new GetObjectCommand({ Bucket: bucketName, Key: r2Key, Range: range })
+      );
       if (!response.Body) {
         return NextResponse.json({ error: "File body is empty" }, { status: 404 });
       }
 
-      const stream = response.Body as any;
-      const chunks: Uint8Array[] = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
-      }
-      const buffer = Buffer.concat(chunks);
+      const headers: Record<string, string> = {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${encodeURIComponent(document.fileName || "ncert-chapter.pdf")}"`,
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+      };
+      if (response.ContentLength != null) headers["Content-Length"] = String(response.ContentLength);
+      if (response.ContentRange) headers["Content-Range"] = response.ContentRange;
 
-      return new NextResponse(buffer, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `inline; filename="${document.fileName || "ncert-chapter.pdf"}"`,
-          "Content-Length": buffer.length.toString(),
-          "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-        },
-      });
+      const body = (response.Body as { transformToWebStream: () => ReadableStream }).transformToWebStream();
+      return new NextResponse(body, { status: range && response.ContentRange ? 206 : 200, headers });
     } catch (r2Err) {
       console.error("[NCERT PDF Stream] R2 fetch error:", r2Err);
       return NextResponse.json(

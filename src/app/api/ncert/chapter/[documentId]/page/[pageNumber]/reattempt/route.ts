@@ -3,6 +3,9 @@ import { prisma } from "@/lib/db";
 import { getAuthenticatedStudent } from "@/lib/ncert/auth-helper";
 import { preparePageReattempt } from "@/lib/ncert/question-pool";
 
+// Generating a page set asks the AI and can take a while.
+export const maxDuration = 60;
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { documentId: string; pageNumber: string } }

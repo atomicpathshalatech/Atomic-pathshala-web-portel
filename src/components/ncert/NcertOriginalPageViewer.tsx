@@ -20,6 +20,33 @@ interface Props {
   onPageChange?: (newPage: number) => void;
 }
 
+/**
+ * Pixels drawn per CSS pixel. At least 1.5 even on a plain (1×) laptop
+ * screen: the page is then drawn finer than shown, so small textbook print
+ * and Hindi matras stay crisp instead of soft. Capped to keep memory sane.
+ */
+function outputScale() {
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  return Math.min(3, Math.max(1.5, dpr));
+}
+
+/** Rendered pages kept for instant flips — only the most recent few. */
+const MAX_CACHED_PAGES = 8;
+function trimCache(cache: Map<string, unknown>) {
+  while (cache.size > MAX_CACHED_PAGES) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
+/** Where pdf.js finds its CJK maps and the 14 standard PDF fonts — the
+ * version must match the installed library, or text from fonts the PDF
+ * doesn't embed draws wrong. */
+function pdfAssetBase(version: string) {
+  return `https://unpkg.com/pdfjs-dist@${version}`;
+}
+
 export function NcertOriginalPageViewer({
   documentId,
   fileUrl,
@@ -55,11 +82,14 @@ export function NcertOriginalPageViewer({
   // In-memory page image cache for instant flip
   const pageCacheRef = useRef<Map<string, { canvas: HTMLCanvasElement; width: number; height: number }>>(new Map());
 
-  // Effective PDF stream endpoint
-  const pdfUrl =
-    fileUrl && (fileUrl.startsWith("http://") || fileUrl.startsWith("https://"))
-      ? fileUrl
-      : `/api/ncert/document/${documentId}/pdf`;
+  // The file streamed through our server — the "open in new tab" link and the
+  // fallback when the direct storage link can't be read from the browser.
+  // (fileUrl is no longer needed here: the route resolves the file itself.)
+  void fileUrl;
+  const pdfUrl = `/api/ncert/document/${documentId}/pdf`;
+  // Scale the visible size was last drawn at; a zoom shows the canvas
+  // stretched at once and redraws it sharp a moment later.
+  const renderedScaleRef = useRef<number>(scale);
 
   // Helper to render a specific page directly to a canvas
   const renderDirect = useCallback(
@@ -78,30 +108,49 @@ export function NcertOriginalPageViewer({
         }
       }
 
-      const page = await doc.getPage(pageNum);
+      // A cached copy at this scale (the page was preloaded): show it at once.
+      const cached = pageCacheRef.current.get(`${pageNum}_${currentScale}`);
       const ctx = targetCanvas.getContext("2d");
       if (!ctx) return;
+      const dpr = outputScale();
+      if (cached) {
+        targetCanvas.width = cached.width;
+        targetCanvas.height = cached.height;
+        targetCanvas.style.width = `${cached.width / dpr}px`;
+        targetCanvas.style.height = `${cached.height / dpr}px`;
+        ctx.drawImage(cached.canvas, 0, 0);
+        if (targetCanvas === activeCanvasRef.current) renderedScaleRef.current = currentScale;
+        return;
+      }
 
-      const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+      const page = await doc.getPage(pageNum);
       const viewport = page.getViewport({ scale: currentScale * dpr });
 
-      targetCanvas.width = viewport.width;
-      targetCanvas.height = viewport.height;
-      targetCanvas.style.width = `${viewport.width / dpr}px`;
-      targetCanvas.style.height = `${viewport.height / dpr}px`;
+      // Draw off-screen, then swap in one step — the visible page never
+      // goes blank or half-drawn while a new size renders.
+      const work = document.createElement("canvas");
+      work.width = viewport.width;
+      work.height = viewport.height;
+      const workCtx = work.getContext("2d");
+      if (!workCtx) return;
 
-      const renderContext = {
-        canvasContext: ctx,
-        viewport: viewport,
-      };
-
-      const task = page.render(renderContext);
+      const task = page.render({ canvasContext: workCtx, viewport });
       renderTaskRef.current = task;
       try {
         await task.promise;
       } catch (err: any) {
         if (err?.name !== "RenderingCancelledException") throw err;
+        return;
       }
+
+      targetCanvas.width = viewport.width;
+      targetCanvas.height = viewport.height;
+      targetCanvas.style.width = `${viewport.width / dpr}px`;
+      targetCanvas.style.height = `${viewport.height / dpr}px`;
+      ctx.drawImage(work, 0, 0);
+      if (targetCanvas === activeCanvasRef.current) renderedScaleRef.current = currentScale;
+      pageCacheRef.current.set(`${pageNum}_${currentScale}`, { canvas: work, width: work.width, height: work.height });
+      trimCache(pageCacheRef.current);
     },
     []
   );
@@ -118,8 +167,7 @@ export function NcertOriginalPageViewer({
       const ctx = offscreen.getContext("2d");
       if (!ctx) return;
 
-      const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      const viewport = page.getViewport({ scale: currentScale * dpr });
+      const viewport = page.getViewport({ scale: currentScale * outputScale() });
       offscreen.width = viewport.width;
       offscreen.height = viewport.height;
 
@@ -129,6 +177,7 @@ export function NcertOriginalPageViewer({
         width: viewport.width,
         height: viewport.height,
       });
+      trimCache(pageCacheRef.current);
     } catch {
       // Preloading error ignored
     }
@@ -158,13 +207,39 @@ export function NcertOriginalPageViewer({
         const pdfjsLib = await import("pdfjs-dist");
         pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-        const loadingTask = pdfjsLib.getDocument({
-          url: pdfUrl,
-          cMapUrl: "https://unpkg.com/pdfjs-dist@4.0.0/cmaps/",
-          cMapPacked: true,
-        });
+        const assets = pdfAssetBase(pdfjsLib.version);
+        const open = (url: string) =>
+          pdfjsLib.getDocument({
+            url,
+            cMapUrl: `${assets}/cmaps/`,
+            cMapPacked: true,
+            standardFontDataUrl: `${assets}/standard_fonts/`,
+            // Fetch only the parts of the file the shown pages need (byte
+            // ranges) rather than the whole chapter before page 1 appears.
+            disableAutoFetch: true,
+            rangeChunkSize: 256 * 1024,
+          }).promise;
 
-        const doc = await loadingTask.promise;
+        // Direct storage link first — but only when the browser may read it
+        // in parts. Chapter PDFs run to 35 MB; if storage doesn't let the
+        // page see Content-Range (its CORS settings), pdf.js would pull the
+        // whole file, and our own ranged streaming route is faster.
+        let doc: any;
+        try {
+          const res = await fetch(`${pdfUrl}?as=url`);
+          const json = res.ok ? await res.json() : null;
+          if (!json?.url) throw new Error("no direct link");
+          const probe = await fetch(json.url, { headers: { Range: "bytes=0-0" } });
+          probe.body?.cancel().catch(() => {});
+          if (probe.status !== 206 || !probe.headers.get("content-range")) {
+            throw new Error("direct link can't be read in parts");
+          }
+          doc = await open(json.url);
+        } catch (directErr) {
+          if (isCancelled) return;
+          console.warn("[NcertOriginalPageViewer] direct PDF link failed, streaming instead:", directErr);
+          doc = await open(pdfUrl);
+        }
         if (!isCancelled) {
           pdfDocRef.current = doc;
           const page = await doc.getPage(pageNumber);
@@ -175,9 +250,12 @@ export function NcertOriginalPageViewer({
           setDisplayedPage(pageNumber);
           setInitialLoading(false);
 
-          // Preload next page in background
+          // Preload the pages on either side in the background
           if (pageNumber < (totalPages || doc.numPages)) {
             preloadPage(doc, pageNumber + 1, autoScale);
+          }
+          if (pageNumber > 1) {
+            preloadPage(doc, pageNumber - 1, autoScale);
           }
         }
       } catch (err: any) {
@@ -237,17 +315,20 @@ export function NcertOriginalPageViewer({
             activeCanvas.style.width = bufferCanvas.style.width;
             activeCanvas.style.height = bufferCanvas.style.height;
             activeCtx.drawImage(bufferCanvas, 0, 0);
+            renderedScaleRef.current = scale;
           }
 
           setDisplayedPage(pageNumber);
           setIsTransitioning(false);
 
-          // Preload adjacent page
-          const nextTarget = direction === "next" ? pageNumber + 1 : pageNumber - 1;
-          if (nextTarget >= 1 && nextTarget <= (totalPages || doc.numPages)) {
-            preloadPage(doc, nextTarget, scale);
+          // Preload the next two pages in the reading direction
+          for (const step of [1, 2]) {
+            const target = direction === "next" ? pageNumber + step : pageNumber - step;
+            if (target >= 1 && target <= (totalPages || doc.numPages)) {
+              preloadPage(doc, target, scale);
+            }
           }
-        }, 320); // 320ms matching CSS transition
+        }, 160); // matches the CSS transition below
       } catch (err) {
         console.error("[NcertOriginalPageViewer] Page turn error:", err);
         setIsTransitioning(false);
@@ -262,11 +343,24 @@ export function NcertOriginalPageViewer({
     };
   }, [pageNumber, scale, initialLoading, renderDirect, totalPages, preloadPage, displayedPage]);
 
-  // 3. Handle Zoom / Scale changes on the current active page
+  // 3. Zoom: stretch the drawn page to the new size at once (smooth during a
+  // pinch), then redraw it sharp once the zoom has paused — instead of a
+  // full re-render on every step, which made pinching stutter.
   useEffect(() => {
-    if (pdfDocRef.current && !initialLoading && !isTransitioning) {
-      renderDirect(pdfDocRef.current, displayedPage, scale, activeCanvasRef.current);
+    if (!pdfDocRef.current || initialLoading || isTransitioning) return;
+    const canvas = activeCanvasRef.current;
+    if (canvas && canvas.width > 0 && renderedScaleRef.current !== scale) {
+      const ratio = scale / renderedScaleRef.current;
+      const dpr = outputScale();
+      canvas.style.width = `${(canvas.width / dpr) * ratio}px`;
+      canvas.style.height = `${(canvas.height / dpr) * ratio}px`;
     }
+    const timer = setTimeout(() => {
+      if (pdfDocRef.current) {
+        renderDirect(pdfDocRef.current, displayedPage, scale, activeCanvasRef.current);
+      }
+    }, 140);
+    return () => clearTimeout(timer);
   }, [scale, displayedPage, initialLoading, isTransitioning, renderDirect]);
 
   useEffect(() => {
@@ -553,7 +647,7 @@ export function NcertOriginalPageViewer({
         >
           {/* Active / Current Page Canvas Container */}
           <div
-            className={`bg-white shadow-[0_20px_50px_rgba(0,0,0,0.5)] rounded-sm border border-slate-700/80 overflow-hidden transition-all duration-300 ease-out origin-center ${
+            className={`bg-white shadow-[0_20px_50px_rgba(0,0,0,0.5)] rounded-sm border border-slate-700/80 overflow-hidden transition-all duration-150 ease-out origin-center ${
               isTransitioning
                 ? turnDirection === "next"
                   ? "opacity-40 scale-[0.98] -translate-x-3 rotate-y-[-6deg]"

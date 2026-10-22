@@ -10,6 +10,7 @@ import {
 import { generatePageQuestions, type CandidateNcertQuestion } from "./ai-generator";
 import { validateNcertQuestion } from "./question-validator";
 import { generateQuestionId } from "@/lib/questions/id-generator";
+import { waitUntil } from "@vercel/functions";
 
 async function resolveSafeUserId(userId?: string | null): Promise<string | null> {
   try {
@@ -363,12 +364,40 @@ export async function getOrGeneratePageQuestionPool(
   });
 
   if (existing.length > 0) {
-    // Proactively ensure existing questions are in Question Bank
-    syncExistingPageQuestionsToQuestionBank(pageId, existing, userId).catch((err) => {
-      console.warn("[NCERT Question Pool] Background Question Bank sync error:", err);
-    });
+    // Pools made before Question Bank streaming existed still need copying
+    // over — once per page per server instance, off the request path. Doing
+    // it on every request ran one text search per question each time.
+    const syncKey = `${pageId}:${poolSet}`;
+    if (!syncedPools.has(syncKey)) {
+      syncedPools.add(syncKey);
+      waitUntil(
+        syncExistingPageQuestionsToQuestionBank(pageId, existing, userId).catch((err) => {
+          console.warn("[NCERT Question Pool] Background Question Bank sync error:", err);
+        })
+      );
+    }
     return existing;
   }
+
+  // The next page is prepared in the background while the student reads
+  // this one; when they arrive before it finishes, wait for that same run
+  // instead of asking the AI a second time.
+  const key = `${pageId}:${poolSet}`;
+  const running = inflightPools.get(key);
+  if (running) return running;
+  const run = generatePagePool(pageId, poolSet, userId).finally(() => inflightPools.delete(key));
+  inflightPools.set(key, run);
+  return run;
+}
+
+const inflightPools = new Map<string, Promise<NcertPageQuestion[]>>();
+const syncedPools = new Set<string>();
+
+async function generatePagePool(
+  pageId: string,
+  poolSet: number,
+  userId?: string | null
+): Promise<NcertPageQuestion[]> {
 
   // 2. Fetch page and metadata
   const page = await prisma.ncertPage.findUnique({
@@ -465,20 +494,32 @@ export async function getOrGeneratePageQuestionPool(
     return [];
   }
 
+  // Another server instance may have prepared this same set while the AI
+  // was answering (a background prepare and the student's own request) —
+  // keep the first set rather than storing two.
+  const raced = await prisma.ncertPageQuestion.findMany({
+    where: { pageId, poolSet, verificationStatus: NCERTVerificationStatus.APPROVED },
+    orderBy: { createdAt: "asc" },
+  });
+  if (raced.length > 0) return raced;
+
   // 5. Store in DB
   await prisma.ncertPageQuestion.createMany({
     data: approvedRows,
   });
 
-  // 6. Automatically stream verified NCERT questions to central Question Bank
-  await streamNcertQuestionsToQuestionBank({
-    document: page.document,
-    pageNumber: page.pageNumber,
-    questions: approvedCandidates,
-    userId: userId || page.document.uploadedById,
-  }).catch((err) => {
-    console.warn("[NCERT Question Pool] Background Question Bank stream error:", err);
-  });
+  // 6. Copy the verified questions to the central Question Bank after the
+  // response — the student shouldn't wait for it.
+  waitUntil(
+    streamNcertQuestionsToQuestionBank({
+      document: page.document,
+      pageNumber: page.pageNumber,
+      questions: approvedCandidates,
+      userId: userId || page.document.uploadedById,
+    }).catch((err) => {
+      console.warn("[NCERT Question Pool] Background Question Bank stream error:", err);
+    })
+  );
 
   return prisma.ncertPageQuestion.findMany({
     where: { pageId, poolSet, verificationStatus: NCERTVerificationStatus.APPROVED },
