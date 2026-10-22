@@ -104,11 +104,19 @@ export async function predictNEETRank({
   const refs = dataset.references;
 
   // 3. Exact reference check
-  const exactMatch = refs.find((r) => Math.abs(r.marks - clampedScore) < 0.01);
+  // Several ranks can share one score (e.g. ranks 20-35 all scored 700), and
+  // refs are only ordered by marks, so a bare find() returned an arbitrary one.
+  const ties = refs.filter((r) => Math.abs(r.marks - clampedScore) < 0.01);
+  const exactMatch = ties.length
+    ? ties.reduce((worst, r) => (r.neetRank > worst.neetRank ? r : worst))
+    : undefined;
   if (exactMatch) {
+    const tiedMinRank = Math.min(...ties.map((r) => r.neetRank));
     const rangeSpan = Math.max(50, Math.round(exactMatch.neetRank * 0.05));
-    const minAIR = Math.max(1, exactMatch.neetRank - Math.round(rangeSpan / 2));
-    const maxAIR = exactMatch.neetRank + Math.round(rangeSpan / 2);
+    const minAIR =
+      ties.length > 1 ? tiedMinRank : Math.max(1, exactMatch.neetRank - Math.round(rangeSpan / 2));
+    const maxAIR =
+      ties.length > 1 ? exactMatch.neetRank : exactMatch.neetRank + Math.round(rangeSpan / 2);
 
     const catPrediction = evaluateCategoryRank(
       category,

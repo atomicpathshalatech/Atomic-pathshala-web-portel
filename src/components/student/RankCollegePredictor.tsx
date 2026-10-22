@@ -55,6 +55,7 @@ export function RankCollegePredictor() {
   const [rankCategory, setRankCategory] = useState("General");
   const [rankLoading, setRankLoading] = useState(false);
   const [prediction, setPrediction] = useState<NEETPredictionData | null>(null);
+  const [rankError, setRankError] = useState<string | null>(null);
 
   // College predictor state
   const [rank, setRank] = useState("");
@@ -67,6 +68,7 @@ export function RankCollegePredictor() {
     e.preventDefault();
     setRankLoading(true);
     setPrediction(null);
+    setRankError(null);
     try {
       const res = await fetch(
         `/api/predictor/rank?marks=${encodeURIComponent(marks)}&category=${encodeURIComponent(rankCategory)}`
@@ -74,7 +76,11 @@ export function RankCollegePredictor() {
       const body = await res.json();
       if (res.ok && body.success && body.data?.prediction) {
         setPrediction(body.data.prediction);
+      } else {
+        setRankError(body?.error || "Could not predict rank right now. Please try again.");
       }
+    } catch {
+      setRankError("Network error. Please check your connection and try again.");
     } finally {
       setRankLoading(false);
     }
@@ -178,6 +184,10 @@ export function RankCollegePredictor() {
               <span>{rankLoading ? "Predicting..." : "Predict NEET AIR"}</span>
             </button>
           </form>
+
+          {rankError && (
+            <p className="text-xs font-semibold text-red-600 dark:text-red-400">{rankError}</p>
+          )}
 
           {/* Prediction Result Display */}
           {prediction && (
