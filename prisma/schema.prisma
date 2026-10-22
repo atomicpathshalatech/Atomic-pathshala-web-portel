@@ -283,6 +283,7 @@ model Student {
   // bound to a BatchSchedule) and a standalone TestSeries/Dpp attempt — see
   // the Test / Dpp models below for why one Attempt model spans both.
   attempts  Attempt[]
+  testReattempts TestReattempt[]
   testAnalyses TestAttemptAnalysis[]
   bookmarks Bookmark[]
   lectureProgress LectureProgress[]
@@ -928,6 +929,7 @@ model Test {
   createdBy     User?          @relation("TestCreatedBy", fields: [createdById], references: [id])
   sections      Section[]
   attempts      Attempt[]
+  reattempts    TestReattempt[]
   exercises     Exercise[]
 
   @@index([status])
@@ -1002,6 +1004,29 @@ model Attempt {
   @@index([testId])
   @@index([studentId])
   @@map("attempts")
+}
+
+/// A student's 2nd, 3rd… sitting of a test / DPP / chapter test, for practice.
+/// Kept apart from Attempt on purpose: the first attempt alone is ranked and
+/// feeds leaderboards, analytics and reports; these never do. Answers are a
+/// questionId → chosen option map.
+model TestReattempt {
+  id            String        @id @default(cuid())
+  testId        String
+  studentId     String
+  attemptNumber Int
+  status        AttemptStatus @default(IN_PROGRESS)
+  answers       Json          @default("{}")
+  startedAt     DateTime      @default(now())
+  submittedAt   DateTime?
+  score         Float?
+
+  test    Test    @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, studentId, attemptNumber])
+  @@index([studentId])
+  @@map("test_reattempts")
 }
 
 model AttemptAnswer {

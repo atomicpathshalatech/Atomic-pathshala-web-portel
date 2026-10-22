@@ -220,10 +220,8 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
  * Deterministic calculation of complete NTA-grade test performance analysis.
  * Generates and stores the complete analysis payload into the database.
  */
-export async function calculateAndStoreTestAnalysis(
-  attemptId: string
-): Promise<FullTestAnalysisResult | null> {
-  const attempt = await prisma.attempt.findUnique({
+function loadAttemptForAnalysis(attemptId: string) {
+  return prisma.attempt.findUnique({
     where: { id: attemptId },
     include: {
       test: {
@@ -250,9 +248,38 @@ export async function calculateAndStoreTestAnalysis(
       student: { select: { id: true, targetExam: true, user: { select: { name: true } } } },
     },
   });
+}
 
+type LoadedAttempt = NonNullable<Awaited<ReturnType<typeof loadAttemptForAnalysis>>>;
+
+/**
+ * What the analysis reads from an attempt. A re-attempt (practice, kept in
+ * TestReattempt) supplies the same shape so it gets the very same result
+ * dashboard; it is analysed in memory and never stored.
+ */
+export type AttemptForAnalysis = Pick<LoadedAttempt, "id" | "studentId" | "submittedAt" | "student"> & {
+  test: NonNullable<LoadedAttempt["test"]>;
+  answers: Array<Pick<LoadedAttempt["answers"][number], "questionId" | "selectedOptionIds" | "timeTakenSec">>;
+};
+
+export async function calculateAndStoreTestAnalysis(
+  attemptId: string
+): Promise<FullTestAnalysisResult | null> {
+  const attempt = await loadAttemptForAnalysis(attemptId);
   if (!attempt || !attempt.test) return null;
+  return analyseAttempt({ ...attempt, test: attempt.test }, { persist: true });
+}
 
+/**
+ * The analysis of one attempt. persist:false (re-attempts) computes it only;
+ * rank/percentile then say where that score would place among the
+ * first attempts — re-attempts never enter the ranking.
+ */
+export async function analyseAttempt(
+  attempt: AttemptForAnalysis,
+  opts: { persist: boolean }
+): Promise<FullTestAnalysisResult> {
+  const attemptId = attempt.id;
   const test = attempt.test;
   const answersMap = new Map(attempt.answers.map((a) => [a.questionId, a]));
   const sectionQuestions = test.sections.flatMap((s) => {
@@ -916,7 +943,7 @@ export async function calculateAndStoreTestAnalysis(
       : Math.round(((totalParticipants - atomicTestRank) / (totalParticipants - 1)) * 10000) / 100;
 
   // Persist into TestAttemptAnalysis table (Idempotent Upsert)
-  await prisma.testAttemptAnalysis.upsert({
+  if (opts.persist) await prisma.testAttemptAnalysis.upsert({
     where: { attemptId },
     create: {
       attemptId,

@@ -127,6 +127,22 @@ export function AtomicPracticeTestArena({
   }, []);
 
   const activeSubjectData = subjectTests.find((s) => s.name === selectedSubject) || subjectTests[0];
+  // Chemistry / Biology are split into branches — offered in a dropdown, not a row of big pills.
+  const branchOptions =
+    selectedSubject === "Chemistry"
+      ? [
+          { id: "ALL", label: "All Chemistry" },
+          { id: "PHYSICAL", label: "Physical" },
+          { id: "INORGANIC", label: "Inorganic" },
+          { id: "ORGANIC", label: "Organic" },
+        ]
+      : selectedSubject === "Biology"
+      ? [
+          { id: "ALL", label: "All Biology" },
+          { id: "BOTANY", label: "Botany" },
+          { id: "ZOOLOGY", label: "Zoology" },
+        ]
+      : [];
 
   const handleSubjectChange = (name: string) => {
     setSelectedSubject(name);
@@ -283,199 +299,55 @@ export function AtomicPracticeTestArena({
       {/* ========================================================================= */}
       {currentView === "CHAPTERWISE_CHAPTERS" && (
         <div className="space-y-4">
-          {/* Top Navigation Bar with Back button, breadcrumbs, and quick subject switcher */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-4 shadow-2xs">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setCurrentView("CHAPTERWISE_SUBJECTS")}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer shrink-0"
-              >
-                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                <span>Subjects</span>
-              </button>
-              <div>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentView("CHAPTERWISE_SUBJECTS")}
-                    className="hover:text-emerald-600 transition-colors"
-                  >
-                    Tests
-                  </button>
-                  <span>/</span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentView("CHAPTERWISE_SUBJECTS")}
-                    className="hover:text-emerald-600 transition-colors"
-                  >
-                    Chapter Wise
-                  </button>
-                  <span>/</span>
-                  <span className="text-slate-900 font-bold">{activeSubjectData?.name}</span>
-                </div>
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2 mt-0.5">
-                  <span className={`material-symbols-outlined text-lg ${activeSubjectData?.color || "text-emerald-600"}`}>
-                    {activeSubjectData?.icon || "science"}
-                  </span>
-                  <span>{activeSubjectData?.name} Chapters &amp; Tests</span>
-                </h2>
-              </div>
-            </div>
+          {/* One slim toolbar: back · subject · branch · search */}
+          <div className="flex items-center gap-2 flex-wrap bg-white border border-slate-200/80 rounded-xl px-2 py-1.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setCurrentView("CHAPTERWISE_SUBJECTS")}
+              className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 cursor-pointer"
+              title="All subjects"
+              aria-label="Back to subjects"
+            >
+              <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+            </button>
 
-            {/* Quick Switcher Between Subjects */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 self-start sm:self-auto">
-              {subjectTests.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => handleSubjectChange(s.name)}
-                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    selectedSubject === s.name
-                      ? "bg-white text-slate-900 shadow-2xs font-extrabold"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  {s.name}
-                </button>
-              ))}
-            </div>
-          </div>
+            <CompactSelect
+              label="Subject"
+              value={selectedSubject}
+              onChange={handleSubjectChange}
+              options={subjectTests.map((s) => ({ value: s.name, label: s.name, count: s.chapters.length }))}
+            />
 
-          {/* Sub-branch Selector Pills (Only for Chemistry & Biology) */}
-          {selectedSubject === "Chemistry" && (
-            <div className="bg-amber-50/70 border border-amber-200/70 rounded-2xl p-2.5 shadow-2xs flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold text-amber-900 px-2 py-1 flex items-center gap-1">
-                <span className="material-symbols-outlined text-[16px] text-amber-600">tune</span>
-                Branch:
-              </span>
-              {[
-                { id: "ALL", label: "All Chemistry", icon: "science" },
-                { id: "PHYSICAL", label: "Physical Chemistry", icon: "hourglass_bottom" },
-                { id: "INORGANIC", label: "Inorganic Chemistry", icon: "hub" },
-                { id: "ORGANIC", label: "Organic Chemistry", icon: "grain" },
-              ].map((b) => {
-                const isBranchActive = selectedBranch === b.id;
-                const count =
-                  b.id === "ALL"
-                    ? activeSubjectData?.chapters.length || 0
-                    : activeSubjectData?.chapters.filter((c) => c.branch === b.id).length || 0;
+            {branchOptions.length > 0 && (
+              <CompactSelect
+                label="Branch"
+                value={selectedBranch}
+                onChange={setSelectedBranch}
+                options={branchOptions.map((b) => ({
+                  value: b.id,
+                  label: b.label,
+                  count:
+                    b.id === "ALL"
+                      ? activeSubjectData?.chapters.length || 0
+                      : activeSubjectData?.chapters.filter((c) => c.branch === b.id).length || 0,
+                }))}
+              />
+            )}
 
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => setSelectedBranch(b.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isBranchActive
-                        ? "bg-amber-600 text-white shadow-2xs"
-                        : "bg-white hover:bg-amber-100/60 text-slate-700 border border-amber-200/80"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[15px]">{b.icon}</span>
-                    <span>{b.label}</span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                        isBranchActive ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {selectedSubject === "Biology" && (
-            <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-2xl p-2.5 shadow-2xs flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold text-emerald-900 px-2 py-1 flex items-center gap-1">
-                <span className="material-symbols-outlined text-[16px] text-emerald-600">tune</span>
-                Branch:
-              </span>
-              {[
-                { id: "ALL", label: "All Biology", icon: "biotech" },
-                { id: "BOTANY", label: "Botany", icon: "eco" },
-                { id: "ZOOLOGY", label: "Zoology", icon: "pets" },
-              ].map((b) => {
-                const isBranchActive = selectedBranch === b.id;
-                const count =
-                  b.id === "ALL"
-                    ? activeSubjectData?.chapters.length || 0
-                    : activeSubjectData?.chapters.filter((c) => c.branch === b.id).length || 0;
-
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => setSelectedBranch(b.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isBranchActive
-                        ? "bg-emerald-600 text-white shadow-2xs"
-                        : "bg-white hover:bg-emerald-100/60 text-slate-700 border border-emerald-200/80"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[15px]">{b.icon}</span>
-                    <span>{b.label}</span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                        isBranchActive ? "bg-white/25 text-white" : "bg-emerald-100 text-emerald-800"
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Search Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-2xs">
-            <div className="flex items-center gap-2.5">
-              <span className={`material-symbols-outlined text-2xl ${activeSubjectData?.color || "text-orange-500"}`}>
-                {activeSubjectData?.icon || "science"}
-              </span>
-              <div>
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
-                  {activeSubjectData?.name || "Subject"}{" "}
-                  {selectedBranch !== "ALL"
-                    ? `· ${
-                        selectedBranch === "PHYSICAL"
-                          ? "Physical Chemistry"
-                          : selectedBranch === "INORGANIC"
-                          ? "Inorganic Chemistry"
-                          : selectedBranch === "ORGANIC"
-                          ? "Organic Chemistry"
-                          : selectedBranch === "BOTANY"
-                          ? "Botany"
-                          : "Zoology"
-                      }`
-                    : ""}{" "}
-                  — Chapterwise Practice Tests
-                </h2>
-                <p className="text-[11px] text-slate-500">
-                  Tests automatically added as chapters and subjects are created in your batch.
-                </p>
-              </div>
-            </div>
-
-            <div className="relative w-full sm:w-64">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
-                search
-              </span>
+            <div className="relative flex-1 min-w-[140px]">
+              <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[17px]">search</span>
               <input
                 type="text"
                 value={chapterSearch}
                 onChange={(e) => setChapterSearch(e.target.value)}
-                placeholder="Search chapter or test..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                placeholder="Search chapter or test"
+                className="w-full h-8 pl-8 pr-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               />
             </div>
           </div>
 
           {/* Chapters Accordion */}
-          <div className="space-y-3">
+          <div className="space-y-1.5">
             {filteredChapters.length === 0 ? (
               <div className="bg-white rounded-2xl p-10 text-center text-slate-500 space-y-1.5 border border-slate-200/80">
                 <span className="material-symbols-outlined text-4xl text-slate-300">quiz</span>
@@ -492,27 +364,27 @@ export function AtomicPracticeTestArena({
               </div>
             ) : (
               filteredChapters.map((chapter) => {
-                const isExpanded = expandedChapters[chapter.id] !== false; // Default expanded
+                const isExpanded = expandedChapters[chapter.id] === true; // Collapsed by default — a compact list of chapters
                 const completed = chapter.tests.filter((t) => t.status === "COMPLETED").length;
 
                 return (
                   <div
                     key={chapter.id}
-                    className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-2xs transition-all"
+                    className="bg-white border border-slate-200/80 rounded-xl overflow-hidden transition-all hover:border-slate-300"
                   >
                     <button
                       type="button"
                       onClick={() => toggleChapter(chapter.id)}
-                      className="w-full flex items-center justify-between p-3.5 sm:p-4 text-left hover:bg-slate-50/80 transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-50/80 transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-7 h-7 rounded-lg bg-orange-50 text-orange-600 font-bold text-xs flex items-center justify-center shrink-0 border border-orange-200/60">
+                        <span className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 font-bold text-[11px] flex items-center justify-center shrink-0">
                           {chapter.chapterNumber}
                         </span>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                              Chapter {chapter.chapterNumber}: {chapter.title}
+                              {chapter.title}
                             </h3>
                             {chapter.branchLabel && (
                               <span
@@ -532,9 +404,6 @@ export function AtomicPracticeTestArena({
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-500">
-                            {chapter.tests.length} Test{chapter.tests.length === 1 ? "" : "s"} &middot; {completed}/{chapter.tests.length} Completed
-                          </p>
                         </div>
                       </div>
 
@@ -882,5 +751,47 @@ export function AtomicPracticeTestArena({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A small, tidy dropdown for the chapter-test toolbar: label + current value
+ * in one pill, the native select on top (keyboard/touch friendly, opens the
+ * phone's own picker).
+ */
+function CompactSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string; count?: number }>;
+}) {
+  const current = options.find((o) => o.value === value) ?? options[0];
+  return (
+    <label className="relative inline-flex items-center gap-1.5 h-8 pl-2.5 pr-7 rounded-lg border border-slate-200 bg-white hover:border-slate-300 text-xs cursor-pointer shrink-0 focus-within:ring-2 focus-within:ring-blue-500/30">
+      <span className="text-slate-400 font-semibold">{label}</span>
+      <span className="font-bold text-slate-900">{current?.label}</span>
+      {typeof current?.count === "number" && (
+        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 rounded px-1">{current.count}</span>
+      )}
+      <span className="material-symbols-outlined absolute right-1.5 text-[18px] text-slate-400 pointer-events-none">expand_more</span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 opacity-0 cursor-pointer"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+            {typeof o.count === "number" ? ` (${o.count})` : ""}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

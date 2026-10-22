@@ -8,12 +8,20 @@ import { StudentResultDashboard } from "@/components/student/result/StudentResul
 import { DppResultDashboard } from "@/components/student/result/DppResultDashboard";
 import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
 import { formatISTDateTime } from "@/lib/date-utils";
+import { AttemptSwitcher, type AttemptPill } from "@/components/student/result/AttemptSwitcher";
+import { MAX_REATTEMPTS, analyseReattempt } from "@/lib/test-engine/reattempts";
 
 export const metadata: Metadata = {
   title: "Test Result & AIR Detailed Analytics | Atomic Pathshala",
 };
 
-export default async function TestResultPage({ params }: { params: { id: string } }) {
+export default async function TestResultPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: { attempt?: string };
+}) {
   const { session } = await requireStudentSession();
 
   const test = await prisma.test.findUnique({
@@ -56,7 +64,28 @@ export default async function TestResultPage({ params }: { params: { id: string 
     );
   }
 
-  const analysis = await getStoredTestAnalysis(attempt.id);
+  // Attempt 1 (ranked) + practice re-attempts; ?attempt=n picks which one is shown.
+  const reattempts = await prisma.testReattempt.findMany({
+    where: { testId: test.id, studentId: student.id },
+    orderBy: { attemptNumber: "asc" },
+  });
+  const pills: AttemptPill[] = [
+    { n: 1, score: attempt.score ?? null },
+    ...reattempts.map((r) => ({ n: r.attemptNumber, score: r.score ?? null, inProgress: r.status === "IN_PROGRESS" })),
+  ];
+  const wanted = Number(searchParams?.attempt) || 1;
+  const shownRe = wanted > 1 ? reattempts.find((r) => r.attemptNumber === wanted && r.status !== "IN_PROGRESS") : undefined;
+  const current = shownRe ? shownRe.attemptNumber : 1;
+  const switcher = (
+    <AttemptSwitcher
+      testId={test.id}
+      attempts={pills}
+      current={current}
+      reattemptsLeft={Math.max(0, MAX_REATTEMPTS - reattempts.length)}
+    />
+  );
+
+  const analysis = shownRe ? await analyseReattempt(shownRe) : await getStoredTestAnalysis(attempt.id);
   if (!analysis) {
     return (
       <div className="max-w-xl mx-auto py-20 text-center space-y-3">
@@ -68,9 +97,10 @@ export default async function TestResultPage({ params }: { params: { id: string 
     );
   }
 
-  if (analysis.isDpp) {
-    return <DppResultDashboard analysis={analysis} />;
-  }
-
-  return <StudentResultDashboard analysis={analysis} />;
+  return (
+    <>
+      {switcher}
+      {analysis.isDpp ? <DppResultDashboard analysis={analysis} /> : <StudentResultDashboard analysis={analysis} />}
+    </>
+  );
 }

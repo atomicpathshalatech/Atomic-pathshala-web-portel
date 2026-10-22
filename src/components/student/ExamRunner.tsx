@@ -130,11 +130,19 @@ function formatClock(totalSec: number) {
 export function ExamRunner({
   testId,
   initialData,
+  apiBase,
+  resultHref,
 }: {
   testId: string;
   initialData?: ExamAttemptData;
+  /** Where this attempt's endpoints live — a re-attempt uses /reattempts/:n. */
+  apiBase?: string;
+  /** Where to go after submitting. */
+  resultHref?: string;
 }) {
   const router = useRouter();
+  const base = apiBase ?? `/api/tests/${testId}/attempts/my`;
+  const resultUrl = resultHref ?? `/tests/${testId}/result`;
   const [data, setData] = useState<ExamAttemptData | null>(initialData || null);
   const [loading, setLoading] = useState(!initialData);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -204,7 +212,7 @@ export function ExamRunner({
   // 1. Fetch or initialize attempt data
   const loadData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/tests/${testId}/attempts/my`);
+      const res = await fetch(base);
       const json = await res.json();
       if (!res.ok || !json.success) {
         setLoadError(json.error ?? "Could not load exam data.");
@@ -212,7 +220,7 @@ export function ExamRunner({
       }
       const d: ExamAttemptData = json.data;
       if (d.attempt.status !== "IN_PROGRESS") {
-        router.replace(`/tests/${testId}/result`);
+        router.replace(resultUrl);
         return;
       }
       setData(d);
@@ -222,7 +230,7 @@ export function ExamRunner({
     } finally {
       setLoading(false);
     }
-  }, [testId, router, startFrom]);
+  }, [base, resultUrl, router, startFrom]);
 
   useEffect(() => {
     if (!initialData) {
@@ -321,7 +329,7 @@ export function ExamRunner({
       if (phase !== "RUNNING" || submittedRef.current) return;
       setViolationsCount((prev) => prev + 1);
       try {
-        await fetch(`/api/tests/${testId}/attempts/my/violations`, {
+        await fetch(`${base}/violations`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ type }),
@@ -330,7 +338,7 @@ export function ExamRunner({
         // Silently log
       }
     },
-    [testId, phase]
+    [base, phase]
   );
 
   useEffect(() => {
@@ -377,7 +385,7 @@ export function ExamRunner({
           const value = unsavedRef.current[questionId] ?? null;
           let outcome: "saved" | "retry" | "give-up" = "retry";
           try {
-            const res = await fetch(`/api/tests/${testId}/attempts/my/answers`, {
+            const res = await fetch(`${base}/answers`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ questionId, selectedOption: value }),
@@ -406,7 +414,7 @@ export function ExamRunner({
         sendingRef.current.delete(questionId);
       }
     },
-    [testId, markUnsaved]
+    [base, markUnsaved]
   );
 
   const persistAnswerToServer = (questionId: string, selectedOption: string | null) => {
@@ -539,7 +547,7 @@ export function ExamRunner({
       for (let i = 0; i < 20 && sendingRef.current.size > 0 && Object.keys(unsavedRef.current).length > 0; i++) await wait(250);
       // The submit carries every answer shown on this screen, so nothing the
       // student chose is lost even if a save above never got through.
-      const res = await fetch(`/api/tests/${testId}/attempts/my/submit`, {
+      const res = await fetch(`${base}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: answersRef.current }),
@@ -559,7 +567,7 @@ export function ExamRunner({
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
-      router.replace(`/tests/${testId}/result`);
+      router.replace(resultUrl);
     } catch {
       setSubmitError("Network error while submitting. Please try again.");
       submittedRef.current = false;

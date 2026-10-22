@@ -6,13 +6,21 @@ import { resolveStudentForTest } from "@/lib/test-series/access";
 import { computeDeadlineMs } from "@/lib/test-engine/scoring";
 import { toLegacyQuestion } from "@/lib/questions/legacy";
 import { ExamRunner } from "@/components/student/ExamRunner";
+import { examQuestions, finalizeReattempt, reattemptAnswers, reattemptDeadlineMs } from "@/lib/test-engine/reattempts";
 
 export const metadata: Metadata = {
   title: "Live CBT Exam Room | Atomic Pathshala",
 };
 
-export default async function TestAttemptPage({ params }: { params: { id: string } }) {
+export default async function TestAttemptPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: { re?: string };
+}) {
   const { session } = await requireStudentSession();
+  const reNumber = Number(searchParams?.re) || 0;
 
   const test = await prisma.test.findUnique({
     where: { id: params.id },
@@ -43,6 +51,43 @@ export default async function TestAttemptPage({ params }: { params: { id: string
 
   const { student } = await resolveStudentForTest(session.user.id, test);
   if (!student) redirect("/tests");
+
+  // A practice re-attempt (Attempt 2, 3, …): same exam room, its own answers.
+  if (reNumber >= 2) {
+    let re = await prisma.testReattempt.findUnique({
+      where: { testId_studentId_attemptNumber: { testId: test.id, studentId: student.id, attemptNumber: reNumber } },
+    });
+    if (!re) redirect(`/tests/${test.id}/result`);
+    const reDeadline = reattemptDeadlineMs(re.startedAt, test.durationMin);
+    if (re.status === "IN_PROGRESS" && Date.now() > reDeadline) re = (await finalizeReattempt(re.id, true)) ?? re;
+    if (re.status !== "IN_PROGRESS") redirect(`/tests/${test.id}/result?attempt=${reNumber}`);
+    const reUser = await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, photoUrl: true } });
+    return (
+      <ExamRunner
+        testId={test.id}
+        apiBase={`/api/tests/${test.id}/reattempts/${reNumber}`}
+        resultHref={`/tests/${test.id}/result?attempt=${reNumber}`}
+        initialData={{
+          attempt: {
+            id: re.id,
+            status: re.status,
+            startedAt: re.startedAt.toISOString(),
+            deadlineAt: new Date(reDeadline).toISOString(),
+          },
+          test: {
+            id: test.id,
+            title: `${test.name} · Attempt ${reNumber}`,
+            instructions: test.instructions,
+            durationMin: test.durationMin,
+            targetExam: test.batchSchedule?.batch.targetExam || test.testSeries?.course || test.examType || "NEET UG",
+          },
+          questions: examQuestions(test, reattemptAnswers(re.answers)),
+          candidateName: reUser?.name || "Student",
+          candidatePhoto: reUser?.photoUrl || null,
+        }}
+      />
+    );
+  }
 
   const now = new Date();
   // Batch-scheduled tests respect class window; test series tests respect openTime/closeTime
