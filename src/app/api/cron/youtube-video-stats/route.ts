@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { allClassVideoIds } from "@/lib/teaching/stats";
 import { refreshYoutubeVideoStats } from "@/lib/youtube/video-stats";
+import { purgeOldYoutubeChat } from "@/lib/whiteboard/youtube-chat-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,14 +17,19 @@ function isAuthorized(req: NextRequest): boolean {
 /**
  * Daily: refreshes length + view count of every class video from YouTube
  * (teachers' teaching time for recorded classes and their view totals).
- * ~1 quota unit per 50 videos.
+ * ~1 quota unit per 50 videos. Also deletes stored YouTube live-chat comments
+ * older than 30 days (YouTube API Services data-retention rule).
  */
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
+    const purgedChat = await purgeOldYoutubeChat().catch((err) => {
+      console.error("[cron_youtube_chat_purge]", err);
+      return null;
+    });
     const ids = await allClassVideoIds();
     const result = await refreshYoutubeVideoStats(ids);
-    return NextResponse.json({ videos: ids.length, ...result });
+    return NextResponse.json({ videos: ids.length, purgedChat, ...result });
   } catch (err) {
     console.error("[cron_youtube_video_stats]", err);
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : "failed" }, { status: 500 });

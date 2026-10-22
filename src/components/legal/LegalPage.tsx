@@ -13,7 +13,7 @@ export const LEGAL = {
   phone: "+91 76685 43654",
   grievanceOfficer: "Firoz Ali",
   grievanceDesignation: "Founder & Director",
-  updated: "3 October 2026",
+  updated: "23 October 2026",
 };
 
 export type LegalSection = { id: string; title: string; body: ReactNode };

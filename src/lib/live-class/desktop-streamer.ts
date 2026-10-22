@@ -11,6 +11,7 @@
  */
 import type { AtomicDesktopBridge, DesktopEncoderStatus } from "@/lib/desktop/bridge";
 import { StageCompositor, type StageSources } from "@/lib/live-class/stage-compositor";
+import { loadStreamDevices } from "@/lib/live-class/stream-devices";
 import { sanitizeChroma, type ChromaSettings } from "@/lib/live-class/chroma-key";
 
 const RECORDER_TYPES = ["video/webm;codecs=h264,opus", "video/webm;codecs=vp8,opus", "video/webm"];
@@ -144,7 +145,9 @@ export class DesktopClassStreamer {
     const compositor = new StageCompositor({ width: 1920, height: 1080, fps: 30 });
     this.compositor = compositor;
     compositor.setSources(this.currentSources());
-    const stage = await compositor.start({ camera: true, microphone: true });
+    // The camera + mic the teacher picked in the class setup (not just
+    // Windows' defaults) — see stream-devices.ts.
+    const stage = await compositor.start({ camera: true, microphone: true, ...loadStreamDevices() });
     // Video from the stage, audio from the mix (teacher mic + any call).
     const stream = new MediaStream([...stage.getVideoTracks(), this.buildAudioMix(stage)]);
     this.stream = stream;

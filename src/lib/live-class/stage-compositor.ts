@@ -502,7 +502,9 @@ export class StageCompositor {
             width: { ideal: 1280 },
             height: { ideal: 720 },
             frameRate: { ideal: this.fps },
-            ...(media.cameraDeviceId ? { deviceId: { exact: media.cameraDeviceId } } : {}),
+            // ideal, not exact: a camera that was unplugged since it was
+            // picked falls back to the default instead of no camera at all.
+            ...(media.cameraDeviceId ? { deviceId: { ideal: media.cameraDeviceId } } : {}),
           },
           audio: false,
         });
@@ -524,7 +526,7 @@ export class StageCompositor {
         mic = await navigator.mediaDevices.getUserMedia({
           audio: {
             ...MIC_CONSTRAINTS,
-            ...(media.microphoneDeviceId ? { deviceId: { exact: media.microphoneDeviceId } } : {}),
+            ...(media.microphoneDeviceId ? { deviceId: { ideal: media.microphoneDeviceId } } : {}),
           },
           video: false,
         });
@@ -532,7 +534,7 @@ export class StageCompositor {
         // Fallback to standard audio constraints if strict constraints fail on the device
         try {
           mic = await navigator.mediaDevices.getUserMedia({
-            audio: media.microphoneDeviceId ? { deviceId: { exact: media.microphoneDeviceId } } : true,
+            audio: media.microphoneDeviceId ? { deviceId: { ideal: media.microphoneDeviceId } } : true,
             video: false,
           });
         } catch (fallbackErr) {

@@ -100,9 +100,17 @@ function registerStageIpc({ ipcMain, trustedSender, preloadPath }) {
     if (typeof opts.streamKey !== "string" || !opts.streamKey) throw new Error("streamKey is required.");
     const job = { serverUrl: opts.serverUrl, streamKey: opts.streamKey, profile: opts.profile === "720p" ? "720p" : "1080p" };
 
-    // Already sending this class (e.g. the teacher page was refreshed): keep
-    // the running stage — the stream is never interrupted by a reload.
-    if (stage && !stage.win.isDestroyed() && stage.stagePath === stagePath) {
+    // Already sending this class to this same key (e.g. the teacher page was
+    // refreshed): keep the running stage — a reload never interrupts the
+    // stream. A different key or server (the teacher corrected a wrong key)
+    // needs a fresh stage, or it would keep sending to the old one.
+    if (
+      stage &&
+      !stage.win.isDestroyed() &&
+      stage.stagePath === stagePath &&
+      stage.job.serverUrl === job.serverUrl &&
+      stage.job.streamKey === job.streamKey
+    ) {
       stage.job = job;
       return { opened: true, reused: true };
     }

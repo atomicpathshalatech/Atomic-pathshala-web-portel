@@ -74,10 +74,18 @@ export default function PrivacyPolicyPage() {
               <ul>
                 <li>Only our own YouTube channel is connected (by our staff, through Google sign-in). Students are never asked to connect a YouTube or Google account.</li>
                 <li>We create, start and end live broadcasts and streams for our classes, read the live chat of our own broadcasts so the teacher can see students&apos; questions, and read the status, duration and view counts of our own videos.</li>
-                <li>We do not access, collect or store any information about students&apos; YouTube or Google accounts.</li>
+                <li>We do not access YouTube or Google accounts of students or viewers, and we never ask for their sign-in.</li>
               </ul>
-              <p><b>What we store:</b> the IDs of our broadcasts, streams and videos, their live/recording status and view counts, linked to the class they belong to. Live chat messages read from YouTube are shown to the teacher during class and are not stored in our database.</p>
-              <p><b>How long:</b> this data is kept while the class or lecture exists on the Platform and is deleted with it. Cached YouTube data is refreshed or removed within 30 days.</p>
+              <p>
+                <b>What we store:</b> the IDs of our broadcasts, streams and videos, their live/recording status, duration and view
+                counts, linked to the class they belong to. Comments posted in the live chat of our own broadcasts (the commenter&apos;s
+                public YouTube display name and the message text) are shown in that class&apos;s chat inside the Platform so the teacher
+                and the class can see the questions.
+              </p>
+              <p>
+                <b>How long:</b> live-chat comments read from YouTube are deleted automatically after 30 days. Video and broadcast
+                details are refreshed from YouTube every day and are deleted when the class or lecture is removed from the Platform.
+              </p>
               <p>
                 <b>Revoking access:</b> the channel owner can remove the Platform&apos;s access to YouTube at any time from the Google security
                 settings page:{" "}

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { saveStreamDevices } from "@/lib/live-class/stream-devices";
 import {
   FileText,
   UploadCloud,
@@ -341,6 +342,8 @@ export function PreFlightSetupWizard({
         throw new Error(data.message || "Failed to save pre-flight settings.");
       }
 
+      // The Windows app's stream window opens these same devices.
+      saveStreamDevices({ cameraDeviceId: selectedVideoId, microphoneDeviceId: selectedAudioId });
       onComplete(configPayload);
     } catch (err: any) {
       console.error("Pre-flight save error:", err);

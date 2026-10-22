@@ -85,3 +85,15 @@ export async function saveYoutubeChat(
   }
   return { stored: res.count };
 }
+
+/** YouTube API Services policy: API data may be kept at most 30 days. */
+export const YOUTUBE_CHAT_RETENTION_DAYS = 30;
+
+/** Deletes stored YouTube comments older than the retention window. */
+export async function purgeOldYoutubeChat(): Promise<number> {
+  const cutoff = new Date(Date.now() - YOUTUBE_CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const res = await prisma.whiteboardMessage.deleteMany({
+    where: { authorRole: YOUTUBE_AUTHOR_ROLE, createdAt: { lt: cutoff } },
+  });
+  return res.count;
+}
