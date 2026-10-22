@@ -364,6 +364,60 @@ function isValidQuestion(q: unknown): q is QuizQuestion {
   return true;
 }
 
+/**
+ * The option a written answer names: "Option (B)", "(B) 2 mol", "B.",
+ * "विकल्प (2)", or — when no letter is given — the one option whose text it
+ * quotes. 1-4 numbering counts too (the printable quiz numbers options 1-4).
+ * null when it can't tell.
+ */
+export function answerIndexFromText(text: string | null | undefined, options: string[] = []): number | null {
+  if (!text?.trim()) return null;
+  const t = text.trim();
+  const toIndex = (c: string) => (/[1-4]/.test(c) ? Number(c) - 1 : "ABCD".indexOf(c.toUpperCase()));
+  // A lowercase letter only counts in brackets: "the answer is a mixture"
+  // must not read as option A.
+  const m =
+    t.match(/(?:option|विकल्प|answer|उत्तर)\s*(?:is|है)?\s*[:\-=]?\s*\(\s*([A-Da-d1-4])\s*\)/i) ||
+    t.match(/(?:[Oo]ption|OPTION|विकल्प|[Aa]nswer|ANSWER|उत्तर)\s*(?:is|IS|है)?\s*[:\-=]?\s*([A-D1-4])(?![A-Za-z0-9])/) ||
+    t.match(/\(\s*([A-Da-d1-4])\s*\)/) ||
+    t.match(/^\s*([A-D1-4])\s*(?:[).:\-]|$)/);
+  if (m?.[1]) {
+    const idx = toIndex(m[1]);
+    if (idx >= 0 && idx <= 3) return idx;
+  }
+  const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+  const nt = norm(t);
+  const hits = options
+    .map((o, i) => ({ i, o: norm(String(o ?? "")) }))
+    .filter(({ o }) => o.length >= 3 && nt.includes(o));
+  return hits.length === 1 ? hits[0]!.i : null;
+}
+
+/**
+ * The model states the answer twice — correctIndex and, after working it
+ * out, finalAnswer ("Option (B)"). They disagreed often enough (off-by-one
+ * counting, or a slip) that students saw a solution proving B with A marked
+ * correct. The worked-out answer wins: correctIndex is set from finalAnswer,
+ * or from the end of the solution when finalAnswer names no option.
+ */
+function reconcileCorrectIndex(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const q = raw as Partial<QuizQuestion>;
+  const options = Array.isArray(q.options) ? q.options.map(String) : [];
+  if (options.length !== 4) return raw;
+  let idx = answerIndexFromText(q.finalAnswer, options);
+  if (idx === null && typeof q.solution === "string") {
+    const tail = q.solution.slice(-240);
+    const m = tail.match(/(?:option|विकल्प|answer|उत्तर)\s*(?:is|है)?\s*[:\-=]?\s*\(?\s*[A-Da-d1-4]\s*\)?(?![A-Za-z0-9])/i);
+    if (m) idx = answerIndexFromText(m[0], options);
+  }
+  if (idx === null || idx === q.correctIndex) return raw;
+  if (process.env.NODE_ENV !== "production" || Math.random() < 0.2) {
+    console.warn(`[quiz_answer_reconciled] correctIndex ${String(q.correctIndex)} → ${idx} (finalAnswer: ${String(q.finalAnswer).slice(0, 40)})`);
+  }
+  return { ...q, correctIndex: idx };
+}
+
 export function parseQuizJson(content: string): QuizQuestion[] | null {
   const match = content.match(QUIZ_JSON_BLOCK);
   // Same noUncheckedIndexedAccess quirk as parseBoardExamJson in
@@ -381,7 +435,8 @@ export function parseQuizJson(content: string): QuizQuestion[] | null {
 
     // A question that has a worked solution but no separate "explanation"
     // is still complete — use the solution rather than dropping it.
-    const filled = list.map((q) => {
+    const filled = list.map((raw) => {
+      const q = reconcileCorrectIndex(raw);
       const x = q as Partial<QuizQuestion>;
       if (x && typeof x === "object" && !(typeof x.explanation === "string" && x.explanation.trim())) {
         const fallback = [x.solution, x.finalAnswer, x.concept].find((v) => typeof v === "string" && v.trim());

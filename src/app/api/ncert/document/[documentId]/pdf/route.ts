@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getR2Client, createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { createHash } from "crypto";
 
 /**
  * The chapter PDF for the NCERT reader.
@@ -31,11 +32,16 @@ export async function GET(
 
     const wantsUrl = request.nextUrl.searchParams.get("as") === "url";
     const isHttp = document.fileUrl.startsWith("http://") || document.fileUrl.startsWith("https://");
+    // Changes when the chapter's file is replaced, so the browser can keep
+    // the streamed copy for a long time (a revisit re-downloads nothing) and
+    // still never shows an outdated file.
+    const version = createHash("sha1").update(document.fileUrl).digest("hex").slice(0, 12);
+    const streamUrl = `/api/ncert/document/${documentId}/pdf?v=${version}`;
 
     // 1. If fileUrl is already a direct public HTTP(S) URL, use it as is
     if (isHttp) {
       return wantsUrl
-        ? NextResponse.json({ url: document.fileUrl })
+        ? NextResponse.json({ url: document.fileUrl, streamUrl })
         : NextResponse.redirect(document.fileUrl, 302);
     }
 
@@ -48,7 +54,7 @@ export async function GET(
         expiresInSeconds: 3600,
         contentType: "application/pdf",
       });
-      return NextResponse.json({ url }, { headers: { "Cache-Control": "private, max-age=1800" } });
+      return NextResponse.json({ url, streamUrl }, { headers: { "Cache-Control": "private, max-age=1800" } });
     }
 
     try {
@@ -70,8 +76,14 @@ export async function GET(
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${encodeURIComponent(document.fileName || "ncert-chapter.pdf")}"`,
         "Accept-Ranges": "bytes",
-        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+        // Versioned URL (?v=): safe to keep a year. Validators let the
+        // browser reuse the byte ranges it already has.
+        "Cache-Control": request.nextUrl.searchParams.get("v") === version
+          ? "public, max-age=31536000, immutable"
+          : "public, max-age=86400, stale-while-revalidate=604800",
       };
+      if (response.ETag) headers["ETag"] = response.ETag;
+      if (response.LastModified) headers["Last-Modified"] = response.LastModified.toUTCString();
       if (response.ContentLength != null) headers["Content-Length"] = String(response.ContentLength);
       if (response.ContentRange) headers["Content-Range"] = response.ContentRange;
 

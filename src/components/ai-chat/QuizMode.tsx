@@ -121,6 +121,16 @@ function nextFrame() {
   });
 }
 
+/** Letters and digits only, labels like "Statement I:" / "(a)" removed — for "is this already in the question text?". */
+function compareKey(text: string | null | undefined): string {
+  return String(text ?? "")
+    .normalize("NFKC")
+    .replace(/^\s*(?:statement|कथन|assertion|अभिकथन|reason|कारण)\s*[(]?[ivxar\d]{0,4}[)]?\s*[:.)\-]?\s*/i, "")
+    .replace(/^\s*[(]?[a-z\divx]{1,4}[).:]\s*/i, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
 function QuestionExtras({
   question,
   variant,
@@ -132,14 +142,32 @@ function QuestionExtras({
   const textStyle = isPdf ? { fontSize: "14.5px", lineHeight: 1.6 } : undefined;
   const textClass = isPdf ? undefined : "text-sm leading-relaxed";
 
-  const hasColumns = Boolean(question.columnI?.length && question.columnII?.length);
+  // The model often writes the statements / assertion-reason / passage into
+  // the question text AND sends them as separate fields — students saw the
+  // question once in large type and again below in small type. A part that
+  // is already in the text is not shown a second time.
+  const stemKey = compareKey(question.text);
+  const inStem = (part: string | null | undefined) => {
+    const key = compareKey(part);
+    return key.length >= 6 && stemKey.includes(key);
+  };
+  const statements = (question.statements ?? []).filter((st) => st?.trim() && !inStem(st));
+  const sequenceItems = (question.sequenceItems ?? []).filter((it) => !inStem(it.text));
+  const flowchartSteps = (question.flowchartSteps ?? []).filter((st) => !inStem(st));
+  const columnsInStem =
+    Boolean(question.columnI?.length) &&
+    [...(question.columnI ?? []), ...(question.columnII ?? [])].every((it) => inStem(it.text));
+
+  const hasColumns = Boolean(question.columnI?.length && question.columnII?.length) && !columnsInStem;
   const hasTable = Boolean(question.tableHeaders?.length && question.tableRows?.length);
-  const hasStatements = Boolean(question.statements?.length);
-  const hasSequence = Boolean(question.sequenceItems?.length);
-  const hasFlowchart = Boolean(question.flowchartSteps?.length);
+  const hasStatements = statements.length > 0;
+  const hasSequence = sequenceItems.length > 0;
+  const hasFlowchart = flowchartSteps.length > 0;
   const hasImage = Boolean(question.imageRequired);
-  const hasPassage = Boolean(question.passage?.trim());
-    const hasAssertionReason = Boolean(question.assertionText?.trim() && question.reasonText?.trim());
+  const hasPassage = Boolean(question.passage?.trim()) && !inStem(question.passage);
+  const hasAssertionReason =
+    Boolean(question.assertionText?.trim() && question.reasonText?.trim()) &&
+    !(inStem(question.assertionText) && inStem(question.reasonText));
 
   return (
     <>
@@ -181,7 +209,7 @@ function QuestionExtras({
 
       {hasFlowchart && (
         <div style={isPdf ? { marginBottom: "8px" } : undefined} className={isPdf ? undefined : "mb-3"}>
-          {question.flowchartSteps!.map((step, idx) => (
+          {flowchartSteps.map((step, idx) => (
             <div key={idx} style={textStyle} className={textClass}>
               {idx > 0 && <span style={isPdf ? { display: "block", textAlign: "center" } : undefined} className={isPdf ? undefined : "block text-center text-slate-400"}>↓</span>}
               <MathText text={step} />
@@ -195,7 +223,7 @@ function QuestionExtras({
           style={isPdf ? { paddingLeft: "12px", marginBottom: "8px" } : undefined}
           className={isPdf ? undefined : "mb-3 space-y-1 pl-3"}
         >
-          {question.sequenceItems!.map((item) => (
+          {sequenceItems.map((item) => (
             <div key={item.label} style={textStyle} className={textClass}>
               <strong>({item.label})</strong> <MathText text={item.text} />
             </div>
@@ -208,7 +236,7 @@ function QuestionExtras({
           style={isPdf ? { paddingLeft: "12px", marginBottom: "8px" } : undefined}
           className={isPdf ? undefined : "mb-3 space-y-1 pl-3"}
         >
-          {question.statements!.map((statement, idx) => (
+          {statements.map((statement, idx) => (
             <div key={idx} style={textStyle} className={textClass}>
               <MathText text={statement} />
             </div>

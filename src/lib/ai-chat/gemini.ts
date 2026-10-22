@@ -369,7 +369,15 @@ export async function* generateChatResponseStream(
 
 const QUIZ_SYSTEM_INSTRUCTION = `You are a NEET question generator for Atomic Pathshala. You output ONLY valid JSON matching the exact schema requested by the user message. No markdown, no headings, no code fences, no commentary before or after the JSON. Follow the latest NCERT and NTA NEET syllabus. Never invent fake facts. Never fabricate PYQs; generate original NEET-standard practice questions instead.`;
 
-export async function generateQuizQuestions(promptText: string): Promise<string> {
+/**
+ * attemptTimeoutMs: a model that hasn't answered by then is given up on and
+ * the next model is tried — a stalled request used to hold the whole quiz
+ * for minutes.
+ */
+export async function generateQuizQuestions(
+  promptText: string,
+  opts: { attemptTimeoutMs?: number } = {}
+): Promise<string> {
   const apiKeys = getApiKeys();
   let lastError: unknown;
 
@@ -382,16 +390,19 @@ export async function generateQuizQuestions(promptText: string): Promise<string>
       const apiKey = availableKeys[i]!;
       try {
         const genAI = new LightGoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          systemInstruction: QUIZ_SYSTEM_INSTRUCTION,
-          generationConfig: {
-            maxOutputTokens: 32768,
-           temperature: 0.1,
-            topP: 0.95,
-            responseMimeType: "application/json",
+        const model = genAI.getGenerativeModel(
+          {
+            model: modelName,
+            systemInstruction: QUIZ_SYSTEM_INSTRUCTION,
+            generationConfig: {
+              maxOutputTokens: 32768,
+              temperature: 0.1,
+              topP: 0.95,
+              responseMimeType: "application/json",
+            },
           },
-        });
+          opts.attemptTimeoutMs ? { timeout: opts.attemptTimeoutMs } : undefined
+        );
 
         const result = await model.generateContent(promptText);
         const text = result.response.text();
@@ -400,6 +411,13 @@ export async function generateQuizQuestions(promptText: string): Promise<string>
         return text.trim();
       } catch (error) {
         lastError = error;
+
+        // Timed out (attemptTimeoutMs): this model is slow right now — next model.
+        const msg = String((error as { message?: string })?.message ?? error).toLowerCase();
+        if (opts.attemptTimeoutMs && (msg.includes("abort") || msg.includes("timeout") || msg.includes("timed out"))) {
+          markModelBusy(modelName);
+          break;
+        }
 
         // A blocked/invalid key: try the next key. A retired model: next model.
         if (isDeadKeyError(error) || isRetiredModelError(error)) {

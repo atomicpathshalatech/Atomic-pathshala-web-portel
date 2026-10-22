@@ -217,6 +217,11 @@ export function NcertOriginalPageViewer({
             // Fetch only the parts of the file the shown pages need (byte
             // ranges) rather than the whole chapter before page 1 appears.
             disableAutoFetch: true,
+            // Without this pdf.js keeps the first, whole-file request
+            // streaming in the background alongside the ranges — a 35 MB
+            // chapter was downloaded in full anyway. With it, that request
+            // is dropped as soon as the server confirms ranges.
+            disableStream: true,
             rangeChunkSize: 256 * 1024,
           }).promise;
 
@@ -225,9 +230,13 @@ export function NcertOriginalPageViewer({
         // page see Content-Range (its CORS settings), pdf.js would pull the
         // whole file, and our own ranged streaming route is faster.
         let doc: any;
+        // Versioned streaming URL (long browser cache); the plain route if
+        // the lookup fails.
+        let streamUrl = pdfUrl;
         try {
           const res = await fetch(`${pdfUrl}?as=url`);
           const json = res.ok ? await res.json() : null;
+          if (typeof json?.streamUrl === "string") streamUrl = json.streamUrl;
           if (!json?.url) throw new Error("no direct link");
           const probe = await fetch(json.url, { headers: { Range: "bytes=0-0" } });
           probe.body?.cancel().catch(() => {});
@@ -237,8 +246,8 @@ export function NcertOriginalPageViewer({
           doc = await open(json.url);
         } catch (directErr) {
           if (isCancelled) return;
-          console.warn("[NcertOriginalPageViewer] direct PDF link failed, streaming instead:", directErr);
-          doc = await open(pdfUrl);
+          console.info("[NcertOriginalPageViewer] streaming through the site:", directErr instanceof Error ? directErr.message : directErr);
+          doc = await open(streamUrl);
         }
         if (!isCancelled) {
           pdfDocRef.current = doc;
