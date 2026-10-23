@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { chapterQuestionWhere } from "@/lib/questions/chapter-match";
 import { requirePermission, UnauthorizedError, hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -61,11 +62,26 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.QUESTION_ASSIGN);
 
+    const assignment = await prisma.questionAssignment.findUnique({ where: { id: params.id } });
+    if (!assignment) return apiSuccess({ success: true, message: "Assignment deleted" });
+
+    // Give back the chapter's questions this reviewer hadn't started, so the
+    // chapter can be assigned again (they stayed assigned before, and a new
+    // assignment of the chapter then got none of them).
+    const released = await prisma.question.updateMany({
+      where: {
+        AND: [chapterQuestionWhere(assignment.subject, assignment.chapter)],
+        assignedToId: assignment.assignedToId,
+        OR: [{ correctionStatus: { in: ["NONE", "ASSIGNED"] } }, { correctionStatus: null }],
+      },
+      data: { assignedToId: null, assignedById: null, assignedAt: null, correctionStatus: "NONE" },
+    });
+
     await prisma.questionAssignment.delete({
       where: { id: params.id },
     });
 
-    return apiSuccess({ success: true, message: "Assignment deleted" });
+    return apiSuccess({ success: true, message: "Assignment deleted", releasedQuestions: released.count });
   } catch (error) {
     return handleApiError(error);
   }

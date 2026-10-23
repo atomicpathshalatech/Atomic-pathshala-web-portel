@@ -40,6 +40,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     title: "Question Bank",
     items: [
       { href: "/team/questions", label: "Question Bank", icon: "database", permission: PERMISSIONS.QUESTION_READ },
+      { href: "/team/questions/atomic", label: "Atomic Question Bank", icon: "verified", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/exercises", label: "Exercise Builder", icon: "assignment", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/my-question-bank", label: "My Question Bank", icon: "inventory_2", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/questions/reports", label: "Question Reports", icon: "flag", permission: PERMISSIONS.QUESTION_READ },

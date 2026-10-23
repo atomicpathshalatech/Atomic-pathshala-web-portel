@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { questionChapterMiddleware } from "@/lib/academic/question-chapter-middleware";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -45,11 +46,16 @@ function buildDatabaseUrl(): string | undefined {
   }
 }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createClient() {
+  const client = new PrismaClient({
     datasourceUrl: buildDatabaseUrl(),
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
+  // Questions are always saved under the standard NCERT chapter name.
+  client.$use(questionChapterMiddleware);
+  return client;
+}
+
+export const prisma = globalForPrisma.prisma ?? createClient();
 
 globalForPrisma.prisma = prisma;

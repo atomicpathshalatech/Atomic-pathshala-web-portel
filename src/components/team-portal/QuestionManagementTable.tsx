@@ -1053,6 +1053,14 @@ export function QuestionManagementTable({
                           </span>
                         )}
 
+                        {/* Who wrote / added it (was loaded but never shown). */}
+                        <span
+                          className="text-[10px] text-slate-500 block truncate max-w-[150px]"
+                          title={q.createdBy?.email ?? undefined}
+                        >
+                          By {q.createdBy?.name || q.createdBy?.email || "System / AI"}
+                        </span>
+
                         {q._count?.reports && q._count.reports > 0 ? (
                           <Link
                             href={`/team/questions/reports?search=${encodeURIComponent(q.questionCode || q.id)}`}

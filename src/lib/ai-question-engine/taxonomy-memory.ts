@@ -1,3 +1,4 @@
+import { canonicalChapter } from "@/lib/academic/canonical-chapter";
 import { prisma } from "@/lib/db";
 import { getMasterNcertTopics } from "@/lib/academic/master-ncert-catalog";
 
@@ -34,7 +35,8 @@ export async function getTopicsForSubjectAndChapter(
   chapterName: string
 ): Promise<ResolvedTaxonomyTopic[]> {
   const normSubject = subjectName.trim();
-  const normChapter = chapterName.trim();
+  // Any spelling of a chapter finds the master chapter's topics.
+  const normChapter = canonicalChapter(subjectName, chapterName)?.chapter ?? chapterName.trim();
 
   const results: Map<string, ResolvedTaxonomyTopic> = new Map();
 

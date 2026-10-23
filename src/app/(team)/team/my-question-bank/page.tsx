@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { chapterQuestionWhere } from "@/lib/questions/chapter-match";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { MyQuestionBankDashboard } from "@/components/team/questions/MyQuestionBankDashboard";
@@ -38,19 +39,9 @@ export default async function MyQuestionBankPage() {
   // Calculate live question statistics per assignment
   const assignmentsWithStats = await Promise.all(
     assignments.map(async (a) => {
-      const cleanChap = a.chapter
-        .replace(/^\[class\s*\d+\]\s*/i, "")
-        .replace(/^ch\s*\d+:\s*/i, "")
-        .replace(/^\d+[\.:\s-]+/i, "")
-        .trim();
-
-      const chapterFilter = {
-        subject: { equals: a.subject, mode: "insensitive" as const },
-        OR: [
-          { chapter: { contains: cleanChap, mode: "insensitive" as const } },
-          { category: { contains: cleanChap, mode: "insensitive" as const } },
-        ],
-      };
+      // Exactly this chapter's questions (standard NCERT name) — the old
+      // "chapter or category CONTAINS" filter counted other chapters too.
+      const chapterFilter = chapterQuestionWhere(a.subject, a.chapter);
 
       const [
         total,
@@ -67,31 +58,31 @@ export default async function MyQuestionBankPage() {
         prisma.question.count({ where: chapterFilter }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             aiVerified: true,
           },
         }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             status: { in: ["REVIEW_2", "PUBLISHED"] },
           },
         }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             status: { in: ["DRAFT", "REVIEW_1"] },
           },
         }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             status: "PUBLISHED",
           },
         }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             OR: [
               { status: "REJECTED" },
               { review1Status: "CHANGES_REQUESTED" },
@@ -101,25 +92,25 @@ export default async function MyQuestionBankPage() {
         }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             correctionStatus: "REWORK",
           },
         }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             status: "DRAFT",
           },
         }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             status: "REVIEW_1",
           },
         }),
         prisma.question.count({
           where: {
-            ...chapterFilter,
+            AND: [chapterFilter],
             status: "REVIEW_2",
           },
         }),
@@ -171,6 +162,10 @@ export default async function MyQuestionBankPage() {
     orderBy: { name: "asc" },
   });
 
+  const myOpenQuestions = await prisma.question.count({
+    where: { assignedToId: session.user.id, correctionStatus: { in: ["ASSIGNED", "IN_CORRECTION", "REWORK"] } },
+  });
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <MyQuestionBankDashboard
@@ -178,6 +173,7 @@ export default async function MyQuestionBankPage() {
         isAssignAdmin={isAssignAdmin}
         currentUserId={session.user.id}
         facultyList={facultyList}
+        myOpenQuestions={myOpenQuestions}
       />
     </div>
   );

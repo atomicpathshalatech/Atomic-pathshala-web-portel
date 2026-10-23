@@ -13,6 +13,7 @@ import {
   getMasterNcertSubjects,
   getMasterNcertChapters,
 } from "@/lib/academic/master-ncert-catalog";
+import { canonicalChapter } from "@/lib/academic/canonical-chapter";
 
 export async function GET(request: NextRequest) {
   try {
@@ -75,6 +76,9 @@ export async function GET(request: NextRequest) {
 
         for (const ac of academicChapters) {
           const clean = ac.title.trim().toLowerCase();
+          // A differently-written copy of a master chapter ("Cell - The Unit
+          // of Life", a Hindi title…) is the same chapter: list it once.
+          if (canonicalChapter(subject, ac.title)) continue;
           if (!seen.has(clean)) {
             seen.add(clean);
             combined.push({
@@ -101,6 +105,7 @@ export async function GET(request: NextRequest) {
 
         for (const lc of legacyChapters) {
           const clean = lc.title.trim().toLowerCase();
+          if (canonicalChapter(subject, lc.title)) continue;
           if (!seen.has(clean)) {
             seen.add(clean);
             combined.push({ id: lc.id, title: lc.title, displayTitle: lc.title });

@@ -5,15 +5,18 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError } from "@/lib/api/response";
+import type { Prisma } from "@prisma/client";
+import { chapterQuestionWhere, standardAssignmentChapter } from "@/lib/questions/chapter-match";
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return apiError("Unauthorized", 401);
 
+    // Assigning work to others needs the assign permission — being allowed to
+    // create questions used to be enough.
     const canAssign =
       (await hasPermission(session.user.id, PERMISSIONS.QUESTION_ASSIGN)) ||
-      (await hasPermission(session.user.id, PERMISSIONS.QUESTION_CREATE)) ||
       session.user.role === "ADMIN" ||
       session.user.role === "SUPER_ADMIN" ||
       session.user.role === "ACADEMIC_HEAD";
@@ -58,13 +61,12 @@ export async function POST(request: NextRequest) {
 
     // Scenario B: Chapter / Subject / Topic based assignment
     if (subject && chapter) {
-      const whereClause: any = {
-        subject: { equals: subject, mode: "insensitive" },
-        chapter: { contains: chapter, mode: "insensitive" },
+      // Exactly this chapter (standard name); published questions are not reopened.
+      const whereClause: Prisma.QuestionWhereInput = {
+        AND: [chapterQuestionWhere(subject, chapter)],
+        status: { not: "PUBLISHED" },
+        ...(topic ? { topic: { equals: String(topic).trim(), mode: "insensitive" as const } } : {}),
       };
-      if (topic) {
-        whereClause.topic = { contains: topic, mode: "insensitive" };
-      }
 
       const matchingQuestions = await prisma.question.findMany({
         where: whereClause,
@@ -92,7 +94,7 @@ export async function POST(request: NextRequest) {
         data: {
           title: `Correction & Review: ${subject} - ${chapter}${topic ? ` (${topic})` : ""}`,
           subject,
-          chapter,
+          chapter: standardAssignmentChapter(subject, chapter),
           topic: topic || null,
           targetCount: idsToAssign.length,
           status: "ASSIGNED",

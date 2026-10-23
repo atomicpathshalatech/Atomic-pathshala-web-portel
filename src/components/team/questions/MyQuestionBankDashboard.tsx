@@ -81,11 +81,14 @@ export function MyQuestionBankDashboard({
   isAssignAdmin,
   currentUserId,
   facultyList,
+  myOpenQuestions = 0,
 }: {
   initialAssignments: QuestionAssignmentItem[];
   isAssignAdmin: boolean;
   currentUserId: string;
   facultyList: FacultyUser[];
+  /** Questions assigned to me (one by one or with a chapter) that still need my work. */
+  myOpenQuestions?: number;
 }) {
   const router = useRouter();
   const [assignments, setAssignments] = useState<QuestionAssignmentItem[]>(initialAssignments);
@@ -346,6 +349,19 @@ export function MyQuestionBankDashboard({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Questions assigned one by one (from the Question Bank table) never
+          appeared here — only chapter assignments did. */}
+      {myOpenQuestions > 0 && (
+        <Link
+          href="/team/questions?assignedToId=ME&status=ASSIGNED"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-2.5 text-sm hover:bg-amber-100/70 transition"
+        >
+          <span className="font-bold text-amber-900 dark:text-amber-200">
+            {myOpenQuestions} question{myOpenQuestions === 1 ? "" : "s"} assigned to you need your work
+          </span>
+          <span className="text-xs font-bold text-amber-800 dark:text-amber-300">Open →</span>
+        </Link>
+      )}
       {/* 1. TOP HEADER & ASSIGN ACTION */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
         <div className="flex items-center gap-3.5">

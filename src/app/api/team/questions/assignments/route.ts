@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { chapterQuestionWhere, standardAssignmentChapter } from "@/lib/questions/chapter-match";
 import { requirePermission, UnauthorizedError, hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -44,19 +45,9 @@ export async function GET(req: NextRequest) {
     // Compute comprehensive live question stats for each assigned chapter
     const assignmentStats = await Promise.all(
       assignments.map(async (a) => {
-        const cleanChap = a.chapter
-          .replace(/^\[class\s*\d+\]\s*/i, "")
-          .replace(/^ch\s*\d+:\s*/i, "")
-          .replace(/^\d+[\.:\s-]+/i, "")
-          .trim();
-
-        const chapterFilter = {
-          subject: { equals: a.subject, mode: "insensitive" as const },
-          OR: [
-            { chapter: { contains: cleanChap, mode: "insensitive" as const } },
-            { category: { contains: cleanChap, mode: "insensitive" as const } },
-          ],
-        };
+        // Exactly this chapter's questions (standard NCERT name) — the old
+        // "chapter or category CONTAINS" filter counted other chapters too.
+        const chapterFilter = chapterQuestionWhere(a.subject, a.chapter);
 
         const [
           total,
@@ -73,31 +64,31 @@ export async function GET(req: NextRequest) {
           prisma.question.count({ where: chapterFilter }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               aiVerified: true,
             },
           }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               status: { in: ["REVIEW_2", "PUBLISHED"] },
             },
           }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               status: { in: ["DRAFT", "REVIEW_1"] },
             },
           }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               status: "PUBLISHED",
             },
           }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               OR: [
                 { status: "REJECTED" },
                 { review1Status: "CHANGES_REQUESTED" },
@@ -107,25 +98,25 @@ export async function GET(req: NextRequest) {
           }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               correctionStatus: "REWORK",
             },
           }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               status: "DRAFT",
             },
           }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               status: "REVIEW_1",
             },
           }),
           prisma.question.count({
             where: {
-              ...chapterFilter,
+              AND: [chapterFilter],
               status: "REVIEW_2",
             },
           }),
@@ -175,22 +166,12 @@ export async function POST(req: NextRequest) {
       return apiError("Assigned user not found", 404);
     }
 
-    const cleanChap = chapter
-      .replace(/^\[class\s*\d+\]\s*/i, "")
-      .replace(/^ch\s*\d+:\s*/i, "")
-      .replace(/^\d+[\.:\s-]+/i, "")
-      .trim();
+    // The standard chapter name, and exactly that chapter's questions.
+    const cleanChap = standardAssignmentChapter(subject, chapter);
+    const inChapter = chapterQuestionWhere(subject, chapter);
 
     // Check total questions in this chapter
-    const totalQuestionsInChapter = await prisma.question.count({
-      where: {
-        subject: { equals: subject.trim(), mode: "insensitive" },
-        OR: [
-          { chapter: { contains: cleanChap, mode: "insensitive" } },
-          { category: { contains: cleanChap, mode: "insensitive" } },
-        ],
-      },
-    });
+    const totalQuestionsInChapter = await prisma.question.count({ where: inChapter });
 
     // Auto-generate title for clean chapter assignment
     const title = `${subject.trim()} — ${cleanChap}`;
@@ -212,15 +193,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Automatically associate unassigned questions in this chapter to the assigned reviewer
+    // The chapter's questions go to the new reviewer: unassigned ones, and
+    // ones assigned earlier that nobody has started on. (Only unassigned ones
+    // moved before, so re-assigning a chapter left the new reviewer with
+    // nothing.) Questions someone is correcting stay with them; published ones
+    // are not reopened.
     await prisma.question.updateMany({
       where: {
-        subject: { equals: subject.trim(), mode: "insensitive" },
-        OR: [
-          { chapter: { contains: cleanChap, mode: "insensitive" } },
-          { category: { contains: cleanChap, mode: "insensitive" } },
-        ],
-        assignedToId: null,
+        AND: [inChapter],
+        status: { not: "PUBLISHED" },
+        OR: [{ assignedToId: null }, { correctionStatus: { in: ["NONE", "ASSIGNED"] } }, { correctionStatus: null }],
       },
       data: {
         assignedToId,
