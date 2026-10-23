@@ -93,6 +93,11 @@ export function cleanDocumentArtifacts(rawText: string): string {
     .replace(/^.*(?:Page\s*\d+\s*of\s*\d+|\bPage\s*\d+\b).*$/gim, "")
     .replace(/^.*(?:ALLEN\s*CAREER\s*INSTITUTE|Aakash\s*Educational|NEET\s*\(UG\)|CONFIDENTIAL|DO\s*NOT\s*OPEN).*$/gim, "")
     .replace(/^.*(?:Rough\s*Work|Space\s*for\s*Rough\s*Work).*$/gim, "")
+    // Publisher footers / app adverts (ExamGOAL & co.) that ended up inside
+    // the last option of a page: "Keep practising on the ExamGOAL app GET IT
+    // ON … Google Play … Page 4 / 12".
+    .replace(/^.*(?:Keep\s*practising|GET\s*IT\s*ON|Google\s*Play|examside\.com|examgoal\.com|ExamGOAL\s*P\s*Y\s*Q|Chapter-wise\s*PYQs\s*with\s*solutions).*$/gim, "")
+    .replace(/^\s*ExamGOAL\s*$/gim, "")
     .replace(/\r\n/g, "\n")
     .trim();
 }
@@ -147,12 +152,33 @@ export async function extractTextFromPdfBuffer(
       const crossingCount = lineSpans.filter((l) => l.minX < mid - 25 && l.maxX > mid + 25).length;
       const crossingShare = lineSpans.length ? crossingCount / lineSpans.length : 0;
       const twoColumns = items.length > 40 && leftShare > 0.3 && rightShare > 0.3 && leftShare + rightShare > 0.85 && crossingShare < 0.12;
+      // Subscripts / superscripts: printed smaller and shifted down / up.
+      // The text layer gives them as separate pieces, so "CH₃" arrived as
+      // "CH 3" (or on a line of its own) and "SO₄²⁻" as "SO 4 2–". A short
+      // run of digits / charges (or a single letter like the n in CₙH₂ₙ),
+      // clearly smaller than the text around it, is joined to that line as
+      // _{…} or ^{…}.
+      const sortedH = items.map((it) => it.h).sort((a, b) => a - b);
+      const bodyH = sortedH[Math.floor(sortedH.length / 2)] ?? 10;
+      const isScript = (it: (typeof items)[number]) =>
+        it.h < bodyH * 0.82 && /^(?:[0-9]{1,3}[+\-−–]?|[+\-−–⊕⊖]{1,2}|[0-9]?[+\-−–]|[a-z])$/.test(it.str.trim());
       const toLines = (list: typeof items) => {
         const sorted = [...list].sort((a, b) => b.y - a.y || a.x - b.x);
         const lines: { y: number; parts: typeof items }[] = [];
-        for (const it of sorted) {
+        for (const it of sorted.filter((i) => !isScript(i))) {
           const line = lines.find((l) => Math.abs(l.y - it.y) < 3);
           if (line) line.parts.push(it);
+          else lines.push({ y: it.y, parts: [it] });
+        }
+        // A script piece goes to the line it is printed against (within about
+        // half a line of it), else it stays a line of its own.
+        for (const it of sorted.filter(isScript)) {
+          let best: (typeof lines)[number] | null = null;
+          for (const l of lines) {
+            const d = Math.abs(l.y - it.y);
+            if (d < bodyH * 0.6 && (!best || d < Math.abs(best.y - it.y))) best = l;
+          }
+          if (best) best.parts.push({ ...it, script: it.y < best.y ? "sub" : it.y > best.y ? "sup" : undefined } as any);
           else lines.push({ y: it.y, parts: [it] });
         }
         return lines
@@ -168,6 +194,12 @@ export async function extractTextFromPdfBuffer(
             parts.forEach((p, i) => {
               const prev = parts[i - 1];
               const gap = prev ? p.x - (prev.x + prev.w) : 0;
+              const script = (p as { script?: "sub" | "sup" }).script;
+              // Attached to the character before it: no space, marked _ or ^.
+              if (script && prev && gap < bodyH * 0.6) {
+                out = out.replace(/\s+$/, "") + (script === "sub" ? `_{${p.str.trim()}}` : `^{${p.str.trim()}}`);
+                return;
+              }
               out += prev && gap > Math.max(1, p.h * 0.18) && !/\s$/.test(out) && !/^\s/.test(p.str) ? ` ${p.str}` : p.str;
             });
             return out.replace(/Open\s*solution/gi, "").replace(/\s+/g, " ").trim();
