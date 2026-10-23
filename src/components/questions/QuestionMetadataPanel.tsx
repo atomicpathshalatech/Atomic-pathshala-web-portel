@@ -34,6 +34,11 @@ export interface QuestionMetadataPanelProps {
   onMore: () => void;
   onAddTopic: (title: string) => void;
   isSavingTaxonomy?: boolean;
+  /** What the AI detected from the question, shown for approval. */
+  aiDetected?: { chapter?: string; topic?: string; subTopic?: string; difficulty?: string; type?: string; pyq?: string } | null;
+  /** "NEET 2019" when this question is filed as a PYQ. */
+  pyqLabel?: string | null;
+  onClearPyq?: () => void;
 }
 
 const selectCls =
@@ -72,6 +77,9 @@ export const QuestionMetadataPanel = forwardRef<HTMLDivElement, QuestionMetadata
     onMore,
     onAddTopic,
     isSavingTaxonomy,
+    aiDetected,
+    pyqLabel,
+    onClearPyq,
   },
   ref
 ) {
@@ -100,6 +108,16 @@ export const QuestionMetadataPanel = forwardRef<HTMLDivElement, QuestionMetadata
               <Sparkles className="w-3 h-3" /> AI filled — please check
             </span>
           )}
+          {pyqLabel && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 text-[10px] font-black border border-amber-200">
+              PYQ · {pyqLabel}
+              {onClearPyq && (
+                <button type="button" onClick={onClearPyq} className="text-amber-600 hover:text-amber-900" title="Not a PYQ">
+                  ✕
+                </button>
+              )}
+            </span>
+          )}
           {syllabusLocked && (
             <span className="text-[10px] text-slate-500">Chapters limited to this paper&apos;s syllabus</span>
           )}
@@ -113,6 +131,27 @@ export const QuestionMetadataPanel = forwardRef<HTMLDivElement, QuestionMetadata
           <Sliders className="w-3.5 h-3.5" /> More
         </button>
       </div>
+
+      {aiDetected && needsCheck && (
+        <div className="mb-2.5 flex items-center gap-1.5 flex-wrap rounded-lg bg-violet-50/70 border border-violet-200 px-2 py-1.5 text-[10px]">
+          <span className="font-black text-violet-700 uppercase tracking-wide">AI detected</span>
+          {[
+            aiDetected.chapter,
+            aiDetected.topic,
+            aiDetected.subTopic,
+            aiDetected.difficulty,
+            aiDetected.type?.replace(/_/g, " ").toLowerCase(),
+            aiDetected.pyq ? `PYQ ${aiDetected.pyq}` : null,
+          ]
+            .filter(Boolean)
+            .map((v, i) => (
+              <span key={i} className="px-1.5 py-0.5 rounded bg-white border border-violet-200 text-slate-700 font-semibold max-w-[200px] truncate">
+                {v}
+              </span>
+            ))}
+          {!aiDetected.chapter && <span className="text-rose-600 font-bold">chapter not in this paper&apos;s syllabus — pick it below</span>}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <label className="space-y-0.5 col-span-2 md:col-span-1">
@@ -231,7 +270,7 @@ export const QuestionMetadataPanel = forwardRef<HTMLDivElement, QuestionMetadata
           }`}
         >
           <CheckCircle2 className="w-4 h-4" />
-          {confirmed ? "Metadata checked" : "Confirm metadata"}
+          {confirmed ? "Metadata checked" : fromAi ? "Approve AI metadata" : "Confirm metadata"}
         </button>
       </div>
     </div>

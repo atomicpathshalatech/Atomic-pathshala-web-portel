@@ -68,6 +68,19 @@ export interface UnifiedQuestionEditorProps {
 
 export type SyllabusChapter = { subject: string; chapter: string; topics: string[] };
 
+type AiSuggestion = {
+  subject?: string;
+  chapter?: string;
+  topic?: string;
+  subTopic?: string;
+  difficulty?: "EASY" | "MEDIUM" | "HARD" | "ULTRA";
+  type?: string;
+  pyqExam?: string;
+  pyqYear?: number;
+  pyqMonth?: string;
+  pyqQuestionNumber?: string;
+};
+
 /** Case/spacing/punctuation-insensitive name for matching chapter & topic titles. */
 function sameName(a?: string | null, b?: string | null) {
   const norm = (s?: string | null) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
@@ -288,14 +301,34 @@ export function UnifiedQuestionEditor({
   };
 
   // AI Suggested Curriculum Metadata (Pending user approval)
-  const [aiSuggestedMetadata, setAiSuggestedMetadata] = useState<{
-    subject?: string;
-    chapter?: string;
-    topic?: string;
-    subTopic?: string;
-    difficulty?: "EASY" | "MEDIUM" | "HARD" | "ULTRA";
-    type?: string;
-  } | null>(null);
+  const [aiSuggestedMetadata, setAiSuggestedMetadata] = useState<AiSuggestion | null>(null);
+  // What the AI last detected, kept for the metadata panel's "AI detected" line.
+  const [lastAiSuggestion, setLastAiSuggestion] = useState<AiSuggestion | null>(null);
+
+  /** The extraction result in the editor's own values (type and level names differ). */
+  const toSuggestion = (data: any): AiSuggestion => {
+    const t = String(data.type || "").toUpperCase();
+    const type =
+      t === "MULTI_CORRECT" ? "MULTIPLE_CORRECT"
+      : t === "INTEGER" ? "NUMERICAL"
+      : t === "MATCH_THE_COLUMN" ? "MATCH_COLUMN"
+      : ["SINGLE_CORRECT", "MULTIPLE_CORRECT", "ASSERTION_REASON", "STATEMENT_BASED", "MATCH_COLUMN", "NUMERICAL"].includes(t) ? t
+      : questionType || "SINGLE_CORRECT";
+    const d = String(data.difficulty || "").toUpperCase();
+    const level = d === "VERY_HARD" || d === "ULTRA" ? "ULTRA" : d === "EASY" || d === "HARD" ? d : "MEDIUM";
+    return {
+      subject: data.subject || subject || "Biology",
+      chapter: data.chapter || "",
+      topic: data.topic || "",
+      subTopic: data.subTopic || "",
+      difficulty: level as AiSuggestion["difficulty"],
+      type,
+      pyqExam: data.pyqExam || undefined,
+      pyqYear: typeof data.pyqYear === "number" ? data.pyqYear : undefined,
+      pyqMonth: data.pyqMonth || undefined,
+      pyqQuestionNumber: data.pyqQuestionNumber || undefined,
+    };
+  };
 
   // The AI's metadata is filled in straight away (no separate approve step);
   // the teacher checks it in the panel above Save. Inside a test/DPP the
@@ -324,6 +357,17 @@ export function UnifiedQuestionEditor({
     setSubTopic(appliedSubTopic);
     if (aiSuggestedMetadata.difficulty) setDifficulty(aiSuggestedMetadata.difficulty);
     if (aiSuggestedMetadata.type) setQuestionType(aiSuggestedMetadata.type);
+    // A printed "NEET 2019" / "AIPMT 2007" / "JEE Main …" tag → PYQ details.
+    if (aiSuggestedMetadata.pyqExam && aiSuggestedMetadata.pyqYear) {
+      setPyqExam(aiSuggestedMetadata.pyqExam);
+      setPyqYear(String(aiSuggestedMetadata.pyqYear));
+      if (aiSuggestedMetadata.pyqMonth) setPyqMonth(aiSuggestedMetadata.pyqMonth);
+      if (aiSuggestedMetadata.pyqQuestionNumber) setPyqQuestionNumber(aiSuggestedMetadata.pyqQuestionNumber);
+      setCategory(
+        aiSuggestedMetadata.pyqExam === "NEET" ? "NEET_PYQ" : aiSuggestedMetadata.pyqExam === "JEE_MAINS" ? "JEE_MAINS_PYQ" : "JEE_ADVANCED_PYQ"
+      );
+    }
+    setLastAiSuggestion({ ...aiSuggestedMetadata, chapter: appliedChapter, topic: appliedTopic, subTopic: appliedSubTopic });
     setMetadataConfirmed(false);
     setMetadataFromAi(true);
 
@@ -825,7 +869,9 @@ export function UnifiedQuestionEditor({
             subject: subject || "Biology",
             chapter: chapter || "",
             topic: topic || "",
-            difficulty: difficulty || "MEDIUM",
+            // The paper's chapters: the AI picks one of these. No level
+            // hint — it judges the difficulty from the question.
+            allowedChapters: syllabusForSubject.length ? chapterOptions : undefined,
           },
         }),
       });
@@ -866,14 +912,7 @@ export function UnifiedQuestionEditor({
 
       // Capture AI-suggested metadata for teacher approval
       if (data.subject || data.chapter || data.topic) {
-        setAiSuggestedMetadata({
-          subject: data.subject || subject || "Biology",
-          chapter: data.chapter || "",
-          topic: data.topic || "",
-          subTopic: data.subTopic || "",
-          difficulty: (data.difficulty as any) || difficulty || "MEDIUM",
-          type: data.type || questionType || "SINGLE_CORRECT",
-        });
+        setAiSuggestedMetadata(toSuggestion(data));
       }
 
       // Record AI Cost in Paise
@@ -907,7 +946,9 @@ export function UnifiedQuestionEditor({
             subject: subject || "Biology",
             chapter: chapter || "",
             topic: topic || "",
-            difficulty: difficulty || "MEDIUM",
+            // The paper's chapters: the AI picks one of these. No level
+            // hint — it judges the difficulty from the question.
+            allowedChapters: syllabusForSubject.length ? chapterOptions : undefined,
           },
         }),
       });
@@ -946,14 +987,7 @@ export function UnifiedQuestionEditor({
       if (data.solutionHi) setSolutionHi(data.solutionHi);
 
       if (data.subject || data.chapter || data.topic) {
-        setAiSuggestedMetadata({
-          subject: data.subject || subject || "Biology",
-          chapter: data.chapter || "",
-          topic: data.topic || "",
-          subTopic: data.subTopic || "",
-          difficulty: (data.difficulty as any) || difficulty || "MEDIUM",
-          type: data.type || questionType || "SINGLE_CORRECT",
-        });
+        setAiSuggestedMetadata(toSuggestion(data));
       }
 
       if (data.costEstimate) {
@@ -2293,6 +2327,23 @@ export function UnifiedQuestionEditor({
         onMore={() => setIsMetadataDrawerOpen(true)}
         onAddTopic={(title) => void handleSaveNewTopic(title)}
         isSavingTaxonomy={isSavingTaxonomy}
+        aiDetected={
+          lastAiSuggestion
+            ? {
+                chapter: lastAiSuggestion.chapter,
+                topic: lastAiSuggestion.topic,
+                subTopic: lastAiSuggestion.subTopic,
+                difficulty: lastAiSuggestion.difficulty,
+                type: lastAiSuggestion.type,
+                pyq: lastAiSuggestion.pyqExam && lastAiSuggestion.pyqYear ? `${lastAiSuggestion.pyqExam.replace("_", " ")} ${lastAiSuggestion.pyqYear}` : undefined,
+              }
+            : null
+        }
+        pyqLabel={pyqExam ? `${pyqExam.replace("_", " ")} ${pyqYear}${pyqMonth && pyqExam === "JEE_MAINS" ? ` ${pyqMonth}` : ""}` : null}
+        onClearPyq={() => {
+          setPyqExam("");
+          setCategory("NCERT Canonical");
+        }}
       />
 
       {/* 5. STICKY BOTTOM ACTION BAR (Save & Slot Navigation) */}

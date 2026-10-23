@@ -36,6 +36,11 @@ export interface ExtractedQuestionData {
   type: "SINGLE_CORRECT" | "MULTI_CORRECT" | "INTEGER" | "ASSERTION_REASON" | "MATCH_THE_COLUMN";
   category: string;
   pyqSource?: string;
+  /** Detected from a printed tag like "NEET 2019" / "AIPMT 2007" / "JEE Main 2023 (24 Jan Shift 1)". */
+  pyqExam?: "NEET" | "JEE_MAINS" | "JEE_ADVANCED";
+  pyqYear?: number;
+  pyqMonth?: string;
+  pyqQuestionNumber?: string;
   tags: string[];
   isBilingual: boolean;
   aiTranslatedHi?: boolean;
@@ -135,6 +140,60 @@ export async function executeGeminiInteractive<T>(
  * In a SINGLE API CALL, extracts image content, performs NCERT Hindi/English translation,
  * deduces correct answer, generates 4-step bilingual solution, and classifies curriculum taxonomy.
  */
+/**
+ * The metadata part of both extraction prompts. Difficulty is judged from the
+ * question (a "MEDIUM" hint used to be sent with every request and came back
+ * as the answer); a printed PYQ tag is read; the chapter is chosen from the
+ * paper's syllabus when one is given.
+ */
+function metadataInstructions(allowedChapters?: string[]) {
+  const chapterRule = allowedChapters?.length
+    ? `"chapter": MUST be exactly one of these (the paper's syllabus): ${allowedChapters.map((c) => JSON.stringify(c)).join(", ")}. Pick the one the question belongs to.`
+    : `"chapter": the exact official NCERT chapter title (Class 11 or 12).`;
+  return `CURRICULUM METADATA (fill every field — never leave topic or subTopic empty):
+   - "subject": "Physics" | "Chemistry" | "Biology" | "Mathematics"
+   - ${chapterRule}
+   - "topic": the NCERT topic (section) inside that chapter the question tests, e.g. "Kirchhoff's Rules".
+   - "subTopic": the narrower concept, e.g. "Loop Law".
+   - "type": "SINGLE_CORRECT" | "MULTI_CORRECT" | "INTEGER" | "ASSERTION_REASON" | "MATCH_THE_COLUMN" | "STATEMENT_BASED"
+   - "difficulty": judge THIS question — do not default to MEDIUM:
+       EASY = direct NCERT fact / definition / single formula, one step.
+       MEDIUM = two concepts or 2–3 steps, or a statement/assertion check of standard facts.
+       HARD = multi-concept, lengthy calculation, tricky options or exceptions, or a less-known NCERT line.
+   - "pyq": if the question carries a printed exam tag (e.g. "NEET 2019", "AIPMT 2007", "NEET (Odisha) 2019",
+     "[JEE Main 2023 (24 Jan Shift 1)]", "JEE Advanced 2021"), return
+     {"exam": "NEET" | "JEE_MAINS" | "JEE_ADVANCED", "year": 2019, "month": "January" or null, "questionNumber": "37" or null}.
+     AIPMT and NEET-UG count as "NEET". No tag printed → "pyq": null. Never guess a year.`;
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** The PYQ details from the model's "pyq" field, checked; and the category that goes with them. */
+function readPyq(parsed: any): Pick<ExtractedQuestionData, "pyqExam" | "pyqYear" | "pyqMonth" | "pyqQuestionNumber" | "category"> {
+  const q = parsed?.pyq;
+  const raw = typeof q?.exam === "string" ? q.exam.toUpperCase() : "";
+  const exam = raw.includes("ADV") ? "JEE_ADVANCED" : raw.includes("JEE") || raw.includes("MAIN") ? "JEE_MAINS" : raw.includes("NEET") || raw.includes("AIPMT") ? "NEET" : "";
+  const year = Number(q?.year);
+  if (!exam || !Number.isInteger(year) || year < 1985 || year > new Date().getFullYear()) {
+    return { category: "NCERT Canonical" };
+  }
+  const m = typeof q?.month === "string" ? q.month.trim().toLowerCase().slice(0, 3) : "";
+  const month = m ? MONTHS.find((x) => x.toLowerCase().startsWith(m)) : undefined;
+  return {
+    pyqExam: exam,
+    pyqYear: year,
+    pyqMonth: month,
+    pyqQuestionNumber: q?.questionNumber != null && String(q.questionNumber).trim() ? String(q.questionNumber).trim() : undefined,
+    category: exam === "NEET" ? "NEET_PYQ" : exam === "JEE_MAINS" ? "JEE_MAINS_PYQ" : "JEE_ADVANCED_PYQ",
+  };
+}
+
+const DIFFICULTIES = new Set(["EASY", "MEDIUM", "HARD", "VERY_HARD"]);
+function readDifficulty(v: unknown): ExtractedQuestionData["difficulty"] {
+  const d = typeof v === "string" ? v.trim().toUpperCase().split(" ").join("_") : "";
+  return (DIFFICULTIES.has(d) ? d : "MEDIUM") as ExtractedQuestionData["difficulty"];
+}
+
 export async function extractBilingualQuestionFromImage({
   imageBase64,
   mimeType = "image/png",
@@ -143,7 +202,7 @@ export async function extractBilingualQuestionFromImage({
   subjectContext,
   chapterContext,
   topicContext,
-  difficultyContext,
+  allowedChapters,
 }: {
   imageBase64: string;
   mimeType?: string;
@@ -152,7 +211,9 @@ export async function extractBilingualQuestionFromImage({
   subjectContext?: string;
   chapterContext?: string;
   topicContext?: string;
+  /** Ignored: difficulty is judged from the question. */
   difficultyContext?: string;
+  allowedChapters?: string[];
 }): Promise<ExtractedQuestionData> {
   const cleanQuestionBase64 = imageBase64.includes(";base64,")
     ? (imageBase64.split(";base64,")[1] ?? "").trim()
@@ -168,7 +229,7 @@ export async function extractBilingualQuestionFromImage({
     });
 
     const contextInstruction = subjectContext
-      ? `Curriculum context: Subject: "${subjectContext}", Chapter: "${chapterContext || ""}", Topic: "${topicContext || ""}"${difficultyContext ? `, Difficulty: "${difficultyContext}"` : ""}.`
+      ? `Curriculum context (a hint, the question decides): Subject: "${subjectContext}"${chapterContext ? `, Chapter: "${chapterContext}"` : ""}${topicContext ? `, Topic: "${topicContext}"` : ""}.`
       : "";
 
     const systemPrompt = `You are the Master Question Ingestion Engine for NEET, JEE Main, and NCERT examinations (Atomic Pathshala).
@@ -205,13 +266,7 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
 
    - CRITICAL: DO NOT use markdown bold asterisks (NO ** or *). Use clean plain text with LaTeX $...$ for equations and symbols only.
 
-4. CURRICULUM TAXONOMY & QUESTION TYPE:
-   - "subject": "Physics" | "Chemistry" | "Biology" | "Mathematics"
-   - "chapter": Exact official NCERT chapter title
-   - "topic": Core topic name
-   - "subTopic": Specific subtopic
-   - "difficulty": "EASY" | "MEDIUM" | "HARD"
-   - "type": "SINGLE_CORRECT" | "MULTI_CORRECT" | "INTEGER" | "ASSERTION_REASON" | "MATCH_THE_COLUMN"
+4. ${metadataInstructions(allowedChapters)}
    - "hasFigure": true/false (if question relies on a diagram/graph/circuit) and "figureCaption".
 
 RETURN STRICT JSON SCHEMA:
@@ -230,8 +285,9 @@ RETURN STRICT JSON SCHEMA:
   "chapter": "Current Electricity",
   "topic": "Kirchhoff's Rules",
   "subTopic": "Loop Law",
-  "difficulty": "MEDIUM",
+  "difficulty": "HARD",
   "type": "SINGLE_CORRECT",
+  "pyq": {"exam": "NEET", "year": 2019, "month": null, "questionNumber": null},
   "confidence": 95
 }`;
 
@@ -298,9 +354,9 @@ RETURN STRICT JSON SCHEMA:
       chapter: parsed.chapter || chapterContext || "General",
       topic: parsed.topic || topicContext || "Core Concept",
       subTopic: parsed.subTopic || undefined,
-      difficulty: parsed.difficulty || (difficultyContext as any) || "MEDIUM",
+      difficulty: readDifficulty(parsed.difficulty),
       type: parsed.type || "SINGLE_CORRECT",
-      category: "NCERT Canonical",
+      ...readPyq(parsed),
       tags: ["NEET", "NCERT"],
       isBilingual: Boolean(parsed.statementEn && parsed.statementHi),
       confidence: Number(parsed.confidence) || 95,
@@ -319,13 +375,15 @@ export async function extractBilingualQuestionFromText({
   subjectContext,
   chapterContext,
   topicContext,
-  difficultyContext,
+  allowedChapters,
 }: {
   rawText: string;
   subjectContext?: string;
   chapterContext?: string;
   topicContext?: string;
+  /** Ignored: difficulty is judged from the question. */
   difficultyContext?: string;
+  allowedChapters?: string[];
 }): Promise<ExtractedQuestionData> {
   return executeGeminiInteractive(async (client, modelName, meta) => {
     const model = client.getGenerativeModel({
@@ -337,7 +395,7 @@ export async function extractBilingualQuestionFromText({
     });
 
     const contextInstruction = subjectContext
-      ? `Curriculum context: Subject: "${subjectContext}", Chapter: "${chapterContext || ""}", Topic: "${topicContext || ""}"${difficultyContext ? `, Difficulty: "${difficultyContext}"` : ""}.`
+      ? `Curriculum context (a hint, the question decides): Subject: "${subjectContext}"${chapterContext ? `, Chapter: "${chapterContext}"` : ""}${topicContext ? `, Topic: "${topicContext}"` : ""}.`
       : "";
 
     const prompt = `You are the Master Question Ingestion Engine for NEET, JEE Main, and NCERT examinations (Atomic Pathshala).
@@ -362,8 +420,7 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
    - "solutionHi": सिद्धांत : [1-पंक्ति का सूत्र/नियम], हल : [संक्षिप्त 1-3 पंक्ति का हल], अंतिम उत्तर : विकल्प (X)
    - CRITICAL: NO markdown asterisks (NO ** or *).
 
-4. CURRICULUM TAXONOMY:
-   - "subject", "chapter", "topic", "subTopic", "difficulty", "type".
+4. ${metadataInstructions(allowedChapters)}
 
 Raw Text:
 """
@@ -379,12 +436,13 @@ RETURN STRICT JSON SCHEMA:
   "correctAnswer": ["A"],
   "solutionEn": "Concept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
   "solutionHi": "सिद्धांत : ...\\nहल : ...\\nअंतिम उत्तर : विकल्प (A)",
-  "subject": "${subjectContext || "Biology"}",
-  "chapter": "${chapterContext || "General"}",
-  "topic": "${topicContext || "Core Concept"}",
-  "subTopic": "Specific subtopic",
-  "difficulty": "${difficultyContext || "MEDIUM"}",
-  "type": "SINGLE_CORRECT"
+  "subject": "Biology",
+  "chapter": "Cell: The Unit of Life",
+  "topic": "Cell Organelles",
+  "subTopic": "Mitochondria",
+  "difficulty": "EASY",
+  "type": "SINGLE_CORRECT",
+  "pyq": null
 }`;
 
     const response = await model.generateContent(prompt);
@@ -420,9 +478,9 @@ RETURN STRICT JSON SCHEMA:
       chapter: parsed.chapter || chapterContext || "General",
       topic: parsed.topic || topicContext || "Core Concept",
       subTopic: parsed.subTopic || undefined,
-      difficulty: parsed.difficulty || (difficultyContext as any) || "MEDIUM",
+      difficulty: readDifficulty(parsed.difficulty),
       type: parsed.type || "SINGLE_CORRECT",
-      category: "NCERT Canonical",
+      ...readPyq(parsed),
       tags: ["NEET", "NCERT"],
       isBilingual: Boolean(parsed.statementEn && parsed.statementHi),
       confidence: 92,

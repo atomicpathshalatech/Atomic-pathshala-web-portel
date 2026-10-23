@@ -1,3 +1,4 @@
+import { canonicalChapter } from "@/lib/academic/canonical-chapter";
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -22,6 +23,13 @@ import {
 // Image extraction + cropping drawings in headless Chromium.
 export const maxDuration = 120;
 
+/** The paper's chapters sent by the editor (strings only, a sane amount). */
+function allowedChapters(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const list = v.filter((x): x is string => typeof x === "string" && x.trim() !== "").map((x) => x.trim().slice(0, 200)).slice(0, 60);
+  return list.length ? list : undefined;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -43,7 +51,7 @@ export async function POST(request: NextRequest) {
           subjectContext: payload.subject,
           chapterContext: payload.chapter,
           topicContext: payload.topic,
-          difficultyContext: payload.difficulty,
+          allowedChapters: allowedChapters(payload.allowedChapters),
         });
         // Drawings (structures, diagrams) are cropped from the pasted image
         // and placed where they belong — never rewritten as text.
@@ -59,10 +67,18 @@ export async function POST(request: NextRequest) {
           subjectContext: payload.subject,
           chapterContext: payload.chapter,
           topicContext: payload.topic,
-          difficultyContext: payload.difficulty,
+          allowedChapters: allowedChapters(payload.allowedChapters),
         });
       } else {
         return apiError("imageBase64 or rawText is required for auto extraction.", 400);
+      }
+
+      // The chapter under its standard NCERT name (the editor's syllabus list
+      // and dropdowns use those); a topic the model put in the chapter field
+      // becomes the topic.
+      const std = canonicalChapter(result.subject, result.chapter);
+      if (std) {
+        result = { ...result, chapter: std.chapter, topic: result.topic && result.topic !== "Core Concept" ? result.topic : std.topicHint ?? result.topic };
       }
 
       // Audit log the extraction

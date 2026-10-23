@@ -81,6 +81,8 @@ export function DualColumnQuestionStudio({
   const [showImportModal, setShowImportModal] = useState(false);
   const [importQuery, setImportQuery] = useState("");
   const [activeAuthoringSlots, setActiveAuthoringSlots] = useState<Record<number, boolean>>({});
+  // Palette sections the teacher opened/closed (unset = open only while active).
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   // Questions cache for the test
   const [questionsMap, setQuestionsMap] = useState<Record<number, QuestionEntry>>(() => {
@@ -372,8 +374,21 @@ export function DualColumnQuestionStudio({
 
         {/* SECTION ACCORDIONS & QUESTION PALETTE (metadata is edited above Save, in the question itself) */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {!sidebarCollapsed && subjects.length > 1 && (
+              <div className="flex justify-end -mb-1">
+                <button
+                  type="button"
+                  onClick={() => setOpenSections(Object.fromEntries(subjects.map((s) => [s.name, false])))}
+                  className="text-[10px] font-bold text-blue-200 hover:text-white"
+                >
+                  Collapse all
+                </button>
+              </div>
+            )}
             {subjects.map((sub) => {
               const isSubActive = activeSubject === sub.name;
+              // The active section opens by default; any section can be closed.
+              const isOpen = openSections[sub.name] ?? isSubActive;
               const subSaved = Object.values(questionsMap).filter(
                 (q) => q.subject === sub.name && q.isSaved
               ).length;
@@ -385,6 +400,11 @@ export function DualColumnQuestionStudio({
                   <button
                     type="button"
                     onClick={() => {
+                      if (isSubActive) {
+                        setOpenSections((prev) => ({ ...prev, [sub.name]: !isOpen }));
+                        return;
+                      }
+                      setOpenSections((prev) => ({ ...prev, [sub.name]: true }));
                       setActiveSubject(sub.name);
                       const range = sectionOffsets[sub.name];
                       if (range && (currentQuestionNumber < range.start || currentQuestionNumber > range.end)) {
@@ -407,7 +427,7 @@ export function DualColumnQuestionStudio({
                         <span className="text-[11px] font-mono opacity-80">
                           {subSaved}/{sub.total}
                         </span>
-                        {isSubActive ? (
+                        {isOpen ? (
                           <ChevronDown className="w-3.5 h-3.5" />
                         ) : (
                           <ChevronRight className="w-3.5 h-3.5" />
@@ -417,7 +437,7 @@ export function DualColumnQuestionStudio({
                   </button>
 
                   {/* Question Grid for Active Section */}
-                  {isSubActive && !sidebarCollapsed && (
+                  {isOpen && !sidebarCollapsed && (
                     <div className="grid grid-cols-5 gap-1.5 p-2 bg-[#092e7a]/50 rounded-2xl border border-white/5 animate-in fade-in">
                       {Array.from({ length: sub.total }, (_, i) => {
                         const qNum = startQ + i;
