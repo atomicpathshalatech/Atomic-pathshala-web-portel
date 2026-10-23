@@ -427,9 +427,16 @@ export async function processChunkForJob(
             if (q.cardBox) {
               const pg = inChunk(q.cardBox.page) ? q.cardBox.page : q.sourcePage;
               if (inChunk(pg)) {
-                // The whole question as printed, a little margin around it.
+                // The whole question as printed, a little margin around it but
+                // never into the next question below it in the same column
+                // (the boxes tend to run a line long).
                 const [y0, x0, y1, x1] = q.cardBox.box;
-                const png = await doc.crop(pg, [Math.max(0, y0 - 6), Math.max(0, x0 - 6), Math.min(1000, y1 + 6), Math.min(1000, x1 + 6)], { grow: false }).catch(() => null);
+                const below = extractedQuestions
+                  .map((o) => o.cardBox)
+                  .filter((o): o is NonNullable<typeof o> => !!o && o !== q.cardBox && o.page === q.cardBox!.page && o.box[0] > y0 + 10 && Math.min(x1, o.box[3]) - Math.max(x0, o.box[1]) > (x1 - x0) * 0.3)
+                  .map((o) => o.box[0]);
+                const bottom = Math.min(1000, y1 + 6, below.length ? Math.min(...below) - 8 : 1000);
+                const png = await doc.crop(pg, [Math.max(0, y0 - 6), Math.max(0, x0 - 6), bottom, Math.min(1000, x1 + 6)], { grow: false }).catch(() => null);
                 if (png) cardCrops.set(q.originalNumber, png);
               }
             }
