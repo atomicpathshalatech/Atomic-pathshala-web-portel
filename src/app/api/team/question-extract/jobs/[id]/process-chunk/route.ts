@@ -6,7 +6,9 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { processChunkForJob } from "@/lib/extraction/chunk-pipeline";
 
-export const maxDuration = 120;
+// A page read from its image (questions, figures, reference cards) can take
+// a couple of minutes.
+export const maxDuration = 300;
 
 export async function POST(
   request: NextRequest,

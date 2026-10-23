@@ -80,7 +80,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const sourceName = String(fields.sourceName ?? "").trim();
+    // Optional: when left empty the source printed in the PDF (ALLEN,
+    // ExamGOAL, …) is detected during extraction.
+    const sourceName = String(fields.sourceName ?? "").trim() || "Auto Detect";
     const startNumber = Math.max(1, parseInt(String(fields.startNumber ?? "1"), 10) || 1);
     const endNumber = Math.max(startNumber, parseInt(String(fields.endNumber ?? "180"), 10) || 180);
     const examName = String(fields.examName ?? "").trim() || null;
@@ -92,10 +94,9 @@ export async function POST(request: NextRequest) {
     const chapter = String(fields.chapter ?? "").trim() || null;
     const rawText = String(fields.rawText ?? "").trim() || null;
 
-    if (!sourceName) return apiError("Source Name (e.g. ALLEN, RACE, NCERT) is required.", 400);
     if (!pdfBuffer && !rawText) return apiError("Please upload a PDF file or provide extracted document text.", 400);
 
-    fileName ||= `${sourceName}_Document.pdf`;
+    fileName ||= `${sourceName === "Auto Detect" ? "Uploaded" : sourceName}_Document.pdf`;
     // Keep the original PDF (it used to be a made-up "/uploads/extraction/…" path that pointed nowhere).
     if (pdfBuffer && !fileUrl) {
       try {

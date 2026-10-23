@@ -8,6 +8,7 @@ import {
   extractTextFromPdfBuffer,
   extractQuestionsWithAiChunk,
   type ExtractedAiQuestion,
+  type PrintedAnswer,
 } from "./pdf-extractor";
 import {
   cropQuestionFigures,
@@ -19,6 +20,7 @@ import {
   type CroppedFigure,
 } from "./figure-crops";
 import { validateAndClassifyQuestions } from "./validator";
+import { questionFingerprint } from "@/lib/pyq/fingerprint";
 
 export interface ChunkMetadata {
   index: number;
@@ -43,7 +45,11 @@ export interface JobChunkPlan {
 const MAX_CHUNK_CHARS = 14_000;
 // Three pages per text request (still capped by MAX_CHUNK_CHARS): fewer, fuller AI calls.
 const MAX_TEXT_PAGES_PER_CHUNK = 3;
-const IMAGE_PAGES_PER_CHUNK = 2;
+// Pages are read from their images (exact formulas, structures, tables);
+// one page per AI call keeps each answer quick and complete.
+const IMAGE_PAGES_PER_CHUNK = 1;
+
+const READ_PAGES_AS_IMAGES = true;
 
 const STOPWORDS = new Set([
   "the", "of", "is", "and", "which", "following", "in", "to", "a", "an", "are",
@@ -98,7 +104,9 @@ export function buildChunkPlan(pages: { pageNumber: number; text: string }[]): J
   };
 
   for (const p of pages) {
-    if (needsVision(p.text)) {
+    // Every page goes through the page-image path; the text layer rides along
+    // as a spelling hint (it breaks subscripts, Greek letters and drawings).
+    if (READ_PAGES_AS_IMAGES || needsVision(p.text)) {
       flushText();
       visionRun.push(p.pageNumber);
       continue;
@@ -184,6 +192,79 @@ async function jobPages(jobId: string, pdf: Buffer): Promise<{ pageNumber: numbe
   return pages;
 }
 
+const sectionKey = (s: string | null | undefined) =>
+  String(s ?? "").toLowerCase().replace(/exercise|ex\.?|section|part/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * The printed answer key wins over answers the AI deduced. Entries are
+ * matched by section + question number (numbering restarts per exercise);
+ * an entry without a section is used only when that number is unique.
+ */
+async function applyPrintedAnswers(jobId: string, entries: PrintedAnswer[]) {
+  const rows = await prisma.extractedQuestion.findMany({
+    where: { jobId },
+    select: { id: true, originalNumber: true, questionType: true, imagesJson: true, reviewReasons: true, correctAnswer: true },
+  });
+  const toLetters = (a: string, numeric: boolean) => {
+    if (numeric) return a.trim();
+    const keys = a.toUpperCase().split(/[\s,;/&]+/).map((x) => ({ "1": "A", "2": "B", "3": "C", "4": "D" } as Record<string, string>)[x.replace(/[()]/g, "")] ?? x.replace(/[()]/g, ""));
+    return Array.from(new Set(keys.filter((k) => /^[A-D]$/.test(k)))).join(",");
+  };
+  for (const row of rows) {
+    const section = sectionKey((row.imagesJson as { section?: string } | null)?.section);
+    const sameNumber = entries.filter((e) => e.question === row.originalNumber);
+    const match =
+      (section && sameNumber.find((e) => e.section && sectionKey(e.section) === section)) ||
+      (sameNumber.length === 1 ? sameNumber[0] : undefined);
+    if (!match) continue;
+    const answer = toLetters(match.answer, /INTEGER|NUMERICAL/i.test(row.questionType));
+    if (!answer || answer === row.correctAnswer) continue;
+    const reasons = (Array.isArray(row.reviewReasons) ? row.reviewReasons : []) as string[];
+    await prisma.extractedQuestion.update({
+      where: { id: row.id },
+      data: {
+        correctAnswer: answer,
+        answerKeySource: "ANSWER_KEY_SECTION",
+        reviewReasons: reasons.filter((r) => !/Answer not found/i.test(String(r))),
+      },
+    });
+  }
+}
+
+/** "Auto Detect" / empty: the source is taken from the PDF itself. */
+export function isAutoSource(name: string | null | undefined) {
+  return !name || /^\s*(auto(?:[\s-]*detect)?|exam document)\s*$/i.test(name);
+}
+
+/** An existing question with exactly this fingerprint: in the Question Bank, or extracted before. */
+async function findDuplicate(
+  fingerprint: string,
+  jobId: string,
+  sourceKey: string
+): Promise<{ code: string; questionId: string | null; where: string } | null> {
+  const inBank = await prisma.question.findFirst({
+    where: { contentFingerprint: fingerprint },
+    select: { id: true, questionCode: true },
+  });
+  if (inBank) return { code: inBank.questionCode ?? inBank.id.slice(0, 8), questionId: inBank.id, where: "in the Question Bank" };
+  const extracted = await prisma.extractedQuestion.findFirst({
+    where: {
+      imagesJson: { path: ["fingerprint"], equals: fingerprint },
+      NOT: { jobId, sourceKey },
+      status: { not: "DUPLICATE" },
+    },
+    select: { jobId: true, originalNumber: true, draftQuestionId: true, job: { select: { sourceName: true } } },
+  });
+  if (extracted) {
+    return {
+      code: `${extracted.job?.sourceName ?? "PDF"} Q${extracted.originalNumber}`,
+      questionId: extracted.draftQuestionId,
+      where: extracted.jobId === jobId ? "earlier in this PDF" : "in another extracted PDF",
+    };
+  }
+  return null;
+}
+
 /**
  * Processes a single chunk for an extraction job.
  * Updates ExtractedQuestion records incrementally so NO work is lost if later chunks fail.
@@ -265,7 +346,10 @@ export async function processChunkForJob(
 
   const subjectContext = job.subject && job.subject !== "Auto Detect" ? job.subject : undefined;
   let extractedQuestions: ExtractedAiQuestion[] = [];
+  let printedAnswers: PrintedAnswer[] = [];
   let visionCrops: CroppedFigure[] | null = null;
+  // Reference image of each question (the whole printed question), by number.
+  const cardCrops = new Map<number, Buffer>();
 
   // Pages of this chunk to look for figures on: where the model said a
   // question has one, plus pages whose PDF actually draws a figure (the model
@@ -305,9 +389,15 @@ export async function processChunkForJob(
           (_, i) => chunkMeta.firstPage + i
         );
         const images = await Promise.all(nums.map((n) => doc.jpeg(n, 1800)));
+        const hint = pdfBuf
+          ? (await jobPages(job.id, pdfBuf))
+              .filter((p) => p.pageNumber >= chunkMeta.firstPage && p.pageNumber <= chunkMeta.lastPage)
+              .map((p) => `--- [Page ${p.pageNumber}] ---\n${cleanDocumentArtifacts(p.text)}`)
+              .join("\n\n")
+          : "";
         try {
-          extractedQuestions = await extractQuestionsWithAiChunk({
-            textChunk: "",
+          const visionResult = await extractQuestionsWithAiChunk({
+            textChunk: hint,
             pageImages: images,
             firstPage: chunkMeta.firstPage,
             startNumber: job.startNumber,
@@ -316,14 +406,43 @@ export async function processChunkForJob(
             chapterContext: job.chapter || undefined,
             sourceName: job.sourceName,
           });
-          // Figures are cropped now, from the pages already rendered — no
-          // second browser start for the same pages.
-          const pages = await figurePagesFor(extractedQuestions);
+          extractedQuestions = visionResult;
+          printedAnswers = visionResult.answerKey ?? [];
+          // Figures and reference cards are cropped now, from the pages
+          // already rendered. The extraction call located them itself; only
+          // questions with a [FIGURE] it gave no box for are looked up again.
+          const inChunk = (pg: number) => pg >= chunkMeta.firstPage && pg <= chunkMeta.lastPage;
+          visionCrops = [];
+          for (const q of extractedQuestions) {
+            for (const f of q.figureBoxes ?? []) {
+              const pg = inChunk(f.page) ? f.page : q.sourcePage;
+              if (!inChunk(pg) || f.box[2] - f.box[0] < 8 || f.box[3] - f.box[1] < 8) continue;
+              // The model's box is often a little tight (a CH₃ above a ring got
+              // clipped): widen it, then the crop tightens back to the ink.
+              const [y0, x0, y1, x1] = f.box;
+              const wide: [number, number, number, number] = [Math.max(0, y0 - 18), Math.max(0, x0 - 12), Math.min(1000, y1 + 18), Math.min(1000, x1 + 12)];
+              const png = await doc.crop(pg, wide, { grow: true }).catch(() => null);
+              if (png) visionCrops.push({ questionNumber: q.originalNumber, place: f.place, page: pg, png, box: f.box });
+            }
+            if (q.cardBox) {
+              const pg = inChunk(q.cardBox.page) ? q.cardBox.page : q.sourcePage;
+              if (inChunk(pg)) {
+                // The whole question as printed, a little margin around it.
+                const [y0, x0, y1, x1] = q.cardBox.box;
+                const png = await doc.crop(pg, [Math.max(0, y0 - 6), Math.max(0, x0 - 6), Math.min(1000, y1 + 6), Math.min(1000, x1 + 6)], { grow: false }).catch(() => null);
+                if (png) cardCrops.set(q.originalNumber, png);
+              }
+            }
+          }
+          const unlocated = extractedQuestions.filter((q) => !q.figureBoxes?.length && /\[FIGURE\]/.test([q.statement, ...Object.values(q.options || {})].join(" ")));
+          const pages = await figurePagesFor(unlocated);
           if (pages.length) {
-            visionCrops = await cropFiguresOnDoc(doc, { pages }).catch((err) => {
+            const more = await cropFiguresOnDoc(doc, { pages }).catch((err) => {
               console.warn(`[chunk-pipeline] Figure cropping failed on chunk ${chunkIndex}:`, err);
-              return [];
+              return [] as CroppedFigure[];
             });
+            const wanted = new Set(unlocated.map((q) => q.originalNumber));
+            visionCrops.push(...more.filter((c) => wanted.has(c.questionNumber)));
           }
         } finally {
           for (const n of nums) {
@@ -392,14 +511,52 @@ export async function processChunkForJob(
       };
     });
 
+    // 4b. Reference images: upload each question's printed card.
+    const cardUrls = new Map<number, string>();
+    for (const [num, png] of cardCrops) {
+      try {
+        cardUrls.set(num, await uploadFile({ key: `questions/extracted/${jobId}/q${num}-card.png`, body: png, contentType: "image/png" }));
+      } catch (err) {
+        console.warn(`[chunk-pipeline] reference image upload failed for Q${num}:`, err);
+      }
+    }
+
+    // 4c. The source printed in the PDF (ALLEN, ExamGOAL, …) when none was given.
+    const detectedSource = extractedQuestions.map((q) => q.documentSource).find(Boolean);
+    if (detectedSource && isAutoSource(job.sourceName)) {
+      await prisma.extractionJob.update({ where: { id: jobId }, data: { sourceName: detectedSource } });
+      job.sourceName = detectedSource;
+    }
+
+    // 4d. A page without its exercise heading continues the section of the
+    // page before (chunks run in page order) — needed to match the answer key.
+    let runningSection: string | null = typeof report.currentSection === "string" ? report.currentSection : null;
+    extractedQuestions = [...extractedQuestions]
+      .sort((a, b) => (a.sourcePage || 0) - (b.sourcePage || 0))
+      .map((q) => {
+        if (q.section) runningSection = q.section;
+        return q.section ? q : { ...q, section: runningSection };
+      });
+    report.currentSection = runningSection;
+
     // 5. Save/Upsert questions into the database
     let savedCount = 0;
     for (const q of extractedQuestions) {
       if (!Number.isFinite(q.originalNumber)) continue;
       if (q.originalNumber < job.startNumber || q.originalNumber > job.endNumber) continue;
 
+      // Exact duplicate (same statement and option set, formatting ignored):
+      // of a Question Bank question, or of another question already extracted.
+      const fingerprint = questionFingerprint(q.statement || "", q.options || null);
+      // A question is identified by its page and printed number: modules
+      // restart numbering in every exercise, so the number alone made
+      // Exercise-II Q1 overwrite Exercise-I Q1.
+      const sourceKey = `p${q.sourcePage || chunkMeta.firstPage}-q${q.originalNumber}`;
+      const duplicateOf = await findDuplicate(fingerprint, jobId, sourceKey);
+
       const questionData = {
         jobId,
+        sourceKey,
         questionIndex: q.originalNumber - job.startNumber + 1,
         originalNumber: q.originalNumber,
         pyqExam: job.pyqExam || null,
@@ -421,7 +578,17 @@ export async function processChunkForJob(
         tablesJson: q.tableMarkdown ? { markdown: q.tableMarkdown } : (Prisma.DbNull as any),
         hasImage: Boolean(q.hasImage),
         imageUrl: q.imageUrl || null,
-        imagesJson: q.imageUrl ? [{ url: q.imageUrl, page: q.sourcePage }] : (Prisma.DbNull as any),
+        imagesJson: {
+          reference: cardUrls.get(q.originalNumber) ?? null,
+          figure: q.imageUrl ?? null,
+          page: q.sourcePage,
+          fingerprint,
+          duplicateOf: duplicateOf?.code ?? null,
+          duplicateOfQuestionId: duplicateOf?.questionId ?? null,
+          section: q.section ?? null,
+          pyqExam: q.pyqExam ?? null,
+          pyqYear: q.pyqYear ?? null,
+        } as any,
         hasEquation: Boolean(q.hasEquation),
         subject: q.subject || job.subject || "General",
         chapter: q.chapter || job.chapter || null,
@@ -429,10 +596,12 @@ export async function processChunkForJob(
         subTopic: q.subTopic || null,
         questionType: q.questionType || "SINGLE_CORRECT",
         difficulty: q.difficulty || "MEDIUM",
-        status: q.status || "VERIFIED",
+        status: duplicateOf ? "DUPLICATE" : q.status || "VERIFIED",
         confidence: q.confidence || 95.0,
         confidenceBreakdown: q.confidenceBreakdown ? (q.confidenceBreakdown as any) : (Prisma.DbNull as any),
-        reviewReasons: q.reviewReasons || [],
+        reviewReasons: duplicateOf
+          ? [...(q.reviewReasons || []), `🔁 Duplicate: the same question is already ${duplicateOf.where} (${duplicateOf.code}).`]
+          : q.reviewReasons || [],
         originalSnapshot: {
           statement: q.statement,
           options: q.options,
@@ -444,7 +613,7 @@ export async function processChunkForJob(
 
       // Find existing by jobId and originalNumber
       const existing = await prisma.extractedQuestion.findFirst({
-        where: { jobId, originalNumber: q.originalNumber },
+        where: { jobId, OR: [{ sourceKey }, { sourceKey: null, originalNumber: q.originalNumber, sourcePage: q.sourcePage || chunkMeta.firstPage }] },
       });
 
       if (existing) {
@@ -458,6 +627,11 @@ export async function processChunkForJob(
         });
       }
       savedCount++;
+    }
+
+    // Printed answer-key entries seen on this chunk, applied when the job ends.
+    if (printedAnswers.length) {
+      report.answerKeys = [...(Array.isArray(report.answerKeys) ? report.answerKeys : []), ...printedAnswers];
     }
 
     chunkMeta.status = "COMPLETED";
@@ -476,6 +650,13 @@ export async function processChunkForJob(
   const isComplete = !pendingChunk;
   chunkPlan.allProcessed = isComplete;
   report.chunkPlan = chunkPlan;
+
+  // Last chunk: the printed answer key replaces answers the AI worked out.
+  if (isComplete && Array.isArray(report.answerKeys) && report.answerKeys.length) {
+    await applyPrintedAnswers(jobId, report.answerKeys as PrintedAnswer[]).catch((err) =>
+      console.warn("[chunk-pipeline] applying the printed answer key failed:", err)
+    );
+  }
 
   // Reconcile overall counts
   const totalExtracted = await prisma.extractedQuestion.count({ where: { jobId } });

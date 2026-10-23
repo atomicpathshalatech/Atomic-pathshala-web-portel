@@ -216,6 +216,17 @@ export function attachFigures<Q extends QuestionWithFigures>(questions: Q[], fig
       return t.includes(FIGURE_PLACEHOLDER) ? t.replace(FIGURE_PLACEHOLDER, img) : `${t}${t.trim() ? "\n" : ""}${img}`;
     };
     const next: Q = { ...q, options: { ...q.options }, optionsHi: q.optionsHi ? { ...q.optionsHi } : q.optionsHi };
+    // One crop for an option written as "[FIGURE] and [FIGURE]": the crop
+    // shows the whole printed option, so the option becomes just that image
+    // (otherwise "and" would appear twice).
+    for (const place of ["A", "B", "C", "D"] as const) {
+      const mine = figs.filter((f) => f.place === place);
+      const markers = (next.options[place] ?? "").split(FIGURE_PLACEHOLDER).length - 1;
+      if (mine.length === 1 && markers > 1) {
+        next.options[place] = FIGURE_PLACEHOLDER;
+        if (next.optionsHi) next.optionsHi[place] = FIGURE_PLACEHOLDER;
+      }
+    }
     for (const f of figs) {
       const img = md(f.url, f.place);
       if (f.place === "STATEMENT") {

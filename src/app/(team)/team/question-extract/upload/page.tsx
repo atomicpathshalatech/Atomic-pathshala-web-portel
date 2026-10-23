@@ -35,7 +35,8 @@ export default function QuestionExtractUploadPage() {
   const [language, setLanguage] = useState<"English" | "Hindi" | "Bilingual">("English");
 
   // General Source State
-  const [sourceName, setSourceName] = useState("ALLEN");
+  // AUTO: the institute/book printed in the PDF is read during extraction.
+  const [sourceName, setSourceName] = useState("AUTO");
   const [customSource, setCustomSource] = useState("");
   const [examName, setExamName] = useState("NEET Mock Test 01");
   const [generalYear, setGeneralYear] = useState("2026");
@@ -93,6 +94,8 @@ export default function QuestionExtractUploadPage() {
       ? "CBSE Board"
       : sourceName === "CUSTOM"
       ? customSource.trim()
+      : sourceName === "AUTO"
+      ? "Auto Detect"
       : sourceName;
 
   const effectiveExamName =
@@ -514,13 +517,14 @@ export default function QuestionExtractUploadPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Source Institute *
+                    Source Institute
                   </label>
                   <select
                     value={sourceName}
                     onChange={(e) => setSourceName(e.target.value)}
                     className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-slate-900 dark:text-white font-medium text-xs focus:border-blue-500 outline-none"
                   >
+                    <option value="AUTO">Detect from PDF (name printed in it)</option>
                     <option value="ALLEN">ALLEN</option>
                     <option value="RACE">RACE</option>
                     <option value="NCERT">NCERT</option>

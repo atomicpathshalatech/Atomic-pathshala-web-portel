@@ -83,7 +83,21 @@ export interface ExtractedAiQuestion {
   isBilingual: boolean;
   autoTranslated: boolean;
   sourceLanguage?: "ENGLISH" | "HINDI" | "BILINGUAL";
+  /** Page-image extraction: where the whole printed question sits — cropped as its reference image. */
+  cardBox?: { page: number; box: [number, number, number, number] } | null;
+  /** Page-image extraction: drawn figures of this question, located in the same call. */
+  figureBoxes?: Array<{ page: number; place: "STATEMENT" | "A" | "B" | "C" | "D"; box: [number, number, number, number] }>;
+  /** Publisher / book printed on the page (e.g. "ALLEN", "ExamGOAL") — the source when none was given. */
+  documentSource?: string | null;
+  /** A printed PYQ tag ("NEET 2019", "AIPMT 2007", "JEE Main 2023 (24 Jan)"). */
+  pyqExam?: "NEET" | "JEE_MAINS" | "JEE_ADVANCED" | null;
+  pyqYear?: number | null;
+  /** The exercise / section heading the question is printed under ("EXERCISE-II (Previous Year Questions)"). */
+  section?: string | null;
 }
+
+/** A printed answer key entry (answer-key pages of a module). */
+export type PrintedAnswer = { section: string | null; question: number; answer: string };
 
 /**
  * Strips recurring exam headers, footers, and page counters
@@ -243,6 +257,22 @@ export function sortMultiColumnText(pageText: string): string {
  * AI-Powered Multi-Question Extractor using Gemini with automatic bilingual translation,
  * diagram missing detection, and 4-step step-by-step solution generation.
  */
+/** Extra rules when the pages are read from images (the default now). */
+const VISION_RULES = `PAGE-IMAGE RULES (exact reproduction):
+- Copy every question exactly as printed: same words, numbers, options and order. Never paraphrase.
+- Every chemical formula, ion, equation, power and unit in LaTeX inside $...$: $\\text{CH}_3-\\text{CH}_2-\\text{OH}$, $\\text{SO}_4^{2-}$, $[\\text{Fe(CN)}_6]^{4-}$, $\\text{ML}^2\\text{T}^{-2}$, $10^{-3}$. Keep Greek letters ($\\pi$, $\\sigma$, $\\Delta$, $\\lambda$).
+- Reaction arrows with their conditions: $\\xrightarrow{\\text{conc. H}_2\\text{SO}_4,\\ 140^\\circ\\text{C}}$.
+- Leave out question numbers inside the statement, page headers/footers, watermarks, QR captions and app adverts.
+- Assertion–Reason: \"Assertion (A): ...\\nReason (R): ...\" (questionType ASSERTION_REASON). Two statements: \"Statement I: ...\\nStatement II: ...\" (questionType STATEMENT_BASED). Numbered statements each on its own line.
+- DRAWINGS (structures drawn with bonds/rings, reaction schemes drawn as pictures, graphs, diagrams, circuits, apparatus): never as text. Put [FIGURE] where each sits (in the statement, or as the whole option text if the option is a drawing) and list it in \"figures\": {\"page\": real page number, \"place\": \"STATEMENT\"|\"A\"|\"B\"|\"C\"|\"D\", \"box\": [ymin,xmin,ymax,xmax] normalized 0–1000 on that page image} — tight around the whole drawing with its atom labels, starting after an option number like (1), excluding nearby text.
+- \"cardBox\": {\"page\": real page number, \"box\": [ymin,xmin,ymax,xmax] 0–1000} around the WHOLE printed question on its page — number, statement, table/statements, drawings and all options. If it continues on the next page, give the box of the part on its first page.
+- \"documentSource\": the publisher / coaching / book name printed on these pages (header, footer or logo text), e.g. \"ALLEN\", \"ExamGOAL\", \"Physics Wallah\", \"Aakash\"; null if none is printed.
+- SOLUTIONS: copy a printed solution; otherwise keep "solution" and "solutionHi" SHORT — 2–3 lines each (key concept, then "Final Answer : Option (X)"). Do not write long 4-step solutions here.
+- \"section\": the exercise / section heading the question is printed under (e.g. \"EXERCISE-I (Conceptual Questions)\"); numbering restarts in each section, so this tells same-numbered questions apart. null if none.
+- ANSWER KEY PAGES: if a printed answer key (table or list of question numbers and answers) is on these pages, return every entry in \"answerKey\": [{\"section\": heading it belongs to or null, \"question\": 1, \"answer\": \"3\"}] exactly as printed.
+- RETURN an object {\"questions\": [ ...question objects as described below... ], \"answerKey\": [ ... ]} (this replaces the plain array at the end).
+- \"pyq\": a printed exam tag of the question (\"NEET 2019\", \"AIPMT 2007\", \"[JEE Main 2023 (24 Jan Shift 1)]\") as {\"exam\": \"NEET\"|\"JEE_MAINS\"|\"JEE_ADVANCED\", \"year\": 2019}; AIPMT/NEET-UG = NEET; null if none.`;
+
 export async function extractQuestionsWithAiChunk({
   textChunk,
   startNumber,
@@ -263,7 +293,7 @@ export async function extractQuestionsWithAiChunk({
   subjectContext?: string;
   chapterContext?: string;
   sourceName?: string;
-}): Promise<ExtractedAiQuestion[]> {
+}): Promise<ExtractedAiQuestion[] & { answerKey?: PrintedAnswer[] }> {
   return executeGeminiWithFailover(async (client, modelName, meta) => {
     const model = client.getGenerativeModel({
       model: modelName,
@@ -272,7 +302,7 @@ export async function extractQuestionsWithAiChunk({
         temperature: 0.1,
         maxOutputTokens: 16384,
       },
-    }, { timeout: 18_000 });
+    }, { timeout: pageImages?.length ? 150_000 : 30_000 });
 
     const prompt = `You are the Master Academic Question Extraction & Ingestion Engine for NEET, JEE Main, and NCERT (Atomic Pathshala).
 Source Institute / Paper: "${sourceName || "Exam Document"}"
@@ -282,7 +312,14 @@ Default Chapter Context: "${chapterContext || "General"}"
 
 ${
   pageImages?.length
-    ? `DOCUMENT: the ${pageImages.length} attached page image(s)${firstPage ? ` (pages ${firstPage}–${firstPage + pageImages.length - 1} of the PDF; use these real page numbers for "sourcePage")` : ""}. Read the printed text from the images.`
+    ? `DOCUMENT: the ${pageImages.length} attached page image(s)${firstPage ? ` (pages ${firstPage}–${firstPage + pageImages.length - 1} of the PDF; use these real page numbers for "sourcePage" and every "page" below)` : ""}. Read every question FROM THE IMAGES — they are the truth.${textChunk ? `
+
+TEXT LAYER OF THE SAME PAGES (a spelling hint only — subscripts, Greek letters, arrows and drawings are broken or missing in it; trust the images):
+"""
+${textChunk.slice(0, 12000)}
+"""` : ""}
+
+${VISION_RULES}`
     : `DOCUMENT TEXT (page markers "--- [Page N] ---" give the real page number for "sourcePage"):
 """
 ${textChunk}
@@ -398,7 +435,11 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
     "confidence": 98,
     "reviewReasons": [],
     "isBilingual": true,
-    "autoTranslated": true
+    "autoTranslated": true,
+    "cardBox": {"page": 3, "box": [120, 40, 330, 960]},
+    "figures": [{"page": 3, "place": "A", "box": [250, 90, 300, 300]}],
+    "documentSource": "ALLEN",
+    "pyq": null
   }
 ]`;
 
@@ -410,12 +451,20 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
     const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
     const parsedRaw = parseAiJson(cleanJson);
     const parsed = Array.isArray(parsedRaw) ? parsedRaw : Array.isArray(parsedRaw?.questions) ? parsedRaw.questions : parsedRaw;
+    // Answer-key entries printed on these pages (applied when the job ends).
+    const answerKey: PrintedAnswer[] = (Array.isArray(parsedRaw?.answerKey) ? parsedRaw.answerKey : [])
+      .map((a: any) => ({
+        section: typeof a?.section === "string" && a.section.trim() ? a.section.trim().slice(0, 120) : null,
+        question: Number(a?.question),
+        answer: String(a?.answer ?? "").trim(),
+      }))
+      .filter((a: PrintedAnswer) => Number.isInteger(a.question) && a.question > 0 && a.answer);
 
     if (!Array.isArray(parsed)) {
       throw new Error("AI extraction did not return a valid array of questions.");
     }
 
-    return parsed.map((q: any, idx: number) => {
+    const mapped: ExtractedAiQuestion[] = parsed.map((q: any, idx: number) => {
       const qNum = typeof q.originalNumber === "number" ? q.originalNumber : startNumber + idx;
       const statement = q.statement || q.statementEn || "";
       const statementHi = q.statementHi || "";
@@ -467,6 +516,28 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
       const correctAnswer = isNumeric ? rawAns.trim() : Array.from(new Set(ansKeys)).join(",");
       if (!correctAnswer) reviewReasons.push("⚠️ Answer not found — set the correct option.");
 
+      // Boxes from the page-image call: four numbers 0–1000 on a real page.
+      const asBox = (b: unknown): [number, number, number, number] | null =>
+        Array.isArray(b) && b.length === 4 && b.every((n) => typeof n === "number" && isFinite(n))
+          ? (b.map((n) => Math.max(0, Math.min(1000, n))) as [number, number, number, number])
+          : null;
+      const cardBoxRaw = q.cardBox && typeof q.cardBox === "object" ? q.cardBox : null;
+      const cardBox = cardBoxRaw && asBox(cardBoxRaw.box) ? { page: Number(cardBoxRaw.page) || q.sourcePage || firstPage || 1, box: asBox(cardBoxRaw.box)! } : null;
+      const figureBoxes = (Array.isArray(q.figures) ? q.figures : [])
+        .map((f: any) => ({ page: Number(f?.page) || q.sourcePage || firstPage || 1, place: String(f?.place ?? "").toUpperCase(), box: asBox(f?.box) }))
+        .filter((f: any) => f.box && ["STATEMENT", "A", "B", "C", "D"].includes(f.place));
+      if (figureBoxes.length) {
+        // The drawings are cropped from the page — not "missing".
+        hasImage = true;
+        missingImage = false;
+        missingImageReason = "";
+        const i = reviewReasons.findIndex((r) => r.includes("Missing Diagram"));
+        if (i >= 0) reviewReasons.splice(i, 1);
+      }
+      const pyqRaw = String(q.pyq?.exam ?? "").toUpperCase();
+      const pyqExam = pyqRaw.includes("ADV") ? "JEE_ADVANCED" : pyqRaw.includes("JEE") || pyqRaw.includes("MAIN") ? "JEE_MAINS" : pyqRaw.includes("NEET") || pyqRaw.includes("AIPMT") ? "NEET" : null;
+      const pyqYear = Number(q.pyq?.year);
+
       const isClean = reviewReasons.length === 0;
       const status: ExtractedAiQuestion["status"] = isClean ? "VERIFIED" : "REVIEW_REQUIRED";
 
@@ -508,6 +579,12 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
         reviewReasons,
         isBilingual: Boolean(statement && statementHi),
         autoTranslated: Boolean(q.autoTranslated),
+        cardBox,
+        figureBoxes,
+        documentSource: typeof q.documentSource === "string" && q.documentSource.trim() ? q.documentSource.trim().slice(0, 60) : null,
+        pyqExam: pyqExam && Number.isInteger(pyqYear) && pyqYear > 1985 ? (pyqExam as ExtractedAiQuestion["pyqExam"]) : null,
+        pyqYear: pyqExam && Number.isInteger(pyqYear) && pyqYear > 1985 ? pyqYear : null,
+        section: typeof q.section === "string" && q.section.trim() ? q.section.trim().slice(0, 120) : null,
         sourceLanguage: (q.sourceLanguage === "HINDI" || q.sourceLanguage === "BILINGUAL" || q.sourceLanguage === "ENGLISH"
           ? q.sourceLanguage
           : statementHi && !statement
@@ -515,6 +592,7 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
             : "ENGLISH") as "ENGLISH" | "HINDI" | "BILINGUAL",
       };
     });
+    return Object.assign(mapped, { answerKey });
   });
 }
 

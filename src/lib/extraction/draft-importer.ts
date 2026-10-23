@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/db";
+import { questionFingerprint } from "@/lib/pyq/fingerprint";
 import { withNewQuestionCode, toQuestionType, toDifficulty, isOptionBasedType } from "@/lib/questions/create-with-code";
 
 export interface ImportToDraftResult {
@@ -38,8 +39,16 @@ export async function importVerifiedQuestionsToDraft(
   let skippedCount = 0;
 
   for (const eq of job.questions) {
-    const pyqExam = eq.pyqExam || job.pyqExam || (job.examName?.includes("JEE Adv") ? "JEE_ADVANCED" : job.examName?.includes("JEE") ? "JEE_MAINS" : job.examName?.includes("NEET") ? "NEET" : null);
-    const pyqYear = eq.pyqYear ?? (job.pyqYear ?? (job.year ? parseInt(job.year, 10) || null : null));
+    // Per-question details from the page-image extraction (reference image,
+    // figure, the question's own printed PYQ tag).
+    const images = (eq.imagesJson && !Array.isArray(eq.imagesJson) ? eq.imagesJson : {}) as {
+      reference?: string | null;
+      figure?: string | null;
+      pyqExam?: string | null;
+      pyqYear?: number | null;
+    };
+    const pyqExam = eq.pyqExam || images.pyqExam || job.pyqExam || (job.examName?.includes("JEE Adv") ? "JEE_ADVANCED" : job.examName?.includes("JEE") ? "JEE_MAINS" : job.examName?.includes("NEET") ? "NEET" : null);
+    const pyqYear = eq.pyqYear ?? images.pyqYear ?? (job.pyqYear ?? (job.year ? parseInt(job.year, 10) || null : null));
     const pyqMonth = eq.pyqMonth || job.pyqMonth || null;
     const paddedQNum = String(eq.originalNumber).padStart(2, "0");
     const pyqQuestionNumber = eq.pyqQuestionNumber || `Question ${paddedQNum}`;
@@ -87,6 +96,18 @@ export async function importVerifiedQuestionsToDraft(
       continue;
     }
 
+    // An exact copy already in the Question Bank is not imported again.
+    const fingerprint = questionFingerprint(eq.statement || "", (eq.options as Record<string, string>) || null);
+    const already = await prisma.question.findFirst({ where: { contentFingerprint: fingerprint }, select: { questionCode: true } });
+    if (already) {
+      await prisma.extractedQuestion.update({
+        where: { id: eq.id },
+        data: { status: "DUPLICATE", reviewReasons: [...((Array.isArray(eq.reviewReasons) ? eq.reviewReasons : []) as string[]), `🔁 Duplicate of ${already.questionCode} in the Question Bank.`] },
+      });
+      skippedCount++;
+      continue;
+    }
+
     // Claim the row first so a double-click / second import can't create a
     // second Question Bank copy of the same extracted question.
     const claimed = await prisma.extractedQuestion.updateMany({
@@ -117,8 +138,12 @@ export async function importVerifiedQuestionsToDraft(
         pyqSource: formattedPyqSource,
         questionCode,
         solution: eq.solution || null,
-        imageUrl: null, // STRICTLY for genuine diagram only
-        referenceImageUrl: eq.imageUrl || null, // Editor-only source screenshot
+        // The figure that is part of the question (also placed inside the
+        // statement/options), and the reference image of the whole printed
+        // question (statement, table/statements, options) for checking.
+        imageUrl: eq.hasImage ? images.figure ?? eq.imageUrl ?? null : null,
+        referenceImageUrl: images.reference ?? null,
+        contentFingerprint: fingerprint,
         tags: tagsArray.join(", "),
         status: "DRAFT",
         isPublished: false,
