@@ -92,7 +92,7 @@ export async function cropFiguresOnDoc(
         if (box[2] - box[0] < 8 || box[3] - box[1] < 8) continue;
         // Grows past a tight box (labels like CH3 / NO2 / the O of C=O),
         // trims a stray text line, then fits the drawing.
-        const png = await doc.crop(absPage, box, { grow: true });
+        const png = await doc.crop(absPage, box, { grow: true, option: ["A", "B", "C", "D"].includes(String(f.place).toUpperCase()) });
         if (!png) continue;
         const place = (["STATEMENT", "A", "B", "C", "D"].includes(String(f.place).toUpperCase()) ? String(f.place).toUpperCase() : "STATEMENT") as FigurePlace;
         crops.push({ questionNumber: f.question, place, page: absPage, box, png });

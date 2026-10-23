@@ -21,6 +21,7 @@ import {
 } from "./figure-crops";
 import { validateAndClassifyQuestions } from "./validator";
 import { questionFingerprint } from "@/lib/pyq/fingerprint";
+import { cropQuestionImages, hasFigure } from "./question-images";
 
 export interface ChunkMetadata {
   index: number;
@@ -408,49 +409,11 @@ export async function processChunkForJob(
           });
           extractedQuestions = visionResult;
           printedAnswers = visionResult.answerKey ?? [];
-          // Figures and reference cards are cropped now, from the pages
-          // already rendered. The extraction call located them itself; only
-          // questions with a [FIGURE] it gave no box for are looked up again.
-          const inChunk = (pg: number) => pg >= chunkMeta.firstPage && pg <= chunkMeta.lastPage;
-          visionCrops = [];
-          for (const q of extractedQuestions) {
-            for (const f of q.figureBoxes ?? []) {
-              const pg = inChunk(f.page) ? f.page : q.sourcePage;
-              if (!inChunk(pg) || f.box[2] - f.box[0] < 8 || f.box[3] - f.box[1] < 8) continue;
-              // The model's box is often a little tight (a CH₃ above a ring got
-              // clipped): widen it, then the crop tightens back to the ink.
-              const [y0, x0, y1, x1] = f.box;
-              const wide: [number, number, number, number] = [Math.max(0, y0 - 18), Math.max(0, x0 - 12), Math.min(1000, y1 + 18), Math.min(1000, x1 + 12)];
-              const png = await doc.crop(pg, wide, { grow: true }).catch(() => null);
-              if (png) visionCrops.push({ questionNumber: q.originalNumber, place: f.place, page: pg, png, box: f.box });
-            }
-            if (q.cardBox) {
-              const pg = inChunk(q.cardBox.page) ? q.cardBox.page : q.sourcePage;
-              if (inChunk(pg)) {
-                // The whole question as printed, a little margin around it but
-                // never into the next question below it in the same column
-                // (the boxes tend to run a line long).
-                const [y0, x0, y1, x1] = q.cardBox.box;
-                const below = extractedQuestions
-                  .map((o) => o.cardBox)
-                  .filter((o): o is NonNullable<typeof o> => !!o && o !== q.cardBox && o.page === q.cardBox!.page && o.box[0] > y0 + 10 && Math.min(x1, o.box[3]) - Math.max(x0, o.box[1]) > (x1 - x0) * 0.3)
-                  .map((o) => o.box[0]);
-                const bottom = Math.min(1000, y1 + 6, below.length ? Math.min(...below) - 8 : 1000);
-                const png = await doc.crop(pg, [Math.max(0, y0 - 6), Math.max(0, x0 - 6), bottom, Math.min(1000, x1 + 6)], { grow: false }).catch(() => null);
-                if (png) cardCrops.set(q.originalNumber, png);
-              }
-            }
-          }
-          const unlocated = extractedQuestions.filter((q) => !q.figureBoxes?.length && /\[FIGURE\]/.test([q.statement, ...Object.values(q.options || {})].join(" ")));
-          const pages = await figurePagesFor(unlocated);
-          if (pages.length) {
-            const more = await cropFiguresOnDoc(doc, { pages }).catch((err) => {
-              console.warn(`[chunk-pipeline] Figure cropping failed on chunk ${chunkIndex}:`, err);
-              return [] as CroppedFigure[];
-            });
-            const wanted = new Set(unlocated.map((q) => q.originalNumber));
-            visionCrops.push(...more.filter((c) => wanted.has(c.questionNumber)));
-          }
+          // Figures and reference images, from the pages already rendered.
+          const figurePages = await figurePagesFor(extractedQuestions.filter((q) => hasFigure(q) || q.figureBoxes?.length));
+          const cropped = await cropQuestionImages({ doc, pdf: pdfBuf, questions: extractedQuestions, pages: nums, figurePages });
+          visionCrops = cropped.figures;
+          for (const [num, png] of cropped.cards) cardCrops.set(num, png);
         } finally {
           for (const n of nums) {
             await doc.release(n).catch(() => {});
