@@ -2,7 +2,7 @@ import "server-only";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { lightThinking } from "@/lib/ai/gemini-models";
-import { withRenderedPdf } from "@/lib/pdf/page-renderer";
+import { withRenderedPdf, type RenderedPdf } from "@/lib/pdf/page-renderer";
 import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
 
 /**
@@ -58,7 +58,19 @@ async function locateFigures(images: string[]): Promise<Located[]> {
  * - `deadlineMs`: stop starting new pages after this time.
  */
 export async function cropQuestionFigures(pdf: Buffer, opts: { maxPages?: number; pages?: number[]; deadlineMs?: number } = {}): Promise<CroppedFigure[]> {
-  return withRenderedPdf(pdf, async (doc) => {
+  return withRenderedPdf(pdf, (doc) => cropFiguresOnDoc(doc, opts));
+}
+
+/**
+ * Same as cropQuestionFigures, on a PDF that is already rendered — a chunk
+ * read from page images crops its figures in the same browser session
+ * instead of starting a second one.
+ */
+export async function cropFiguresOnDoc(
+  doc: RenderedPdf,
+  opts: { maxPages?: number; pages?: number[]; deadlineMs?: number } = {}
+): Promise<CroppedFigure[]> {
+  {
     const list = (opts.pages?.length ? opts.pages : Array.from({ length: Math.min(doc.pageCount, opts.maxPages ?? 60) }, (_, i) => i + 1))
       .filter((n) => n >= 1 && n <= doc.pageCount)
       .sort((a, b) => a - b);
@@ -88,6 +100,88 @@ export async function cropQuestionFigures(pdf: Buffer, opts: { maxPages?: number
       for (const n of numbers) await doc.release(n);
     }
     return crops;
+  }
+}
+
+/**
+ * Pages that place a real picture, read from the PDF itself: an image of
+ * real size — not a tiny logo, not a full-page background or scan. Figures
+ * used to be looked for only on pages where the text model said "this
+ * question has an image"; a pasted diagram it missed never came.
+ * (Drawn lines are not counted: many coaching PDFs draw their text, Hindi
+ * especially, as outlines — every page would look like a figure.)
+ */
+export async function pagesWithDrawings(pdf: Buffer, pages: number[]): Promise<number[]> {
+  if (!pages.length) return [];
+  try {
+    const pdfjs = await loadServerPdfJs();
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(pdf), useWorkerFetch: false, isEvalSupported: false, disableFontFace: true, verbosity: 0 }).promise;
+    const OPS = pdfjs.OPS as Record<string, number>;
+    const imageOps = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageXObjectRepeat].filter((x) => typeof x === "number"));
+    const found: number[] = [];
+    try {
+      for (const n of pages) {
+        if (n < 1 || n > doc.numPages) continue;
+        const page = await doc.getPage(n);
+        const [, , pw, ph] = page.view as number[];
+        const pageArea = Math.max(1, (pw ?? 1) * (ph ?? 1));
+        const ops = await page.getOperatorList();
+        let figureImage = false;
+        // Track the current transform scale to size placed images.
+        const stack: number[][] = [];
+        let ctm = [1, 0, 0, 1, 0, 0];
+        for (let i = 0; i < ops.fnArray.length; i++) {
+          const fn = ops.fnArray[i];
+          const args = ops.argsArray[i] as unknown[];
+          if (fn === OPS.save) stack.push(ctm);
+          else if (fn === OPS.restore) ctm = stack.pop() ?? ctm;
+          else if (fn === OPS.transform && Array.isArray(args)) {
+            const [a, b, c, d, e, f] = args as number[];
+            ctm = [
+              ctm[0]! * a! + ctm[2]! * b!,
+              ctm[1]! * a! + ctm[3]! * b!,
+              ctm[0]! * c! + ctm[2]! * d!,
+              ctm[1]! * c! + ctm[3]! * d!,
+              ctm[0]! * e! + ctm[2]! * f! + ctm[4]!,
+              ctm[1]! * e! + ctm[3]! * f! + ctm[5]!,
+            ];
+          } else if (imageOps.has(fn!)) {
+            const area = Math.abs(ctm[0]! * ctm[3]! - ctm[1]! * ctm[2]!);
+            const share = area / pageArea;
+            if (share > 0.006 && share < 0.6) figureImage = true;
+          }
+          if (figureImage) break;
+        }
+        page.cleanup();
+        if (figureImage) found.push(n);
+      }
+    } finally {
+      await doc.destroy().catch(() => undefined);
+    }
+    return found;
+  } catch (err) {
+    console.warn("[figure-crops] drawing scan failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Figures whose question number the locator misread (it matches no question
+ * extracted on that page) go to the one question on that page that needs a
+ * figure and has none — instead of being dropped.
+ */
+export function matchFiguresToQuestions<F extends { questionNumber: number; page: number }>(
+  figures: F[],
+  questions: { originalNumber: number; sourcePage: number; hasImage?: boolean }[]
+): F[] {
+  const numbers = new Set(questions.map((q) => q.originalNumber));
+  const matched = new Set(figures.filter((f) => numbers.has(f.questionNumber)).map((f) => f.questionNumber));
+  return figures.map((f) => {
+    if (numbers.has(f.questionNumber)) return f;
+    const waiting = questions.filter((q) => q.sourcePage === f.page && q.hasImage && !matched.has(q.originalNumber));
+    if (waiting.length !== 1) return f;
+    matched.add(waiting[0]!.originalNumber);
+    return { ...f, questionNumber: waiting[0]!.originalNumber };
   });
 }
 

@@ -44,31 +44,34 @@ export function ExtractionJobProgress({
       setIsDriving(true);
 
       try {
+        // Ask once where to start, then go straight from one chunk to the
+        // next (each answer names the next chunk). It used to ask "resume"
+        // before every chunk and then wait for a 4 s tick.
         const resumeRes = await fetch(`/api/team/question-extract/jobs/${jobId}/resume`, {
           method: "POST",
         });
         const resumeData = await resumeRes.json();
+        let next: number | null =
+          resumeData.success && typeof resumeData.data?.nextChunkIndex === "number" ? resumeData.data.nextChunkIndex : null;
 
-        if (resumeData.success && typeof resumeData.data?.nextChunkIndex === "number") {
-          const chunkIdx = resumeData.data.nextChunkIndex;
-          setLocalStep(`Processing chunk ${chunkIdx + 1} of ${totalChunks || "..."}...`);
-
+        while (!unmounted && next !== null) {
+          setLocalStep(`Processing chunk ${next + 1} of ${totalChunks || "..."}...`);
           const processRes = await fetch(`/api/team/question-extract/jobs/${jobId}/process-chunk`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chunkIndex: chunkIdx }),
+            body: JSON.stringify({ chunkIndex: next }),
           });
+          if (!processRes.ok) break; // server/network trouble: the watchdog tick retries
           const processData = await processRes.json();
-
-          if (processData.success) {
-            if (processData.data?.isComplete) {
-              setLocalStep("Extraction complete!");
-              setLocalProgress(100);
-              toast.success("PDF question extraction completed successfully!");
-              router.refresh();
-              return;
-            }
+          router.refresh();
+          if (processData.data?.isComplete) {
+            setLocalStep("Extraction complete!");
+            setLocalProgress(100);
+            toast.success("PDF question extraction completed successfully!");
+            return;
           }
+          // A chunk that failed is marked and skipped; carry on with the rest.
+          next = typeof processData.data?.nextChunkIndex === "number" ? processData.data.nextChunkIndex : null;
         }
       } catch (err) {
         console.warn("[ExtractionJobProgress] Auto-drive step notice:", err);
@@ -80,9 +83,11 @@ export function ExtractionJobProgress({
       }
     }
 
+    // Start right away; the interval only restarts the chain if it stopped (network error).
+    driveNextChunk();
     const interval = setInterval(() => {
       driveNextChunk();
-    }, 4000);
+    }, 15000);
 
     return () => {
       unmounted = true;

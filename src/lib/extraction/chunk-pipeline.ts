@@ -9,7 +9,15 @@ import {
   extractQuestionsWithAiChunk,
   type ExtractedAiQuestion,
 } from "./pdf-extractor";
-import { cropQuestionFigures, attachFigures, FIGURE_PLACEHOLDER } from "./figure-crops";
+import {
+  cropQuestionFigures,
+  cropFiguresOnDoc,
+  attachFigures,
+  matchFiguresToQuestions,
+  pagesWithDrawings,
+  FIGURE_PLACEHOLDER,
+  type CroppedFigure,
+} from "./figure-crops";
 import { validateAndClassifyQuestions } from "./validator";
 
 export interface ChunkMetadata {
@@ -33,7 +41,8 @@ export interface JobChunkPlan {
 }
 
 const MAX_CHUNK_CHARS = 14_000;
-const MAX_TEXT_PAGES_PER_CHUNK = 2;
+// Three pages per text request (still capped by MAX_CHUNK_CHARS): fewer, fuller AI calls.
+const MAX_TEXT_PAGES_PER_CHUNK = 3;
 const IMAGE_PAGES_PER_CHUNK = 2;
 
 const STOPWORDS = new Set([
@@ -147,6 +156,35 @@ export async function getJobPdfBuffer(job: { fileUrl: string; fileName: string }
 }
 
 /**
+ * The job's PDF and its page text, kept for the next chunks. Every chunk
+ * used to download the whole PDF again and re-read the text of every page
+ * (for a 100-page paper: 50 chunks × 100 pages). Kept per server instance for
+ * a while; a cold instance simply loads it once.
+ */
+const JOB_CACHE_MS = 20 * 60_000;
+const jobFiles = new Map<string, { at: number; fileUrl: string; pdf: Buffer; pages?: { pageNumber: number; text: string }[] }>();
+
+async function jobPdf(job: { id: string; fileUrl: string; fileName: string }): Promise<Buffer | null> {
+  const hit = jobFiles.get(job.id);
+  if (hit && hit.fileUrl === job.fileUrl && Date.now() - hit.at < JOB_CACHE_MS) return hit.pdf;
+  const pdf = await getJobPdfBuffer(job);
+  if (pdf) {
+    // A few jobs at most; the oldest goes first.
+    while (jobFiles.size >= 3) jobFiles.delete(jobFiles.keys().next().value as string);
+    jobFiles.set(job.id, { at: Date.now(), fileUrl: job.fileUrl, pdf });
+  }
+  return pdf;
+}
+
+async function jobPages(jobId: string, pdf: Buffer): Promise<{ pageNumber: number; text: string }[]> {
+  const hit = jobFiles.get(jobId);
+  if (hit?.pdf === pdf && hit.pages) return hit.pages;
+  const { pages } = await extractTextFromPdfBuffer(pdf);
+  if (hit?.pdf === pdf) hit.pages = pages;
+  return pages;
+}
+
+/**
  * Processes a single chunk for an extraction job.
  * Updates ExtractedQuestion records incrementally so NO work is lost if later chunks fail.
  */
@@ -181,15 +219,14 @@ export async function processChunkForJob(
 
   let pdfBuf = options.pdfBuffer || null;
   if (!pdfBuf && job.fileUrl) {
-    pdfBuf = await getJobPdfBuffer(job);
+    pdfBuf = await jobPdf(job);
   }
 
   // If no chunk plan exists, initialize one
   if (!chunkPlan) {
     let pages: { pageNumber: number; text: string }[] = [];
     if (pdfBuf) {
-      const res = await extractTextFromPdfBuffer(pdfBuf);
-      pages = res.pages;
+      pages = await jobPages(job.id, pdfBuf);
     }
     if (!pages.length) {
       pages = [{ pageNumber: 1, text: "" }];
@@ -228,12 +265,23 @@ export async function processChunkForJob(
 
   const subjectContext = job.subject && job.subject !== "Auto Detect" ? job.subject : undefined;
   let extractedQuestions: ExtractedAiQuestion[] = [];
+  let visionCrops: CroppedFigure[] | null = null;
+
+  // Pages of this chunk to look for figures on: where the model said a
+  // question has one, plus pages whose PDF actually draws a figure (the model
+  // misses some) — only pages that have a question on them.
+  const figurePagesFor = async (qs: ExtractedAiQuestion[]) => {
+    const inChunk = (p: number) => p >= chunkMeta.firstPage && p <= chunkMeta.lastPage;
+    const flagged = qs.filter((q) => q.hasImage).map((q) => q.sourcePage).filter(inChunk);
+    const withQuestions = Array.from(new Set(qs.map((q) => q.sourcePage).filter(inChunk)));
+    const drawn = pdfBuf ? await pagesWithDrawings(pdfBuf, withQuestions.filter((p) => !flagged.includes(p))) : [];
+    return Array.from(new Set([...flagged, ...drawn])).sort((a, b) => a - b);
+  };
 
   try {
     if (!chunkMeta.isVision && pdfBuf) {
       // 1. Text-based chunk extraction
-      const res = await extractTextFromPdfBuffer(pdfBuf);
-      const chunkPages = res.pages.filter(
+      const chunkPages = (await jobPages(job.id, pdfBuf)).filter(
         (p) => p.pageNumber >= chunkMeta.firstPage && p.pageNumber <= chunkMeta.lastPage
       );
       const textChunk = chunkPages
@@ -268,6 +316,15 @@ export async function processChunkForJob(
             chapterContext: job.chapter || undefined,
             sourceName: job.sourceName,
           });
+          // Figures are cropped now, from the pages already rendered — no
+          // second browser start for the same pages.
+          const pages = await figurePagesFor(extractedQuestions);
+          if (pages.length) {
+            visionCrops = await cropFiguresOnDoc(doc, { pages }).catch((err) => {
+              console.warn(`[chunk-pipeline] Figure cropping failed on chunk ${chunkIndex}:`, err);
+              return [];
+            });
+          }
         } finally {
           for (const n of nums) {
             await doc.release(n).catch(() => {});
@@ -277,19 +334,14 @@ export async function processChunkForJob(
     }
 
     // 3. Diagram / Structure Cropping for questions on these pages
-    if (pdfBuf && extractedQuestions.some((q) => q.hasImage)) {
-      const figurePages = Array.from(
-        new Set(
-          extractedQuestions
-            .filter((q) => q.hasImage)
-            .map((q) => q.sourcePage)
-            .filter((p) => p >= chunkMeta.firstPage && p <= chunkMeta.lastPage)
-        )
-      );
+    if (pdfBuf) {
+      const figurePages = visionCrops ? [] : await figurePagesFor(extractedQuestions);
 
-      if (figurePages.length) {
+      if (visionCrops || figurePages.length) {
         try {
-          const crops = await cropQuestionFigures(pdfBuf, { pages: figurePages });
+          const located = visionCrops ?? (await cropQuestionFigures(pdfBuf, { pages: figurePages }));
+          // A misread question number still reaches the right question.
+          const crops = matchFiguresToQuestions(located, extractedQuestions);
           const uploaded: { questionNumber: number; place: "STATEMENT" | "A" | "B" | "C" | "D"; url: string }[] = [];
           for (const [i, c] of crops.entries()) {
             const url = await uploadFile({
@@ -485,11 +537,10 @@ export async function resumeExtractionJob(jobId: string) {
   let chunkPlan = (report.chunkPlan as JobChunkPlan) || null;
 
   if (!chunkPlan) {
-    const pdfBuf = await getJobPdfBuffer(job);
+    const pdfBuf = await jobPdf(job);
     let pages: { pageNumber: number; text: string }[] = [];
     if (pdfBuf) {
-      const res = await extractTextFromPdfBuffer(pdfBuf);
-      pages = res.pages;
+      pages = await jobPages(job.id, pdfBuf);
     }
     chunkPlan = buildChunkPlan(pages);
     report.chunkPlan = chunkPlan;
