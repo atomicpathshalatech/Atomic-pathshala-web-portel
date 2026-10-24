@@ -18,6 +18,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import { FormulaText } from "@/components/test-portal/FormulaText";
 
 export interface GeneratedQuestionItem {
   id: string;
@@ -433,15 +434,14 @@ export function GeneratedQuestionCard({
           <>
             {/* English Question Statement */}
             <div className="space-y-2">
-              <p className="text-slate-900 font-medium text-sm leading-relaxed whitespace-pre-wrap">
-                {question.statementEn}
-              </p>
+              {/* Tables (match the column, data tables) and formulas shown as the student sees them. */}
+              <FormulaText text={question.statementEn} className="block text-slate-900 font-medium text-sm leading-relaxed" />
 
               {/* Hindi Statement if present */}
               {question.statementHi && (
-                <p className="text-slate-700 font-normal text-sm leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100 whitespace-pre-wrap">
-                  {question.statementHi}
-                </p>
+                <div className="text-slate-700 font-normal text-sm leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <FormulaText text={question.statementHi} className="block" />
+                </div>
               )}
             </div>
 
@@ -488,8 +488,8 @@ export function GeneratedQuestionCard({
                       {key}
                     </span>
                     <div className="space-y-0.5 flex-1">
-                      <p className="leading-snug">{optTextEn}</p>
-                      {optTextHi && <p className="text-slate-600 text-[11px]">{optTextHi}</p>}
+                      {optTextEn && <FormulaText text={optTextEn} className="block leading-snug" />}
+                      {optTextHi && <FormulaText text={optTextHi} className="block text-slate-600 text-[11px]" />}
                     </div>
                     {isCorrect && (
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded shrink-0">

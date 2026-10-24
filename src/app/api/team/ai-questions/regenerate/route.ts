@@ -2,13 +2,19 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { toQuestionType, toDifficulty } from "@/lib/questions/create-with-code";
+import { toDifficulty } from "@/lib/questions/create-with-code";
+import { bankTypeOf } from "@/lib/ai-question-engine/type-formats";
+import { attachFigure } from "@/lib/ai-question-engine/prepare-figure";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { defaultAiProvider } from "@/lib/ai-question-engine/gemini-provider";
 import { runQuestionValidationPipeline } from "@/lib/ai-question-engine/validator-pipeline";
 import { GenerationLanguage, NeetDifficulty } from "@/lib/ai-question-engine/types";
+
+// One AI call to write, one to check, plus drawing a figure.
+export const runtime = "nodejs";
+export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   try {
@@ -58,6 +64,8 @@ export async function POST(request: NextRequest) {
     }
 
     const newQ = rawList[0]!;
+    // Its picture (drawn figure / source image) before the check, as in a batch.
+    if (newQ.figure || newQ.sourceImageId) await attachFigure(newQ, existing.batchId);
     const batchTopics = Array.isArray(existing.batch.topics) ? (existing.batch.topics as string[]) : [];
     const { report, scores } = await runQuestionValidationPipeline({
       question: newQ,
@@ -79,6 +87,7 @@ export async function POST(request: NextRequest) {
         subTopic: newQ.subTopic || null,
         difficulty: newQ.difficulty,
         questionType: newQ.questionType,
+        imageUrl: newQ.imageUrl ?? null,
         validationStatus: report.validationStatus,
         validationReport: report as any,
         qualityScore: scores as any,
@@ -101,7 +110,8 @@ export async function POST(request: NextRequest) {
             data: {
               topic: newQ.topic,
               subTopic: newQ.subTopic || null,
-              type: toQuestionType(newQ.questionType),
+              type: bankTypeOf(newQ.questionType),
+              imageUrl: newQ.imageUrl ?? null,
               difficulty: toDifficulty(newQ.difficulty),
               solution: newQ.solutionEn || newQ.solutionHi || null,
               translations: { create: tr },

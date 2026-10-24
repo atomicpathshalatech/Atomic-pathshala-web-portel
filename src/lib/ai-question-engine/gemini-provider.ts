@@ -13,6 +13,35 @@ import {
   QuestionValidationReport,
   RawAiGeneratedQuestion,
 } from "./types";
+import { formatOf } from "./type-formats";
+import { parseFigure } from "./figures";
+
+/**
+ * Holds a generated question to the type it was asked for: the type id is set,
+ * the format is checked, and visual types must bring a usable figure (or one of
+ * the offered source images). What is wrong is recorded in formatIssue.
+ */
+export function checkAgainstType(q: RawAiGeneratedQuestion, typeId: string, offeredImages: Set<string>): RawAiGeneratedQuestion {
+  const fmt = formatOf(typeId);
+  const out: RawAiGeneratedQuestion = { ...q, questionType: typeId, formatIssue: undefined };
+  const usesSource = Boolean(q.sourceImageId && offeredImages.has(q.sourceImageId));
+  if (!usesSource) out.sourceImageId = undefined;
+  if (!fmt.figure) out.figure = undefined;
+  let issue = fmt.check(q);
+  if (!issue && fmt.figure && !usesSource) {
+    if (fmt.figure === "source") {
+      issue = "No source image was used (one of the offered images must be chosen).";
+    } else {
+      const { figure, problem } = parseFigure(q.figure);
+      if (!figure) issue = problem ?? "No figure was given for this visual question.";
+      else if (fmt.figure === "graph" && figure.kind !== "graph") issue = "A graph question needs a graph figure.";
+      else out.figure = figure;
+    }
+  }
+  out.requiresImage = Boolean(fmt.figure) || Boolean(out.sourceImageId);
+  if (issue) out.formatIssue = issue;
+  return out;
+}
 
 const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
@@ -197,6 +226,7 @@ export class GeminiProvider implements AIProvider {
           sourcePageNumbers: Array.isArray(item.sourcePageNumbers) ? item.sourcePageNumbers.map(Number) : undefined,
           sourceExcerpt: item.sourceExcerpt ? String(item.sourceExcerpt).trim() : undefined,
           sourceImageId: item.sourceImageId ? String(item.sourceImageId).trim() : undefined,
+          figure: item.figure && typeof item.figure === "object" ? item.figure : undefined,
         };
       });
     });
@@ -216,56 +246,93 @@ export class GeminiProvider implements AIProvider {
     deadlineMs?: number;
   }): Promise<RawAiGeneratedQuestion[]> {
     const totalRequested = Object.values(params.questionTypeCounts).reduce((a, b) => a + b, 0);
+    const offeredImages = new Set((params.sourceImageDescriptions ?? []).map((i) => i.id));
 
-    if (totalRequested <= 5) {
-      return this.generateSingleBatch(params);
-    }
-
-    // Chunk generation into manageable sub-batches (max 5 questions per call).
-    // Each chunk gets an exact share of the type and difficulty plan (the old
-    // Math.max(1, …) gave every chunk at least one of every type, so the plan
-    // was overshot), and the stems already written so it doesn't repeat them.
+    // One type per call (at most 5 questions), so each call is told exactly one
+    // format and every requested type is really asked for; a few calls run at
+    // once to stay inside the time budget. Difficulties are shared out over the
+    // calls so the batch adds up to the plan.
     const CHUNK_SIZE = 5;
-    const accumulatedQuestions: RawAiGeneratedQuestion[] = [];
-    const typesLeft: Record<string, number> = { ...params.questionTypeCounts };
+    const PARALLEL = 4;
+    type Job = { typeId: string; count: number; diff: Record<NeetDifficulty, number> };
     const diffLeft: Record<string, number> = { ...params.difficultyMix };
-    let failures = 0;
-
-    while (accumulatedQuestions.length < totalRequested && failures < 3) {
-      if (params.deadlineMs && Date.now() > params.deadlineMs && accumulatedQuestions.length > 0) break;
-      const currentChunkTarget = Math.min(CHUNK_SIZE, totalRequested - accumulatedQuestions.length);
-      const subTypeCounts = splitCounts(params.questionTypeCounts, currentChunkTarget, typesLeft);
-      const chunkSize = Object.values(subTypeCounts).reduce((a, b) => a + b, 0) || currentChunkTarget;
-      const subDiff = splitCounts(params.difficultyMix, chunkSize, diffLeft);
-      const subDiffMix = { EASY: 0, MEDIUM: 0, HARD: 0, ULTRA: 0 } as Record<NeetDifficulty, number>;
-      for (const [k, n] of Object.entries(subDiff)) subDiffMix[k as NeetDifficulty] = n;
-
-      try {
-        const chunkQuestions = await this.generateSingleBatch({
-          ...params,
-          questionTypeCounts: Object.keys(subTypeCounts).length > 0 ? subTypeCounts : { SINGLE_CORRECT: chunkSize },
-          difficultyMix: subDiffMix,
-          avoidStatements: accumulatedQuestions.map((q) => q.statementEn || q.statementHi || "").filter(Boolean).slice(-25),
-        });
-        if (chunkQuestions.length === 0) {
-          failures++;
-          continue;
+    const plan = (counts: Record<string, number>): Job[] => {
+      const jobs: Job[] = [];
+      for (const [typeId, n] of Object.entries(counts)) {
+        for (let left = n; left > 0; left -= CHUNK_SIZE) {
+          const count = Math.min(CHUNK_SIZE, left);
+          const sub = splitCounts(params.difficultyMix, count, diffLeft);
+          for (const [k, v] of Object.entries(sub)) diffLeft[k] = Math.max(0, (diffLeft[k] ?? 0) - v);
+          const diff = { EASY: 0, MEDIUM: 0, HARD: 0, ULTRA: 0 } as Record<NeetDifficulty, number>;
+          let assigned = 0;
+          for (const [k, v] of Object.entries(sub)) {
+            diff[k as NeetDifficulty] = v;
+            assigned += v;
+          }
+          if (assigned < count) diff.MEDIUM += count - assigned;
+          jobs.push({ typeId, count, diff });
         }
-        for (const [k, n] of Object.entries(subTypeCounts)) typesLeft[k] = Math.max(0, (typesLeft[k] ?? 0) - n);
-        for (const [k, n] of Object.entries(subDiff)) diffLeft[k] = Math.max(0, (diffLeft[k] ?? 0) - n);
-        for (const q of chunkQuestions) {
-          if (accumulatedQuestions.length >= totalRequested) break;
-          q.questionIndex = accumulatedQuestions.length + 1;
-          accumulatedQuestions.push(q);
-        }
-      } catch (chunkErr) {
-        failures++;
-        console.warn(`[GeminiProvider] Chunk generation error (${failures}/3):`, chunkErr);
-        if (failures >= 3 && accumulatedQuestions.length === 0) throw chunkErr;
       }
+      return jobs;
+    };
+
+    const good: Record<string, RawAiGeneratedQuestion[]> = {};
+    const flawed: RawAiGeneratedQuestion[] = [];
+    let lastError: unknown = null;
+    const runJobs = async (jobs: Job[]) => {
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(PARALLEL, jobs.length) }, async () => {
+          while (next < jobs.length) {
+            const job = jobs[next++]!;
+            if (params.deadlineMs && Date.now() > params.deadlineMs) return;
+            try {
+              const written = Object.values(good).flat().concat(flawed);
+              const list = await this.generateSingleBatch({
+                ...params,
+                questionTypeCounts: { [job.typeId]: job.count },
+                difficultyMix: job.diff,
+                avoidStatements: written.map((q) => q.statementEn || q.statementHi || "").filter(Boolean).slice(-25),
+              });
+              for (const q of list.slice(0, job.count)) {
+                const checked = checkAgainstType(q, job.typeId, offeredImages);
+                if (checked.formatIssue) flawed.push(checked);
+                else (good[job.typeId] ??= []).push(checked);
+              }
+            } catch (err) {
+              lastError = err;
+              console.warn(`[GeminiProvider] Generation call for ${job.typeId} failed:`, err instanceof Error ? err.message : err);
+            }
+          }
+        })
+      );
+    };
+
+    await runJobs(plan(params.questionTypeCounts));
+
+    // Types that came back short (or not in their format) are asked for once more.
+    const missing: Record<string, number> = {};
+    for (const [typeId, n] of Object.entries(params.questionTypeCounts)) {
+      const short = n - (good[typeId]?.length ?? 0);
+      if (short > 0) missing[typeId] = short;
+    }
+    if (Object.keys(missing).length && (!params.deadlineMs || Date.now() < params.deadlineMs - 20_000)) {
+      for (const k of Object.keys(diffLeft)) diffLeft[k] = 0;
+      for (const [k, n] of Object.entries(params.difficultyMix)) diffLeft[k] = n;
+      await runJobs(plan(missing));
     }
 
-    return accumulatedQuestions;
+    // Requested order; a type still short is filled with its flawed questions
+    // (saved with the reason, so the teacher sees what went wrong).
+    const out: RawAiGeneratedQuestion[] = [];
+    for (const [typeId, n] of Object.entries(params.questionTypeCounts)) {
+      const ok = (good[typeId] ?? []).slice(0, n);
+      const extra = flawed.filter((q) => q.questionType === typeId).slice(0, n - ok.length);
+      out.push(...ok, ...extra);
+    }
+    if (!out.length && lastError) throw lastError;
+    out.forEach((q, i) => (q.questionIndex = i + 1));
+    return out.slice(0, totalRequested);
   }
 
   async validateQuestion(question: {
@@ -280,6 +347,7 @@ export class GeminiProvider implements AIProvider {
     questionType: string;
     topic?: string;
     allowedTopics?: string[];
+    figureDescription?: string;
   }): Promise<QuestionValidationReport> {
     const prompt = buildQuestionValidationPrompt(question);
 

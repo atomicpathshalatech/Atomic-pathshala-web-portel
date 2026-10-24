@@ -46,7 +46,7 @@ const nextConfig = {
     optimizePackageImports: ["lucide-react", "date-fns"],
     // Headless Chromium and pdf processing libraries:
     // kept out of the bundle and traced into serverless functions properly.
-    serverComponentsExternalPackages: ["@sparticuz/chromium", "puppeteer-core", "pdf-lib"],
+    serverComponentsExternalPackages: ["@sparticuz/chromium", "puppeteer-core", "pdf-lib", "@napi-rs/canvas", "openchemlib"],
     serverActions: {
       bodySizeLimit: "10mb",
     },
@@ -108,6 +108,16 @@ const nextConfig = {
         "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
       ],
       "/api/team/modules/[id]/export": ["node_modules/@sparticuz/chromium/bin/**"],
+      // AI questions draw their figures (graph / structures / diagram) to PNG with
+      // the native canvas and the Liberation Sans font shipped with pdf.js.
+      "/api/team/ai-questions/generate": [
+        "node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+        "node_modules/pdfjs-dist/standard_fonts/LiberationSans-*.ttf",
+      ],
+      "/api/team/ai-questions/regenerate": [
+        "node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+        "node_modules/pdfjs-dist/standard_fonts/LiberationSans-*.ttf",
+      ],
       // Design Studio: Chrome renders the module, pdf.js reads back the contents' page numbers.
       "/api/team/modules/[id]/design/render": [
         "node_modules/@sparticuz/chromium/bin/**",

@@ -3,6 +3,8 @@ import { analyzeQuestionSimilarity } from "@/lib/questions/similarity";
 import { isOptionBasedType } from "@/lib/questions/create-with-code";
 import { AIProvider } from "./provider-interface";
 import { matchSelectedTopic } from "./gemini-provider";
+import { formatOf, TYPE_FORMATS } from "./type-formats";
+import { describeFigure, parseFigure } from "./figures";
 import {
   QuestionQualityScores,
   QuestionValidationReport,
@@ -32,6 +34,13 @@ const sameAnswer = (a: string[] = [], b: string[] = []) => {
   const y = Array.from(new Set(b.map((s) => s.trim().toUpperCase()))).sort().join(",");
   return x !== "" && x === y;
 };
+
+/** The figure in words for the answer checker (it cannot see pictures). */
+function figureText(q: RawAiGeneratedQuestion): string | undefined {
+  if (!q.figure) return undefined;
+  const { figure } = parseFigure(q.figure);
+  return figure ? describeFigure(figure) : undefined;
+}
 
 /**
  * Multi-stage validation for one AI-generated question.
@@ -73,7 +82,8 @@ export async function runQuestionValidationPipeline({
   const hasHi = Boolean(question.statementHi?.trim());
   if (!hasEn && !hasHi) blocking.push("Question statement is completely empty.");
 
-  const optionBased = isOptionBasedType(question.questionType);
+  // Every generator type is answered by choosing an option ("Numerical value" is a calculation MCQ).
+  const optionBased = TYPE_FORMATS[question.questionType] ? true : isOptionBasedType(question.questionType);
   const optsEn = (question.optionsEn || {}) as Record<string, string>;
   const optsHi = (question.optionsHi || {}) as Record<string, string>;
   const filled = (o: Record<string, string>) => ["A", "B", "C", "D"].filter((k) => String(o[k] ?? "").trim());
@@ -96,20 +106,20 @@ export async function runQuestionValidationPipeline({
 
   if (!question.solutionEn?.trim() && !question.solutionHi?.trim()) issues.push("Solution is missing.");
 
-  // Visual / Image Dependency Enforcement (Section 93, 102, 119)
-  const isVisualType =
-    question.questionType === "DIAGRAM_BASED" ||
-    question.questionType === "IMAGE_BASED" ||
-    question.questionType === "GRAPH_BASED" ||
-    question.primaryNature === "Diagram-Based" ||
-    question.primaryNature === "Graph-Based" ||
-    question.requiresImage;
+  // The question must really be of its type (e.g. three columns for a 3-column match).
+  if (question.formatIssue) blocking.push(`Not in the format of ${question.questionType}: ${question.formatIssue}`);
 
-  if (isVisualType) {
-    if (!question.sourceImageId && !question.requiresImage) {
-      blocking.push("Visual question requested but no image/diagram asset is attached.");
+  // A visual question needs a picture that is actually attached — saying
+  // "requiresImage" is not enough (those used to pass with no picture at all).
+  const isVisualType = Boolean(formatOf(question.questionType).figure) && Boolean(TYPE_FORMATS[question.questionType]);
+  if (isVisualType || question.sourceImageId || question.figure) {
+    if (!question.imageUrl) {
+      blocking.push(`No picture is attached${question.figureProblem ? `: ${question.figureProblem}` : "."}`);
+    } else if (question.figureProblem) {
+      issues.push(question.figureProblem);
     }
-    const depScore = question.imageDependencyScore ?? (question.sourceImageId ? 85 : 0);
+    if (question.figure && !question.sourceImageId) issues.push("The figure was drawn from the AI's description — check that its labels and values match the question.");
+    const depScore = question.imageDependencyScore ?? (question.imageUrl ? 85 : 0);
     if (depScore < 60 && !blocking.length) {
       issues.push(`Image dependency score is low (${depScore}% < 60%). The question may not strictly require the diagram.`);
     }
@@ -192,6 +202,7 @@ export async function runQuestionValidationPipeline({
           questionType: question.questionType,
           topic: question.topic,
           allowedTopics,
+          figureDescription: figureText(question),
         }),
         AI_CHECK_TIMEOUT_MS
       );

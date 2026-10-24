@@ -20,8 +20,11 @@ export interface NeetQuestionTypeDef {
   category: "STANDARD" | "STATEMENT" | "MATCH" | "VISUAL" | "CALCULATION" | "PASSAGE";
   description: string;
   exampleSnippet: string;
+  /** Generation modes that can make it (default: both). Real photographs only exist in an uploaded PDF. */
+  methods?: GenerationMethod[];
 }
 
+// NEET papers have no multiple-correct or type-in integer questions, so those two types are not offered.
 export const OFFICIAL_NEET_QUESTION_TYPES: NeetQuestionTypeDef[] = [
   {
     id: "SINGLE_CORRECT",
@@ -31,15 +34,6 @@ export const OFFICIAL_NEET_QUESTION_TYPES: NeetQuestionTypeDef[] = [
     category: "STANDARD",
     description: "Standard multiple-choice question with exactly one correct option among four.",
     exampleSnippet: "Which of the following is the powerhouse of the cell? (A) Ribosome (B) Mitochondria...",
-  },
-  {
-    id: "MULTIPLE_CORRECT",
-    name: "Multiple Correct MCQ",
-    hindiName: "बहु-विकल्प सही MCQ",
-    badge: "Multi-MCQ",
-    category: "STANDARD",
-    description: "Multiple options can be scientifically correct. Used for comprehensive concept testing.",
-    exampleSnippet: "Which of the following organelles contain double membranes?",
   },
   {
     id: "ASSERTION_REASON",
@@ -119,7 +113,8 @@ export const OFFICIAL_NEET_QUESTION_TYPES: NeetQuestionTypeDef[] = [
     hindiName: "वास्तविक चित्र आधारित",
     badge: "Image",
     category: "VISUAL",
-    description: "Based on real microscopic slide, specimen photograph, or apparatus image extracted from PDF.",
+    description: "Based on a real microscope slide, specimen photograph or apparatus image from the uploaded PDF (BY PDF only).",
+    methods: ["PDF"],
     exampleSnippet: "Identify the tissue shown in the photomicrograph.",
   },
   {
@@ -166,15 +161,6 @@ export const OFFICIAL_NEET_QUESTION_TYPES: NeetQuestionTypeDef[] = [
     category: "CALCULATION",
     description: "Requires multi-step mathematical calculation using standard NCERT physical/chemical formulas.",
     exampleSnippet: "Calculate the root mean square velocity of oxygen molecules at 300 K.",
-  },
-  {
-    id: "INTEGER_ANSWER",
-    name: "Integer / Numerical Answer",
-    hindiName: "पूर्णांक उत्तर प्रकार",
-    badge: "Integer",
-    category: "CALCULATION",
-    description: "Answer is a single positive integer or whole number (NTA pattern Section B style).",
-    exampleSnippet: "How many ATP molecules are net gained during aerobic glycolysis of one glucose?",
   },
   {
     id: "CONCEPT_APPLICATION",
@@ -248,6 +234,14 @@ export interface RawAiGeneratedQuestion {
   sourcePageNumbers?: number[];
   sourceExcerpt?: string;
   sourceImageId?: string;
+  /** Figure described by the model (graph data, SMILES, small SVG); drawn by figures.ts. */
+  figure?: unknown;
+  /** Why the figure could not be used, if it could not. */
+  figureProblem?: string;
+  /** Why the question is not in the format of its type, if it is not. */
+  formatIssue?: string;
+  /** Picture shown with the question (drawn figure or source image). */
+  imageUrl?: string;
 }
 
 export interface QuestionValidationReport {

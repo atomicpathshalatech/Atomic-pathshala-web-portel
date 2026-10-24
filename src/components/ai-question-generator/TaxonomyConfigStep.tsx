@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BookOpen,
   Plus,
@@ -124,6 +124,28 @@ export function TaxonomyConfigStep({
       onDifficultiesChange([...difficulties, diff]);
     }
   };
+
+  // Types this mode can make (a real-photo question needs an uploaded PDF).
+  const availableTypes = OFFICIAL_NEET_QUESTION_TYPES.filter((t) => !t.methods || t.methods.includes(isPdfMode ? "PDF" : "AI"));
+  const selectAllTypes = () => {
+    const ids = availableTypes.map((t) => t.id);
+    onQuestionTypesChange(ids);
+    // The plan must follow the selection, or the batch only makes the old types.
+    calculateAutoMix(Math.max(totalQuestions, ids.length), ids, difficulties);
+    if (totalQuestions < ids.length) onTotalQuestionsChange(ids.length);
+  };
+  // Switching to BY AI drops a type it cannot make.
+  useEffect(() => {
+    const allowed = new Set(availableTypes.map((t) => t.id));
+    const kept = questionTypes.filter((t) => allowed.has(t));
+    if (kept.length !== questionTypes.length) {
+      const next = kept.length ? kept : ["SINGLE_CORRECT"];
+      onQuestionTypesChange(next);
+      calculateAutoMix(totalQuestions, next, difficulties);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPdfMode]);
+  const typesWithoutQuestions = Math.max(0, questionTypes.length - totalQuestions);
 
   // Question Type Toggle
   const toggleQuestionType = (typeId: string) => {
@@ -515,7 +537,7 @@ export function TaxonomyConfigStep({
         </div>
       </div>
 
-      {/* 4. NEET Question Type System (20 Official Types - Section 21) */}
+      {/* 4. NEET question types */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
@@ -529,20 +551,21 @@ export function TaxonomyConfigStep({
           </div>
           <button
             type="button"
-            onClick={() => onQuestionTypesChange(OFFICIAL_NEET_QUESTION_TYPES.map((t) => t.id))}
+            onClick={selectAllTypes}
             className="text-xs font-bold text-blue-600 hover:text-blue-800 px-3 py-1 bg-blue-50 rounded-lg"
           >
-            Select All 20 Types
+            Select All {availableTypes.length} Types
           </button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto p-1">
-          {OFFICIAL_NEET_QUESTION_TYPES.map((typeDef) => {
+          {availableTypes.map((typeDef) => {
             const isSelected = questionTypes.includes(typeDef.id);
             return (
               <button
                 key={typeDef.id}
                 type="button"
+                title={`${typeDef.description}\nExample: ${typeDef.exampleSnippet}`}
                 onClick={() => toggleQuestionType(typeDef.id)}
                 className={`p-2.5 rounded-2xl border text-left text-xs transition flex items-center gap-2 ${
                   isSelected
@@ -560,6 +583,24 @@ export function TaxonomyConfigStep({
             );
           })}
         </div>
+        {typesWithoutQuestions > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <span>
+              {questionTypes.length} types selected but only {totalQuestions} questions — {typesWithoutQuestions} type
+              {typesWithoutQuestions === 1 ? "" : "s"} will get no question.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                onTotalQuestionsChange(questionTypes.length);
+                calculateAutoMix(questionTypes.length, questionTypes, difficulties);
+              }}
+              className="ml-auto rounded-lg bg-amber-600 px-2.5 py-1 font-bold text-white hover:bg-amber-700"
+            >
+              Make it {questionTypes.length} questions
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 5. NCERT-FIRST & VISUAL DIAGRAM INTELLIGENCE (Sections 93-132) */}

@@ -3,7 +3,9 @@ import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/db";
 import { defaultAiProvider, matchSelectedTopic } from "./gemini-provider";
 import { runQuestionValidationPipeline } from "./validator-pipeline";
-import { withNewQuestionCode, toQuestionType, toDifficulty } from "@/lib/questions/create-with-code";
+import { withNewQuestionCode, toDifficulty } from "@/lib/questions/create-with-code";
+import { bankTypeOf } from "./type-formats";
+import { attachFigure } from "./prepare-figure";
 import {
   GenerationLanguage,
   GenerationPlan,
@@ -213,6 +215,14 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
     for (const item of params.generationPlan.items) {
       if (item.count > 0) questionTypeCounts[item.questionTypeId] = item.count;
     }
+    // A question about a real photograph needs one to look at: without any
+    // source image those are asked as diagram questions (drawn figure) instead.
+    let note = "";
+    if (questionTypeCounts.IMAGE_BASED && sourceImages.length === 0) {
+      questionTypeCounts.DIAGRAM_BASED = (questionTypeCounts.DIAGRAM_BASED ?? 0) + questionTypeCounts.IMAGE_BASED;
+      note = `No source image for "Image Based" — ${questionTypeCounts.IMAGE_BASED} asked as "Diagram Based" (drawn figure).`;
+      delete questionTypeCounts.IMAGE_BASED;
+    }
 
     await prisma.aiGenerationBatch.update({
       where: { id: batchId },
@@ -232,6 +242,12 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
       sourceImageDescriptions: sourceImages.length > 0 ? sourceImages : undefined,
       deadlineMs: startedAt + GENERATE_BUDGET_MS,
     });
+
+    // Pictures first: the validator needs to know whether each visual question really has one.
+    await prisma.aiGenerationBatch.update({ where: { id: batchId }, data: { progress: 50, currentStep: "Drawing figures for visual questions..." } });
+    for (const q of rawQuestions) {
+      if (q.figure || q.sourceImageId) await attachFigure(q, batchId);
+    }
 
     await prisma.aiGenerationBatch.update({
       where: { id: batchId },
@@ -301,11 +317,8 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
       else if (report.validationStatus === "NEEDS_REVIEW") needsReviewCount++;
       else failedCount++;
 
-      let imageUrl: string | undefined;
-      if (q.sourceImageId && params.sourcePdfId) {
-        const img = await prisma.aiSourcePdfImage.findUnique({ where: { id: q.sourceImageId }, select: { publicUrl: true } });
-        if (img) imageUrl = img.publicUrl;
-      }
+      // Drawn figure or chosen source/NCERT image (the NCERT figures found in AI mode were never attached before).
+      const imageUrl = q.imageUrl;
 
       // Question Bank draft — only for questions that didn't fail outright.
       let draftQuestionId: string | null = null;
@@ -327,7 +340,7 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
                 chapter: q.chapter,
                 topic: q.topic,
                 subTopic: q.subTopic || null,
-                type: toQuestionType(q.questionType),
+                type: bankTypeOf(q.questionType),
                 difficulty: toDifficulty(q.difficulty),
                 category: `AI_GENERATED:${methodTag}`,
                 status: "DRAFT",
@@ -395,8 +408,8 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
           generated === 0
             ? "No questions generated."
             : shortBy > 0
-              ? `Completed — ${generated} of ${params.totalQuestions} generated (time limit); run again for the rest.`
-              : "Generation & Validation Complete",
+              ? `Completed — ${generated} of ${params.totalQuestions} generated (time limit); run again for the rest.${note ? ` ${note}` : ""}`
+              : `Generation & Validation Complete${note ? ` — ${note}` : ""}`,
         generatedCount: generated,
         passedCount,
         needsReviewCount,

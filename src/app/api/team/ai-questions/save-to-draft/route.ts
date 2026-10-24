@@ -7,8 +7,11 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { QuestionType, Difficulty } from "@prisma/client";
 import { withNewQuestionCode } from "@/lib/questions/create-with-code";
+import { TYPE_FORMATS, bankTypeOf } from "@/lib/ai-question-engine/type-formats";
 
 function mapQuestionTypeToPrisma(typeStr: string): QuestionType {
+  // Generator types are all answered by choosing an option (a "Numerical value" question is a calculation MCQ).
+  if (TYPE_FORMATS[typeStr]) return QuestionType[bankTypeOf(typeStr)];
   const upper = typeStr.toUpperCase();
   if (upper.includes("MULTI") && upper.includes("CORRECT")) return QuestionType.MULTIPLE_CORRECT;
   if (upper.includes("INTEGER")) return QuestionType.INTEGER;

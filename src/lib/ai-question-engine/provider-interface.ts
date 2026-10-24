@@ -50,5 +50,6 @@ export interface AIProvider {
     questionType: string;
     topic?: string;
     allowedTopics?: string[];
+    figureDescription?: string;
   }): Promise<QuestionValidationReport>;
 }

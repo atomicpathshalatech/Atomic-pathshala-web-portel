@@ -1,6 +1,7 @@
 import { GenerationLanguage, NeetDifficulty } from "./types";
+import { formatOf } from "./type-formats";
 
-export const PROMPT_VERSION = "v1.1";
+export const PROMPT_VERSION = "v1.2";
 
 /**
  * Builds the strict NEET Question Generation Prompt
@@ -34,10 +35,11 @@ export function buildQuestionGenerationPrompt({
 
   const totalQuestions = Object.values(questionTypeCounts).reduce((a, b) => a + b, 0);
 
-  const typeInstructions = Object.entries(questionTypeCounts)
-    .filter(([_, count]) => count > 0)
-    .map(([typeId, count]) => `- Question Type "${typeId}": Exactly ${count} question(s)`)
-    .join("\n");
+  const requestedTypes = Object.entries(questionTypeCounts).filter(([, count]) => count > 0);
+  const typeInstructions = requestedTypes.map(([typeId, count]) => `- Question Type "${typeId}": Exactly ${count} question(s)`).join("\n");
+  // What each requested type must look like (the ids alone did not tell the model).
+  const typeFormats = requestedTypes.map(([typeId]) => `- ${typeId}: ${formatOf(typeId).format}`).join("\n");
+  const needsFigure = requestedTypes.some(([typeId]) => formatOf(typeId).figure === "graph" || formatOf(typeId).figure === "figure");
 
   const diffInstructions = Object.entries(difficultyMix)
     .filter(([_, count]) => count > 0)
@@ -96,6 +98,14 @@ ${
 GENERATION QUOTAS TO PRODUCE:
 ${typeInstructions}
 
+FORMAT OF EACH REQUESTED TYPE (follow it exactly; set "questionType" to the type id):
+${typeFormats}
+${
+  needsFigure
+    ? `
+FIGURES: a figure is described as data in the "figure" field and drawn by our system — never say "see the figure" without giving it. Figure labels must be English letters/words or symbols (no Hindi inside the figure); the Hindi statement refers to the same labels. A figure must agree exactly with the question and its answer.\n`
+    : ""
+}
 DIFFICULTY DISTRIBUTION:
 ${diffInstructions}
 
@@ -116,7 +126,7 @@ MANDATORY STATEMENT COMPLETENESS RULES:
 - For STATEMENT_BASED or MULTI-STATEMENT questions (e.g. "Consider the following statements..."): "statementEn" and "statementHi" MUST include the full question text WITH ALL individual numbered statements (I, II, III, IV...) explicitly written out inside the statement field, followed by the question prompt (e.g. "Which of the statements given above is/are correct?"). NEVER write only the introductory line without the statements!
 - For ASSERTION_REASON questions: "statementEn" and "statementHi" MUST include both "Assertion (A): ..." and "Reason (R): ..." completely.
 - For MATCH_COLUMN questions: "statementEn" and "statementHi" MUST include the complete Column-I and Column-II items.
-- MATCH THE COLUMN / ANY TABLE — write it exactly like the printed paper, as a table in the statement:
+- MATCH THE COLUMN / ANY TABLE — write it exactly like the printed paper, as a table in the statement (the example below is two-column; a 3-column match has THREE cells in every row):
   one header row, a "---|---" divider row, then ONE ROW PER LINE, columns separated by " | ", rows separated by \\n.
   Example (statementEn): "Match Column-I with Column-II.\\n\\nColumn-I | Column-II\\n---|---\\n(A) Benzene | (P) 4\\n(B) Cyclohexane | (Q) 1\\n(C) Naphthalene | (R) 7\\n(D) But-1-ene | (S) 0"
   Hindi (statementHi): "स्तम्भ-I | स्तम्भ-II\\n---|---\\n(A) बेंज़ीन | (P) 4\\n..."
@@ -189,10 +199,12 @@ Return ONLY a valid JSON object matching the following JSON schema with NO markd
       "requiresImage": false,
       "sourcePageNumbers": [1],
       "sourceExcerpt": "Direct quote from source if PDF mode",
-      "sourceImageId": null
+      "sourceImageId": null,
+      "figure": null
     }
   ]
-}`;
+}
+"figure" is null unless the type above asks for one.`;
 }
 
 /**
@@ -210,6 +222,7 @@ export function buildQuestionValidationPrompt(question: {
   questionType: string;
   topic?: string;
   allowedTopics?: string[];
+  figureDescription?: string;
 }): string {
   const topics = question.allowedTopics?.length ? question.allowedTopics : question.topic ? [question.topic] : [];
   return `You are the Chief Academic Auditor for National Medical Entrance Examination (NEET) at Atomic Pathshala.
@@ -222,7 +235,7 @@ Type: ${question.questionType}
 ${question.topic ? `Tagged Topic: ${question.topic}` : ""}
 ${topics.length ? `Requested Topic(s): ${topics.join(", ")}` : ""}
 Statement (English): ${question.statementEn}
-${question.statementHi ? `Statement (Hindi): ${question.statementHi}` : ""}
+${question.figureDescription ? `Figure shown with the question (described in words): ${question.figureDescription}\n` : ""}${question.statementHi ? `Statement (Hindi): ${question.statementHi}` : ""}
 Options (English):
 ${JSON.stringify(question.optionsEn, null, 2)}
 ${question.optionsHi ? `Options (Hindi):\n${JSON.stringify(question.optionsHi, null, 2)}` : ""}
