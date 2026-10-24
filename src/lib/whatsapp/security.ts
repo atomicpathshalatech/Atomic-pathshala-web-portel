@@ -19,8 +19,7 @@ export function verifyWebhookToken(
     process.env.WHATSAPP_VERIFY_TOKEN ||
     process.env.META_WEBHOOK_VERIFY_TOKEN ||
     process.env.META_VERIFY_TOKEN ||
-    process.env.WEBHOOK_VERIFY_TOKEN ||
-    "atomic_pathshala_meta_verify_token";
+    process.env.WEBHOOK_VERIFY_TOKEN;
 
   if (!expectedToken || !token) {
     return false;
@@ -55,12 +54,13 @@ export function verifyMetaWebhookSignature(
     process.env.WHATSAPP_API_SECRET ||
     process.env.WHATSAPP_APP_SECRET;
 
-  // If secret is not yet configured in environment, allow processing to avoid rejecting valid webhook deliveries
+  // No app secret configured: never trust unsigned events in production.
   if (!secret) {
+    const allow = process.env.NODE_ENV !== "production";
     console.warn(
-      "[META_WEBHOOK_SECURITY] META_APP_SECRET is not configured in environment. Permitting event ingestion."
+      `[META_WEBHOOK_SECURITY] META_APP_SECRET is not configured. ${allow ? "Permitting (non-production)" : "Rejecting"} unsigned event.`
     );
-    return true;
+    return allow;
   }
 
   if (!signatureHeader) {
