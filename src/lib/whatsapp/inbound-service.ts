@@ -117,6 +117,18 @@ export async function processInboundWhatsAppMessage(msg: MetaParsedMessage) {
     console.warn("[WHATSAPP_CONTACT_LINK_WARN]", err);
   }
 
+  // 2b. Opt-out / opt-in keywords (STOP / START)
+  const keyword = `${msg.bodyText || msg.buttonPayload || ""}`.trim().toUpperCase();
+  if (linkedContactId && /^(STOP|STOP ALL|UNSUBSCRIBE|BAND|BAND KARO)$/.test(keyword)) {
+    await prisma.whatsAppContact
+      .update({ where: { id: linkedContactId }, data: { status: "OPTED_OUT" } })
+      .catch((e) => console.warn("[WHATSAPP_OPT_OUT_WARN]", e));
+  } else if (linkedContactId && /^(START|SUBSCRIBE|UNSTOP)$/.test(keyword)) {
+    await prisma.whatsAppContact
+      .update({ where: { id: linkedContactId }, data: { status: "ACTIVE" } })
+      .catch((e) => console.warn("[WHATSAPP_OPT_IN_WARN]", e));
+  }
+
   // 3. Classify intent
   const detectedIntent = classifyWhatsAppIntent(msg.bodyText, msg.buttonPayload);
 
