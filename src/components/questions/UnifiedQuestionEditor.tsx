@@ -38,6 +38,7 @@ import { FormulaInsertToolbar } from "./FormulaInsertToolbar";
 import { QuestionIdBadge } from "./QuestionIdBadge";
 import { QuestionMetadataDrawer } from "./QuestionMetadataDrawer";
 import { QuestionMetadataPanel } from "./QuestionMetadataPanel";
+import { canonicalChapter, canonicalSubject } from "@/lib/academic/canonical-chapter";
 import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
 import { CamDrawEditor } from "@/components/camdraw/CamDrawEditor";
 
@@ -85,6 +86,35 @@ type AiSuggestion = {
 function sameName(a?: string | null, b?: string | null) {
   const norm = (s?: string | null) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   return norm(a) !== "" && norm(a) === norm(b);
+}
+
+/** Botany / Zoology / Biology are one subject for matching a syllabus. */
+function sameSubject(a?: string | null, b?: string | null) {
+  return sameName(a, b) || (Boolean(a && b) && sameName(canonicalSubject(a), canonicalSubject(b)));
+}
+
+/**
+ * The same chapter under two spellings: the test's syllabus keeps the name
+ * it was made with ("Cell - The Unit of Life", "Some Basic Concepts in
+ * Chemistry"), the AI answers with the standard NCERT title.
+ */
+function sameChapter(subject: string, a?: string | null, b?: string | null) {
+  if (sameName(a, b)) return true;
+  const ca = canonicalChapter(subject, a)?.chapter;
+  return Boolean(ca) && ca === canonicalChapter(subject, b)?.chapter;
+}
+
+/** A topic named a little differently ("Bohr Model" / "Bohr's Atomic Model"). */
+function sameTopic(a?: string | null, b?: string | null) {
+  if (sameName(a, b)) return true;
+  const words = (s?: string | null) =>
+    new Set(String(s ?? "").toLowerCase().replace(/'s\b/g, "").split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !["and", "the", "of"].includes(w)));
+  const wa = words(a);
+  const wb = words(b);
+  if (!wa.size || !wb.size) return false;
+  let common = 0;
+  for (const w of wa) if (wb.has(w)) common++;
+  return common / Math.min(wa.size, wb.size) >= 0.75;
 }
 
 export function UnifiedQuestionEditor({
@@ -337,16 +367,21 @@ export function UnifiedQuestionEditor({
     if (!aiSuggestedMetadata) return;
 
     const appliedSubject = mode === "bank" ? aiSuggestedMetadata.subject || subject : subject;
-    const allowed = (syllabus ?? []).filter((s) => sameName(s.subject, appliedSubject));
+    const allowed = (syllabus ?? []).filter((s) => sameSubject(s.subject, appliedSubject));
     let appliedChapter = aiSuggestedMetadata.chapter || chapter;
     let appliedTopic = aiSuggestedMetadata.topic || topic;
     if (allowed.length > 0) {
-      const match = allowed.find((s) => sameName(s.chapter, appliedChapter));
+      const match =
+        allowed.find((s) => sameChapter(appliedSubject, s.chapter, appliedChapter)) ??
+        // A paper whose "chapter" is really a topic ("Isomerism"): the AI
+        // names the NCERT chapter and puts that as the topic / sub-topic.
+        allowed.find((s) => sameTopic(s.chapter, aiSuggestedMetadata.topic) || sameTopic(s.chapter, aiSuggestedMetadata.subTopic));
       // One chapter in the syllabus: it is that chapter, whatever the AI says.
       const entry = match ?? (allowed.length === 1 ? allowed[0] : undefined);
-      appliedChapter = entry?.chapter ?? "";
+      // Under the name the chapter dropdown shows for it.
+      appliedChapter = entry ? chapterOptionFor(entry.chapter) : "";
       if (entry && entry.topics.length > 0) {
-        appliedTopic = entry.topics.find((t) => sameName(t, appliedTopic)) ?? "";
+        appliedTopic = entry.topics.find((t) => sameTopic(t, appliedTopic)) ?? "";
       }
     }
     const appliedSubTopic = appliedTopic ? aiSuggestedMetadata.subTopic || subTopic : "";
@@ -688,7 +723,7 @@ export function UnifiedQuestionEditor({
           // No guessing: the first chapter of the subject used to be picked
           // here, so questions landed in unrelated chapters. Only a syllabus
           // with exactly one chapter for this subject decides it.
-          const own = (syllabus ?? []).filter((s) => sameName(s.subject, subject));
+          const own = (syllabus ?? []).filter((s) => sameSubject(s.subject, subject));
           if (!chapter && own.length === 1 && own[0]) setChapter(own[0].chapter);
         }
       } catch {
@@ -702,15 +737,15 @@ export function UnifiedQuestionEditor({
   // What the metadata panel offers. With a syllabus (test/DPP) only its
   // chapters for this subject — and only the listed topics when the chapter
   // names some; without one, the subject's whole catalog.
-  const syllabusForSubject = (syllabus ?? []).filter((s) => sameName(s.subject, subject));
+  const syllabusForSubject = (syllabus ?? []).filter((s) => sameSubject(s.subject, subject));
+  // A syllabus chapter under the catalog's (standard) title when there is one.
+  const chapterOptionFor = (name: string) => chaptersList.find((c) => sameChapter(subject, c.title, name))?.title ?? name;
   const chapterOptions =
-    syllabusForSubject.length > 0
-      ? syllabusForSubject.map((s) => chaptersList.find((c) => sameName(c.title, s.chapter))?.title ?? s.chapter)
-      : chaptersList.map((c) => c.title);
-  const syllabusChapter = syllabusForSubject.find((s) => sameName(s.chapter, chapter));
+    syllabusForSubject.length > 0 ? syllabusForSubject.map((s) => chapterOptionFor(s.chapter)) : chaptersList.map((c) => c.title);
+  const syllabusChapter = syllabusForSubject.find((s) => sameChapter(subject, s.chapter, chapter));
   const topicOptions =
     syllabusChapter && syllabusChapter.topics.length > 0
-      ? syllabusChapter.topics.map((t) => topicsList.find((x) => sameName(x.title, t)) ?? { title: t, subtopics: [] })
+      ? syllabusChapter.topics.map((t) => topicsList.find((x) => sameTopic(x.title, t)) ?? { title: t, subtopics: [] })
       : topicsList;
 
   // C. Fetch Topics when Chapter changes
