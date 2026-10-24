@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 const DEFAULT_SECTION_NAME = "General";
@@ -66,8 +67,8 @@ export async function countTestQuestions(testId: string) {
   return prisma.sectionQuestion.count({ where: { section: { testId } } });
 }
 
-export async function nextSectionQuestionOrder(sectionId: string) {
-  const max = await prisma.sectionQuestion.aggregate({
+export async function nextSectionQuestionOrder(sectionId: string, db: Prisma.TransactionClient = prisma) {
+  const max = await db.sectionQuestion.aggregate({
     where: { sectionId },
     _max: { order: true },
   });

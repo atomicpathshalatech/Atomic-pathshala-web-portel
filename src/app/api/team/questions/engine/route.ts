@@ -10,6 +10,7 @@ import { generateQuestionId } from "@/lib/questions/id-generator";
 import { analyzeQuestionSimilarity } from "@/lib/questions/similarity";
 import { QuestionType, Difficulty } from "@prisma/client";
 import { testStartedReason } from "@/lib/tests/scheduled-publish";
+import { contentFingerprint, duplicateMessage, findInTest, testIdOfSection, withTestLock } from "@/lib/tests/test-question-guard";
 
 /** A test's questions stop changing once it has started (or someone has taken it). */
 async function testSectionLockReason(sectionId: unknown): Promise<string | null> {
@@ -184,6 +185,17 @@ export async function POST(request: NextRequest) {
     const sectionLocked = await testSectionLockReason(testSectionId);
     if (sectionLocked) return apiError(sectionLocked, 409);
 
+    // A test holds each question once: the same question saved again (into
+    // another slot or section) is refused. Checked again under a lock when
+    // the question is linked, for two saves at the same moment.
+    const fingerprint = contentFingerprint(statementEn?.trim() ? statementEn : statementHi, statementEn?.trim() ? optionsEn : optionsHi);
+    const testId = await testIdOfSection(prisma, testSectionId);
+    const slot = typeof order === "number" && order > 0 ? order : typeof slotNumber === "number" && slotNumber > 0 ? slotNumber : null;
+    if (testId) {
+      const dup = await findInTest(prisma, testId, { fingerprint, exceptSlot: slot ? { sectionId: testSectionId, order: slot } : null });
+      if (dup) return apiError(duplicateMessage(dup), 409);
+    }
+
     // 1. Concurrency-Safe 8-Digit Question ID Generation
     const firstQuestionCode = await generateQuestionId(prisma, subject);
 
@@ -240,6 +252,7 @@ export async function POST(request: NextRequest) {
         pyqQuestionNumber: pyqQuestionNumber?.trim() || null,
         pyqSource: formattedPyqSource,
         questionCode,
+        contentFingerprint: fingerprint,
         solution: solutionEn?.trim() || solutionHi?.trim() || null,
         tags: tagsString,
         status: "REVIEW_1", // Enforce Centralized Question Review pipeline
@@ -331,48 +344,59 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. Link to Test Section if requested
-    if (testSectionId) {
-      const targetSecOrder =
-        typeof order === "number" && order > 0
-          ? order
-          : typeof slotNumber === "number" && slotNumber > 0
-          ? slotNumber
-          : (await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } })) + 1;
+    if (testSectionId && testId) {
+      const linked = await withTestLock(prisma, testId, async (tx) => {
+        const targetSecOrder =
+          typeof order === "number" && order > 0
+            ? order
+            : typeof slotNumber === "number" && slotNumber > 0
+            ? slotNumber
+            : (await tx.sectionQuestion.count({ where: { sectionId: testSectionId } })) + 1;
 
-      const existingAtSlot = await prisma.sectionQuestion.findUnique({
-        where: {
-          sectionId_order: {
-            sectionId: testSectionId,
-            order: targetSecOrder,
-          },
-        },
-      });
+        // Same check as above, now that no other save can link at the same time.
+        const dup = await findInTest(tx, testId, { fingerprint, exceptQuestionId: question.id, exceptSlot: { sectionId: testSectionId, order: targetSecOrder } });
+        if (dup) return { dup };
 
-      if (existingAtSlot) {
-        sectionQuestion = await prisma.sectionQuestion.update({
-          where: { id: existingAtSlot.id },
-          data: {
-            questionId: question.id,
-          },
-        });
-      } else {
-        sectionQuestion = await prisma.sectionQuestion.upsert({
+        const existingAtSlot = await tx.sectionQuestion.findUnique({
           where: {
-            sectionId_questionId: {
+            sectionId_order: {
               sectionId: testSectionId,
-              questionId: question.id,
+              order: targetSecOrder,
             },
           },
-          update: {
-            order: targetSecOrder,
-          },
-          create: {
-            sectionId: testSectionId,
-            questionId: question.id,
-            order: targetSecOrder,
-          },
         });
+
+        if (existingAtSlot) {
+          return { link: await tx.sectionQuestion.update({
+            where: { id: existingAtSlot.id },
+            data: {
+              questionId: question.id,
+            },
+          }) };
+        }
+        return { link: await tx.sectionQuestion.upsert({
+            where: {
+              sectionId_questionId: {
+                sectionId: testSectionId,
+                questionId: question.id,
+              },
+            },
+            update: {
+              order: targetSecOrder,
+            },
+            create: {
+              sectionId: testSectionId,
+              questionId: question.id,
+              order: targetSecOrder,
+            },
+          }) };
+      });
+      if ("dup" in linked && linked.dup) {
+        // Saved twice at the same moment: this copy goes.
+        await prisma.question.delete({ where: { id: question.id } }).catch(() => {});
+        return apiError(duplicateMessage(linked.dup), 409);
       }
+      sectionQuestion = "link" in linked ? linked.link : null;
 
       await prisma.question.update({
         where: { id: question.id },
@@ -462,6 +486,27 @@ export async function PUT(request: NextRequest) {
     if (!existing) return apiError("Question not found.", 404);
     const sectionLocked = await testSectionLockReason(testSectionId);
     if (sectionLocked) return apiError(sectionLocked, 409);
+
+    // A test holds each question once — checked before anything is saved:
+    // not this question in another section, nor the same question (its
+    // statement + options after this edit) under another id.
+    const testId = await testIdOfSection(prisma, testSectionId);
+    if (testId) {
+      const en = existing.translations.find((t) => t.language === "ENGLISH");
+      const hi = existing.translations.find((t) => t.language === "HINDI");
+      const enStatement = statementEn !== undefined ? statementEn : en?.statement;
+      const fingerprint = enStatement?.trim()
+        ? contentFingerprint(enStatement, optionsEn !== undefined ? optionsEn : en?.options)
+        : contentFingerprint(statementHi !== undefined ? statementHi : hi?.statement, optionsHi !== undefined ? optionsHi : hi?.options);
+      const slot = typeof order === "number" && order > 0 ? order : typeof slotNumber === "number" && slotNumber > 0 ? slotNumber : null;
+      const dup = await findInTest(prisma, testId, {
+        questionId,
+        fingerprint,
+        movingWithin: testSectionId,
+        exceptSlot: slot ? { sectionId: testSectionId, order: slot } : null,
+      });
+      if (dup) return apiError(duplicateMessage(dup), 409);
+    }
 
     const targetExam = pyqExam !== undefined ? (pyqExam ? pyqExam.trim() : null) : existing.pyqExam;
     const targetYear = pyqYear !== undefined ? (pyqYear ? parseInt(String(pyqYear), 10) || null : null) : existing.pyqYear;

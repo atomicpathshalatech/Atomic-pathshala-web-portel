@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
 import { getOrCreateDefaultSection, listTestSectionQuestions, nextSectionQuestionOrder } from "@/lib/test-engine/sections";
+import { contentFingerprint, testContents, withTestLock } from "@/lib/tests/test-question-guard";
 import { testQuestionsAddSchema } from "@/lib/validation/test";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { testLockedReason } from "@/lib/tests/scheduled-publish";
@@ -52,31 +53,47 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const section = await getOrCreateDefaultSection(params.id);
 
-    const [candidates, existingLinks] = await Promise.all([
-      prisma.question.findMany({
-        where: {
-          OR: [
-            { id: { in: input.questionIds } },
-            { questionCode: { in: input.questionIds } },
-          ],
-        },
-      }),
-      prisma.sectionQuestion.findMany({ where: { sectionId: section.id }, select: { questionId: true } }),
-    ]);
-
-    const existingIds = new Set(existingLinks.map((l) => l.questionId));
+    const candidates = await prisma.question.findMany({
+      where: {
+        OR: [
+          { id: { in: input.questionIds } },
+          { questionCode: { in: input.questionIds } },
+        ],
+      },
+      include: { translations: { select: { language: true, statement: true, options: true } } },
+    });
     const foundIds = new Set(candidates.map((q) => q.id));
     const foundCodes = new Set(candidates.map((q) => q.questionCode).filter(Boolean));
     const missing = input.questionIds.filter((id) => !foundIds.has(id) && !foundCodes.has(id));
-    const alreadyAdded = candidates.filter((q) => existingIds.has(q.id)).map((q) => q.questionCode || q.id);
 
-    const toAdd = candidates.filter((q) => !existingIds.has(q.id));
+    // A test holds each question once — in any section — and the same
+    // question saved under two ids counts as one. Under the test's lock, so
+    // two adds at the same moment cannot both get in.
+    const { alreadyAdded, toAdd } = await withTestLock(prisma, params.id, async (tx) => {
+      const held = await testContents(tx, params.id);
+      const alreadyAdded: string[] = [];
+      const toAdd: typeof candidates = [];
+      for (const q of candidates) {
+        const en = q.translations.find((t) => t.language === "ENGLISH") ?? q.translations[0];
+        const fp = q.contentFingerprint ?? contentFingerprint(en?.statement, en?.options);
+        if (held.ids.has(q.id) || (fp && held.fingerprints.has(fp))) {
+          alreadyAdded.push(q.questionCode || q.id);
+          continue;
+        }
+        held.ids.add(q.id);
+        if (fp) held.fingerprints.add(fp);
+        toAdd.push(q);
+      }
+      if (toAdd.length > 0) {
+        let nextOrder = await nextSectionQuestionOrder(section.id, tx);
+        await tx.sectionQuestion.createMany({
+          data: toAdd.map((q) => ({ sectionId: section.id, questionId: q.id, order: nextOrder++ })),
+        });
+      }
+      return { alreadyAdded, toAdd };
+    });
 
-    let nextOrder = await nextSectionQuestionOrder(section.id);
     if (toAdd.length > 0) {
-      await prisma.sectionQuestion.createMany({
-        data: toAdd.map((q) => ({ sectionId: section.id, questionId: q.id, order: nextOrder++ })),
-      });
 
       await prisma.auditLog.create({
         data: {
