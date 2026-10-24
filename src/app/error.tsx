@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportClientError } from "@/lib/client-error-report";
 
 /**
  * App-wide error boundary (Next.js App Router convention — catches any
@@ -21,6 +22,7 @@ export default function ErrorBoundary({
 }) {
   useEffect(() => {
     console.error("[app error boundary]", error);
+    reportClientError(error, "app");
   }, [error]);
 
   return (
@@ -46,9 +48,15 @@ export default function ErrorBoundary({
       <p style={{ fontSize: "0.9rem", color: "#9AA5B8", maxWidth: 360, margin: 0 }}>
         This is usually a brief connection hiccup. Try again — if it keeps happening, let us know.
       </p>
-      {error.digest && (
+      {error.digest ? (
         <p style={{ fontSize: "0.75rem", color: "#5C6579", margin: 0 }}>Reference: {error.digest}</p>
-      )}
+      ) : error.message ? (
+        // A crash in the browser has no reference: a short line of what
+        // failed, so a screenshot is enough to trace it.
+        <p style={{ fontSize: "0.7rem", color: "#5C6579", margin: 0, maxWidth: 420, wordBreak: "break-word" }}>
+          {error.message.slice(0, 160)}
+        </p>
+      ) : null}
       <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
         <button
           onClick={() => reset()}
