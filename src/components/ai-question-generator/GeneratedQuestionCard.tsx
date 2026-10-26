@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { QuestionReviewModal } from "./QuestionReviewModal";
+import { MultiModelReviewDeck } from "./MultiModelReviewDeck";
 
 export interface GeneratedQuestionItem {
   id: string;
@@ -563,6 +564,20 @@ export function GeneratedQuestionCard({
           </>
         )}
       </div>
+
+      {/* 6.5 MULTI-AI 4-PANEL ADVERSARIAL QC DECK */}
+      <MultiModelReviewDeck
+        questionId={question.id}
+        storedAnswer={question.correctAnswer}
+        validationStatus={question.validationStatus}
+        validationReport={question.validationReport}
+        onFacultyOverride={async () => {
+          await onUpdateQuestion(question.id, {
+            validationStatus: "APPROVED_BY_FACULTY_OVERRIDE",
+          });
+          toast.success("Question approved via Faculty Override!");
+        }}
+      />
 
       {/* 7. CARD ACTIONS FOOTER: [EDIT] [REVIEW] [SAVE TO DRAFT] [REGENERATE] */}
       <div className="bg-slate-50/80 border-t border-slate-100 px-6 py-3 flex flex-wrap items-center justify-between gap-3">

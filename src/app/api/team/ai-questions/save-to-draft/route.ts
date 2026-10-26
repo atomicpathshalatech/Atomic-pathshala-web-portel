@@ -166,6 +166,15 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      // Link any QuestionReviewAudit to the newly created canonical Question
+      await prisma.questionReviewAudit.updateMany({
+        where: { generatedQId: aiQ.id },
+        data: {
+          questionId: createdQuestion.id,
+          questionCode: createdQuestion.questionCode,
+        },
+      }).catch(() => {});
+
       savedIds.push(createdQuestion.id);
       newlyCreated++;
     }

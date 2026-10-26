@@ -94,6 +94,8 @@ export async function PUT(
         subTopic: fieldsToUpdate.subTopic ?? question.subTopic,
         difficulty: fieldsToUpdate.difficulty ?? question.difficulty,
         questionType: fieldsToUpdate.questionType ?? question.questionType,
+        validationStatus: fieldsToUpdate.validationStatus ?? question.validationStatus,
+        validationReport: fieldsToUpdate.validationReport ?? question.validationReport,
         editSource: "HUMAN",
       },
     });

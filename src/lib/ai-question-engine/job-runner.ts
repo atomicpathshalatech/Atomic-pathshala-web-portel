@@ -6,6 +6,8 @@ import { runQuestionValidationPipeline } from "./validator-pipeline";
 import { withNewQuestionCode, toDifficulty } from "@/lib/questions/create-with-code";
 import { bankTypeOf } from "./type-formats";
 import { attachFigure } from "./prepare-figure";
+import { runMultiModelAudit } from "@/lib/ai-provider/multi-model-hub";
+import { QuestionSnapshot } from "@/lib/ai-provider/types";
 import {
   GenerationLanguage,
   GenerationPlan,
@@ -158,7 +160,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
   return out;
 }
 
-const DRAFTABLE = new Set(["PASSED", "NEEDS_REVIEW", "BILINGUAL_VALIDATION_FAILED"]);
+const DRAFTABLE = new Set(["PASSED", "APPROVED_BY_ALL", "APPROVED_AFTER_VERIFICATION"]);
 
 /**
  * Background worker: generate → validate (real AI audit) → persist.
@@ -254,7 +256,7 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
       data: {
         progress: 55,
         generatedCount: rawQuestions.length,
-        currentStep: `Checking answers with an independent AI solver (0 of ${rawQuestions.length})...`,
+        currentStep: `Multi-AI Verification in progress (0 of ${rawQuestions.length}) — L1 Gemini, L2 OpenAI, L3 Claude, Math/Chem validation...`,
       },
     });
 
@@ -263,6 +265,20 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
     const results = await mapLimit(rawQuestions, VALIDATION_CONCURRENCY, async (q, i) => {
       let report: QuestionValidationReport;
       let scores: QuestionQualityScores;
+      let qcPayload: any = null;
+
+      const snapshot: QuestionSnapshot = {
+        statement: q.statementEn || q.statementHi || "",
+        options: (q.optionsEn as Record<string, string>) || {},
+        storedAnswer: Array.isArray(q.correctAnswer) ? q.correctAnswer : [String(q.correctAnswer || "A")],
+        solution: q.solutionEn || q.solutionHi || "",
+        subject: q.subject,
+        chapter: q.chapter,
+        topic: q.topic,
+        subTopic: q.subTopic || undefined,
+        difficulty: q.difficulty,
+      };
+
       if (Date.now() - startedAt > WORK_BUDGET_MS) {
         report = {
           isValid: false,
@@ -280,26 +296,63 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
         };
         scores = { contentAccuracy: 0, answerConfidence: 0, ncertAlignment: 0, neetRelevance: 0, languageQuality: 0, overallScore: 0 };
       } else {
+        // Run full adversarial multi-model QC audit (Gemini L1, OpenAI L2, Claude L3, Math, Chem, Consensus)
+        try {
+          qcPayload = await runMultiModelAudit(snapshot, sourceText || undefined, { persist: false });
+        } catch (auditErr) {
+          console.error(`[JobRunner] Multi-model audit exception for Q#${i + 1}:`, auditErr);
+        }
+
+        // Run structural, topic-relevance, and duplicate detection
         ({ report, scores } = await runQuestionValidationPipeline({
           question: q,
           aiProvider: defaultAiProvider,
           batchQuestionsSoFar: rawQuestions.slice(0, i),
           allowedTopics: params.selectedTopics,
         }));
+
+        if (qcPayload) {
+          if (qcPayload.finalDecision?.disagreements?.length > 0) {
+            report.issues.push(...qcPayload.finalDecision.disagreements);
+          }
+          if (qcPayload.finalDecision?.reasons?.length > 0) {
+            report.issues.push(...qcPayload.finalDecision.reasons);
+          }
+
+          // Safe Approval Gate: If consensus or deterministic checks failed, mark status accurately
+          const finalStatus = qcPayload.finalDecision.finalStatus;
+          const eligible = qcPayload.finalDecision.eligibleForApproval && report.isValid;
+          report.validationStatus = finalStatus;
+          report.isValid = eligible;
+          (report as any).qcPayload = qcPayload;
+
+          const avgConfidence = Math.round(
+            ((qcPayload.geminiReview?.confidenceScore || 0) +
+             (qcPayload.openaiReview?.confidenceScore || 0) +
+             (qcPayload.claudeReview?.confidenceScore || 0)) / 3 * 100
+          );
+          if (eligible) {
+            scores.overallScore = Math.max(scores.overallScore, avgConfidence || 95);
+            scores.contentAccuracy = Math.max(scores.contentAccuracy, avgConfidence || 95);
+          } else {
+            scores.overallScore = Math.min(scores.overallScore || 50, 40);
+          }
+        }
       }
+
       done++;
-      if (done % 3 === 0 || done === rawQuestions.length) {
+      if (done % 2 === 0 || done === rawQuestions.length) {
         await prisma.aiGenerationBatch
           .update({
             where: { id: batchId },
             data: {
               progress: Math.round(55 + (done / Math.max(1, rawQuestions.length)) * 35),
-              currentStep: `Checking answers with an independent AI solver (${done} of ${rawQuestions.length})...`,
+              currentStep: `Multi-AI Verification in progress (${done} of ${rawQuestions.length}) — L1 Gemini, L2 OpenAI, L3 Claude, Math/Chem...`,
             },
           })
           .catch(() => {});
       }
-      return { q, report, scores };
+      return { q, report, scores, qcPayload, snapshot };
     });
 
     await prisma.aiGenerationBatch.update({
@@ -312,15 +365,24 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
     let failedCount = 0;
     let draftedCount = 0;
 
-    for (const [i, { q, report, scores }] of results.entries()) {
-      if (report.validationStatus === "PASSED") passedCount++;
-      else if (report.validationStatus === "NEEDS_REVIEW") needsReviewCount++;
-      else failedCount++;
+    for (const [i, { q, report, scores, qcPayload, snapshot }] of (results as any[]).entries()) {
+      const status = report.validationStatus;
+      if (status === "PASSED" || status === "APPROVED_BY_ALL" || status === "APPROVED_AFTER_VERIFICATION") {
+        passedCount++;
+      } else if (
+        status === "NEEDS_REVIEW" ||
+        status === "MANUAL_REVIEW_REQUIRED" ||
+        status === "API_FAILURE" ||
+        status === "SOURCE_UNVERIFIED"
+      ) {
+        needsReviewCount++;
+      } else {
+        failedCount++;
+      }
 
-      // Drawn figure or chosen source/NCERT image (the NCERT figures found in AI mode were never attached before).
       const imageUrl = q.imageUrl;
 
-      // Question Bank draft — only for questions that didn't fail outright.
+      // Question Bank draft — ONLY for questions that strictly passed multi-model consensus
       let draftQuestionId: string | null = null;
       if (DRAFTABLE.has(report.validationStatus)) {
         try {
@@ -357,13 +419,12 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
           draftQuestionId = created.id;
           draftedCount++;
         } catch (err) {
-          // Not swallowed silently any more: the batch question records why.
           console.error(`[JobRunner] Could not create the Question Bank draft (batch ${batchId}):`, err);
           report.issues.push(`Question Bank draft could not be created: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 
-      await prisma.aiGeneratedQuestion.create({
+      const createdQ = await prisma.aiGeneratedQuestion.create({
         data: {
           batchId,
           questionIndex: q.questionIndex || i + 1,
@@ -395,6 +456,36 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
           savedAt: draftQuestionId ? new Date() : null,
         },
       });
+
+      // Persist the QuestionReviewAudit record in PostgreSQL
+      if (qcPayload) {
+        try {
+          await prisma.questionReviewAudit.create({
+            data: {
+              generatedQId: createdQ.id,
+              questionId: draftQuestionId || null,
+              snapshot: snapshot as any,
+              geminiReview: qcPayload.geminiReview as any,
+              openaiReview: qcPayload.openaiReview as any,
+              claudeReview: qcPayload.claudeReview as any,
+              mathValidation: qcPayload.mathValidation as any,
+              chemValidation: qcPayload.chemValidation as any,
+              ncertValidation: qcPayload.finalDecision?.ncertValidation as any,
+              finalDecision: qcPayload.finalDecision as any,
+              finalStatus: qcPayload.finalDecision?.finalStatus || report.validationStatus,
+              disagreements: qcPayload.finalDecision?.disagreements as any || [],
+              reasons: qcPayload.finalDecision?.reasons as any || [],
+              tokenUsage: {
+                gemini: qcPayload.geminiReview?.tokenUsage,
+                openai: qcPayload.openaiReview?.tokenUsage,
+                claude: qcPayload.claudeReview?.tokenUsage,
+              } as any,
+            },
+          });
+        } catch (auditErr) {
+          console.warn(`[JobRunner] Failed to persist QuestionReviewAudit for ${createdQ.id}:`, auditErr);
+        }
+      }
     }
 
     const generated = results.length;
