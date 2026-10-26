@@ -132,6 +132,8 @@ model User {
   aiGenerationBatches    AiGenerationBatch[] @relation("AiGenerationBatchCreatedBy")
   taxonomyTopicMemories  TaxonomyTopicMemory[] @relation("TaxonomyTopicMemoryCreatedBy")
   ncertUploads           NcertDocument[]       @relation("NCERTUploadedBy")
+  sourceMaterialsUploaded SourceMaterial[]      @relation("SourceMaterialUploadedBy")
+  reviewAuditsOverridden QuestionReviewAudit[] @relation("ReviewAuditOverriddenBy")
 
   // --- Centralized Email & Communication System ---------------------------
   emailLogsReceived      EmailLog[]        @relation("EmailLogRecipient")
@@ -2557,6 +2559,7 @@ model Question {
   qcReviews             QcReview[]
   qcFindings            QcFinding[]
   qcCorrections         QcCorrection[]
+  reviewAudits          QuestionReviewAudit[]
   collectionItems       QuestionCollectionItem[]
   pyqOccurrences        PyqOccurrence[]
   moduleItems           QuestionModuleItem[]
@@ -7354,4 +7357,107 @@ model ExerciseAttemptAnswer {
   @@index([attemptId])
   @@index([questionId])
   @@map("exercise_attempt_answers")
+}
+
+
+// ==========================================================================
+// SOURCE MATERIAL LIBRARY & MULTI-MODEL QC AUDIT
+// ==========================================================================
+
+model SourceMaterial {
+  id              String                @id @default(cuid())
+  title           String
+  category        String                // NCERT_TEXTBOOK | NCERT_EXEMPLAR | ALLEN_MODULE | PREVIOUS_YEAR_QUESTIONS | REFERENCE_BOOK | FACULTY_NOTES | QUESTION_BANK | OFFICIAL_ANSWER_KEY | OTHER
+  subject         String                // PHYSICS | CHEMISTRY | BOTANY | ZOOLOGY
+  classLevel      String                // CLASS_11 | CLASS_12 | DROPPER
+  bookName        String?
+  chapterNumber   Int?
+  chapterName     String?
+  topicName       String?
+  fileUrl         String
+  storageKey      String?
+  fileType        String                @default("PDF") // PDF | IMAGE | SCANNED_PDF
+  fileSize        Int                   @default(0)
+  pageCount       Int                   @default(0)
+  editionYear     String?
+  extractedText   String?               @db.Text
+  metadata        Json?
+  uploadedById    String?
+  uploadedBy      User?                 @relation("SourceMaterialUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  chunks          SourceMaterialChunk[]
+  reviewAudits    QuestionReviewAudit[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([subject, classLevel])
+  @@index([category])
+  @@index([chapterName])
+  @@map("source_materials")
+}
+
+model SourceMaterialChunk {
+  id               String         @id @default(cuid())
+  sourceMaterialId String
+  sourceMaterial   SourceMaterial @relation(fields: [sourceMaterialId], references: [id], onDelete: Cascade)
+  pageNumber       Int
+  chunkIndex       Int
+  topic            String?
+  subtopic         String?
+  content          String         @db.Text
+  bbox             Json?          // Bounding box coordinates if extracted from image/pdf page
+  figureUrl        String?        // Crop url if containing diagram/reaction
+  tokenEstimate    Int            @default(0)
+  createdAt        DateTime       @default(now())
+
+  @@index([sourceMaterialId])
+  @@index([pageNumber])
+  @@map("source_material_chunks")
+}
+
+model QuestionReviewAudit {
+  id               String          @id @default(cuid())
+  questionId       String?
+  question         Question?       @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  generatedQId     String?
+  questionCode     String?
+  sourceMaterialId String?
+  sourceMaterial   SourceMaterial? @relation(fields: [sourceMaterialId], references: [id], onDelete: SetNull)
+  
+  // Input question snapshot evaluated
+  snapshot         Json            // { statement, options, storedAnswer, solution, subject, chapter, topic, subTopic, difficulty }
+  
+  // Independent evaluations (Panels A, B, C)
+  geminiReview     Json?           // Panel A: Gemini review & suggestions
+  openaiReview     Json?           // Panel B: OpenAI review & suggestions
+  claudeReview     Json?           // Panel C: Claude review & suggestions
+  
+  // Deterministic checks
+  mathValidation   Json?           // { valid: boolean, errors: string[], calculatedValues: any }
+  chemValidation   Json?           // { valid: boolean, errors: string[], chargesBalanced: boolean, formulas: string[] }
+  ncertValidation  Json?           // { verified: boolean, status: string, pageNumber: number, citation: string, quote: string }
+  
+  // Panel D: Final Consolidated Quality Decision
+  finalDecision    Json            // { finalQuestion, finalOptions, finalAnswerKey, finalSolution, subject, chapter, topic, subTopic }
+  finalStatus      String          // APPROVED_BY_ALL | APPROVED_AFTER_VERIFICATION | REJECTED_BY_GEMINI | REJECTED_BY_OPENAI | REJECTED_BY_CLAUDE | NCERT_MISMATCH | ANSWER_KEY_MISMATCH | SOLUTION_ERROR | SCIENTIFIC_ERROR | TOPIC_MISMATCH | SOURCE_UNVERIFIED | MANUAL_REVIEW_REQUIRED | API_FAILURE
+  disagreements    Json            // string[] of all detected differences between models
+  reasons          Json            // string[] of issues / justification
+  
+  // Admin / Faculty override
+  isOverridden     Boolean         @default(false)
+  overrideStatus   String?
+  overrideReason   String?         @db.Text
+  overriddenById   String?
+  overriddenBy     User?           @relation("ReviewAuditOverriddenBy", fields: [overriddenById], references: [id], onDelete: SetNull)
+  overriddenAt     DateTime?
+
+  // Cost & Tokens tracking
+  tokenUsage       Json?           // { gemini: { in, out, cost }, openai: { in, out, cost }, claude: { in, out, cost } }
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([questionId])
+  @@index([finalStatus])
+  @@index([createdAt])
+  @@map("question_review_audits")
 }

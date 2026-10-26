@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, HelpCircle, Loader2, Play, RefreshCw, Search, ShieldCheck, Square, X, XCircle } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { QcDuplicates } from "@/components/team-portal/QcDuplicates";
+import { MultiAiQcEngine } from "@/components/team-portal/MultiAiQcEngine";
+import { SourceMaterialLibrary } from "@/components/team-portal/SourceMaterialLibrary";
 
 type Overview = {
   total: number;
@@ -142,7 +144,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"review" | "duplicates">("review");
+  const [tab, setTab] = useState<"multi-ai" | "source-library" | "review" | "duplicates">("multi-ai");
 
   // Batch run: the page calls the run endpoint again and again until nothing is left or it is stopped.
   const [running, setRunning] = useState(false);
@@ -268,13 +270,30 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
         </button>
       </div>
 
-      <div className="flex gap-2">
-        {(["review", "duplicates"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${tab === t ? "bg-sky-600 text-white" : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"}`}>
-            {t === "review" ? "Answer and solution review" : "Duplicate questions"}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { id: "multi-ai", label: "Multi-AI Engine (4 Panels)" },
+          { id: "source-library", label: "Source Material Library" },
+          { id: "review", label: "Answer & Solution Review" },
+          { id: "duplicates", label: "Duplicate Questions" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id as any)}
+            className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              tab === t.id
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            {t.label}
           </button>
         ))}
       </div>
+
+      {tab === "multi-ai" && <MultiAiQcEngine canApply={canApply} />}
+
+      {tab === "source-library" && <SourceMaterialLibrary />}
 
       {tab === "duplicates" && <QcDuplicates subjects={subjects} />}
 

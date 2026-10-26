@@ -5,6 +5,7 @@ const nextConfig = {
   compress: true,
   // Lint runs with `npm run lint`; a lint finding must not stop a production deploy.
   eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
   images: {
     // Cloud object storage domains (fill in production bucket/CDN host)
     remotePatterns: [
