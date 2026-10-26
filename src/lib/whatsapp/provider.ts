@@ -170,7 +170,7 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
         payload.type = "template";
         payload.template = {
           name: params.templateName,
-          language: { code: "en" },
+          language: { code: process.env.WHATSAPP_TEMPLATE_LANG || "en" },
           components: params.templateParams
             ? [
                 {
@@ -229,22 +229,13 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
     }
   }
 
-  // 4. AISENSY / GUPSHUP PROVIDER FALLBACK
-  try {
-    console.log(`[WHATSAPP_DISPATCH] Provider: ${provider} to ${destinationNumber}`);
-    return {
-      success: true,
-      messageId: `${provider.toLowerCase()}_${Date.now()}`,
-      status: "SENT",
-      provider,
-      rawResponse: { provider, sent: true },
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      status: "FAILED",
-      provider,
-      error: err.message,
-    };
-  }
+  // 4. Providers without a real integration (AISENSY / GUPSHUP / unknown).
+  // Never report these as SENT: nothing was actually delivered.
+  console.warn(`[WHATSAPP_PROVIDER_NOT_IMPLEMENTED] Provider ${provider} has no dispatch integration.`);
+  return {
+    success: false,
+    status: "FAILED",
+    provider,
+    error: `WhatsApp provider ${provider} is not implemented. Use META or INTERAKT.`,
+  };
 }

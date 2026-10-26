@@ -110,6 +110,19 @@ export async function processWhatsAppQueue(batchSize: number = 25) {
 
     if (claim.count === 0) continue;
 
+    // Respect opt-outs: never message a contact who replied STOP.
+    const optedOut = await prisma.whatsAppContact
+      .findUnique({ where: { phone: item.recipientPhone }, select: { status: true } })
+      .then((c) => c?.status === "OPTED_OUT")
+      .catch(() => false);
+    if (optedOut) {
+      await prisma.whatsAppMessageQueue.update({
+        where: { id: item.id },
+        data: { status: WhatsAppQueueStatus.SKIPPED, errorMessage: "Recipient opted out (STOP)" },
+      });
+      continue;
+    }
+
     try {
       const result = await sendWhatsAppMessage({
         to: item.recipientPhone,

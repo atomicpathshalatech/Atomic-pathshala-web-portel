@@ -23,3 +23,8 @@ tsconfig.tsbuildinfo
 _import*
 
 scratch/
+
+# Never commit database dumps or archives
+*.dump
+*.sql.gz
+*.zip
