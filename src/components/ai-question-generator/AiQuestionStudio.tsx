@@ -32,6 +32,7 @@ import {
 import { PdfUploadStep } from "./PdfUploadStep";
 import { TaxonomyConfigStep } from "./TaxonomyConfigStep";
 import { GenerationProgressModal } from "./GenerationProgressModal";
+import { ProviderHealthBadge } from "./ProviderHealthBadge";
 import { GeneratedQuestionCard, GeneratedQuestionItem } from "./GeneratedQuestionCard";
 import { GenerationHistoryView } from "./GenerationHistoryView";
 
@@ -562,6 +563,11 @@ export function AiQuestionStudio() {
               Generate syllabus-aligned, source-grounded NEET questions with multi-agent adversarial
               validation, 20 question formats, KaTeX mathematics, and seamless 2-stage review integration.
             </p>
+          </div>
+
+          {/* AI Health Live Badge */}
+          <div className="flex items-center gap-3">
+            <ProviderHealthBadge />
           </div>
 
           {/* Mode Navigation Toggle */}

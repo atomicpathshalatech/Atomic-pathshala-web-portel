@@ -7,9 +7,18 @@ import OpenAI from "openai";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { QuestionSnapshot, SingleModelReview } from "./types";
 
+function cleanKey(raw?: string): string | null {
+  if (!raw) return null;
+  let k = raw.trim();
+  if ((k.startsWith('"') && k.endsWith('"')) || (k.startsWith("'") && k.endsWith("'"))) {
+    k = k.slice(1, -1).trim();
+  }
+  return k.length > 0 ? k : null;
+}
+
 function getOpenAIClient(): OpenAI | null {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || apiKey.trim() === "") {
+  const apiKey = cleanKey(process.env.OPENAI_API_KEY || process.env.OPEN_AI_API_KEY);
+  if (!apiKey) {
     return null;
   }
   return new OpenAI({ apiKey });

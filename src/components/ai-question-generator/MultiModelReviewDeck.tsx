@@ -361,10 +361,10 @@ export function MultiModelReviewDeck({
                 <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-2.5">
                   <div className="flex items-center gap-2 text-amber-900 font-bold">
                     <KeyRound className="w-4 h-4 text-amber-700 shrink-0" />
-                    <span>OpenAI API Key Format Issue (HTTP 401: Invalid API Key)</span>
+                    <span>OpenAI Provider Connection Notice</span>
                   </div>
-                  <p className="text-[11px] text-amber-900 leading-relaxed">
-                    Aapne jo OpenAI API key enter ki hai wo invalid hai (OpenAI ki key hamesha <code className="font-bold bg-amber-100 px-1 rounded">sk-...</code> ya <code className="font-bold bg-amber-100 px-1 rounded">sk-proj-...</code> se start hoti hai, jabki yahan <code className="font-bold bg-amber-100 px-1 rounded">key_6hS7...</code> daali gayi thi).
+                  <p className="text-[11px] text-amber-900 leading-relaxed font-mono">
+                    {openai?.apiError?.message || openai?.rejectionReasons?.[0] || "OPENAI_API_KEY is not active in this environment."}
                   </p>
                   <div className="p-2.5 bg-white/80 rounded-xl border border-amber-200 text-[10px] font-mono text-slate-700">
                     Kripya <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-600 underline font-bold inline-flex items-center gap-0.5">platform.openai.com/api-keys <ExternalLink className="w-2.5 h-2.5" /></a> se nayi valid API key copy karke apne server environment (.env) me <code className="font-bold text-slate-900">OPENAI_API_KEY</code> set karein.
@@ -470,10 +470,10 @@ export function MultiModelReviewDeck({
                 <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-2.5">
                   <div className="flex items-center gap-2 text-amber-900 font-bold">
                     <KeyRound className="w-4 h-4 text-amber-700 shrink-0" />
-                    <span>Groq API Key Required or Inactive (GROQ_API_KEY)</span>
+                    <span>Groq Provider Connection Notice</span>
                   </div>
-                  <p className="text-[11px] text-amber-900 leading-relaxed">
-                    Groq L3 Review Llama-3.3 70B par chalti hai. Kripya Vercel ya .env me <code className="font-bold bg-amber-100 px-1 rounded">GROQ_API_KEY</code> set karein (Groq API keys <code className="font-bold bg-amber-100 px-1 rounded">gsk_...</code> se start hoti hain).
+                  <p className="text-[11px] text-amber-900 leading-relaxed font-mono">
+                    {claude?.apiError?.message || claude?.rejectionReasons?.[0] || "GROQ_API_KEY is not active in this environment."}
                   </p>
                   <div className="p-2.5 bg-white/80 rounded-xl border border-amber-200 text-[10px] font-mono text-slate-700">
                     Groq Console se free key generate karein: <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-blue-600 underline font-bold inline-flex items-center gap-0.5">console.groq.com/keys <ExternalLink className="w-2.5 h-2.5" /></a>
