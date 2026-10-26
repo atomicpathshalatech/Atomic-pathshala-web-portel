@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { TeacherTrackingRecord } from "@/app/api/team/faculty/tracking/route";
+import type { TeacherTrackingRecord } from "@/app/api/team/faculty/tracking/route";
 
 interface TrackingSummary {
   totalFaculty: number;

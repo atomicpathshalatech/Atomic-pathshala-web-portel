@@ -39,7 +39,7 @@ import { BoardHistory, type BoardHistoryOps, type BoardStep, type SlideSnapshot 
 import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
-import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { extractYouTubeVideoId } from "@/lib/live-class/youtube-url";
 import { StagePreview } from "@/components/live-class/StagePreview";
 import { getDesktopBridge, type DesktopEncoderStatus } from "@/lib/desktop/bridge";
 import { DesktopClassStreamer } from "@/lib/live-class/desktop-streamer";

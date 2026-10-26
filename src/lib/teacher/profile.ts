@@ -84,12 +84,9 @@ export type TeacherFullProfile = {
   }>;
 };
 
-export function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
+import { generateSlug } from "./slug";
+
+export { generateSlug };
 
 /**
  * Format DOB strictly as Day + Month (e.g. "15 August", "1 September").

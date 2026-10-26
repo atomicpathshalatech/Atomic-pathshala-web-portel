@@ -11,7 +11,7 @@ import {
 import {
   COMMON_DURATIONS,
   calculateEndTime,
-} from "@/lib/batch/schedule-conflict";
+} from "@/lib/batch/schedule-times";
 
 type ScheduleEntry = {
   id: string;

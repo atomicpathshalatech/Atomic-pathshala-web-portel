@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { generateSlug } from "@/lib/teacher/profile";
+import { generateSlug } from "@/lib/teacher/slug";
 
 export interface DirectoryTeacher {
   id: string;

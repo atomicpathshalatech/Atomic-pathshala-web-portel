@@ -10,7 +10,7 @@ import {
   Calendar,
   Clock,
 } from "lucide-react";
-import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { extractYouTubeVideoId } from "@/lib/live-class/youtube-url";
 
 export interface UnifiedStartClassModalProps {
   isOpen: boolean;

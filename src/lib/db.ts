@@ -52,7 +52,11 @@ function createClient() {
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
   // Questions are always saved under the standard NCERT chapter name.
-  client.$use(questionChapterMiddleware);
+  // Server only: a browser bundle that pulls this file in by mistake gets
+  // Prisma's stand-in client, which throws on any property — attaching the
+  // middleware there crashed the whole page ("PrismaClient is unable to run
+  // in this browser environment").
+  if (typeof window === "undefined") client.$use(questionChapterMiddleware);
   return client;
 }
 
