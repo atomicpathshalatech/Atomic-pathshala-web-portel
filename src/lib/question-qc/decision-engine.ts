@@ -30,18 +30,19 @@ export function evaluateFinalQualityDecision(
   let finalStatus: QualityStatus = "MANUAL_REVIEW_REQUIRED";
 
   // Check for API Failures first
-  const isGeminiFailed = geminiReview.confidenceScore === 0 && geminiReview.rawOutput?.includes("API_ERROR");
-  const isOpenAiFailed = openaiReview.confidenceScore === 0 && openaiReview.rawOutput?.includes("API_ERROR");
-  const isClaudeFailed = claudeReview.confidenceScore === 0 && claudeReview.rawOutput?.includes("API_ERROR");
+  const isGeminiFailed = geminiReview.confidenceScore === 0 && (geminiReview.rawOutput?.includes("API_ERROR") || Boolean(geminiReview.apiError?.isApiError) || geminiReview.rejectionReasons?.some(r => r.includes("API_FAILURE") || r.includes("API_ERROR")));
+  const isOpenAiFailed = openaiReview.confidenceScore === 0 && (openaiReview.rawOutput?.includes("API_ERROR") || Boolean(openaiReview.apiError?.isApiError) || openaiReview.rejectionReasons?.some(r => r.includes("API_FAILURE") || r.includes("API_ERROR")));
+  const isClaudeFailed = claudeReview.confidenceScore === 0 && (claudeReview.rawOutput?.includes("API_ERROR") || Boolean(claudeReview.apiError?.isApiError) || claudeReview.rejectionReasons?.some(r => r.includes("API_FAILURE") || r.includes("API_ERROR")));
 
   if (isGeminiFailed || isOpenAiFailed || isClaudeFailed) {
     const failedProviders = [
-      isGeminiFailed ? "Gemini" : null,
-      isOpenAiFailed ? "OpenAI" : null,
-      isClaudeFailed ? "Claude" : null,
+      isGeminiFailed ? (geminiReview.apiError?.message || "Gemini API unavailable") : null,
+      isOpenAiFailed ? (openaiReview.apiError?.message || "OpenAI API unavailable") : null,
+      isClaudeFailed ? (claudeReview.apiError?.message || "Claude API unavailable") : null,
     ].filter(Boolean);
     finalStatus = "API_FAILURE";
-    reasons.push(`AI Provider service failure on: ${failedProviders.join(", ")}`);
+    reasons.push(...failedProviders.map(p => `AI Provider Service Notice: ${p}`));
+    disagreements.push(...failedProviders.map(p => `Provider unavailable: ${p}`));
   }
 
   // 1. Cross-model answer key consistency comparison

@@ -68,8 +68,8 @@ export async function reviewQuestionWithOpenAI(
       model: modelName,
       solvedAnswer: "",
       answerMatches: false,
-      isScientificallyCorrect: false,
-      isMathematicallyCorrect: false,
+      isScientificallyCorrect: true,
+      isMathematicallyCorrect: true,
       scientificErrors: [],
       mathematicalErrors: [],
       solutionCorrections: null,
@@ -88,6 +88,12 @@ export async function reviewQuestionWithOpenAI(
         outputTokens: 0,
         durationMs: Date.now() - startTime,
         estimatedCostUsd: 0,
+      },
+      apiError: {
+        isApiError: true,
+        errorType: "CONFIG_ERROR",
+        message: "OPENAI_API_KEY is not configured in server environment (.env).",
+        sanitizedDetails: "Missing OPENAI_API_KEY",
       },
       rawOutput: "API_ERROR: Missing OPENAI_API_KEY",
     };
@@ -199,14 +205,35 @@ Return ONLY a JSON response in this exact format:
     };
   } catch (err: any) {
     console.error("[OpenAIReview] Error:", err);
+    const errMsg = err?.message || String(err);
+    const isAuth = errMsg.includes("401") || errMsg.includes("Incorrect API key") || errMsg.includes("invalid_api_key");
+    const isBilling = errMsg.includes("quota") || errMsg.includes("billing") || errMsg.includes("insufficient_quota");
+    const isRate = errMsg.includes("429") || errMsg.includes("rate_limit");
+
+    const errorType = isAuth
+      ? "AUTH_ERROR"
+      : isBilling
+      ? "INSUFFICIENT_CREDITS"
+      : isRate
+      ? "RATE_LIMIT"
+      : "NETWORK_ERROR";
+
+    const userFriendlyMsg = isAuth
+      ? "OpenAI API Key is incorrect or invalid (OpenAI keys must start with 'sk-'). Please check OPENAI_API_KEY."
+      : isBilling
+      ? "OpenAI API quota exceeded or billing inactive. Please check credits at platform.openai.com."
+      : isRate
+      ? "OpenAI rate limit reached. Please wait a moment and retry."
+      : `OpenAI provider service error: ${errMsg}`;
+
     return {
       provider: "openai",
       model: modelName,
       solvedAnswer: "",
       answerMatches: false,
-      isScientificallyCorrect: false,
-      isMathematicallyCorrect: false,
-      scientificErrors: [`OpenAI review execution error: ${err.message || String(err)}`],
+      isScientificallyCorrect: true,
+      isMathematicallyCorrect: true,
+      scientificErrors: [],
       mathematicalErrors: [],
       solutionCorrections: null,
       suggestedQuestion: null,
@@ -217,7 +244,7 @@ Return ONLY a JSON response in this exact format:
       ambiguityDetected: false,
       multipleCorrectOptionsDetected: false,
       decision: "REJECT",
-      rejectionReasons: [`API_ERROR: ${err.message}`],
+      rejectionReasons: [`API_FAILURE: ${userFriendlyMsg}`],
       confidenceScore: 0,
       tokenUsage: {
         inputTokens: 0,
@@ -225,7 +252,13 @@ Return ONLY a JSON response in this exact format:
         durationMs: Date.now() - startTime,
         estimatedCostUsd: 0,
       },
-      rawOutput: `API_ERROR: ${err.message}`,
+      apiError: {
+        isApiError: true,
+        errorType,
+        message: userFriendlyMsg,
+        sanitizedDetails: errMsg,
+      },
+      rawOutput: `API_ERROR: ${errMsg}`,
     };
   }
 }

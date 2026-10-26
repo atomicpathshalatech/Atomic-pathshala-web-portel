@@ -66,8 +66,8 @@ export async function reviewQuestionWithClaude(
       model: modelName,
       solvedAnswer: "",
       answerMatches: false,
-      isScientificallyCorrect: false,
-      isMathematicallyCorrect: false,
+      isScientificallyCorrect: true,
+      isMathematicallyCorrect: true,
       scientificErrors: [],
       mathematicalErrors: [],
       solutionCorrections: null,
@@ -86,6 +86,12 @@ export async function reviewQuestionWithClaude(
         outputTokens: 0,
         durationMs: Date.now() - startTime,
         estimatedCostUsd: 0,
+      },
+      apiError: {
+        isApiError: true,
+        errorType: "CONFIG_ERROR",
+        message: "ANTHROPIC_API_KEY is not configured in server environment (.env).",
+        sanitizedDetails: "Missing ANTHROPIC_API_KEY",
       },
       rawOutput: "API_ERROR: Missing ANTHROPIC_API_KEY",
     };
@@ -196,14 +202,35 @@ Return ONLY a JSON response in this exact schema:
     };
   } catch (err: any) {
     console.error("[ClaudeReview] Error:", err);
+    const errMsg = err?.message || String(err);
+    const isBilling = errMsg.includes("credit balance is too low") || errMsg.includes("balance") || errMsg.includes("billing");
+    const isAuth = errMsg.includes("401") || errMsg.includes("invalid_api_key") || errMsg.includes("authentication_error");
+    const isRate = errMsg.includes("429") || errMsg.includes("rate_limit");
+
+    const errorType = isBilling
+      ? "INSUFFICIENT_CREDITS"
+      : isAuth
+      ? "AUTH_ERROR"
+      : isRate
+      ? "RATE_LIMIT"
+      : "NETWORK_ERROR";
+
+    const userFriendlyMsg = isBilling
+      ? "Anthropic account credit balance is too low ($0 credits). Please add credits at console.anthropic.com/settings/plans or review via Faculty Override."
+      : isAuth
+      ? "Anthropic API Key is incorrect or invalid. Please verify ANTHROPIC_API_KEY in your environment."
+      : isRate
+      ? "Anthropic rate limit reached. Please wait a moment and retry."
+      : `Claude provider service error: ${errMsg}`;
+
     return {
       provider: "claude",
       model: modelName,
       solvedAnswer: "",
       answerMatches: false,
-      isScientificallyCorrect: false,
-      isMathematicallyCorrect: false,
-      scientificErrors: [`Claude review execution error: ${err.message || String(err)}`],
+      isScientificallyCorrect: true,
+      isMathematicallyCorrect: true,
+      scientificErrors: [],
       mathematicalErrors: [],
       solutionCorrections: null,
       suggestedQuestion: null,
@@ -214,7 +241,7 @@ Return ONLY a JSON response in this exact schema:
       ambiguityDetected: false,
       multipleCorrectOptionsDetected: false,
       decision: "REJECT",
-      rejectionReasons: [`API_ERROR: ${err.message}`],
+      rejectionReasons: [`API_FAILURE: ${userFriendlyMsg}`],
       confidenceScore: 0,
       tokenUsage: {
         inputTokens: 0,
@@ -222,7 +249,13 @@ Return ONLY a JSON response in this exact schema:
         durationMs: Date.now() - startTime,
         estimatedCostUsd: 0,
       },
-      rawOutput: `API_ERROR: ${err.message}`,
+      apiError: {
+        isApiError: true,
+        errorType,
+        message: userFriendlyMsg,
+        sanitizedDetails: errMsg,
+      },
+      rawOutput: `API_ERROR: ${errMsg}`,
     };
   }
 }

@@ -107,6 +107,12 @@ export interface SingleModelReview {
     durationMs: number;
     estimatedCostUsd: number;
   };
+  apiError?: {
+    isApiError: boolean;
+    errorType: "AUTH_ERROR" | "INSUFFICIENT_CREDITS" | "RATE_LIMIT" | "NETWORK_ERROR" | "CONFIG_ERROR";
+    message: string;
+    sanitizedDetails?: string;
+  };
   rawOutput?: string;
 }
 

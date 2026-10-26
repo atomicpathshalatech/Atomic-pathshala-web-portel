@@ -17,6 +17,9 @@ import {
   ChevronDown,
   ChevronUp,
   Cpu,
+  KeyRound,
+  CreditCard,
+  ExternalLink,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 
@@ -50,7 +53,31 @@ export function MultiModelReviewDeck({
   // Stored key formatted
   const storedStr = storedAnswer.join(", ").toUpperCase() || "A";
 
-  const getStatusBadge = (decisionStr?: string, errorsCount = 0) => {
+  const isOpenAiApiError = Boolean(
+    openai?.apiError?.isApiError ||
+    openai?.confidenceScore === 0 ||
+    openai?.rawOutput?.includes("API_ERROR") ||
+    openai?.rejectionReasons?.some((r: string) => r.includes("API_FAILURE") || r.includes("API_ERROR") || r.includes("401") || r.includes("Incorrect API key")) ||
+    openai?.scientificErrors?.some((e: string) => e.includes("execution error") || e.includes("401") || e.includes("API key"))
+  );
+
+  const isClaudeApiError = Boolean(
+    claude?.apiError?.isApiError ||
+    claude?.confidenceScore === 0 ||
+    claude?.rawOutput?.includes("API_ERROR") ||
+    claude?.rejectionReasons?.some((r: string) => r.includes("API_FAILURE") || r.includes("API_ERROR") || r.includes("credit balance") || r.includes("400")) ||
+    claude?.scientificErrors?.some((e: string) => e.includes("execution error") || e.includes("credit balance") || e.includes("400"))
+  );
+
+  const getStatusBadge = (decisionStr?: string, errorsCount = 0, isApiErr = false) => {
+    if (isApiErr) {
+      return (
+        <span className="flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+          <AlertTriangle className="w-3 h-3 text-amber-600" />
+          <span>API UNAVAILABLE</span>
+        </span>
+      );
+    }
     if (decisionStr === "APPROVE" && errorsCount === 0) {
       return (
         <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
@@ -122,17 +149,25 @@ export function MultiModelReviewDeck({
             </span>
             <span
               className={`px-2 py-0.5 rounded font-mono font-bold ${
-                openai?.decision === "APPROVE" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"
+                isOpenAiApiError
+                  ? "bg-amber-100 text-amber-800 border border-amber-200"
+                  : openai?.decision === "APPROVE"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-slate-200 text-slate-700"
               }`}
             >
-              OpenAI: {openai?.solvedAnswer || "?"}
+              OpenAI: {isOpenAiApiError ? "API Error" : openai?.solvedAnswer || "?"}
             </span>
             <span
               className={`px-2 py-0.5 rounded font-mono font-bold ${
-                claude?.decision === "APPROVE" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"
+                isClaudeApiError
+                  ? "bg-amber-100 text-amber-800 border border-amber-200"
+                  : claude?.decision === "APPROVE"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-slate-200 text-slate-700"
               }`}
             >
-              Claude: {claude?.solvedAnswer || "?"}
+              Claude: {isClaudeApiError ? "API Error" : claude?.solvedAnswer || "?"}
             </span>
           </div>
 
@@ -193,7 +228,9 @@ export function MultiModelReviewDeck({
             >
               <BrainCircuit className="w-3.5 h-3.5" />
               <span>Panel B: OpenAI L2</span>
-              {openai?.decision === "APPROVE" ? (
+              {isOpenAiApiError ? (
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+              ) : openai?.decision === "APPROVE" ? (
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
               ) : (
                 <span className="w-2 h-2 rounded-full bg-rose-400" />
@@ -211,7 +248,9 @@ export function MultiModelReviewDeck({
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Panel C: Claude L3</span>
-              {claude?.decision === "APPROVE" ? (
+              {isClaudeApiError ? (
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+              ) : claude?.decision === "APPROVE" ? (
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
               ) : (
                 <span className="w-2 h-2 rounded-full bg-rose-400" />
@@ -309,24 +348,40 @@ export function MultiModelReviewDeck({
                       OpenAI GPT-4o Blind Solver (Level 2 Review)
                     </p>
                     <p className="text-[10px] text-emerald-700 font-mono">
-                      Model: {openai?.model || "gpt-4o"} · Confidence:{" "}
-                      {Math.round((openai?.confidenceScore || 0) * 100)}%
+                      Model: {openai?.model || "gpt-4o"} · Status:{" "}
+                      {isOpenAiApiError ? "API Offline" : "Live Evaluated"}
                     </p>
                   </div>
                 </div>
-                {getStatusBadge(openai?.decision, openai?.scientificErrors?.length)}
+                {getStatusBadge(openai?.decision, openai?.scientificErrors?.length, isOpenAiApiError)}
               </div>
 
-              {/* Missing Key Banner */}
-              {openai?.rejectionReasons?.some((r: string) => r.includes("API_FAILURE")) && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-1">
-                  <p className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                    <span>OpenAI API Key Unconfigured in Server Environment</span>
+              {/* Actionable Error Callout Banner if API failed */}
+              {isOpenAiApiError && (
+                <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold">
+                    <KeyRound className="w-4 h-4 text-amber-700 shrink-0" />
+                    <span>OpenAI API Key Format Issue (HTTP 401: Invalid API Key)</span>
+                  </div>
+                  <p className="text-[11px] text-amber-900 leading-relaxed">
+                    Aapne jo OpenAI API key enter ki hai wo invalid hai (OpenAI ki key hamesha <code className="font-bold bg-amber-100 px-1 rounded">sk-...</code> ya <code className="font-bold bg-amber-100 px-1 rounded">sk-proj-...</code> se start hoti hai, jabki yahan <code className="font-bold bg-amber-100 px-1 rounded">key_6hS7...</code> daali gayi thi).
                   </p>
-                  <p className="text-[11px] text-amber-800">
-                    OPENAI_API_KEY is not configured in server environment. This review was logged truthfully as an API failure without faking approval. Set OPENAI_API_KEY in your .env to enable live L2 verification.
-                  </p>
+                  <div className="p-2.5 bg-white/80 rounded-xl border border-amber-200 text-[10px] font-mono text-slate-700">
+                    Kripya <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-600 underline font-bold inline-flex items-center gap-0.5">platform.openai.com/api-keys <ExternalLink className="w-2.5 h-2.5" /></a> se nayi valid API key copy karke apne server environment (.env) me <code className="font-bold text-slate-900">OPENAI_API_KEY</code> set karein.
+                  </div>
+                  {onFacultyOverride && (
+                    <div className="pt-1 flex items-center justify-between gap-2 border-t border-amber-200/60">
+                      <span className="text-[10px] text-amber-800">Question me koi academic fault nahi hai. Aap ise manually approve kar sakte hain:</span>
+                      <button
+                        type="button"
+                        onClick={handleOverrideClick}
+                        disabled={isOverriding || validationStatus === "APPROVED_BY_FACULTY_OVERRIDE"}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-sm shrink-0"
+                      >
+                        {isOverriding ? "Approving..." : "Approve via Faculty Override"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -334,10 +389,14 @@ export function MultiModelReviewDeck({
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <p className="text-slate-500 font-bold text-[10px] uppercase">Independently Solved</p>
                   <p className="font-mono text-base font-black text-slate-800 mt-1">
-                    Option ({openai?.solvedAnswer || "—"})
+                    {isOpenAiApiError ? "N/A (Provider Offline)" : `Option (${openai?.solvedAnswer || "—"})`}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {openai?.solvedAnswer === storedStr ? "Matches original key" : `Disagrees with key (${storedStr})`}
+                    {isOpenAiApiError
+                      ? "API call did not complete"
+                      : openai?.solvedAnswer === storedStr
+                      ? "Matches original key"
+                      : `Disagrees with key (${storedStr})`}
                   </p>
                 </div>
 
@@ -345,28 +404,36 @@ export function MultiModelReviewDeck({
                   <p className="text-slate-500 font-bold text-[10px] uppercase">Scientific Correctness</p>
                   <p
                     className={`text-base font-black mt-1 ${
-                      openai?.isScientificallyCorrect ? "text-emerald-700" : "text-rose-700"
+                      isOpenAiApiError
+                        ? "text-slate-600"
+                        : openai?.isScientificallyCorrect
+                        ? "text-emerald-700"
+                        : "text-rose-700"
                     }`}
                   >
-                    {openai?.isScientificallyCorrect ? "Scientifically Valid" : "Issues Detected"}
+                    {isOpenAiApiError
+                      ? "Not Evaluated"
+                      : openai?.isScientificallyCorrect
+                      ? "Scientifically Valid"
+                      : "Issues Detected"}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Math: {openai?.isMathematicallyCorrect ? "Valid" : "Math calculation discrepancy"}
+                    {isOpenAiApiError ? "Model unreachable due to API key" : openai?.isMathematicallyCorrect ? "Math: Valid" : "Math: Calculation discrepancy"}
                   </p>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <p className="text-slate-500 font-bold text-[10px] uppercase">NCERT Evidence</p>
                   <p className="text-base font-black text-slate-800 mt-1">
-                    {openai?.ncertAlignment?.status || "UNVERIFIED"}
+                    {isOpenAiApiError ? "Not Checked" : openai?.ncertAlignment?.status || "UNVERIFIED"}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                    {openai?.ncertAlignment?.explanation || "Curriculum aligned"}
+                    {isOpenAiApiError ? "Requires active API key" : openai?.ncertAlignment?.explanation || "Curriculum aligned"}
                   </p>
                 </div>
               </div>
 
-              {openai?.scientificErrors && openai.scientificErrors.length > 0 && (
+              {!isOpenAiApiError && openai?.scientificErrors && openai.scientificErrors.length > 0 && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
                   <p className="font-bold text-rose-800">Errors Detected by OpenAI L2:</p>
                   <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
@@ -390,24 +457,40 @@ export function MultiModelReviewDeck({
                       Anthropic Claude 3.5 Sonnet Blind Auditor (Level 3 Review)
                     </p>
                     <p className="text-[10px] text-purple-700 font-mono">
-                      Model: {claude?.model || "claude-3-5-sonnet"} · Confidence:{" "}
-                      {Math.round((claude?.confidenceScore || 0) * 100)}%
+                      Model: {claude?.model || "claude-3-5-sonnet"} · Status:{" "}
+                      {isClaudeApiError ? "API Offline" : "Live Evaluated"}
                     </p>
                   </div>
                 </div>
-                {getStatusBadge(claude?.decision, claude?.scientificErrors?.length)}
+                {getStatusBadge(claude?.decision, claude?.scientificErrors?.length, isClaudeApiError)}
               </div>
 
-              {/* Missing Key Banner */}
-              {claude?.rejectionReasons?.some((r: string) => r.includes("API_FAILURE")) && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-1">
-                  <p className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Anthropic API Key Unconfigured in Server Environment</span>
+              {/* Actionable Error Callout Banner if API failed */}
+              {isClaudeApiError && (
+                <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold">
+                    <CreditCard className="w-4 h-4 text-amber-700 shrink-0" />
+                    <span>Anthropic Account Balance Depleted (HTTP 400: Insufficient Credits)</span>
+                  </div>
+                  <p className="text-[11px] text-amber-900 leading-relaxed">
+                    Aapki Anthropic API key to valid hai, lekin aapke Anthropic console account me <strong>credit balance $0 ho chuka hai</strong> (<code className="font-bold bg-amber-100 px-1 rounded">&quot;Your credit balance is too low to access the Anthropic API&quot;</code>).
                   </p>
-                  <p className="text-[11px] text-amber-800">
-                    ANTHROPIC_API_KEY is not configured in server environment. This review was logged truthfully as an API failure without faking approval. Set ANTHROPIC_API_KEY in your .env to enable live L3 verification.
-                  </p>
+                  <div className="p-2.5 bg-white/80 rounded-xl border border-amber-200 text-[10px] font-mono text-slate-700">
+                    Kripya <a href="https://console.anthropic.com/settings/plans" target="_blank" rel="noreferrer" className="text-blue-600 underline font-bold inline-flex items-center gap-0.5">console.anthropic.com/settings/plans <ExternalLink className="w-2.5 h-2.5" /></a> par jaake prepaid credits (min $5) add karein.
+                  </div>
+                  {onFacultyOverride && (
+                    <div className="pt-1 flex items-center justify-between gap-2 border-t border-amber-200/60">
+                      <span className="text-[10px] text-amber-800">Question me koi academic fault nahi hai. Aap ise manually approve kar sakte hain:</span>
+                      <button
+                        type="button"
+                        onClick={handleOverrideClick}
+                        disabled={isOverriding || validationStatus === "APPROVED_BY_FACULTY_OVERRIDE"}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-sm shrink-0"
+                      >
+                        {isOverriding ? "Approving..." : "Approve via Faculty Override"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -415,10 +498,14 @@ export function MultiModelReviewDeck({
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <p className="text-slate-500 font-bold text-[10px] uppercase">Independently Solved</p>
                   <p className="font-mono text-base font-black text-slate-800 mt-1">
-                    Option ({claude?.solvedAnswer || "—"})
+                    {isClaudeApiError ? "N/A (Provider Offline)" : `Option (${claude?.solvedAnswer || "—"})`}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {claude?.solvedAnswer === storedStr ? "Matches original key" : `Disagrees with key (${storedStr})`}
+                    {isClaudeApiError
+                      ? "API call did not complete"
+                      : claude?.solvedAnswer === storedStr
+                      ? "Matches original key"
+                      : `Disagrees with key (${storedStr})`}
                   </p>
                 </div>
 
@@ -426,28 +513,36 @@ export function MultiModelReviewDeck({
                   <p className="text-slate-500 font-bold text-[10px] uppercase">Ambiguity Check</p>
                   <p
                     className={`text-base font-black mt-1 ${
-                      claude?.ambiguityDetected ? "text-rose-700" : "text-emerald-700"
+                      isClaudeApiError
+                        ? "text-slate-600"
+                        : claude?.ambiguityDetected
+                        ? "text-rose-700"
+                        : "text-emerald-700"
                     }`}
                   >
-                    {claude?.ambiguityDetected ? "Ambiguity Detected" : "Zero Ambiguity"}
+                    {isClaudeApiError
+                      ? "Not Evaluated"
+                      : claude?.ambiguityDetected
+                      ? "Ambiguity Detected"
+                      : "Zero Ambiguity"}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Multi-correct: {claude?.multipleCorrectOptionsDetected ? "Detected" : "None"}
+                    {isClaudeApiError ? "Model unreachable due to billing" : claude?.multipleCorrectOptionsDetected ? "Multi-correct: Detected" : "Multi-correct: None"}
                   </p>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <p className="text-slate-500 font-bold text-[10px] uppercase">NCERT Alignment</p>
                   <p className="text-base font-black text-slate-800 mt-1">
-                    {claude?.ncertAlignment?.status || "UNVERIFIED"}
+                    {isClaudeApiError ? "Not Checked" : claude?.ncertAlignment?.status || "UNVERIFIED"}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                    {claude?.ncertAlignment?.citation || "NCERT Textual Concept"}
+                    {isClaudeApiError ? "Requires active credit balance" : claude?.ncertAlignment?.citation || "NCERT Textual Concept"}
                   </p>
                 </div>
               </div>
 
-              {claude?.scientificErrors && claude.scientificErrors.length > 0 && (
+              {!isClaudeApiError && claude?.scientificErrors && claude.scientificErrors.length > 0 && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
                   <p className="font-bold text-rose-800">Errors Detected by Claude L3:</p>
                   <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
@@ -508,23 +603,23 @@ export function MultiModelReviewDeck({
                 <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40">
                   <p className="text-[10px] font-bold text-emerald-700 uppercase">OpenAI L2</p>
                   <p className="font-mono text-lg font-black text-emerald-900 mt-0.5">
-                    {openai?.solvedAnswer || "—"}
+                    {isOpenAiApiError ? "Offline" : openai?.solvedAnswer || "—"}
                   </p>
                 </div>
                 <div className="p-2.5 rounded-xl border border-purple-200 bg-purple-50/40">
                   <p className="text-[10px] font-bold text-purple-700 uppercase">Claude L3</p>
                   <p className="font-mono text-lg font-black text-purple-900 mt-0.5">
-                    {claude?.solvedAnswer || "—"}
+                    {isClaudeApiError ? "Offline" : claude?.solvedAnswer || "—"}
                   </p>
                 </div>
               </div>
 
-              {/* Disagreements / Observations */}
+              {/* Provider Notices & Disagreements */}
               {decision?.disagreements && decision.disagreements.length > 0 && (
                 <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-1.5">
                   <p className="font-bold text-amber-900 flex items-center gap-1.5">
                     <AlertTriangle className="w-4 h-4 text-amber-600" />
-                    <span>Adversarial AI Disagreements Detected:</span>
+                    <span>Adversarial QC Audit Notices:</span>
                   </p>
                   <ul className="list-disc list-inside space-y-1 text-amber-800 text-[11px] pl-1 font-mono">
                     {decision.disagreements.map((dis: string, idx: number) => (
