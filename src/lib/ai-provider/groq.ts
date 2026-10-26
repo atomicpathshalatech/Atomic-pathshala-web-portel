@@ -161,22 +161,53 @@ Return ONLY a JSON response in this exact format:
   "confidenceScore": 0.95
 }`;
 
+  const candidateModels = [
+    process.env.GROQ_MODEL,
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+  ].filter(Boolean) as string[];
+
+  let response: any = null;
+  let lastError: any = null;
+  let usedModel = candidateModels[0] || "llama-3.3-70b-versatile";
+
+  for (const m of candidateModels) {
+    try {
+      usedModel = m;
+      response = await client.chat.completions.create({
+        model: m,
+        temperature: 0.1,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: "You are the Lead Master Academic Auditor for Atomic Pathshala NEET-UG. Return strict JSON only.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      });
+      if (response) break;
+    } catch (err: any) {
+      lastError = err;
+      const msg = String(err?.message || err);
+      // If 404 model not found or no access, try next fallback
+      if (msg.includes("404") || msg.includes("does not exist") || msg.includes("do not have access")) {
+        console.warn(`[Groq Provider] Model ${m} unavailable, trying fallback: ${msg}`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  if (!response) {
+    throw lastError || new Error("Failed to get response from Groq models");
+  }
+
   try {
-    const response = await client.chat.completions.create({
-      model: modelName,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: "You are the Lead Master Academic Auditor for Atomic Pathshala NEET-UG. Return strict JSON only.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    });
 
     const durationMs = Date.now() - startTime;
     const text = response.choices[0]?.message?.content?.trim() || "{}";
@@ -193,7 +224,7 @@ Return ONLY a JSON response in this exact format:
 
     return {
       provider: "groq",
-      model: modelName,
+      model: usedModel,
       solvedAnswer: solved || (stored[0] ?? "A"),
       answerMatches,
       isScientificallyCorrect: Boolean(parsed.isScientificallyCorrect ?? true),

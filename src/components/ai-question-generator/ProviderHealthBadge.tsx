@@ -84,6 +84,9 @@ export function ProviderHealthBadge() {
                 </div>
                 <p className="text-[11px] text-slate-500 font-mono">
                   Key: {data?.gemini?.masked || "..."}
+                  {data?.gemini?.activeModel && (
+                    <span className="ml-2 text-emerald-600 font-bold">({data.gemini.activeModel})</span>
+                  )}
                 </p>
                 {data?.gemini?.error && (
                   <p className="text-[11px] text-rose-600 font-mono">{data.gemini.error}</p>
@@ -124,6 +127,9 @@ export function ProviderHealthBadge() {
                 </div>
                 <p className="text-[11px] text-slate-500 font-mono">
                   Key: {data?.groq?.masked || "..."}
+                  {data?.groq?.activeModel && (
+                    <span className="ml-2 text-emerald-600 font-bold">({data.groq.activeModel})</span>
+                  )}
                 </p>
                 {data?.groq?.error && (
                   <p className="text-[11px] text-rose-600 font-mono">{data.groq.error}</p>

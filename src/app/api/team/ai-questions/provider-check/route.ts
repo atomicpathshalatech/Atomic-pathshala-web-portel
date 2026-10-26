@@ -60,16 +60,36 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    // Test Gemini
+    // Test Gemini with automatic candidate fallback
     if (geminiKey) {
-      try {
-        const genAi = new GoogleGenerativeAI(geminiKey);
-        const model = genAi.getGenerativeModel({ model: "gemini-1.5-flash" });
-        await model.generateContent("Respond with 'OK'");
-        results.gemini.status = "CONNECTED";
-      } catch (e: any) {
+      const geminiCandidateModels = [
+        process.env.GEMINI_MODEL,
+        "gemini-3.6-flash",
+        "gemini-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+      ].filter(Boolean) as string[];
+
+      let geminiSuccess = false;
+      let lastGeminiErr = "";
+
+      const genAi = new GoogleGenerativeAI(geminiKey);
+      for (const m of geminiCandidateModels) {
+        try {
+          const model = genAi.getGenerativeModel({ model: m });
+          await model.generateContent("Respond with 'OK'");
+          results.gemini.status = "CONNECTED";
+          (results.gemini as any).activeModel = m;
+          geminiSuccess = true;
+          break;
+        } catch (e: any) {
+          lastGeminiErr = e?.message || String(e);
+        }
+      }
+
+      if (!geminiSuccess) {
         results.gemini.status = "ERROR";
-        results.gemini.error = e?.message || String(e);
+        results.gemini.error = lastGeminiErr;
       }
     } else {
       results.gemini.status = "MISSING_KEY";
@@ -95,22 +115,42 @@ export async function GET(request: NextRequest) {
       results.openai.error = "OPENAI_API_KEY is not defined in this environment";
     }
 
-    // Test Groq
+    // Test Groq with automatic candidate fallback
     if (groqKey) {
-      try {
-        const client = new OpenAI({
-          apiKey: groqKey,
-          baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
-        });
-        await client.chat.completions.create({
-          model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 3,
-        });
-        results.groq.status = "CONNECTED";
-      } catch (e: any) {
+      const groqCandidateModels = [
+        process.env.GROQ_MODEL,
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3-70b-8192",
+      ].filter(Boolean) as string[];
+
+      let groqSuccess = false;
+      let lastGroqErr = "";
+
+      const client = new OpenAI({
+        apiKey: groqKey,
+        baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+      });
+
+      for (const m of groqCandidateModels) {
+        try {
+          await client.chat.completions.create({
+            model: m,
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 3,
+          });
+          results.groq.status = "CONNECTED";
+          (results.groq as any).activeModel = m;
+          groqSuccess = true;
+          break;
+        } catch (e: any) {
+          lastGroqErr = e?.message || String(e);
+        }
+      }
+
+      if (!groqSuccess) {
         results.groq.status = "ERROR";
-        results.groq.error = e?.message || String(e);
+        results.groq.error = lastGroqErr;
       }
     } else {
       results.groq.status = "MISSING_KEY";
