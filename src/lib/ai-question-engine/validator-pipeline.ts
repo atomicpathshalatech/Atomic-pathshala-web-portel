@@ -62,12 +62,14 @@ export async function runQuestionValidationPipeline({
   aiProvider,
   batchQuestionsSoFar = [],
   allowedTopics = [],
+  skipLegacyAiCheck = false,
 }: {
   question: RawAiGeneratedQuestion;
   aiProvider: AIProvider;
   batchQuestionsSoFar?: RawAiGeneratedQuestion[];
   /** Topics the teacher selected for the batch (empty = any topic of the chapter). */
   allowedTopics?: string[];
+  skipLegacyAiCheck?: boolean;
 }): Promise<{
   report: QuestionValidationReport;
   scores: QuestionQualityScores;
@@ -187,7 +189,7 @@ export async function runQuestionValidationPipeline({
   // ==========================================
   let ai: QuestionValidationReport | null = null;
   let aiError: string | null = null;
-  if (blocking.length === 0) {
+  if (blocking.length === 0 && !skipLegacyAiCheck) {
     try {
       ai = await withTimeout(
         aiProvider.validateQuestion({

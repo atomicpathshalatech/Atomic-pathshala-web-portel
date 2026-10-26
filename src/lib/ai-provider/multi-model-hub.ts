@@ -20,6 +20,23 @@ import { validateMathematics } from "../question-qc/math-validator";
 import { validateChemistry } from "../question-qc/chemical-validator";
 import { evaluateFinalQualityDecision } from "../question-qc/decision-engine";
 
+function withReviewTimeout<T>(promise: Promise<T>, ms: number = 25_000, providerName: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${providerName} review timed out after ${Math.round(ms / 1000)}s`));
+    }, ms);
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 export async function runMultiModelAudit(
   snapshot: QuestionSnapshot,
   sourceContext?: string,
@@ -31,12 +48,12 @@ export async function runMultiModelAudit(
 ): Promise<CompleteReviewPayload> {
   // Execute all three independent AI reviews in parallel
   const [geminiResult, openaiResult, claudeResult] = await Promise.allSettled([
-    reviewQuestionWithGemini(snapshot, sourceContext),
-    reviewQuestionWithOpenAI(snapshot, sourceContext),
+    withReviewTimeout(reviewQuestionWithGemini(snapshot, sourceContext), 25_000, "Gemini"),
+    withReviewTimeout(reviewQuestionWithOpenAI(snapshot, sourceContext), 25_000, "OpenAI"),
     // Prefer Groq as requested; fallback to Claude only if GROQ_API_KEY is not set but ANTHROPIC_API_KEY is
     process.env.GROQ_API_KEY || !process.env.ANTHROPIC_API_KEY
-      ? reviewQuestionWithGroq(snapshot, sourceContext)
-      : reviewQuestionWithClaude(snapshot, sourceContext),
+      ? withReviewTimeout(reviewQuestionWithGroq(snapshot, sourceContext), 25_000, "Groq")
+      : withReviewTimeout(reviewQuestionWithClaude(snapshot, sourceContext), 25_000, "Claude"),
   ]);
 
   const geminiReview: SingleModelReview =

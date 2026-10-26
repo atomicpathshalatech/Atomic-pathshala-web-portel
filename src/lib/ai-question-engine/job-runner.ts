@@ -251,6 +251,39 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
       if (q.figure || q.sourceImageId) await attachFigure(q, batchId);
     }
 
+    // Persist all generated questions immediately so they are never lost if a worker timeout occurs!
+    const persistedQuestions = await Promise.all(
+      rawQuestions.map((q, i) =>
+        prisma.aiGeneratedQuestion.create({
+          data: {
+            batchId,
+            questionIndex: q.questionIndex || i + 1,
+            statementEn: q.statementEn,
+            statementHi: q.statementHi || null,
+            optionsEn: q.optionsEn as any,
+            optionsHi: (q.optionsHi as any) || null,
+            correctAnswer: q.correctAnswer,
+            solutionEn: q.solutionEn,
+            solutionHi: q.solutionHi || null,
+            subject: q.subject,
+            chapter: q.chapter,
+            topic: q.topic,
+            subTopic: q.subTopic || null,
+            difficulty: q.difficulty,
+            questionType: q.questionType,
+            pyqStyle: q.pyqStyle,
+            language: q.language,
+            imageUrl: q.imageUrl || null,
+            sourcePdfId: params.sourcePdfId || null,
+            sourcePageNumbers: q.sourcePageNumbers || [],
+            sourceExcerpt: q.sourceExcerpt || null,
+            sourceImageId: q.sourceImageId || null,
+            validationStatus: "PROCESSING",
+          },
+        })
+      )
+    );
+
     await prisma.aiGenerationBatch.update({
       where: { id: batchId },
       data: {
@@ -260,9 +293,15 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
       },
     });
 
-    // Validate in parallel (a few at a time) inside the time budget.
+    let passedCount = 0;
+    let needsReviewCount = 0;
+    let failedCount = 0;
+    let draftedCount = 0;
     let done = 0;
-    const results = await mapLimit(rawQuestions, VALIDATION_CONCURRENCY, async (q, i) => {
+
+    // Validate in parallel (a few at a time) inside the time budget.
+    await mapLimit(rawQuestions, VALIDATION_CONCURRENCY, async (q, i) => {
+      const persistedQ = persistedQuestions[i]!;
       let report: QuestionValidationReport;
       let scores: QuestionQualityScores;
       let qcPayload: any = null;
@@ -296,19 +335,20 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
         };
         scores = { contentAccuracy: 0, answerConfidence: 0, ncertAlignment: 0, neetRelevance: 0, languageQuality: 0, overallScore: 0 };
       } else {
-        // Run full adversarial multi-model QC audit (Gemini L1, OpenAI L2, Claude L3, Math, Chem, Consensus)
+        // Run full adversarial multi-model QC audit (Gemini L1, OpenAI L2, Claude/Groq L3, Math, Chem, Consensus)
         try {
           qcPayload = await runMultiModelAudit(snapshot, sourceText || undefined, { persist: false });
         } catch (auditErr) {
           console.error(`[JobRunner] Multi-model audit exception for Q#${i + 1}:`, auditErr);
         }
 
-        // Run structural, topic-relevance, and duplicate detection
+        // Run structural, topic-relevance, and duplicate detection (skip legacy AI check since multi-model audit already ran)
         ({ report, scores } = await runQuestionValidationPipeline({
           question: q,
           aiProvider: defaultAiProvider,
           batchQuestionsSoFar: rawQuestions.slice(0, i),
           allowedTopics: params.selectedTopics,
+          skipLegacyAiCheck: true,
         }));
 
         if (qcPayload) {
@@ -328,8 +368,10 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
 
           const avgConfidence = Math.round(
             ((qcPayload.geminiReview?.confidenceScore || 0) +
-             (qcPayload.openaiReview?.confidenceScore || 0) +
-             (qcPayload.claudeReview?.confidenceScore || 0)) / 3 * 100
+              (qcPayload.openaiReview?.confidenceScore || 0) +
+              (qcPayload.claudeReview?.confidenceScore || 0)) /
+              3 *
+              100
           );
           if (eligible) {
             scores.overallScore = Math.max(scores.overallScore, avgConfidence || 95);
@@ -340,48 +382,6 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
         }
       }
 
-      done++;
-      if (done % 2 === 0 || done === rawQuestions.length) {
-        await prisma.aiGenerationBatch
-          .update({
-            where: { id: batchId },
-            data: {
-              progress: Math.round(55 + (done / Math.max(1, rawQuestions.length)) * 35),
-              currentStep: `Multi-AI Verification in progress (${done} of ${rawQuestions.length}) — L1 Gemini, L2 OpenAI, L3 Groq, Math/Chem...`,
-            },
-          })
-          .catch(() => {});
-      }
-      return { q, report, scores, qcPayload, snapshot };
-    });
-
-    await prisma.aiGenerationBatch.update({
-      where: { id: batchId },
-      data: { progress: 92, currentStep: "Saving questions..." },
-    });
-
-    let passedCount = 0;
-    let needsReviewCount = 0;
-    let failedCount = 0;
-    let draftedCount = 0;
-
-    for (const [i, { q, report, scores, qcPayload, snapshot }] of (results as any[]).entries()) {
-      const status = report.validationStatus;
-      if (status === "PASSED" || status === "APPROVED_BY_ALL" || status === "APPROVED_AFTER_VERIFICATION") {
-        passedCount++;
-      } else if (
-        status === "NEEDS_REVIEW" ||
-        status === "MANUAL_REVIEW_REQUIRED" ||
-        status === "API_FAILURE" ||
-        status === "SOURCE_UNVERIFIED"
-      ) {
-        needsReviewCount++;
-      } else {
-        failedCount++;
-      }
-
-      const imageUrl = q.imageUrl;
-
       // Question Bank draft — ONLY for questions that strictly passed multi-model consensus
       let draftQuestionId: string | null = null;
       if (DRAFTABLE.has(report.validationStatus)) {
@@ -389,10 +389,22 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
           const methodTag = params.method === "PDF" ? "PDF" : "AI";
           const translations: any[] = [];
           if (q.statementEn?.trim()) {
-            translations.push({ language: "ENGLISH", statement: q.statementEn.trim(), options: q.optionsEn as any, correctOptionIds: q.correctAnswer, solution: q.solutionEn || null });
+            translations.push({
+              language: "ENGLISH",
+              statement: q.statementEn.trim(),
+              options: q.optionsEn as any,
+              correctOptionIds: q.correctAnswer,
+              solution: q.solutionEn || null,
+            });
           }
           if (q.statementHi?.trim()) {
-            translations.push({ language: "HINDI", statement: q.statementHi.trim(), options: (q.optionsHi as any) || {}, correctOptionIds: q.correctAnswer, solution: q.solutionHi || null });
+            translations.push({
+              language: "HINDI",
+              statement: q.statementHi.trim(),
+              options: (q.optionsHi as any) || {},
+              correctOptionIds: q.correctAnswer,
+              solution: q.solutionHi || null,
+            });
           }
           const created = await withNewQuestionCode(q.subject, (questionCode) =>
             prisma.question.create({
@@ -407,7 +419,7 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
                 category: `AI_GENERATED:${methodTag}`,
                 status: "DRAFT",
                 isPublished: false,
-                imageUrl,
+                imageUrl: q.imageUrl || null,
                 solution: q.solutionEn || q.solutionHi || null,
                 tags: `AI_AUTO_DRAFT, METHOD_${methodTag}, BATCH_${batchId}, ${q.difficulty}, VALIDATION_${report.validationStatus}`,
                 createdById: params.userId,
@@ -420,34 +432,16 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
           draftedCount++;
         } catch (err) {
           console.error(`[JobRunner] Could not create the Question Bank draft (batch ${batchId}):`, err);
-          report.issues.push(`Question Bank draft could not be created: ${err instanceof Error ? err.message : String(err)}`);
+          report.issues.push(
+            `Question Bank draft could not be created: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
 
-      const createdQ = await prisma.aiGeneratedQuestion.create({
+      // Progressively update the persisted question record in PostgreSQL
+      await prisma.aiGeneratedQuestion.update({
+        where: { id: persistedQ.id },
         data: {
-          batchId,
-          questionIndex: q.questionIndex || i + 1,
-          statementEn: q.statementEn,
-          statementHi: q.statementHi || null,
-          optionsEn: q.optionsEn as any,
-          optionsHi: (q.optionsHi as any) || null,
-          correctAnswer: q.correctAnswer,
-          solutionEn: q.solutionEn,
-          solutionHi: q.solutionHi || null,
-          subject: q.subject,
-          chapter: q.chapter,
-          topic: q.topic,
-          subTopic: q.subTopic || null,
-          difficulty: q.difficulty,
-          questionType: q.questionType,
-          pyqStyle: q.pyqStyle,
-          language: q.language,
-          imageUrl,
-          sourcePdfId: params.sourcePdfId || null,
-          sourcePageNumbers: q.sourcePageNumbers || [],
-          sourceExcerpt: q.sourceExcerpt || null,
-          sourceImageId: q.sourceImageId || null,
           validationStatus: report.validationStatus,
           validationReport: report as any,
           qualityScore: scores as any,
@@ -462,7 +456,7 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
         try {
           await prisma.questionReviewAudit.create({
             data: {
-              generatedQId: createdQ.id,
+              generatedQId: persistedQ.id,
               questionId: draftQuestionId || null,
               snapshot: snapshot as any,
               geminiReview: qcPayload.geminiReview as any,
@@ -473,8 +467,8 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
               ncertValidation: qcPayload.finalDecision?.ncertValidation as any,
               finalDecision: qcPayload.finalDecision as any,
               finalStatus: qcPayload.finalDecision?.finalStatus || report.validationStatus,
-              disagreements: qcPayload.finalDecision?.disagreements as any || [],
-              reasons: qcPayload.finalDecision?.reasons as any || [],
+              disagreements: (qcPayload.finalDecision?.disagreements as any) || [],
+              reasons: (qcPayload.finalDecision?.reasons as any) || [],
               tokenUsage: {
                 gemini: qcPayload.geminiReview?.tokenUsage,
                 openai: qcPayload.openaiReview?.tokenUsage,
@@ -483,12 +477,42 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
             },
           });
         } catch (auditErr) {
-          console.warn(`[JobRunner] Failed to persist QuestionReviewAudit for ${createdQ.id}:`, auditErr);
+          console.warn(`[JobRunner] Failed to persist QuestionReviewAudit for ${persistedQ.id}:`, auditErr);
         }
       }
-    }
 
-    const generated = results.length;
+      const status = report.validationStatus;
+      if (status === "PASSED" || status === "APPROVED_BY_ALL" || status === "APPROVED_AFTER_VERIFICATION") {
+        passedCount++;
+      } else if (
+        status === "NEEDS_REVIEW" ||
+        status === "MANUAL_REVIEW_REQUIRED" ||
+        status === "API_FAILURE" ||
+        status === "SOURCE_UNVERIFIED"
+      ) {
+        needsReviewCount++;
+      } else {
+        failedCount++;
+      }
+
+      done++;
+      await prisma.aiGenerationBatch
+        .update({
+          where: { id: batchId },
+          data: {
+            progress: Math.round(55 + (done / Math.max(1, rawQuestions.length)) * 40),
+            generatedCount: rawQuestions.length,
+            passedCount,
+            needsReviewCount,
+            failedCount,
+            savedDraftCount: draftedCount,
+            currentStep: `Multi-AI Verification in progress (${done} of ${rawQuestions.length}) — L1 Gemini, L2 OpenAI, L3 Groq...`,
+          },
+        })
+        .catch(() => {});
+    });
+
+    const generated = rawQuestions.length;
     const shortBy = Math.max(0, params.totalQuestions - generated);
     await prisma.aiGenerationBatch.update({
       where: { id: batchId },
@@ -499,7 +523,7 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
           generated === 0
             ? "No questions generated."
             : shortBy > 0
-              ? `Completed — ${generated} of ${params.totalQuestions} generated (time limit); run again for the rest.${note ? ` ${note}` : ""}`
+              ? `Completed — ${generated} of ${params.totalQuestions} generated; run again for the rest.${note ? ` ${note}` : ""}`
               : `Generation & Validation Complete${note ? ` — ${note}` : ""}`,
         generatedCount: generated,
         passedCount,
