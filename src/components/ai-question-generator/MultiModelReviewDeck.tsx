@@ -167,7 +167,7 @@ export function MultiModelReviewDeck({
                   : "bg-slate-200 text-slate-700"
               }`}
             >
-              Claude: {isClaudeApiError ? "API Error" : claude?.solvedAnswer || "?"}
+              {claude?.provider === "claude" ? "Claude" : "Groq"}: {isClaudeApiError ? "API Error" : claude?.solvedAnswer || "?"}
             </span>
           </div>
 
@@ -247,7 +247,7 @@ export function MultiModelReviewDeck({
               }`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Panel C: Claude L3</span>
+              <span>Panel C: Groq L3</span>
               {isClaudeApiError ? (
                 <span className="w-2 h-2 rounded-full bg-amber-400" />
               ) : claude?.decision === "APPROVE" ? (
@@ -454,10 +454,10 @@ export function MultiModelReviewDeck({
                   <ShieldCheck className="w-4 h-4 text-purple-700" />
                   <div>
                     <p className="font-bold text-xs text-purple-900">
-                      Anthropic Claude 3.5 Sonnet Blind Auditor (Level 3 Review)
+                      Groq Llama-3.3 70B Ultra-Fast Blind Auditor (Level 3 Review)
                     </p>
                     <p className="text-[10px] text-purple-700 font-mono">
-                      Model: {claude?.model || "claude-3-5-sonnet"} · Status:{" "}
+                      Model: {claude?.model || "llama-3.3-70b-versatile"} · Status:{" "}
                       {isClaudeApiError ? "API Offline" : "Live Evaluated"}
                     </p>
                   </div>
@@ -469,14 +469,14 @@ export function MultiModelReviewDeck({
               {isClaudeApiError && (
                 <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-2.5">
                   <div className="flex items-center gap-2 text-amber-900 font-bold">
-                    <CreditCard className="w-4 h-4 text-amber-700 shrink-0" />
-                    <span>Anthropic Account Balance Depleted (HTTP 400: Insufficient Credits)</span>
+                    <KeyRound className="w-4 h-4 text-amber-700 shrink-0" />
+                    <span>Groq API Key Required or Inactive (GROQ_API_KEY)</span>
                   </div>
                   <p className="text-[11px] text-amber-900 leading-relaxed">
-                    Aapki Anthropic API key to valid hai, lekin aapke Anthropic console account me <strong>credit balance $0 ho chuka hai</strong> (<code className="font-bold bg-amber-100 px-1 rounded">&quot;Your credit balance is too low to access the Anthropic API&quot;</code>).
+                    Groq L3 Review Llama-3.3 70B par chalti hai. Kripya Vercel ya .env me <code className="font-bold bg-amber-100 px-1 rounded">GROQ_API_KEY</code> set karein (Groq API keys <code className="font-bold bg-amber-100 px-1 rounded">gsk_...</code> se start hoti hain).
                   </p>
                   <div className="p-2.5 bg-white/80 rounded-xl border border-amber-200 text-[10px] font-mono text-slate-700">
-                    Kripya <a href="https://console.anthropic.com/settings/plans" target="_blank" rel="noreferrer" className="text-blue-600 underline font-bold inline-flex items-center gap-0.5">console.anthropic.com/settings/plans <ExternalLink className="w-2.5 h-2.5" /></a> par jaake prepaid credits (min $5) add karein.
+                    Groq Console se free key generate karein: <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-blue-600 underline font-bold inline-flex items-center gap-0.5">console.groq.com/keys <ExternalLink className="w-2.5 h-2.5" /></a>
                   </div>
                   {onFacultyOverride && (
                     <div className="pt-1 flex items-center justify-between gap-2 border-t border-amber-200/60">
@@ -607,7 +607,7 @@ export function MultiModelReviewDeck({
                   </p>
                 </div>
                 <div className="p-2.5 rounded-xl border border-purple-200 bg-purple-50/40">
-                  <p className="text-[10px] font-bold text-purple-700 uppercase">Claude L3</p>
+                  <p className="text-[10px] font-bold text-purple-700 uppercase">{claude?.provider === "claude" ? "Claude L3" : "Groq L3"}</p>
                   <p className="font-mono text-lg font-black text-purple-900 mt-0.5">
                     {isClaudeApiError ? "Offline" : claude?.solvedAnswer || "—"}
                   </p>

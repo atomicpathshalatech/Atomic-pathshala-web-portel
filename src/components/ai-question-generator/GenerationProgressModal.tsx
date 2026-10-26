@@ -62,7 +62,8 @@ const PIPELINE_STAGES: PipelineStage[] = [
     id: 4,
     title: "L3 Independent Audit",
     subtitle: "Blind solve, ambiguity & multiple correct option detection",
-    provider: "Anthropic Claude 3.5",
+    provider: "Groq Llama 3.3",
+    subtitle: "Blind solve, ultra-fast ambiguity & multiple correct option detection",
     icon: ShieldCheck,
   },
   {

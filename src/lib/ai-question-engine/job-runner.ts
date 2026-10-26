@@ -256,7 +256,7 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
       data: {
         progress: 55,
         generatedCount: rawQuestions.length,
-        currentStep: `Multi-AI Verification in progress (0 of ${rawQuestions.length}) — L1 Gemini, L2 OpenAI, L3 Claude, Math/Chem validation...`,
+        currentStep: `Multi-AI Verification in progress (0 of ${rawQuestions.length}) — L1 Gemini, L2 OpenAI, L3 Groq, Math/Chem validation...`,
       },
     });
 
@@ -347,7 +347,7 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
             where: { id: batchId },
             data: {
               progress: Math.round(55 + (done / Math.max(1, rawQuestions.length)) * 35),
-              currentStep: `Multi-AI Verification in progress (${done} of ${rawQuestions.length}) — L1 Gemini, L2 OpenAI, L3 Claude, Math/Chem...`,
+              currentStep: `Multi-AI Verification in progress (${done} of ${rawQuestions.length}) — L1 Gemini, L2 OpenAI, L3 Groq, Math/Chem...`,
             },
           })
           .catch(() => {});

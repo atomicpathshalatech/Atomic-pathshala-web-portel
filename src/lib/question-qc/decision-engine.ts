@@ -38,7 +38,7 @@ export function evaluateFinalQualityDecision(
     const failedProviders = [
       isGeminiFailed ? (geminiReview.apiError?.message || "Gemini API unavailable") : null,
       isOpenAiFailed ? (openaiReview.apiError?.message || "OpenAI API unavailable") : null,
-      isClaudeFailed ? (claudeReview.apiError?.message || "Claude API unavailable") : null,
+      isClaudeFailed ? (claudeReview.apiError?.message || `${claudeReview.provider === "groq" ? "Groq" : "Claude"} API unavailable`) : null,
     ].filter(Boolean);
     finalStatus = "API_FAILURE";
     reasons.push(...failedProviders.map(p => `AI Provider Service Notice: ${p}`));
@@ -50,16 +50,17 @@ export function evaluateFinalQualityDecision(
   const geminiAns = (geminiReview.solvedAnswer || "").trim().toUpperCase();
   const openaiAns = (openaiReview.solvedAnswer || "").trim().toUpperCase();
   const claudeAns = (claudeReview.solvedAnswer || "").trim().toUpperCase();
+  const l3Provider = claudeReview.provider === "groq" ? "Groq" : "Claude";
 
   // Answer matching checks
   if (geminiAns && openaiAns && geminiAns !== openaiAns) {
     disagreements.push(`Answer Key Disagreement: Gemini solved [${geminiAns}] vs OpenAI solved [${openaiAns}]`);
   }
   if (geminiAns && claudeAns && geminiAns !== claudeAns) {
-    disagreements.push(`Answer Key Disagreement: Gemini solved [${geminiAns}] vs Claude solved [${claudeAns}]`);
+    disagreements.push(`Answer Key Disagreement: Gemini solved [${geminiAns}] vs ${l3Provider} solved [${claudeAns}]`);
   }
   if (openaiAns && claudeAns && openaiAns !== claudeAns) {
-    disagreements.push(`Answer Key Disagreement: OpenAI solved [${openaiAns}] vs Claude solved [${claudeAns}]`);
+    disagreements.push(`Answer Key Disagreement: OpenAI solved [${openaiAns}] vs ${l3Provider} solved [${claudeAns}]`);
   }
 
   // Stored answer vs independent solves
@@ -152,7 +153,7 @@ export function evaluateFinalQualityDecision(
     } else if (openaiReview.decision === "REJECT") {
       finalStatus = "REJECTED_BY_OPENAI";
     } else if (claudeReview.decision === "REJECT") {
-      finalStatus = "REJECTED_BY_CLAUDE";
+      finalStatus = claudeReview.provider === "groq" ? "REJECTED_BY_GROQ" : "REJECTED_BY_CLAUDE";
     } else if (disagreements.length > 0) {
       finalStatus = "MANUAL_REVIEW_REQUIRED";
     } else if (

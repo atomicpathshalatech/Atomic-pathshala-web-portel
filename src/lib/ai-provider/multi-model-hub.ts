@@ -15,6 +15,7 @@ import {
 import { generateQuestionWithGemini, reviewQuestionWithGemini } from "./gemini";
 import { reviewQuestionWithOpenAI } from "./openai";
 import { reviewQuestionWithClaude } from "./claude";
+import { reviewQuestionWithGroq } from "./groq";
 import { validateMathematics } from "../question-qc/math-validator";
 import { validateChemistry } from "../question-qc/chemical-validator";
 import { evaluateFinalQualityDecision } from "../question-qc/decision-engine";
@@ -32,7 +33,10 @@ export async function runMultiModelAudit(
   const [geminiResult, openaiResult, claudeResult] = await Promise.allSettled([
     reviewQuestionWithGemini(snapshot, sourceContext),
     reviewQuestionWithOpenAI(snapshot, sourceContext),
-    reviewQuestionWithClaude(snapshot, sourceContext),
+    // Prefer Groq as requested; fallback to Claude only if GROQ_API_KEY is not set but ANTHROPIC_API_KEY is
+    process.env.GROQ_API_KEY || !process.env.ANTHROPIC_API_KEY
+      ? reviewQuestionWithGroq(snapshot, sourceContext)
+      : reviewQuestionWithClaude(snapshot, sourceContext),
   ]);
 
   const geminiReview: SingleModelReview =

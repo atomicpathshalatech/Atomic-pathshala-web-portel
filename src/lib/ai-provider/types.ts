@@ -3,7 +3,7 @@
  * Shared Types & Interfaces
  */
 
-export type ModelProvider = "gemini" | "openai" | "claude";
+export type ModelProvider = "gemini" | "openai" | "claude" | "groq";
 
 export type QualityStatus =
   | "APPROVED_BY_ALL"
@@ -11,6 +11,7 @@ export type QualityStatus =
   | "REJECTED_BY_GEMINI"
   | "REJECTED_BY_OPENAI"
   | "REJECTED_BY_CLAUDE"
+  | "REJECTED_BY_GROQ"
   | "NCERT_MISMATCH"
   | "ANSWER_KEY_MISMATCH"
   | "SOLUTION_ERROR"
@@ -148,6 +149,7 @@ export interface FinalQualityDecision {
   geminiDecision: ReviewDecision;
   openaiDecision: ReviewDecision;
   claudeDecision: ReviewDecision;
+  groqDecision?: ReviewDecision;
   
   // Specialized validations
   ncertValidation: NcertAlignmentResult;
@@ -171,6 +173,7 @@ export interface CompleteReviewPayload {
   geminiReview: SingleModelReview;
   openaiReview: SingleModelReview;
   claudeReview: SingleModelReview;
+  groqReview?: SingleModelReview;
   mathValidation: MathematicalValidationResult;
   chemValidation: ChemicalValidationResult;
   finalDecision: FinalQualityDecision;
