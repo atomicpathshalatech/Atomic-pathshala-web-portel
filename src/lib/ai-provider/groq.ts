@@ -1,7 +1,8 @@
 /**
  * ATOMIC PATHSHALA — GROQ PROVIDER (Independent L3 Review)
- * Uses Groq ultra-fast Llama-3.3-70B reasoning engine for independent blind solving,
- * ambiguity checking, multiple-correct option detection, and NCERT alignment verification.
+ * Uses Groq ultra-fast reasoning engine (openai/gpt-oss-120b / openai/gpt-oss-20b)
+ * for independent blind solving, ambiguity checking, multiple-correct option detection,
+ * and NCERT alignment verification.
  */
 
 import OpenAI from "openai";
@@ -34,7 +35,7 @@ export async function reviewQuestionWithGroq(
 ): Promise<SingleModelReview> {
   const startTime = Date.now();
   const client = getGroqClient();
-  const modelName = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const modelName = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
   if (!client) {
     if (process.env.SIMULATE_MISSING_AI_PROVIDERS === "true") {
@@ -163,14 +164,13 @@ Return ONLY a JSON response in this exact format:
 
   const candidateModels = [
     process.env.GROQ_MODEL,
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "llama3-70b-8192",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
   ].filter(Boolean) as string[];
 
   let response: any = null;
   let lastError: any = null;
-  let usedModel = candidateModels[0] || "llama-3.3-70b-versatile";
+  let usedModel = candidateModels[0] || "openai/gpt-oss-120b";
 
   for (const m of candidateModels) {
     try {
@@ -194,9 +194,17 @@ Return ONLY a JSON response in this exact format:
     } catch (err: any) {
       lastError = err;
       const msg = String(err?.message || err);
-      // If 404 model not found or no access, try next fallback
-      if (msg.includes("404") || msg.includes("does not exist") || msg.includes("do not have access")) {
-        console.warn(`[Groq Provider] Model ${m} unavailable, trying fallback: ${msg}`);
+      // If model not found, decommissioned, deprecated, or no access, try next fallback
+      if (
+        msg.includes("404") ||
+        msg.includes("400") ||
+        msg.includes("decommissioned") ||
+        msg.includes("no longer supported") ||
+        msg.includes("does not exist") ||
+        msg.includes("do not have access") ||
+        msg.includes("deprecated")
+      ) {
+        console.warn(`[Groq Provider] Model ${m} unavailable (${msg}), trying fallback...`);
         continue;
       }
       throw err;
@@ -204,7 +212,41 @@ Return ONLY a JSON response in this exact format:
   }
 
   if (!response) {
-    throw lastError || new Error("Failed to get response from Groq models");
+    const errorDetails = String(lastError?.message || lastError || "All Groq candidate models failed");
+    return {
+      provider: "groq",
+      model: usedModel,
+      solvedAnswer: "",
+      answerMatches: false,
+      isScientificallyCorrect: false,
+      isMathematicallyCorrect: false,
+      scientificErrors: [],
+      mathematicalErrors: [],
+      solutionCorrections: null,
+      suggestedQuestion: null,
+      suggestedOptions: null,
+      suggestedAnswer: null,
+      topicCorrections: null,
+      ncertAlignment: { supported: false, status: "UNVERIFIED" },
+      ambiguityDetected: false,
+      multipleCorrectOptionsDetected: false,
+      decision: "REJECT",
+      rejectionReasons: [`API_FAILURE: Groq L3 review failed: ${errorDetails}`],
+      confidenceScore: 0,
+      tokenUsage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        durationMs: Date.now() - startTime,
+        estimatedCostUsd: 0,
+      },
+      apiError: {
+        isApiError: true,
+        errorType: "PROVIDER_ERROR",
+        message: errorDetails,
+        sanitizedDetails: errorDetails,
+      },
+      rawOutput: `API_ERROR: ${errorDetails}`,
+    };
   }
 
   try {

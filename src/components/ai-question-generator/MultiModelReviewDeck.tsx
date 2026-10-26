@@ -454,10 +454,10 @@ export function MultiModelReviewDeck({
                   <ShieldCheck className="w-4 h-4 text-purple-700" />
                   <div>
                     <p className="font-bold text-xs text-purple-900">
-                      Groq Llama-3.3 70B Ultra-Fast Blind Auditor (Level 3 Review)
+                      Groq Independent Blind Auditor (Level 3 Review)
                     </p>
                     <p className="text-[10px] text-purple-700 font-mono">
-                      Model: {claude?.model || "llama-3.3-70b-versatile"} · Status:{" "}
+                      Model: {claude?.model || "openai/gpt-oss-120b"} · Status:{" "}
                       {isClaudeApiError ? "API Offline" : "Live Evaluated"}
                     </p>
                   </div>
