@@ -46,7 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         language: true,
         chapter: { select: { title: true, subject: { select: { title: true } } } },
         about: { select: { content: true, revision: true } },
-        aiJob: { select: { status: true, segments: true, board: true, dictated: true, windowsDone: true, windowsTotal: true, stepNote: true, lockedUntil: true, retryAt: true } },
+        aiJob: { select: { status: true, segments: true, board: true, dictated: true, windowsDone: true, windowsTotal: true, stepNote: true, lockedUntil: true, retryAt: true, finishedAt: true, updatedAt: true } },
         summaries: {
           where: { OR: [{ status: "PUBLISHED" }, { source: "VIDEO", status: { in: ["DRAFT", "APPROVED"] } }] },
           select: { kind: true, status: true, content: true, language: true },
@@ -70,6 +70,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (summary && notes) return apiSuccess({ state: "READY", summary, notes });
 
     const job = lecture.aiJob;
+    // A failed pass is restarted from a student's request at most once per 6 hours (each pass reads the whole video).
+    const failedAt = job?.finishedAt ?? job?.updatedAt;
+    if (job?.status === "FAILED" && failedAt && Date.now() - failedAt.getTime() < 6 * 3600_000) {
+      return apiError("The summary for this lecture could not be made right now. Please try again later.", 503, { code: "AI_FAILED" });
+    }
     if (!job || job.status === "FAILED") {
       const rate = await checkRateLimit(request, "AUTH", `student-summary:${session.user.id}`);
       if (!rate.success) return rateLimitExceededResponse(rate);
