@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { StorageBanner } from "./RecordedLecturesManager";
 import { formatBytes } from "./VideoUploadPanel";
+import { premiereState } from "@/lib/recorded-lectures/premiere";
 
 type LectureRow = {
   id: string;
@@ -19,6 +20,8 @@ type LectureRow = {
   lectureNumber: number | null;
   archived: boolean;
   summary: "NONE" | "PUBLISHED" | "OUTDATED";
+  /** Its live-schedule slot, if scheduled. */
+  scheduled?: { startsAt: string; endsAt: string } | null;
 };
 type ChapterData = {
   id: string;
@@ -272,6 +275,13 @@ function LectureItem({ l, index }: { l: LectureRow; index: number }) {
             {minutes(l.durationSec) ? ` · ${minutes(l.durationSec)}` : ""}
             {l.sizeBytes ? ` · ${formatBytes(l.sizeBytes)}` : ""}
           </p>
+          {l.scheduled && (
+            <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">event</span>
+              {premiereState(l.scheduled) === "LIVE" ? "Live now · " : premiereState(l.scheduled) === "ENDED" ? "Played on " : "Plays "}
+              {new Date(l.scheduled.startsAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
           <span className={`font-semibold ${v.cls}`}>{v.text}</span>
