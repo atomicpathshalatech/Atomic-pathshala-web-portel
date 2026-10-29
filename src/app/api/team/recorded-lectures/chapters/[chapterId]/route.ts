@@ -6,6 +6,7 @@ import { ForbiddenError } from "@/lib/rbac/guard";
 import { canManageRecordedLectures } from "@/lib/recorded-lectures/access";
 import { recordedApiError, requireUserId } from "@/lib/recorded-lectures/api";
 import { recordedStorageStatus } from "@/lib/recorded-lectures/config";
+import { pickPremiere } from "@/lib/recorded-lectures/premiere";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,8 @@ export async function GET(_request: NextRequest, { params }: { params: { chapter
               teacher: { select: { displayName: true, user: { select: { name: true } } } },
               recordedMedia: { select: { uploadStatus: true, sizeBytes: true, durationSec: true, lectureNumber: true, archivedAt: true } },
               summaries: { where: { status: "PUBLISHED" }, select: { outdated: true }, take: 1 },
+              // Its live-schedule slot (earliest first; one per batch, normally the same time).
+              batchSchedules: { where: { classMode: "RECORDED", status: { not: "CANCELLED" } }, orderBy: { startsAt: "asc" }, select: { startsAt: true, endsAt: true } },
             },
           },
         },
@@ -68,6 +71,10 @@ export async function GET(_request: NextRequest, { params }: { params: { chapter
           lectureNumber: l.recordedMedia?.lectureNumber ?? null,
           archived: Boolean(l.recordedMedia?.archivedAt),
           summary: l.summaries[0] ? (l.summaries[0].outdated ? "OUTDATED" : "PUBLISHED") : "NONE",
+          scheduled: (() => {
+            const slot = pickPremiere(l.batchSchedules);
+            return slot ? { startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString() } : null;
+          })(),
         })),
       },
       allBatches: batches,

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { StorageBanner } from "./RecordedLecturesManager";
 import { VideoUploadPanel, formatBytes } from "./VideoUploadPanel";
+import { parseIstLocal } from "@/lib/recorded-lectures/premiere";
 
 type Teacher = { id: string; name: string; inBatch: boolean; subjectMatch?: boolean };
 type ChapterInfo = { id: string; title: string; subject: { title: string }; course: string; batches: { id: string; name: string }[]; lectures: unknown[] };
@@ -43,7 +44,9 @@ export function RecordedLectureCreateForm({ chapterId }: { chapterId: string }) 
   const [about, setAbout] = useState("");
   const [tags, setTags] = useState("");
   const [notes, setNotes] = useState("");
-  const [publishWhenReady, setPublishWhenReady] = useState(false);
+  // draft | publish when verified | schedule: plays live at a date and time (publishes it for that time).
+  const [release, setRelease] = useState<"draft" | "publish" | "schedule">("draft");
+  const [scheduleAt, setScheduleAt] = useState("");
   const [video, setVideo] = useState<File | null>(null);
   const [thumb, setThumb] = useState<File | null>(null);
   const [requestId] = useState(() => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}${Math.random()}`).replace(/[^a-zA-Z0-9_-]/g, ""));
@@ -73,6 +76,12 @@ export function RecordedLectureCreateForm({ chapterId }: { chapterId: string }) 
     setError(null);
     if (!video) return setError("Choose the recorded video file.");
     if (storage && video.size > storage.maxBytes) return setError(`The video is ${formatBytes(video.size)}; the limit is ${formatBytes(storage.maxBytes)}.`);
+    if (release === "schedule") {
+      const at = parseIstLocal(scheduleAt);
+      if (!at) return setError("Choose the date and time the lecture plays.");
+      if (at.getTime() <= Date.now()) return setError("Choose a date and time that has not passed yet.");
+      if (!chapter?.batches.length) return setError("This chapter is not in any batch yet, so the lecture cannot be scheduled. Add the chapter to a batch first.");
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/team/recorded-lectures", {
@@ -106,7 +115,16 @@ export function RecordedLectureCreateForm({ chapterId }: { chapterId: string }) 
   const afterUpload = async () => {
     if (!lectureId) return;
     if (thumb) await uploadThumbnail(lectureId, thumb).catch((err) => toast.error(`Video saved; thumbnail failed: ${(err as Error).message}`));
-    if (publishWhenReady) {
+    if (release === "schedule") {
+      // Into the chapter's batches' live schedule at the chosen time (this also publishes it for that time).
+      const res = await fetch(`/api/team/recorded-lectures/${lectureId}/schedule`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startsAt: scheduleAt }) });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) toast.success(`Uploaded and scheduled for ${new Date(parseIstLocal(scheduleAt)!).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}.`);
+      else toast.error(`Uploaded, but scheduling failed: ${json.error || "try again"} — set the time on the lecture page.`);
+      router.push(`/team/recorded-lectures/${lectureId}`);
+      return;
+    }
+    if (release === "publish") {
       const res = await fetch(`/api/team/recorded-lectures/${lectureId}/status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "publish" }) });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) toast.success("Uploaded, verified and published.");
@@ -200,12 +218,27 @@ export function RecordedLectureCreateForm({ chapterId }: { chapterId: string }) 
               <legend className={labelText}>Publication *</legend>
               <div className="mt-2 flex flex-col sm:flex-row gap-3 text-sm">
                 <label className="flex items-center gap-2">
-                  <input type="radio" name="rl-publish" checked={!publishWhenReady} onChange={() => setPublishWhenReady(false)} /> Save as draft
+                  <input type="radio" name="rl-publish" checked={release === "draft"} onChange={() => setRelease("draft")} /> Save as draft
                 </label>
                 <label className="flex items-center gap-2">
-                  <input type="radio" name="rl-publish" checked={publishWhenReady} onChange={() => setPublishWhenReady(true)} /> Publish when the upload is verified
+                  <input type="radio" name="rl-publish" checked={release === "publish"} onChange={() => setRelease("publish")} /> Publish when the upload is verified
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="rl-publish" checked={release === "schedule"} onChange={() => setRelease("schedule")} /> Schedule date &amp; time
                 </label>
               </div>
+              {release === "schedule" && (
+                <div className="mt-3 space-y-1">
+                  <label className="block max-w-xs">
+                    <span className={labelText}>Plays live on (India time) *</span>
+                    <input id="rl-new-schedule" type="datetime-local" required value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className={`${field} mt-1`} />
+                  </label>
+                  <p className="text-xs text-slate-500">
+                    It goes into the live schedule of {chapter.batches.length ? chapter.batches.map((b) => b.name).join(", ") : "the chapter's batches"} and plays like a live
+                    class at that time; students cannot play it before. Keep this tab open until the upload finishes.
+                  </p>
+                </div>
+              )}
             </fieldset>
           </fieldset>
           <div className="flex justify-end">
