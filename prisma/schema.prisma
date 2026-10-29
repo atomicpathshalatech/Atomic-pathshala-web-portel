@@ -3766,6 +3766,7 @@ model Lecture {
   recordedMedia  RecordedLectureMedia?
   about          LectureAbout?
   summaries      LectureSummary[]
+  aiJob          LectureAiJob?
 
   @@index([chapterId])
   @@index([status])
@@ -3863,6 +3864,8 @@ model LectureSummary {
   content       String               @db.Text // Markdown (+ $LaTeX$), editable
   language      String               @default("English")
   status        LectureSummaryStatus @default(DRAFT)
+  /// ABOUT (teacher's About), VIDEO (the lecture itself: speech + board), TRANSLATION (of another version)
+  source        String               @default("ABOUT")
   // The About changed after this was generated: regenerate and review before
   // publishing a new version. A published summary stays visible meanwhile.
   outdated      Boolean              @default(false)
@@ -3883,6 +3886,67 @@ model LectureSummary {
   @@index([lectureId, status])
   @@map("lecture_summaries")
 }
+
+enum LectureAiStatus {
+  QUEUED        // waiting to start
+  TRANSFERRING  // copying the video from the recorded-lecture bucket to the AI
+  AI_PREPARING  // the AI is reading the file
+  TRANSCRIBING  // speech + board, window by window
+  TRANSLATING   // transcript into the other language(s)
+  VOICING       // the AI voice speaks the translated transcript
+  READY
+  FAILED
+}
+
+/// The AI pass over a recorded lecture: what was said (timed), what was
+/// written on the board, the transcript in the other language(s) and the
+/// AI-voice audio for them. Drives subtitles, the audio-language switch and
+/// "Create summary from the video". One per lecture; restartable.
+model LectureAiJob {
+  id              String          @id @default(cuid())
+  lectureId       String          @unique
+  status          LectureAiStatus @default(QUEUED)
+  stepNote        String?
+  // Index into the server's Gemini keys (the uploaded file belongs to one
+  // key's project); never the key itself.
+  keyIndex        Int             @default(0)
+  geminiUploadUrl String?         @db.Text
+  uploadedBytes   BigInt          @default(0)
+  geminiFileName  String?
+  geminiFileUri   String?
+  sourceLanguage  String          @default("English")
+  targetLanguages String[]        @default([])
+  durationSec     Int?
+  windowSec       Int             @default(600)
+  windowsDone     Int             @default(0)
+  windowsTotal    Int             @default(0)
+  /// [{ s, e, t }] — start/end seconds and what was said (original language)
+  segments        Json            @default("[]")
+  /// [{ at, c }] — what was written/drawn on the board and when
+  board           Json            @default("[]")
+  /// { hi?: string[], en?: string[] } aligned with segments
+  translations    Json            @default("{}")
+  /// { hi?: { chunks: [{ s, e, key, dur }], total } , en?: … }
+  voice           Json            @default("{}")
+  error           String?         @db.Text
+  retryAt         DateTime?
+  lockedUntil     DateTime?
+  attempts        Int             @default(0)
+  tokensIn        Int             @default(0)
+  tokensOut       Int             @default(0)
+  ttsAudioSec     Float           @default(0)
+  requestedById   String
+  startedAt       DateTime        @default(now())
+  finishedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("lecture_ai_jobs")
+}
+
 
 
 // One row per (lecture, student) once the student has watched it through —

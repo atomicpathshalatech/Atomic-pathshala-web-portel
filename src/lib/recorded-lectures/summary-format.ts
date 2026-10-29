@@ -106,3 +106,39 @@ export function summaryToMarkdown(sections: Partial<Record<SummaryKey, string[]>
   }
   return out.join("\n").trim();
 }
+
+/**
+ * Summary from the lecture itself: what the teacher said and wrote on the
+ * board (timed), plus the teacher's About as a hint. Same rule: only what
+ * the lecture contains.
+ */
+export function buildVideoSummaryPrompt(p: {
+  source: string;
+  about: string | null;
+  title: string;
+  subject: string;
+  chapter: string;
+  language: string;
+}): string {
+  const hindi = isHindi(p.language);
+  return `You turn a recorded classroom lecture into a short, student-friendly summary for NEET/JEE students.
+
+LECTURE: "${p.title}" — ${p.subject}, chapter "${p.chapter}".
+
+WHAT HAPPENED IN THE LECTURE (the source — SAID = the teacher's words, BOARD = what was written/drawn, with times):
+"""
+${p.source}
+"""
+${p.about?.trim() ? `\nTHE TEACHER'S OWN NOTE ABOUT THE LECTURE (a hint, same rules):\n"""\n${p.about.trim()}\n"""\n` : ""}
+STRICT RULES
+- Use ONLY what the lecture contains (speech and board). You may reorganise, shorten and phrase it clearly. Do NOT add concepts, formulas, reactions, definitions, examples, numbers or NCERT page numbers that the teacher did not say or write.
+- Prefer what was written on the BOARD for formulas, reactions and definitions; copy them as written (LaTeX in $...$).
+- Put an item in a section only when the lecture supports it; leave other sections empty. Never invent homework.
+- "checklist": 3–8 short "Can I…?" / "Revise…" items from the lecture's own content.
+- Formulas, equations, chemical formulas, units and symbols in LaTeX inside $...$.
+- Write in ${hindi ? "Hindi (Devanagari), keeping scientific terms and formulas as commonly written" : "simple English"}.
+- If the source is too short or unclear to summarise reliably, set "insufficient": true and say why in "reason".
+
+Return STRICT JSON only:
+{"insufficient": false, "reason": "", "sections": {"topics": [], "concepts": [], "definitions": [], "formulas": [], "examPoints": [], "examples": [], "mistakes": [], "checklist": [], "homework": []}}`;
+}

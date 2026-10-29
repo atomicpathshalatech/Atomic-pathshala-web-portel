@@ -2,7 +2,7 @@ import "server-only";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { lightThinking } from "@/lib/ai/gemini-models";
-import { buildSummaryPrompt, parseSummaryResponse, summaryToMarkdown, aboutWordCount, MIN_ABOUT_WORDS } from "./summary-format";
+import { buildSummaryPrompt, buildVideoSummaryPrompt, parseSummaryResponse, summaryToMarkdown, aboutWordCount, MIN_ABOUT_WORDS } from "./summary-format";
 
 export class SummaryUnavailableError extends Error {
   constructor(message: string, public code: "AI_NOT_CONFIGURED" | "AI_FAILED" | "TIMEOUT" | "INSUFFICIENT" | "INVALID") {
@@ -45,7 +45,31 @@ export async function generateLectureSummary(p: {
     throw new SummaryUnavailableError("No AI provider is configured on the server (Gemini keys missing). The About is saved; the summary can be generated once AI is set up.", "AI_NOT_CONFIGURED");
   }
 
-  const prompt = buildSummaryPrompt(p);
+  return runSummaryPrompt(buildSummaryPrompt(p), p.language);
+}
+
+/**
+ * Generates a summary from the lecture itself (transcript + board from the
+ * AI pass), the About as a hint. Same checks and errors as from the About.
+ */
+export async function generateVideoSummary(p: {
+  source: string;
+  about: string | null;
+  title: string;
+  subject: string;
+  chapter: string;
+  language: string;
+}): Promise<{ markdown: string; provider: string; model: string }> {
+  if (p.source.trim().length < 200) {
+    throw new SummaryUnavailableError("The lecture transcript is too short to summarise. Check that the video has the teacher's voice.", "INSUFFICIENT");
+  }
+  if (!summaryAiConfigured()) {
+    throw new SummaryUnavailableError("No AI provider is configured on the server (Gemini keys missing).", "AI_NOT_CONFIGURED");
+  }
+  return runSummaryPrompt(buildVideoSummaryPrompt(p), p.language);
+}
+
+async function runSummaryPrompt(prompt: string, language: string): Promise<{ markdown: string; provider: string; model: string }> {
   let usedModel = "";
   let timer: ReturnType<typeof setTimeout> | null = null;
   const timeout = new Promise<never>((_, reject) => {
@@ -80,5 +104,5 @@ export async function generateLectureSummary(p: {
   }
   const parsed = parseSummaryResponse(parsedJson);
   if (!parsed.ok) throw new SummaryUnavailableError(parsed.error, parsed.insufficient ? "INSUFFICIENT" : "INVALID");
-  return { markdown: summaryToMarkdown(parsed.sections, p.language), provider: "gemini", model: usedModel || "gemini" };
+  return { markdown: summaryToMarkdown(parsed.sections, language), provider: "gemini", model: usedModel || "gemini" };
 }

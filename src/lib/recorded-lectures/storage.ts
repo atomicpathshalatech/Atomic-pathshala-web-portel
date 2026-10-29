@@ -173,6 +173,20 @@ export async function signedPlaybackUrl(key: string, expiresInSeconds = 600): Pr
   );
 }
 
+/** Stores a generated file (the AI-voice audio clips). Keys are new per job; nothing is overwritten. */
+export async function putGeneratedObject(params: { key: string; body: Uint8Array; contentType: string }) {
+  const { client, config } = connection();
+  await client.send(
+    new PutObjectCommand({ Bucket: config.bucket, Key: params.key, Body: params.body, ContentType: params.contentType, CacheControl: "private, max-age=86400" })
+  );
+}
+
+/** Short-lived signed GET for any object of the recorded bucket (range requests work). */
+export async function signedObjectUrl(key: string, expiresInSeconds = 900): Promise<string> {
+  const { client, config } = connection();
+  return getSignedUrl(client, new GetObjectCommand({ Bucket: config.bucket, Key: key }), { expiresIn: expiresInSeconds });
+}
+
 /** Short-lived URL for a lecture thumbnail (the bucket stays private). */
 export async function signedThumbnailUrl(key: string, expiresInSeconds = 3600): Promise<string> {
   const { client, config } = connection();
