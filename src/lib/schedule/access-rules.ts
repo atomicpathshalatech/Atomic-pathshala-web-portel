@@ -51,6 +51,9 @@ export interface ScheduleAccessTarget {
   endsAt: Date | string;
   status: string; // SCHEDULED | LIVE | COMPLETED | CANCELLED
   type?: string;  // LIVE_CLASS | TEST | DPP | etc.
+  // RECORDED: a scheduled recorded lecture — no teacher starts it; it is
+  // live in its slot by the clock (see src/lib/recorded-lectures/premiere.ts).
+  classMode?: string | null;
   liveWhiteboardSession?: {
     id?: string;
     status?: string;   // ACTIVE | ENDED
@@ -114,6 +117,38 @@ export function isScheduleGenuinelyLive(schedule: ScheduleAccessTarget): boolean
  * time hasn't come yet: it stays "scheduled" until then, so a link pasted into
  * tomorrow's class doesn't play today.
  */
+/**
+ * A scheduled recorded lecture: scheduled until its start, live in its slot,
+ * completed after it — by the clock alone. Students may open it from its start.
+ */
+function recordedClassEvaluation(schedule: ScheduleAccessTarget, serverNow: Date): AccessEvaluation {
+  const { startsAt, endsAt, startOpensAt } = getScheduleWindowDates(schedule);
+  const nowMs = serverNow.getTime();
+  const isCancelled = schedule.status === "CANCELLED";
+  const isLive = !isCancelled && nowMs >= startsAt.getTime() && nowMs < endsAt.getTime();
+  const isCompleted = !isCancelled && nowMs >= endsAt.getTime();
+  const status: NormalizedScheduleStatus = isCancelled ? "CANCELLED" : isLive ? "LIVE" : isCompleted ? "COMPLETED" : "SCHEDULED";
+  const secondsUntilStartsAt = Math.max(0, Math.ceil((startsAt.getTime() - nowMs) / 1000));
+  return {
+    allowed: isLive || isCompleted,
+    status,
+    code: isCancelled ? "CANCELLED" : isLive ? "OK" : isCompleted ? "COMPLETED" : "JOIN_TOO_EARLY",
+    reason: isCancelled ? "This class was cancelled." : !isLive && !isCompleted ? "This class opens at its scheduled time." : undefined,
+    // The class opens at its start (no lobby before it).
+    opensAt: startsAt,
+    startOpensAt,
+    startsAt,
+    endsAt,
+    isLive,
+    isCompleted,
+    isCancelled,
+    isWindowOpen: isLive,
+    secondsUntilWindowOpens: secondsUntilStartsAt,
+    secondsUntilStartOpens: Math.max(0, Math.ceil((startOpensAt.getTime() - nowMs) / 1000)),
+    secondsUntilStartsAt,
+  };
+}
+
 export function isRecordingNotYetDue(schedule: ScheduleAccessTarget, now: Date = new Date()): boolean {
   return !isScheduleGenuinelyLive(schedule) && new Date(schedule.startsAt).getTime() > now.getTime();
 }
@@ -376,6 +411,10 @@ export function canTeacherStartClass(
   schedule: ScheduleAccessTarget,
   serverNow: Date = new Date()
 ): AccessEvaluation {
+  // A recorded lecture plays by itself in its slot: nothing for a teacher to start.
+  if (schedule.classMode === "RECORDED") {
+    return { ...recordedClassEvaluation(schedule, serverNow), allowed: false, code: "START_NOT_ALLOWED", reason: "A recorded lecture plays by itself at its time." };
+  }
   const { startsAt, endsAt, opensAt, startOpensAt, expiresAt } = getScheduleWindowDates(schedule);
   const nowMs = serverNow.getTime();
 
@@ -520,6 +559,7 @@ export function canStudentJoinClass(
   schedule: ScheduleAccessTarget,
   serverNow: Date = new Date()
 ): AccessEvaluation {
+  if (schedule.classMode === "RECORDED") return recordedClassEvaluation(schedule, serverNow);
   const { startsAt, endsAt, opensAt, startOpensAt, expiresAt } = getScheduleWindowDates(schedule);
   const nowMs = serverNow.getTime();
 
@@ -682,6 +722,7 @@ export function getEffectiveScheduleStatus(
   schedule: ScheduleAccessTarget,
   serverNow: Date = new Date()
 ): NormalizedScheduleStatus {
+  if (schedule.classMode === "RECORDED") return recordedClassEvaluation(schedule, serverNow).status;
   if (schedule.status === "CANCELLED") return "CANCELLED";
   if (
     schedule.status === "COMPLETED" ||

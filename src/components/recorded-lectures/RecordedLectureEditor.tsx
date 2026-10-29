@@ -8,6 +8,7 @@ import { LectureAiPanel } from "./LectureAiPanel";
 import { StorageBanner } from "./RecordedLecturesManager";
 import { VideoUploadPanel, formatBytes } from "./VideoUploadPanel";
 import { uploadThumbnail } from "./RecordedLectureCreateForm";
+import { LectureSchedulePanel } from "./LectureSchedulePanel";
 
 type Lecture = {
   id: string;
@@ -215,6 +216,8 @@ export function RecordedLectureEditor({ lectureId }: { lectureId: string }) {
           <p className="text-sm text-slate-500">The video has not been uploaded yet.</p>
         )}
       </section>
+
+      {canManage && !m.archivedAt && <LectureSchedulePanel lectureId={lectureId} ready={ready} onChanged={load} />}
 
       {canManage && <DetailsForm lecture={lecture} onSaved={setLecture} />}
 

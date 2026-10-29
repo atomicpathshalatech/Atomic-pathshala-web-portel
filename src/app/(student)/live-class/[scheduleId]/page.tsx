@@ -27,6 +27,13 @@ export default async function StudentLiveClassPage({
     redirect("/live-class");
   }
 
+  // A scheduled recorded lecture plays in its own player (live in its slot).
+  {
+    const { recordedLecturePathFor } = await import("@/lib/recorded-lectures/routing");
+    const recorded = await recordedLecturePathFor(rawScheduleId);
+    if (recorded) redirect(recorded);
+  }
+
   // The room's clock follows the schedule (see alignRoomClockWithSchedule).
   {
     const { alignRoomClockWithSchedule } = await import("@/lib/live-session/service");

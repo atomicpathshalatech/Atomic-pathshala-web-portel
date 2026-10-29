@@ -33,7 +33,7 @@ export default async function SchedulePage({
                 batch: true,
                 teacher: { include: { user: true } },
                 lecture: {
-                  select: { id: true, videoUrl: true, chapterId: true },
+                  select: { id: true, videoUrl: true, chapterId: true, teacher: { select: { id: true, displayName: true, user: { select: { name: true, email: true } } } } },
                 },
                 test: { select: { id: true } },
                 liveWhiteboardSession: {
@@ -154,8 +154,12 @@ export default async function SchedulePage({
             email: s.teacher.user.email,
           },
         }
-      : null,
+      : s.lecture?.teacher
+        ? // A scheduled recorded lecture has no class teacher: the lecture's teacher.
+          { id: s.lecture.teacher.id, user: { name: s.lecture.teacher.displayName || s.lecture.teacher.user.name, email: s.lecture.teacher.user.email } }
+        : null,
     testId: s.test?.id ?? null,
+    classMode: s.classMode,
     lectureId: s.lecture?.id || null,
     lectureVideoUrl: s.lecture?.videoUrl || null,
     liveWhiteboardSession: s.liveWhiteboardSession

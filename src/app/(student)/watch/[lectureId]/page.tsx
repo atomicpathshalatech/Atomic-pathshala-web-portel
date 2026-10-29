@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { AtomicVideoPlayer } from "@/components/student/AtomicVideoPlayer";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 import { reconcileRecordingStatus } from "@/lib/livekit/egress";
+import { recordedLecturePathFor } from "@/lib/recorded-lectures/routing";
 
 export const metadata: Metadata = {
   title: "Lecture Video Player — Atomic Pathshala",
@@ -74,6 +75,11 @@ async function videoFromClasses(classes: ClassVideoSource[] | undefined): Promis
 export default async function WatchLecturePage({ params }: { params?: { lectureId?: string } }) {
   const { student } = await requireStudentSession();
   const targetId = params?.lectureId || "demo-lecture";
+
+  // A recorded lecture (or a class slot that plays one) has its own player
+  // with its own access checks — its "video url" is that page, not a file.
+  const recordedTarget = await recordedLecturePathFor(targetId);
+  if (recordedTarget) redirect(recordedTarget);
 
   // 1. Try to find lecture from database
   let lecture = await prisma.lecture.findUnique({

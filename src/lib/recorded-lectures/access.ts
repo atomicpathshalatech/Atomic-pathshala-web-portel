@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageLecture } from "@/lib/lecture/access";
+import { pickPremiere, premiereState, RECORDED_CLASS_MODE, type PremiereState } from "./premiere";
 
 /** Upload, publish, archive recorded lectures (Admin / Super Admin, or granted). */
 export function canManageRecordedLectures(userId: string): Promise<boolean> {
@@ -50,9 +51,24 @@ export function recordedForBatchWhere(batch: { id: string; courseId: string | nu
   };
 }
 
+export type StudentPremiere = { scheduleId: string; startsAt: Date; endsAt: Date; state: PremiereState };
+
 export type StudentLectureAccess =
-  | { ok: true; batchId: string }
+  | { ok: true; batchId: string; premiere: StudentPremiere | null }
   | { ok: false; reason: "NOT_FOUND" | "NOT_PUBLISHED" | "NOT_ENROLLED" };
+
+/**
+ * The premiere slot of this lecture for one batch (null: not scheduled —
+ * the lecture is watchable as soon as it is published).
+ */
+export async function premiereForBatch(lectureId: string, batchId: string, now: Date = new Date()): Promise<StudentPremiere | null> {
+  const slots = await prisma.batchSchedule.findMany({
+    where: { lectureId, batchId, classMode: RECORDED_CLASS_MODE, status: { not: "CANCELLED" } },
+    select: { id: true, startsAt: true, endsAt: true },
+  });
+  const slot = pickPremiere(slots, now);
+  return slot ? { scheduleId: slot.id, startsAt: slot.startsAt, endsAt: slot.endsAt, state: premiereState(slot, now) } : null;
+}
 
 /**
  * May this student watch this recorded lecture right now? Checked on the
@@ -87,7 +103,7 @@ export async function studentRecordedAccess(studentId: string, lectureId: string
     orderBy: { enrolledAt: "desc" },
   });
   if (!enrollment) return { ok: false, reason: "NOT_ENROLLED" };
-  return { ok: true, batchId: enrollment.batchId };
+  return { ok: true, batchId: enrollment.batchId, premiere: await premiereForBatch(lectureId, enrollment.batchId) };
 }
 
 /** Is the student actively enrolled in this batch? */

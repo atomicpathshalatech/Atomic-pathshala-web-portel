@@ -7,6 +7,8 @@ import { studentRecordedAccess } from "@/lib/recorded-lectures/access";
 import { watermarkLabel } from "@/lib/recorded-lectures/files";
 import { RecordedLecturePlayer } from "@/components/recorded-lectures/RecordedLecturePlayer";
 import { SummaryLanguageTabs } from "@/components/recorded-lectures/SummaryLanguageTabs";
+import { StudentSummaryPanel } from "@/components/recorded-lectures/StudentSummaryPanel";
+import { PremiereCountdown } from "@/components/recorded-lectures/PremiereCountdown";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +54,8 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
   const teacher = lecture.teacher.displayName || lecture.teacher.user.name;
   const watermark = watermarkLabel(student.user.name, student.studentIdCode ?? student.enrollmentNumber);
   const backHref = `/courses/${access.batchId}`;
+  // Scheduled for the batch and not started yet: a countdown instead of the video.
+  const upcoming = access.premiere?.state === "UPCOMING";
 
   return (
     <div className="max-w-5xl mx-auto space-y-5 px-0 sm:px-2 pb-10">
@@ -60,7 +64,11 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
         Back to batch
       </Link>
 
-      <RecordedLecturePlayer lectureId={lecture.id} watermark={watermark} initiallyCompleted={lecture.progress.length > 0} />
+      {upcoming ? (
+        <PremiereCountdown startsAt={access.premiere!.startsAt.toISOString()} />
+      ) : (
+        <RecordedLecturePlayer lectureId={lecture.id} watermark={watermark} initiallyCompleted={lecture.progress.length > 0} />
+      )}
 
       <header className="space-y-1">
         <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
@@ -76,7 +84,7 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
         </p>
       </header>
 
-      {notes.length > 0 && (
+      {!upcoming && notes.length > 0 && (
         <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 space-y-3">
           <h2 className="text-base font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-xl">stylus_note</span>
@@ -87,17 +95,7 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
         </section>
       )}
 
-      <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 space-y-3">
-        <h2 className="text-base font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-xl">summarize</span>
-          Lecture Summary
-        </h2>
-        {summaries.length ? (
-          <SummaryLanguageTabs summaries={summaries} />
-        ) : (
-          <p className="text-sm text-slate-500">The teacher has not published a summary for this lecture yet. The video is ready to watch.</p>
-        )}
-      </section>
+      {upcoming ? null : <StudentSummaryPanel lectureId={lecture.id} published={summaries} />}
     </div>
   );
 }

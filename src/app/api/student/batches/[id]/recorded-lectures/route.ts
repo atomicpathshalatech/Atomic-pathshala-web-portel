@@ -8,6 +8,7 @@ import { UnauthorizedError } from "@/lib/rbac/guard";
 import { activeEnrollment, recordedForBatchWhere } from "@/lib/recorded-lectures/access";
 import { recordedWatchPath } from "@/lib/recorded-lectures/service";
 import { signedThumbnailUrl } from "@/lib/recorded-lectures/storage";
+import { pickPremiere, premiereState, RECORDED_CLASS_MODE } from "@/lib/recorded-lectures/premiere";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,17 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       },
     });
 
+    // Lectures scheduled for this batch: when each plays live.
+    const slots = await prisma.batchSchedule.findMany({
+      where: { batchId: enrolled.batch.id, classMode: RECORDED_CLASS_MODE, status: { not: "CANCELLED" }, lectureId: { in: lectures.map((l) => l.id) } },
+      select: { lectureId: true, startsAt: true, endsAt: true },
+    });
+    const now = new Date();
+    const premiereOf = (lectureId: string) => {
+      const slot = pickPremiere(slots.filter((s) => s.lectureId === lectureId), now);
+      return slot ? { startsAt: slot.startsAt.toISOString(), state: premiereState(slot, now) } : null;
+    };
+
     // Thumbnails are private objects: signed for an hour, only for lectures listed here.
     const thumbs = await Promise.all(
       lectures.map((l) => (l.recordedMedia?.thumbnailKey ? signedThumbnailUrl(l.recordedMedia.thumbnailKey).catch(() => null) : null))
@@ -64,6 +76,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         summaryPreview: summary ? summary.replace(/^#+\s.*$/gm, "").replace(/^[-*]\s(\[ \]\s)?/gm, "").split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(" · ").slice(0, 220) : null,
         completed: l.progress.length > 0,
         href: recordedWatchPath(l.id),
+        premiere: premiereOf(l.id),
       });
       s.chapters.set(l.chapter.id, c);
       subjects.set(l.chapter.subject.id, s);

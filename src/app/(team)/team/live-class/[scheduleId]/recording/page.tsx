@@ -10,6 +10,7 @@ import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { ClassNotesUploadButton } from "@/components/schedule/ClassNotesUploadButton";
 import { isRecordingNotYetDue } from "@/lib/schedule/access-rules";
 import { formatISTDate, formatISTTime } from "@/lib/date-utils";
+import { teamRecordedLecturePathFor } from "@/lib/recorded-lectures/routing";
 import { parseYouTubeVideoId } from "@/lib/youtube/video-link";
 
 export const metadata: Metadata = {
@@ -38,6 +39,8 @@ export default async function TeacherRecordingPage({
 
   const { scheduleId } = await Promise.resolve(params);
   if (!scheduleId) notFound();
+  const recorded = await teamRecordedLecturePathFor(scheduleId);
+  if (recorded) redirect(recorded);
 
   const schedule = await prisma.batchSchedule.findUnique({
     where: { id: scheduleId },
