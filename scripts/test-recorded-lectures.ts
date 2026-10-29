@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { resolveRecordedStorageConfig, DEFAULT_MAX_BYTES } from "../src/lib/recorded-lectures/config";
+import { clampToLive, livePositionSec, parseIstLocal, pickPremiere, premiereEnd, premiereState, toIstLocal } from "../src/lib/recorded-lectures/premiere";
+import { canStudentJoinClass, canTeacherStartClass, getEffectiveScheduleStatus } from "../src/lib/schedule/access-rules";
 import {
   checkVideoDeclaration,
   sniffVideo,
@@ -274,6 +276,55 @@ const OLD = {
     assert.ok(again);
     assert.equal(after, before, "a resumed upload sends only the missing parts");
     assert.equal(initCalls, 2);
+  });
+
+  await test("scheduled lecture: upcoming → live in its slot → ended", () => {
+    const startsAt = new Date("2026-11-01T10:00:00Z");
+    const endsAt = premiereEnd(startsAt, 4371);
+    assert.equal(endsAt.getTime() - startsAt.getTime(), 4371 * 1000);
+    assert.equal(premiereState({ startsAt, endsAt }, new Date("2026-11-01T09:59:59Z")), "UPCOMING");
+    assert.equal(premiereState({ startsAt, endsAt }, new Date("2026-11-01T10:00:00Z")), "LIVE");
+    assert.equal(premiereState({ startsAt, endsAt }, endsAt), "ENDED");
+    // No duration known: a 1-hour slot.
+    assert.equal(premiereEnd(startsAt, null).getTime() - startsAt.getTime(), 3600 * 1000);
+  });
+
+  await test("live point: where the class is now; no skipping past it", () => {
+    const startsAt = new Date("2026-11-01T10:00:00Z");
+    assert.equal(livePositionSec(startsAt, new Date("2026-11-01T10:05:00Z")), 300);
+    assert.equal(livePositionSec(startsAt, new Date("2026-11-01T09:00:00Z")), 0);
+    assert.equal(livePositionSec(startsAt, new Date("2026-11-01T12:00:00Z"), 4371), 4371);
+    assert.equal(clampToLive(900, 300), 300, "a seek ahead goes back to the live point");
+    assert.equal(clampToLive(120, 300), 120, "going back is allowed");
+  });
+
+  await test("which slot applies: the next one not over, else the last one", () => {
+    const s = (start: string, end: string) => ({ startsAt: new Date(start), endsAt: new Date(end) });
+    const a = s("2026-11-01T10:00:00Z", "2026-11-01T11:00:00Z");
+    const b = s("2026-11-03T10:00:00Z", "2026-11-03T11:00:00Z");
+    assert.equal(pickPremiere([b, a], new Date("2026-11-01T10:30:00Z")), a);
+    assert.equal(pickPremiere([b, a], new Date("2026-11-02T10:00:00Z")), b);
+    assert.equal(pickPremiere([b, a], new Date("2026-11-05T10:00:00Z")), b);
+    assert.equal(pickPremiere([], new Date()), null);
+  });
+
+  await test("date/time input is India time", () => {
+    const d = parseIstLocal("2026-11-01T15:30");
+    assert.equal(d?.toISOString(), "2026-11-01T10:00:00.000Z");
+    assert.equal(toIstLocal(d!), "2026-11-01T15:30");
+    assert.equal(parseIstLocal("tomorrow"), null);
+  });
+
+  await test("schedule rules: a recorded slot is live by the clock, never 'cancelled' for no teacher", () => {
+    const slot = { id: "x", startsAt: "2026-11-01T10:00:00Z", endsAt: "2026-11-01T11:00:00Z", status: "SCHEDULED", type: "LIVE_CLASS", classMode: "RECORDED" };
+    assert.equal(getEffectiveScheduleStatus(slot, new Date("2026-11-01T09:00:00Z")), "SCHEDULED");
+    assert.equal(getEffectiveScheduleStatus(slot, new Date("2026-11-01T10:40:00Z")), "LIVE");
+    assert.equal(getEffectiveScheduleStatus(slot, new Date("2026-11-01T11:30:00Z")), "COMPLETED");
+    assert.equal(canStudentJoinClass(slot, new Date("2026-11-01T09:59:00Z")).allowed, false);
+    assert.equal(canStudentJoinClass(slot, new Date("2026-11-01T10:00:00Z")).allowed, true);
+    assert.equal(canTeacherStartClass(slot, new Date("2026-11-01T10:00:00Z")).allowed, false);
+    // An ordinary live class not started 40 minutes in is still treated as before.
+    assert.notEqual(getEffectiveScheduleStatus({ ...slot, classMode: null }, new Date("2026-11-01T10:40:00Z")), "LIVE");
   });
 
   console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

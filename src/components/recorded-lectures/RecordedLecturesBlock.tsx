@@ -14,6 +14,8 @@ type LectureCard = {
   summaryPreview: string | null;
   completed: boolean;
   href: string;
+  /** Scheduled for the batch: when it plays live (null: not scheduled). */
+  premiere?: { startsAt: string; state: "UPCOMING" | "LIVE" | "ENDED" } | null;
 };
 type Chapter = { id: string; title: string; lectures: LectureCard[] };
 type Subject = { id: string; title: string; chapters: Chapter[] };
@@ -151,6 +153,17 @@ export function RecordedLecturesBlock({ batchId }: { batchId: string }) {
                                 {l.teacher} · {l.language}
                                 {l.completed && <span className="ml-1.5 text-emerald-600 font-bold">· Watched</span>}
                               </p>
+                              {l.premiere?.state === "LIVE" && (
+                                <span className="inline-flex items-center gap-1 rounded bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE NOW
+                                </span>
+                              )}
+                              {l.premiere?.state === "UPCOMING" && (
+                                <p className="text-xs font-bold text-blue-600">
+                                  Starts{" "}
+                                  {new Date(l.premiere.startsAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                </p>
+                              )}
                               {l.summaryPreview && <p className="text-xs text-slate-500 line-clamp-2">{l.summaryPreview}</p>}
                             </div>
                           </Link>

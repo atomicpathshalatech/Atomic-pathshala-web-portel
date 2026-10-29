@@ -46,6 +46,8 @@ export interface ScheduleItem {
   } | null;
   lectureId?: string | null;
   lectureVideoUrl?: string | null;
+  /** RECORDED: a scheduled recorded lecture (plays by itself, live in its slot). */
+  classMode?: string | null;
   liveWhiteboardSession?: {
     id?: string;
     status?: string;
@@ -604,8 +606,11 @@ function TimelineLectureRow({
     endsAt: item.endsAt,
     status: item.status,
     type: item.type,
+    classMode: item.classMode,
     liveWhiteboardSession: item.liveWhiteboardSession,
   };
+  const isRecordedSlot = item.classMode === "RECORDED" && Boolean(item.lectureId);
+  const recordedHref = role === "TEACHER" ? `/team/recorded-lectures/${item.lectureId}` : `/recorded-lectures/${item.lectureId}`;
 
   const studentEval = canStudentJoin(scheduleTarget, clientNow);
   const teacherEval = canTeacherStart(scheduleTarget, clientNow);
@@ -642,7 +647,7 @@ function TimelineLectureRow({
   // tracking is a teacher/admin concern, not something a student acts on.
   const minutesLate = Math.floor((clientNow.getTime() - new Date(item.startsAt).getTime()) / (1000 * 60));
   const isLateNotStarted =
-    role === "TEACHER" && item.type === "LIVE_CLASS" && !isLive && !isCompleted && !isCancelled && minutesLate > 0;
+    role === "TEACHER" && item.type === "LIVE_CLASS" && !isRecordedSlot && !isLive && !isCompleted && !isCancelled && minutesLate > 0;
 
   return (
     <div className="relative flex gap-3 sm:gap-4 items-start">
@@ -705,7 +710,9 @@ function TimelineLectureRow({
       {/* Right Column: Full Details Card */}
       <div
         onClick={() => {
-          if (isCompleted && item.type === "LIVE_CLASS") {
+          if (isRecordedSlot && (isLive || isCompleted)) {
+            router.push(recordedHref);
+          } else if (isCompleted && item.type === "LIVE_CLASS") {
             router.push(watchUrl);
           }
         }}
@@ -878,6 +885,29 @@ function TimelineLectureRow({
                 >
                   <span className="material-symbols-outlined text-[14px]">description</span>
                   <span>View DPP</span>
+                </Link>
+              )
+            ) : isRecordedSlot ? (
+              isCancelled ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 shrink-0">
+                  <span className="material-symbols-outlined text-[12px]">cancel</span>
+                  <span>Class Cancelled</span>
+                </span>
+              ) : role === "STUDENT" && !isLive && !isCompleted ? (
+                <span className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg text-[10px] font-semibold">
+                  <span className="material-symbols-outlined text-[12px]">schedule</span>
+                  <span>Starts {startTimeStr}</span>
+                </span>
+              ) : (
+                <Link
+                  href={recordedHref}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`inline-flex items-center gap-1 py-1 px-3 rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 text-white ${
+                    isLive ? "bg-[#a33900] hover:bg-orange-800 animate-pulse" : role === "TEACHER" && !isCompleted ? "bg-slate-700 hover:bg-slate-800" : "bg-[#a33900] hover:bg-orange-800"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">{isLive ? "live_tv" : role === "TEACHER" && !isCompleted ? "video_library" : "play_circle"}</span>
+                  <span>{isLive ? "Watch Live" : role === "TEACHER" && !isCompleted ? "Recorded lecture" : "Play Class"}</span>
                 </Link>
               )
             ) : isCompleted ? (

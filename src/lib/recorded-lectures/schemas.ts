@@ -44,6 +44,13 @@ export const recordedStatusSchema = z.object({
   action: z.enum(["publish", "unpublish", "archive", "restore"]),
 });
 
+/** Schedule a recorded lecture in batches' timetables ("YYYY-MM-DDTHH:mm", India time). */
+export const recordedScheduleSchema = z.object({
+  startsAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Choose the date and time"),
+  // Default: every batch the lecture is for.
+  batchIds: z.array(z.string().trim().min(1)).max(100).optional(),
+});
+
 export const uploadActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("init"),

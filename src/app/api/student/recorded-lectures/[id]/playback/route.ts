@@ -41,10 +41,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return apiError(message, access.reason === "NOT_FOUND" ? 404 : 403, { code: access.reason });
     }
 
+    // Scheduled for this batch: nothing to play before the slot starts.
+    const premiere = access.premiere;
+    if (premiere?.state === "UPCOMING") {
+      return apiError("This lecture starts at its scheduled time.", 403, { code: "NOT_YET", details: { startsAt: premiere.startsAt.toISOString() } });
+    }
+
     const media = await prisma.recordedLectureMedia.findUnique({ where: { lectureId: params.id }, select: { objectKey: true, mimeType: true } });
     if (!media) return apiError("Lecture not found.", 404);
     const url = await signedPlaybackUrl(media.objectKey, URL_TTL_SECONDS);
-    const res = apiSuccess({ url, mimeType: media.mimeType, expiresInSeconds: URL_TTL_SECONDS });
+    const res = apiSuccess({
+      url,
+      mimeType: media.mimeType,
+      expiresInSeconds: URL_TTL_SECONDS,
+      // In its slot: played like a live class (the player keeps everyone at the live point).
+      live:
+        premiere?.state === "LIVE"
+          ? { startsAt: premiere.startsAt.toISOString(), endsAt: premiere.endsAt.toISOString(), serverNow: new Date().toISOString() }
+          : null,
+    });
     res.headers.set("Cache-Control", "private, no-store");
     return res;
   } catch (error) {

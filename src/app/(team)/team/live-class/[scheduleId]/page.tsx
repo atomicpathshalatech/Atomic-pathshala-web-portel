@@ -26,6 +26,13 @@ export default async function TeacherLiveClassPage({
   const scheduleId = resolvedParams?.scheduleId;
   if (!scheduleId) notFound();
 
+  // A scheduled recorded lecture has nothing to start: its own page instead of the live room.
+  {
+    const { teamRecordedLecturePathFor } = await import("@/lib/recorded-lectures/routing");
+    const recorded = await teamRecordedLecturePathFor(scheduleId);
+    if (recorded) redirect(recorded);
+  }
+
   // The room's clock follows the schedule (see alignRoomClockWithSchedule).
   {
     const { alignRoomClockWithSchedule } = await import("@/lib/live-session/service");

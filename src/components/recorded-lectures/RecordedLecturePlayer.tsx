@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { clampToLive, livePositionSec } from "@/lib/recorded-lectures/premiere";
 
 const POSITIONS = [
   "top-[8%] left-[6%]",
@@ -22,6 +23,11 @@ const POSITIONS = [
  * fullscreen, not the bare <video>), no download button, no
  * picture-in-picture, no right-click menu on the video. Screen recording
  * and screenshots cannot be blocked in a browser.
+ *
+ * A lecture scheduled for the batch plays like a live class in its slot:
+ * it starts at the live point (where the class is now), the student can go
+ * back but not ahead of it, and "Go live" returns to it. After the slot it
+ * is an ordinary recording.
  */
 export function RecordedLecturePlayer({
   lectureId,
@@ -42,6 +48,11 @@ export function RecordedLecturePlayer({
   const [pos, setPos] = useState(0);
   const [now, setNow] = useState(() => new Date());
   const [completed, setCompleted] = useState(initiallyCompleted);
+  // In a scheduled slot: its times and the server clock's offset from this device.
+  const [live, setLive] = useState<{ startsAt: string; endsAt: string; offsetMs: number } | null>(null);
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  const [behindSec, setBehindSec] = useState(0);
   const resumeKey = `rl-pos:${lectureId}`;
 
   const authorise = useCallback(
@@ -58,6 +69,8 @@ export function RecordedLecturePlayer({
           return;
         }
         setError(null);
+        const l = json.data.live as { startsAt: string; endsAt: string; serverNow: string } | null | undefined;
+        setLive(l ? { startsAt: l.startsAt, endsAt: l.endsAt, offsetMs: new Date(l.serverNow).getTime() - Date.now() } : null);
         setSrc(json.data.url);
         if (at !== null && v) {
           const restore = () => {
@@ -95,11 +108,60 @@ export function RecordedLecturePlayer({
     return () => clearInterval(t);
   }, []);
 
+  const livePoint = useCallback(() => {
+    const l = liveRef.current;
+    if (!l) return null;
+    return livePositionSec(l.startsAt, new Date(Date.now() + l.offsetMs), videoRef.current?.duration || null);
+  }, []);
+
+  const goLive = useCallback(() => {
+    const v = videoRef.current;
+    const at = livePoint();
+    if (!v || at === null) return;
+    v.currentTime = at;
+    void v.play().catch(() => null);
+  }, [livePoint]);
+
+  // Live slot: how far behind the live point the student is; at the end of the slot it becomes a recording.
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => {
+      const l = liveRef.current;
+      if (!l) return;
+      if (Date.now() + l.offsetMs >= new Date(l.endsAt).getTime()) {
+        setLive(null);
+        setBehindSec(0);
+        return;
+      }
+      const at = livePoint();
+      const v = videoRef.current;
+      if (at !== null && v) setBehindSec(Math.max(0, at - v.currentTime));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [live, livePoint]);
+
+  // Live slot: no skipping ahead of the class (seeking, or a faster speed).
+  const holdToLive = () => {
+    const v = videoRef.current;
+    const at = livePoint();
+    if (!v || at === null) return;
+    if (v.currentTime > at + 2) v.currentTime = clampToLive(v.currentTime, at);
+  };
+
   const onLoaded = () => {
     setLoading(false);
     failures.current = 0;
     const v = videoRef.current;
     if (!v) return;
+    // Joining a live slot: start where the class is now.
+    const at = livePoint();
+    if (at !== null) {
+      if (v.currentTime < 1) {
+        v.currentTime = at;
+        void v.play().catch(() => null);
+      }
+      return;
+    }
     try {
       const saved = Number(localStorage.getItem(resumeKey));
       if (saved > 5 && saved < v.duration - 10 && v.currentTime < 1) v.currentTime = saved;
@@ -111,6 +173,7 @@ export function RecordedLecturePlayer({
   const onTimeUpdate = () => {
     const v = videoRef.current;
     if (!v || !v.duration) return;
+    holdToLive();
     try {
       if (Math.floor(v.currentTime) % 5 === 0) localStorage.setItem(resumeKey, String(Math.floor(v.currentTime)));
     } catch {
@@ -161,6 +224,7 @@ export function RecordedLecturePlayer({
           onPlaying={() => setLoading(false)}
           onCanPlay={() => setLoading(false)}
           onTimeUpdate={onTimeUpdate}
+          onSeeking={holdToLive}
           onError={onError}
           className="absolute inset-0 w-full h-full"
         />
@@ -170,6 +234,26 @@ export function RecordedLecturePlayer({
       <div aria-hidden className={`pointer-events-none absolute ${POSITIONS[pos]} transition-all duration-[2000ms] text-white/35 text-[11px] sm:text-sm font-bold tracking-wide drop-shadow`}>
         {watermark} · {now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
       </div>
+
+      {live && (
+        <div className="absolute top-2 left-2">
+          {behindSec > 8 ? (
+            <button
+              type="button"
+              onClick={goLive}
+              className="inline-flex items-center gap-1 rounded-md bg-black/60 hover:bg-black/80 text-white text-[11px] font-black px-2 py-1"
+            >
+              <span className="w-2 h-2 rounded-full bg-slate-300" />
+              Go live
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-md bg-red-600 text-white text-[11px] font-black px-2 py-1">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              LIVE
+            </span>
+          )}
+        </div>
+      )}
 
       {loading && !error && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center" role="status" aria-label="Loading video">

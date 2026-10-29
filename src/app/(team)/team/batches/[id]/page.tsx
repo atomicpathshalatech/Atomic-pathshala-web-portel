@@ -254,6 +254,7 @@ export default async function BatchDetailPage({ params }: { params: { id: string
           teacher: s.teacher ? { id: s.teacher.id, user: { name: s.teacher.user.name, email: s.teacher.user.email } } : null,
           lectureId: s.lectureId,
           lectureVideoUrl: s.lecture?.videoUrl ?? null,
+          classMode: s.classMode,
           liveWhiteboardSession: s.liveWhiteboardSession
             ? {
                 id: s.liveWhiteboardSession.id,
