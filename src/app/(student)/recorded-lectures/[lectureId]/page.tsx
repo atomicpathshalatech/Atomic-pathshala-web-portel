@@ -95,7 +95,7 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
         </section>
       )}
 
-      {upcoming ? null : <StudentSummaryPanel lectureId={lecture.id} published={summaries} />}
+      {upcoming ? null : <StudentSummaryPanel lectureId={lecture.id} published={summaries} hasPublishedNotes={notes.length > 0} />}
     </div>
   );
 }

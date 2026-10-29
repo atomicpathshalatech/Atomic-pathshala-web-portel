@@ -177,7 +177,7 @@ export function AboutSummaryPanel({
         />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className={`text-xs ${words < MIN_WORDS ? "text-amber-600" : "text-slate-500"}`}>
-            {words} words{words < MIN_WORDS ? ` — at least ${MIN_WORDS} needed for a summary` : ""}
+            {words} words{words < MIN_WORDS ? ` — at least ${MIN_WORDS} needed for “Summary from About” (not needed for “from video”)` : ""}
           </span>
           <button
             type="button"
