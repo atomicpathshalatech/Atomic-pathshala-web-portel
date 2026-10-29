@@ -37,17 +37,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         language: true,
         chapter: { select: { title: true, subject: { select: { title: true } } } },
         about: { select: { content: true, revision: true } },
-        summaries: { where: { status: "PUBLISHED" }, select: { content: true }, orderBy: { revision: "desc" }, take: 1 },
+        summaries: { where: { status: "PUBLISHED", kind: "SUMMARY" }, select: { content: true, language: true }, orderBy: { revision: "desc" }, take: 8 },
       },
     });
     if (!lecture) return apiError("Lecture not found.", 404);
-    if (lecture.summaries[0]) return apiSuccess({ content: lecture.summaries[0].content, reviewed: true });
+    const published = lecture.summaries.find((s) => s.language === lecture.language) ?? lecture.summaries[0];
+    if (published) return apiSuccess({ content: published.content, reviewed: true });
 
     const about = lecture.about;
     // A draft already made from the current About: reuse it.
     if (about) {
       const draft = await prisma.lectureSummary.findFirst({
-        where: { lectureId: lecture.id, status: { in: ["DRAFT", "APPROVED"] }, outdated: false, aboutRevision: about.revision },
+        where: { lectureId: lecture.id, kind: "SUMMARY", source: "ABOUT", status: { in: ["DRAFT", "APPROVED"] }, outdated: false, aboutRevision: about.revision },
         orderBy: { revision: "desc" },
         select: { content: true },
       });
@@ -78,6 +79,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             content: generated.markdown,
             language: lecture.language,
             status: "DRAFT",
+            kind: "SUMMARY",
+            source: "ABOUT",
             aiProvider: generated.provider,
             aiModel: generated.model,
             generatedAt: new Date(),

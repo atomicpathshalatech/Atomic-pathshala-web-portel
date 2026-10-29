@@ -77,3 +77,31 @@ As a second safety net, add an R2 lifecycle rule on the bucket:
 MP4 (H.264/AAC) plays everywhere. For quick start of playback, export with the
 "fast start" / "web optimised" option (moov atom at the start). Uploaded files
 are played as they are — there is no transcoding or HLS.
+
+## Class notes from the board (AI), summary from the video, subtitles
+
+On a lecture's page (team portal), **Process with AI** (Admin / Super Admin) runs a background pass with
+Gemini (the only one of our AI providers that watches video):
+
+1. The video is copied from the recorded-lecture bucket to the Gemini Files API (max 2 GB).
+2. Gemini reads it 10 minutes at a time, at medium resolution so board text is readable: everything written
+   or drawn on the board, everything the teacher **dictates** ("ye likh lo…"), and what is said (timed).
+
+Then, on the same page:
+
+- **Create notes from video** — ChatGPT (`OPENAI_MODEL`, default gpt-4o; Gemini if OpenAI fails) turns the board
+  writing and dictation into clean class notes. Nothing is added that the teacher did not write or dictate.
+  Students see them as a handwritten notebook page (Kalam font, ruled paper, red headings, highlighted
+  important lines, formulas in KaTeX).
+- **Create summary from video** / **Summary from About** — the lecture summary, as before.
+- **Translate to हिंदी / English** — NCERT terms; every heading, point and formula must survive.
+
+Notes and summaries are drafts until a teacher/admin checks them against the video, approves and publishes.
+Each kind and language has its own published version. Students also get subtitles of what was said.
+The teacher's voice is never changed.
+
+The pass resumes itself (hand-over between invocations, the status poll on the lecture page, the daily
+reconcile cron) and waits out AI quota limits. A 1-hour lecture takes roughly 10–20 minutes.
+
+Database: migration `20261030120000_lecture_ai` (new `lecture_ai_jobs` table, `lecture_summaries.source` and
+`lecture_summaries.kind` columns). Run it **before** deploying this code.

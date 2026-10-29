@@ -55,6 +55,25 @@ export function RecordedLecturePlayer({
   const [behindSec, setBehindSec] = useState(0);
   const resumeKey = `rl-pos:${lectureId}`;
 
+  // Subtitles of what the teacher says (from the lecture's AI pass), when there are any.
+  const [hasSubtitles, setHasSubtitles] = useState(false);
+  const [subtitlesOn, setSubtitlesOn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/student/recorded-lectures/${lectureId}/ai`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => alive && setHasSubtitles(Boolean(json?.success && json.data?.subtitles?.length)))
+      .catch(() => null);
+    return () => {
+      alive = false;
+    };
+  }, [lectureId]);
+  useEffect(() => {
+    const tracks = videoRef.current?.textTracks;
+    if (!tracks) return;
+    for (let i = 0; i < tracks.length; i++) tracks[i]!.mode = subtitlesOn ? "showing" : "disabled";
+  }, [subtitlesOn, src]);
+
   const authorise = useCallback(
     async (keepPosition: boolean) => {
       const v = videoRef.current;
@@ -227,7 +246,23 @@ export function RecordedLecturePlayer({
           onSeeking={holdToLive}
           onError={onError}
           className="absolute inset-0 w-full h-full"
-        />
+        >
+          {subtitlesOn && <track kind="subtitles" default srcLang="und" label="Subtitles" src={`/api/student/recorded-lectures/${lectureId}/subtitles`} />}
+        </video>
+      )}
+
+      {hasSubtitles && (
+        <button
+          type="button"
+          onClick={() => setSubtitlesOn((v) => !v)}
+          aria-pressed={subtitlesOn}
+          className={`absolute top-2 right-12 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] sm:text-xs font-bold text-white ${subtitlesOn ? "bg-blue-600" : "bg-black/60 hover:bg-black/70"}`}
+        >
+          <span className="material-symbols-outlined text-sm" aria-hidden>
+            subtitles
+          </span>
+          Subtitles {subtitlesOn ? "on" : "off"}
+        </button>
       )}
 
       {/* Watermark: masked student id + date/time, moving. */}

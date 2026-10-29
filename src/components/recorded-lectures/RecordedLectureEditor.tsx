@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { AboutSummaryPanel } from "./AboutSummaryPanel";
+import { LectureAiPanel } from "./LectureAiPanel";
 import { StorageBanner } from "./RecordedLecturesManager";
 import { VideoUploadPanel, formatBytes } from "./VideoUploadPanel";
 import { uploadThumbnail } from "./RecordedLectureCreateForm";
@@ -56,6 +57,7 @@ export function RecordedLectureEditor({ lectureId }: { lectureId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ url: string; thumbnailUrl: string | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [transcriptReady, setTranscriptReady] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -220,7 +222,15 @@ export function RecordedLectureEditor({ lectureId }: { lectureId: string }) {
       {canManage && <DetailsForm lecture={lecture} onSaved={setLecture} />}
 
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-        <AboutSummaryPanel lecture={lecture} onLecture={(next) => setLecture((cur) => ({ ...(cur as Lecture), ...next }))} />
+        <LectureAiPanel lectureId={lectureId} canStart={canManage} videoReady={m.uploadStatus === "READY"} onTranscriptReady={setTranscriptReady} />
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+        <AboutSummaryPanel
+          lecture={lecture}
+          transcriptReady={transcriptReady}
+          onLecture={(next) => setLecture((cur) => ({ ...(cur as Lecture), ...next }))}
+        />
       </section>
     </div>
   );

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { recordedStorageStatus } from "@/lib/recorded-lectures/config";
 import { abortMultipartUpload, listOpenMultipartUploads } from "@/lib/recorded-lectures/storage";
 import { verifyAndRecord } from "@/lib/recorded-lectures/verify";
+import { jobIsDue, triggerRun } from "@/lib/recorded-lectures/ai/pipeline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,5 +89,19 @@ export async function GET(req: NextRequest) {
     report.errors++;
   }
 
-  return NextResponse.json({ ok: true, ...report });
+  // Lecture AI jobs that stopped (lost hand-over, quota pause): continue them.
+  let aiResumed = 0;
+  const aiJobs = await prisma.lectureAiJob.findMany({
+    where: { status: { notIn: ["READY", "FAILED"] } },
+    select: { lectureId: true, status: true, lockedUntil: true, retryAt: true },
+    take: 20,
+  });
+  for (const j of aiJobs) {
+    if (jobIsDue(j)) {
+      triggerRun(j.lectureId);
+      aiResumed++;
+    }
+  }
+
+  return NextResponse.json({ ok: true, ...report, aiResumed });
 }

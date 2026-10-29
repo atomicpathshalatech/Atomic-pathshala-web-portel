@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import { SummaryView } from "./SummaryView";
+import { SummaryLanguageTabs } from "./SummaryLanguageTabs";
 
 /**
  * The lecture summary on the student's watch page: the teacher's published
- * summary, or a "Get summary" button that asks for one (an AI summary of the
+ * summaries (one per language, tabs), or a "Get summary" button that asks for one (an AI summary of the
  * teacher's notes, marked as not yet checked by the teacher).
  */
-export function StudentSummaryPanel({ lectureId, published }: { lectureId: string; published: string | null }) {
-  const [content, setContent] = useState<string | null>(published);
-  const [reviewed, setReviewed] = useState(Boolean(published));
+export function StudentSummaryPanel({ lectureId, published }: { lectureId: string; published: { language: string; content: string }[] }) {
+  const [content, setContent] = useState<string | null>(null);
+  const [reviewed, setReviewed] = useState(false);
+  const hasPublished = published.length > 0;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +42,7 @@ export function StudentSummaryPanel({ lectureId, published }: { lectureId: strin
           <span className="material-symbols-outlined text-primary text-xl">summarize</span>
           Lecture Summary
         </h2>
-        {!content && (
+        {!content && !hasPublished && (
           <button
             type="button"
             onClick={getSummary}
@@ -52,7 +54,9 @@ export function StudentSummaryPanel({ lectureId, published }: { lectureId: strin
           </button>
         )}
       </div>
-      {content ? (
+      {hasPublished ? (
+        <SummaryLanguageTabs summaries={published} />
+      ) : content ? (
         <>
           {!reviewed && (
             <p className="text-xs font-semibold text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 rounded-lg px-3 py-2">

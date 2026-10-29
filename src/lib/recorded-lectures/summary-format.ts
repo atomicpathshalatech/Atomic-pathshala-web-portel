@@ -106,3 +106,85 @@ export function summaryToMarkdown(sections: Partial<Record<SummaryKey, string[]>
   }
   return out.join("\n").trim();
 }
+
+/**
+ * Summary from the lecture itself: what the teacher said and wrote on the
+ * board (timed), plus the teacher's About as a hint. Same rule: only what
+ * the lecture contains.
+ */
+export function buildVideoSummaryPrompt(p: {
+  source: string;
+  about: string | null;
+  title: string;
+  subject: string;
+  chapter: string;
+  language: string;
+}): string {
+  const hindi = isHindi(p.language);
+  return `You turn a recorded classroom lecture into a short, student-friendly summary for NEET/JEE students.
+
+LECTURE: "${p.title}" — ${p.subject}, chapter "${p.chapter}".
+
+WHAT HAPPENED IN THE LECTURE (the source — SAID = the teacher's words, BOARD = what was written/drawn, with times):
+"""
+${p.source}
+"""
+${p.about?.trim() ? `\nTHE TEACHER'S OWN NOTE ABOUT THE LECTURE (a hint, same rules):\n"""\n${p.about.trim()}\n"""\n` : ""}
+STRICT RULES
+- Use ONLY what the lecture contains (speech and board). You may reorganise, shorten and phrase it clearly. Do NOT add concepts, formulas, reactions, definitions, examples, numbers or NCERT page numbers that the teacher did not say or write.
+- Prefer what was written on the BOARD for formulas, reactions and definitions; copy them as written (LaTeX in $...$).
+- Put an item in a section only when the lecture supports it; leave other sections empty. Never invent homework.
+- "checklist": 3–8 short "Can I…?" / "Revise…" items from the lecture's own content.
+- Formulas, equations, chemical formulas, units and symbols in LaTeX inside $...$.
+- Write in ${hindi ? "Hindi (Devanagari), keeping scientific terms and formulas as commonly written" : "simple English"}.
+- If the source is too short or unclear to summarise reliably, set "insufficient": true and say why in "reason".
+
+Return STRICT JSON only:
+{"insufficient": false, "reason": "", "sections": {"topics": [], "concepts": [], "definitions": [], "formulas": [], "examPoints": [], "examples": [], "mistakes": [], "checklist": [], "homework": []}}`;
+}
+
+/** Language label stored on a summary for a translation target. */
+export function summaryLanguageFor(to: "hi" | "en"): string {
+  return to === "hi" ? "Hindi" : "English";
+}
+
+/** Same language family? ("Hindi" / "हिंदी" count as one; anything else as English/mixed.) */
+export function sameSummaryLanguage(a: string, b: string): boolean {
+  return isHindi(a) === isHindi(b);
+}
+
+/**
+ * Translates an approved summary's Markdown, NCERT style — as questions are
+ * translated: standard NCERT Hindi-medium terms, formulas untouched.
+ */
+export function buildSummaryTranslationPrompt(p: { markdown: string; to: "hi" | "en"; subject: string }): string {
+  const to =
+    p.to === "hi"
+      ? `pure, simple Hindi (Devanagari) exactly as written in NCERT Hindi-medium ${p.subject} textbooks. Use NCERT's standard Hindi scientific terms (e.g. "सहसंयोजक आबंध", "विद्युत ऋणात्मकता", "त्वरण", "कोशिका झिल्ली", "प्रकाश संश्लेषण"), not transliterated English, except where NCERT itself keeps the English word`
+      : `clear academic English exactly as written in NCERT English-medium ${p.subject} textbooks, with NCERT's standard English terms`;
+  return `Translate these lecture notes / summary for NEET/JEE students into ${to}.
+
+RULES
+- Keep the Markdown exactly: every line keeps its marker ("### " heading, "- " point, "- [ ] " checklist, "1. " step, "> " important line, "[Diagram: …]"), same order, same count. Translate the headings and diagram descriptions too.
+- Everything inside $...$ (formulas, equations, chemical formulas, units) stays EXACTLY as it is. Numbers stay as they are.
+- Translate only; do not add, drop, explain or correct anything.
+
+TEXT:
+"""
+${p.markdown}
+"""
+
+Return STRICT JSON only: {"markdown": "..."}`;
+}
+
+/** The translation must keep the summary's shape and every formula. */
+export function checkSummaryTranslation(original: string, translated: unknown): string | null {
+  if (typeof translated !== "string" || !translated.trim()) return null;
+  const out = translated.trim();
+  const count = (s: string, re: RegExp) => (s.match(re) ?? []).length;
+  if (count(out, /^###\s/gm) !== count(original, /^###\s/gm)) return null;
+  if (count(out, /^- /gm) !== count(original, /^- /gm)) return null;
+  const maths = (s: string) => (s.match(/\$[^$]+\$/g) ?? []).map((m) => m.replace(/\s+/g, "")).sort().join("|");
+  if (maths(out) !== maths(original)) return null;
+  return out;
+}

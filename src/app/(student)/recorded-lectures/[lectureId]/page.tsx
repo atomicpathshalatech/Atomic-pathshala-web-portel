@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { studentRecordedAccess } from "@/lib/recorded-lectures/access";
 import { watermarkLabel } from "@/lib/recorded-lectures/files";
 import { RecordedLecturePlayer } from "@/components/recorded-lectures/RecordedLecturePlayer";
+import { SummaryLanguageTabs } from "@/components/recorded-lectures/SummaryLanguageTabs";
 import { StudentSummaryPanel } from "@/components/recorded-lectures/StudentSummaryPanel";
 import { PremiereCountdown } from "@/components/recorded-lectures/PremiereCountdown";
 
@@ -40,13 +41,16 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
       chapter: { select: { id: true, title: true, subject: { select: { id: true, title: true } } } },
       teacher: { select: { displayName: true, user: { select: { name: true } } } },
       recordedMedia: { select: { lectureNumber: true, durationSec: true } },
-      summaries: { where: { status: "PUBLISHED" }, select: { content: true, publishedAt: true }, take: 1 },
+      summaries: { where: { status: "PUBLISHED" }, select: { content: true, language: true, kind: true }, orderBy: { publishedAt: "asc" }, take: 8 },
       progress: { where: { studentId: student.id }, select: { id: true }, take: 1 },
     },
   });
   if (!lecture) notFound();
 
-  const summary = lecture.summaries[0] ?? null;
+  // One published summary / notes per language; the lecture's own language first.
+  const ownFirst = (list: typeof lecture.summaries) => [...list].sort((a, b) => Number(b.language === lecture.language) - Number(a.language === lecture.language));
+  const summaries = ownFirst(lecture.summaries.filter((s) => s.kind !== "NOTES"));
+  const notes = ownFirst(lecture.summaries.filter((s) => s.kind === "NOTES"));
   const teacher = lecture.teacher.displayName || lecture.teacher.user.name;
   const watermark = watermarkLabel(student.user.name, student.studentIdCode ?? student.enrollmentNumber);
   const backHref = `/courses/${access.batchId}`;
@@ -80,7 +84,18 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
         </p>
       </header>
 
-      {upcoming ? null : <StudentSummaryPanel lectureId={lecture.id} published={summary?.content ?? null} />}
+      {!upcoming && notes.length > 0 && (
+        <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 space-y-3">
+          <h2 className="text-base font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-xl">stylus_note</span>
+            Class Notes
+          </h2>
+          <p className="text-xs text-slate-500">What the teacher wrote on the board and dictated in this lecture.</p>
+          <SummaryLanguageTabs summaries={notes} handwritten />
+        </section>
+      )}
+
+      {upcoming ? null : <StudentSummaryPanel lectureId={lecture.id} published={summaries} />}
     </div>
   );
 }

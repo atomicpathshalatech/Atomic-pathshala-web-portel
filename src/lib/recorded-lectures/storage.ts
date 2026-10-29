@@ -173,6 +173,12 @@ export async function signedPlaybackUrl(key: string, expiresInSeconds = 600): Pr
   );
 }
 
+/** Short-lived signed GET for any object of the recorded bucket (range requests work). */
+export async function signedObjectUrl(key: string, expiresInSeconds = 900): Promise<string> {
+  const { client, config } = connection();
+  return getSignedUrl(client, new GetObjectCommand({ Bucket: config.bucket, Key: key }), { expiresIn: expiresInSeconds });
+}
+
 /** Short-lived URL for a lecture thumbnail (the bucket stays private). */
 export async function signedThumbnailUrl(key: string, expiresInSeconds = 3600): Promise<string> {
   const { client, config } = connection();
