@@ -10,9 +10,11 @@ export const metadata: Metadata = {
   title: "Upload Recorded Lecture — Atomic Pathshala",
 };
 
-export default async function NewRecordedLecturePage() {
+/** A lecture is always added inside a chapter: /team/recorded-lectures/new?chapterId=… */
+export default async function NewRecordedLecturePage({ searchParams }: { searchParams: { chapterId?: string } }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
   if (!(await hasPermission(session.user.id, PERMISSIONS.RECORDED_LECTURE_MANAGE))) redirect("/team/recorded-lectures");
-  return <RecordedLectureCreateForm />;
+  if (!searchParams.chapterId) redirect("/team/recorded-lectures");
+  return <RecordedLectureCreateForm chapterId={searchParams.chapterId} />;
 }

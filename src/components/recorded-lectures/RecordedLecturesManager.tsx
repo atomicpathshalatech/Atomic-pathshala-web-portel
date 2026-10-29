@@ -104,16 +104,6 @@ export function RecordedLecturesManager() {
               : "Your recorded lectures — write the About and approve the lecture summary students see."}
           </p>
         </div>
-        {canManage && (
-          <Link
-            href="/team/recorded-lectures/new"
-            aria-disabled={storage && !storage.ready}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold text-white ${storage && !storage.ready ? "bg-slate-400 pointer-events-none" : "bg-blue-600 hover:bg-blue-700"}`}
-          >
-            <span className="material-symbols-outlined text-base">video_call</span>
-            Upload recorded lecture
-          </Link>
-        )}
       </header>
 
       {canManage && <StorageBanner storage={storage} />}

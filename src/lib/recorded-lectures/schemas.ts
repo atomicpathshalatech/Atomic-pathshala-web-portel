@@ -13,7 +13,9 @@ export const recordedLectureCreateSchema = z.object({
   // Same id on a retried request: the existing draft is returned, not a second one.
   requestId: z.string().trim().min(8).max(64).regex(/^[a-zA-Z0-9_-]+$/),
   title: z.string().trim().min(3, "Enter the lecture title").max(200),
-  batchId: z.string().trim().min(1, "Choose the batch"),
+  // Lectures are added inside a chapter; the chapter's batches decide who
+  // sees them. A batch here limits the lecture to that one batch.
+  batchId: z.string().trim().min(1).nullish(),
   chapterId: z.string().trim().min(1, "Choose the chapter"),
   teacherId: z.string().trim().min(1, "Choose the teacher"),
   language: z.enum(LECTURE_LANGUAGES),

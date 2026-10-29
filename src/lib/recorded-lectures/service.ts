@@ -95,6 +95,11 @@ async function assertChapterInBatch(batchId: string, chapterId: string) {
   }
 }
 
+async function assertChapterExists(chapterId: string) {
+  const c = await prisma.chapter.findUnique({ where: { id: chapterId }, select: { id: true } });
+  if (!c) throw new RecordedLectureError("That chapter does not exist.", 400);
+}
+
 async function assertTeacher(teacherId: string) {
   const t = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { id: true } });
   if (!t) throw new RecordedLectureError("That teacher does not exist.", 400);
@@ -110,7 +115,10 @@ export async function createRecordedDraft(input: z.infer<typeof recordedLectureC
   const existing = await prisma.recordedLectureMedia.findUnique({ where: { objectKey: placeholderKey }, select: { lectureId: true } });
   if (existing) return existing.lectureId;
 
-  await Promise.all([assertChapterInBatch(input.batchId, input.chapterId), assertTeacher(input.teacherId)]);
+  await Promise.all([
+    input.batchId ? assertChapterInBatch(input.batchId, input.chapterId) : assertChapterExists(input.chapterId),
+    assertTeacher(input.teacherId),
+  ]);
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -136,7 +144,7 @@ export async function createRecordedDraft(input: z.infer<typeof recordedLectureC
           objectKey: placeholderKey,
           mimeType: "video/mp4",
           sizeBytes: BigInt(0),
-          batchId: input.batchId,
+          batchId: input.batchId ?? null,
           lectureNumber: input.lectureNumber ?? null,
           tags: input.tags,
           additionalNotes: input.additionalNotes ?? null,

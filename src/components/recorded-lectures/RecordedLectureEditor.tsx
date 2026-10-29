@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { AboutSummaryPanel } from "./AboutSummaryPanel";
@@ -111,8 +111,8 @@ export function RecordedLectureEditor({ lectureId }: { lectureId: string }) {
   return (
     <div className="space-y-6 max-w-5xl">
       <header className="space-y-2">
-        <Link href="/team/recorded-lectures" className="text-xs font-bold text-blue-600 hover:underline">
-          ← Recorded Lectures
+        <Link href={`/team/recorded-lectures/chapters/${lecture.chapter.id}`} className="text-xs font-bold text-blue-600 hover:underline">
+          ← {lecture.chapter.title}
         </Link>
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
           <div className="min-w-0">
@@ -225,9 +225,6 @@ export function RecordedLectureEditor({ lectureId }: { lectureId: string }) {
 
 function DetailsForm({ lecture, onSaved }: { lecture: Lecture; onSaved: (l: Lecture) => void }) {
   const [options, setOptions] = useState<any>(null);
-  const [batchId, setBatchId] = useState(lecture.batch?.id ?? "");
-  const [subjectId, setSubjectId] = useState(lecture.subject.id);
-  const [chapterId, setChapterId] = useState(lecture.chapter.id);
   const [teacherId, setTeacherId] = useState(lecture.teacher.id);
   const [title, setTitle] = useState(lecture.title);
   const [language, setLanguage] = useState(lecture.language);
@@ -238,13 +235,11 @@ function DetailsForm({ lecture, onSaved }: { lecture: Lecture; onSaved: (l: Lect
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/team/recorded-lectures/options${batchId ? `?batchId=${encodeURIComponent(batchId)}` : ""}`, { cache: "no-store" })
+    fetch(`/api/team/recorded-lectures/options?chapterId=${encodeURIComponent(lecture.chapter.id)}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => j.success && setOptions(j.data))
       .catch(() => null);
-  }, [batchId]);
-
-  const chapters = useMemo(() => options?.subjects?.find((s: any) => s.id === subjectId)?.chapters ?? [], [options, subjectId]);
+  }, [lecture.chapter.id]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -256,8 +251,6 @@ function DetailsForm({ lecture, onSaved }: { lecture: Lecture; onSaved: (l: Lect
         body: JSON.stringify({
           title,
           language,
-          batchId,
-          chapterId,
           teacherId,
           lectureNumber: lectureNumber ? Number(lectureNumber) : null,
           sequenceNumber: order ? Number(order) : null,
@@ -286,26 +279,6 @@ function DetailsForm({ lecture, onSaved }: { lecture: Lecture; onSaved: (l: Lect
         <label className="block sm:col-span-2">
           <span className={labelText}>Title</span>
           <input id="rl-edit-title" required minLength={3} value={title} onChange={(e) => setTitle(e.target.value)} className={`${field} mt-1`} />
-        </label>
-        <label className="block">
-          <span className={labelText}>Batch</span>
-          <select id="rl-edit-batch" value={batchId} onChange={(e) => { setBatchId(e.target.value); setSubjectId(""); setChapterId(""); }} className={`${field} mt-1`}>
-            {options?.batches?.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className={labelText}>Subject</span>
-          <select id="rl-edit-subject" value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setChapterId(""); }} className={`${field} mt-1`}>
-            <option value="">Choose subject</option>
-            {options?.subjects?.map((s: any) => <option key={s.id} value={s.id}>{s.title}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className={labelText}>Chapter</span>
-          <select id="rl-edit-chapter" required value={chapterId} onChange={(e) => setChapterId(e.target.value)} className={`${field} mt-1`}>
-            <option value="">Choose chapter</option>
-            {chapters.map((c: any) => <option key={c.id} value={c.id}>{c.title}</option>)}
-          </select>
         </label>
         <label className="block">
           <span className={labelText}>Teacher</span>
@@ -341,7 +314,7 @@ function DetailsForm({ lecture, onSaved }: { lecture: Lecture; onSaved: (l: Lect
         </label>
       </div>
       <div className="flex justify-end">
-        <button type="submit" disabled={saving || !chapterId} className="rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold px-4 py-2">
+        <button type="submit" disabled={saving} className="rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold px-4 py-2">
           {saving ? "Saving…" : "Save details"}
         </button>
       </div>

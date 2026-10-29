@@ -1,18 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { StorageBanner } from "./RecordedLecturesManager";
 import { VideoUploadPanel, formatBytes } from "./VideoUploadPanel";
 
-type Options = {
-  storage: { ready: boolean; problems: string[]; maxBytes: number };
-  batches: { id: string; name: string }[];
-  subjects: { id: string; title: string; chapters: { id: string; title: string }[] }[];
-  teachers: { id: string; name: string; subjects: string[]; inBatch: boolean }[];
-};
+type Teacher = { id: string; name: string; inBatch: boolean; subjectMatch?: boolean };
+type ChapterInfo = { id: string; title: string; subject: { title: string }; course: string; batches: { id: string; name: string }[]; lectures: unknown[] };
 
 const field = "w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm";
 const labelText = "text-xs font-bold text-slate-500 uppercase tracking-wide";
@@ -31,16 +27,18 @@ export async function uploadThumbnail(lectureId: string, file: File) {
   await post({ action: "thumbnail-done", key });
 }
 
-export function RecordedLectureCreateForm() {
+/**
+ * Adds a lecture inside a chapter: the chapter (and so its subject and
+ * batches) is already chosen — only the lecture's own details and video.
+ */
+export function RecordedLectureCreateForm({ chapterId }: { chapterId: string }) {
   const router = useRouter();
-  const [options, setOptions] = useState<Options | null>(null);
-  const [batchId, setBatchId] = useState("");
-  const [subjectId, setSubjectId] = useState("");
-  const [chapterId, setChapterId] = useState("");
+  const [chapter, setChapter] = useState<ChapterInfo | null>(null);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [storage, setStorage] = useState<{ ready: boolean; problems: string[]; maxBytes: number } | undefined>();
   const [teacherId, setTeacherId] = useState("");
   const [title, setTitle] = useState("");
   const [lectureNumber, setLectureNumber] = useState("");
-  const [sequence, setSequence] = useState("");
   const [language, setLanguage] = useState("Hindi");
   const [about, setAbout] = useState("");
   const [tags, setTags] = useState("");
@@ -54,23 +52,27 @@ export function RecordedLectureCreateForm() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const sp = batchId ? `?batchId=${encodeURIComponent(batchId)}` : "";
-    fetch(`/api/team/recorded-lectures/options${sp}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.success) setOptions(j.data);
-        else setError(j.error || "Could not load the form.");
+    Promise.all([
+      fetch(`/api/team/recorded-lectures/chapters/${chapterId}`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`/api/team/recorded-lectures/options?chapterId=${encodeURIComponent(chapterId)}`, { cache: "no-store" }).then((r) => r.json()),
+    ])
+      .then(([c, o]) => {
+        if (!c.success) throw new Error(c.error || "Chapter not found.");
+        if (!o.success) throw new Error(o.error || "Could not load the form.");
+        setChapter(c.data.chapter);
+        // Next lecture number: after the chapter's existing lectures.
+        setLectureNumber(String((c.data.chapter.lectures?.length ?? 0) + 1));
+        setTeachers(o.data.teachers);
+        setStorage(o.data.storage);
       })
-      .catch(() => setError("Could not load the form."));
-  }, [batchId]);
-
-  const chapters = useMemo(() => options?.subjects.find((s) => s.id === subjectId)?.chapters ?? [], [options, subjectId]);
+      .catch((err) => setError((err as Error).message));
+  }, [chapterId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!video) return setError("Choose the recorded video file.");
-    if (options && video.size > options.storage.maxBytes) return setError(`The video is ${formatBytes(video.size)}; the limit is ${formatBytes(options.storage.maxBytes)}.`);
+    if (storage && video.size > storage.maxBytes) return setError(`The video is ${formatBytes(video.size)}; the limit is ${formatBytes(storage.maxBytes)}.`);
     setSaving(true);
     try {
       const res = await fetch("/api/team/recorded-lectures", {
@@ -79,13 +81,11 @@ export function RecordedLectureCreateForm() {
         body: JSON.stringify({
           requestId,
           title,
-          batchId,
           chapterId,
           teacherId,
           language,
           about,
           lectureNumber: lectureNumber ? Number(lectureNumber) : null,
-          sequenceNumber: sequence ? Number(sequence) : null,
           tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
           additionalNotes: notes || null,
         }),
@@ -114,74 +114,51 @@ export function RecordedLectureCreateForm() {
     } else {
       toast.success("Uploaded and verified. The lecture is a draft until you publish it.");
     }
-    router.push(`/team/recorded-lectures/${lectureId}`);
+    router.push(`/team/recorded-lectures/chapters/${chapterId}`);
   };
 
-  if (!options && !error) return <div className="h-64 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse max-w-4xl" />;
+  if (error && !chapter) return <p role="alert" className="text-sm text-rose-600">{error}</p>;
+  if (!chapter) return <div className="h-64 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse max-w-4xl" />;
 
   return (
     <div className="space-y-6 max-w-4xl">
       <header>
-        <Link href="/team/recorded-lectures" className="text-xs font-bold text-blue-600 hover:underline">
-          ← Recorded Lectures
+        <Link href={`/team/recorded-lectures/chapters/${chapterId}`} className="text-xs font-bold text-blue-600 hover:underline">
+          ← {chapter.title}
         </Link>
-        <h1 className="text-2xl font-black text-slate-900 dark:text-white mt-1">Upload recorded lecture</h1>
-        <p className="text-sm text-slate-500 mt-1">The video goes to the recorded-lecture storage. Students see it only after it is uploaded, verified and published.</p>
+        <h1 className="text-2xl font-black text-slate-900 dark:text-white mt-1">Add lecture</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          {chapter.course} › {chapter.subject.title} › <b>{chapter.title}</b>
+          {chapter.batches.length ? ` · seen by ${chapter.batches.map((b) => b.name).join(", ")}` : " · not in any batch yet"}
+        </p>
       </header>
 
-      <StorageBanner storage={options?.storage} />
+      <StorageBanner storage={storage} />
       {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
 
       {lectureId ? (
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
           <h2 className="font-bold text-slate-900 dark:text-white">Uploading “{title}”</h2>
-          <p className="text-xs text-slate-500">Keep this tab open until it finishes. If the upload stops, choose the same file on the lecture page to resume.</p>
+          <p className="text-xs text-slate-500">Keep this tab open until it finishes. If it stops, open the lecture in the chapter and choose the same file to resume.</p>
           <VideoUploadPanel lectureId={lectureId} initialFile={video} autoStart onDone={afterUpload} />
-          <Link href={`/team/recorded-lectures/${lectureId}`} className="text-xs font-bold text-blue-600 hover:underline">
-            Open the lecture page
-          </Link>
         </section>
       ) : (
         <form onSubmit={submit} className="space-y-5">
-          <fieldset disabled={!options?.storage.ready || saving} className="grid gap-4 sm:grid-cols-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <label className="block">
-              <span className={labelText}>Batch *</span>
-              <select id="rl-new-batch" required value={batchId} onChange={(e) => { setBatchId(e.target.value); setSubjectId(""); setChapterId(""); }} className={`${field} mt-1`}>
-                <option value="">Choose batch</option>
-                {options?.batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className={labelText}>Subject *</span>
-              <select id="rl-new-subject" required value={subjectId} disabled={!batchId} onChange={(e) => { setSubjectId(e.target.value); setChapterId(""); }} className={`${field} mt-1`}>
-                <option value="">{batchId ? (options?.subjects.length ? "Choose subject" : "This batch has no chapters yet") : "Choose a batch first"}</option>
-                {options?.subjects.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className={labelText}>Chapter *</span>
-              <select id="rl-new-chapter" required value={chapterId} disabled={!subjectId} onChange={(e) => setChapterId(e.target.value)} className={`${field} mt-1`}>
-                <option value="">Choose chapter</option>
-                {chapters.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-              </select>
+          <fieldset disabled={!storage?.ready || saving} className="grid gap-4 sm:grid-cols-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+            <label className="block sm:col-span-2">
+              <span className={labelText}>Lecture title *</span>
+              <input id="rl-new-title" required minLength={3} maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`e.g. ${chapter.title} — Lecture ${lectureNumber || "01"}`} className={`${field} mt-1`} />
             </label>
             <label className="block">
               <span className={labelText}>Teacher *</span>
               <select id="rl-new-teacher" required value={teacherId} onChange={(e) => setTeacherId(e.target.value)} className={`${field} mt-1`}>
                 <option value="">Choose teacher</option>
-                {options?.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}{t.inBatch ? " (this batch)" : ""}</option>)}
-              </select>
-            </label>
-            <label className="block sm:col-span-2">
-              <span className={labelText}>Lecture title *</span>
-              <input id="rl-new-title" required minLength={3} maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Chemical Bonding — Lecture 03: Fajan's Rule" className={`${field} mt-1`} />
-            </label>
-            <label className="block">
-              <span className={labelText}>Lecture language *</span>
-              <select id="rl-new-lang" value={language} onChange={(e) => setLanguage(e.target.value)} className={`${field} mt-1`}>
-                <option>Hindi</option>
-                <option>English</option>
-                <option>Bilingual</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                    {t.inBatch ? " — teaches this batch" : t.subjectMatch ? ` — ${chapter.subject.title}` : ""}
+                  </option>
+                ))}
               </select>
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -190,30 +167,34 @@ export function RecordedLectureCreateForm() {
                 <input id="rl-new-number" type="number" min={1} value={lectureNumber} onChange={(e) => setLectureNumber(e.target.value)} className={`${field} mt-1`} />
               </label>
               <label className="block">
-                <span className={labelText}>Order</span>
-                <input id="rl-new-seq" type="number" min={0} value={sequence} onChange={(e) => setSequence(e.target.value)} placeholder="auto" className={`${field} mt-1`} />
+                <span className={labelText}>Language *</span>
+                <select id="rl-new-lang" value={language} onChange={(e) => setLanguage(e.target.value)} className={`${field} mt-1`}>
+                  <option>Hindi</option>
+                  <option>English</option>
+                  <option>Bilingual</option>
+                </select>
               </label>
             </div>
             <label className="block sm:col-span-2">
               <span className={labelText}>About this lecture *</span>
               <textarea id="rl-new-about" required rows={6} value={about} onChange={(e) => setAbout(e.target.value)} placeholder="What was taught: topics, concepts, formulas ($...$), examples, exam points, homework. The lecture summary is made from this." className={`${field} mt-1 font-mono`} />
             </label>
-            <label className="block">
-              <span className={labelText}>Tags</span>
-              <input id="rl-new-tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="comma separated" className={`${field} mt-1`} />
+            <label className="block sm:col-span-2">
+              <span className={labelText}>Recorded video *</span>
+              <input id="rl-new-video" required type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.m4v,.webm,.mov" onChange={(e) => setVideo(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-white file:text-xs file:font-bold" />
+              {video && <span className="text-xs text-slate-500">{video.name} · {formatBytes(video.size)}</span>}
             </label>
             <label className="block">
               <span className={labelText}>Thumbnail (optional)</span>
               <input id="rl-new-thumb" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setThumb(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-200 dark:file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:font-bold" />
             </label>
+            <label className="block">
+              <span className={labelText}>Tags</span>
+              <input id="rl-new-tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="comma separated" className={`${field} mt-1`} />
+            </label>
             <label className="block sm:col-span-2">
               <span className={labelText}>Additional notes (staff only)</span>
               <textarea id="rl-new-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={`${field} mt-1`} />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className={labelText}>Recorded video *</span>
-              <input id="rl-new-video" required type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.m4v,.webm,.mov" onChange={(e) => setVideo(e.target.files?.[0] ?? null)} className="mt-1 w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-white file:text-xs file:font-bold" />
-              {video && <span className="text-xs text-slate-500">{video.name} · {formatBytes(video.size)}</span>}
             </label>
             <fieldset className="sm:col-span-2">
               <legend className={labelText}>Publication *</legend>
@@ -228,7 +209,7 @@ export function RecordedLectureCreateForm() {
             </fieldset>
           </fieldset>
           <div className="flex justify-end">
-            <button type="submit" disabled={saving || !options?.storage.ready} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold px-5 py-2.5">
+            <button type="submit" disabled={saving || !storage?.ready} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold px-5 py-2.5">
               <span className="material-symbols-outlined text-base">cloud_upload</span>
               {saving ? "Saving…" : "Save and upload video"}
             </button>

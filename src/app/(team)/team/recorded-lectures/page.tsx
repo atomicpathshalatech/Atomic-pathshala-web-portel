@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { RecordedLecturesManager } from "@/components/recorded-lectures/RecordedLecturesManager";
+import { RecordedChaptersManager } from "@/components/recorded-lectures/RecordedChaptersManager";
 
 export const metadata: Metadata = {
   title: "Recorded Lectures — Atomic Pathshala",
@@ -18,5 +19,7 @@ export default async function RecordedLecturesPage() {
     hasPermission(session.user.id, PERMISSIONS.LECTURE_READ),
   ]);
   if (!manage && !read) redirect("/team");
-  return <RecordedLecturesManager />;
+  // Admins: chapters first (create a chapter → add it to batches → add lectures).
+  // Teachers: their own recorded lectures, to write the About and summary.
+  return manage ? <RecordedChaptersManager /> : <RecordedLecturesManager />;
 }
