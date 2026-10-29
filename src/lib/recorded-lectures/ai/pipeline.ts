@@ -83,14 +83,43 @@ export async function startLectureAi(lectureId: string, userId: string) {
     finishedAt: null,
   };
   await prisma.lectureAiJob.upsert({ where: { lectureId }, update: data, create: { lectureId, ...data } });
-  triggerRun(lectureId);
+  runNow(lectureId);
+}
+
+/**
+ * Runs the job right here, after the response is sent (waitUntil keeps the
+ * function alive up to the route's maxDuration — callers use 300 s; pass a
+ * smaller budget from shorter routes). More work left: handed to a fresh
+ * invocation. This does not depend on the self-call reaching the app: the
+ * status poll (team page, student summary) calls it again while it runs.
+ */
+export function runNow(lectureId: string, budgetMs = 240_000) {
+  try {
+    waitUntil(
+      runSteps(lectureId, budgetMs)
+        .then((r) => {
+          if (r.more) triggerRun(lectureId);
+        })
+        .catch((err) => console.error("[lecture-ai] run failed", lectureId, err))
+    );
+  } catch {
+    triggerRun(lectureId);
+  }
+}
+
+/** This deployment's public address for the self-call (the production domain on Vercel). */
+function selfBaseUrl(): string {
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prod) return `https://${prod.replace(/^https?:\/\//, "")}`;
+  // NEXT_PUBLIC_APP_URL is not used: it can name another site (e.g. the marketing domain).
+  return process.env.NEXTAUTH_URL || "https://ap.atomicpathshala.in";
 }
 
 /** Hands the job to a fresh invocation (its own time budget). Safety nets: the status poll and the daily cron. */
 export function triggerRun(lectureId: string) {
   try {
     const secret = process.env.CRON_SECRET;
-    const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "https://ap.atomicpathshala.in").replace(/\/$/, "");
+    const base = selfBaseUrl().replace(/\/$/, "");
     waitUntil(
       fetch(`${base}/api/internal/lecture-ai/run`, {
         method: "POST",

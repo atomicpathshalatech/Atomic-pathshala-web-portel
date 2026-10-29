@@ -9,7 +9,7 @@ import { checkRateLimit, rateLimitExceededResponse } from "@/lib/security/rate-l
 import { studentRecordedAccess } from "@/lib/recorded-lectures/access";
 import { generateVideoSummary, SummaryUnavailableError } from "@/lib/recorded-lectures/summary";
 import { generateLectureNotes } from "@/lib/recorded-lectures/notes";
-import { jobIsDue, LectureAiError, startLectureAi, triggerRun } from "@/lib/recorded-lectures/ai/pipeline";
+import { jobIsDue, LectureAiError, runNow, startLectureAi } from "@/lib/recorded-lectures/ai/pipeline";
 import { lectureSourceText, notesSourceText, type BoardNote, type DictatedNote, type Segment } from "@/lib/recorded-lectures/ai/format";
 
 export const dynamic = "force-dynamic";
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return apiSuccess({ state: "PROCESSING", progress: { done: 0, total: 0, note: "Starting" }, summary, notes });
     }
     if (job.status !== "READY") {
-      if (jobIsDue(job)) triggerRun(lecture.id);
+      if (jobIsDue(job)) runNow(lecture.id);
       return apiSuccess({ state: "PROCESSING", progress: { done: job.windowsDone, total: job.windowsTotal, note: job.stepNote }, summary, notes });
     }
 

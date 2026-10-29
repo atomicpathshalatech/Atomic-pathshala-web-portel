@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { recordedStorageStatus } from "@/lib/recorded-lectures/config";
 import { abortMultipartUpload, listOpenMultipartUploads } from "@/lib/recorded-lectures/storage";
 import { verifyAndRecord } from "@/lib/recorded-lectures/verify";
-import { jobIsDue, triggerRun } from "@/lib/recorded-lectures/ai/pipeline";
+import { jobIsDue, runNow } from "@/lib/recorded-lectures/ai/pipeline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
   });
   for (const j of aiJobs) {
     if (jobIsDue(j)) {
-      triggerRun(j.lectureId);
+      runNow(j.lectureId, 45_000);
       aiResumed++;
     }
   }

@@ -4,9 +4,11 @@ import { apiSuccess, apiError } from "@/lib/api/response";
 import { ForbiddenError } from "@/lib/rbac/guard";
 import { canEditLectureContent, canManageRecordedLectures } from "@/lib/recorded-lectures/access";
 import { recordedApiError, requireUserId } from "@/lib/recorded-lectures/api";
-import { LectureAiError, jobIsDue, startLectureAi, triggerRun } from "@/lib/recorded-lectures/ai/pipeline";
+import { LectureAiError, jobIsDue, runNow, startLectureAi } from "@/lib/recorded-lectures/ai/pipeline";
 
 export const dynamic = "force-dynamic";
+// The AI pass runs inside these requests (after the response) — see runNow.
+export const maxDuration = 300;
 
 /** Progress of the lecture's AI pass (and a nudge when it has stalled). */
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
@@ -19,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const job = await prisma.lectureAiJob.findUnique({ where: { lectureId: params.id } });
     if (!job) return apiSuccess({ job: null });
     // The page is open and the job is due (lost hand-over / quota wait over): keep it moving.
-    if (jobIsDue(job) && Date.now() - job.updatedAt.getTime() > 60_000) triggerRun(params.id);
+    if (jobIsDue(job)) runNow(params.id);
 
     // Rough progress over the whole pass.
     const stagePct: Record<string, number> = { QUEUED: 0, TRANSFERRING: 5, AI_PREPARING: 25, TRANSCRIBING: 30, READY: 100, FAILED: 0 };
