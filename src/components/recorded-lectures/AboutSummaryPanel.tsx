@@ -16,12 +16,25 @@ export type SummaryItem = {
   generatedAt: string | null;
   approvedAt: string | null;
   publishedAt: string | null;
+  language?: string;
+  source?: "ABOUT" | "VIDEO" | "TRANSLATION" | "VIDEO_TRANSLATION" | string;
 };
 
 export type AboutSummaryData = {
   id: string;
+  language?: string;
   about: { content: string; revision: number; updatedAt: string | null };
   summaries: SummaryItem[];
+};
+
+type Lang = "hi" | "en";
+const langOf = (l: string | undefined): Lang => (/hindi|हिंदी|हिन्दी/i.test(String(l ?? "")) ? "hi" : "en");
+const LANG_LABEL: Record<Lang, string> = { hi: "हिंदी", en: "English" };
+const SOURCE_LABEL: Record<string, string> = {
+  ABOUT: "from the About",
+  VIDEO: "from the video (speech + board)",
+  TRANSLATION: "translated (NCERT)",
+  VIDEO_TRANSLATION: "from the video, translated (NCERT)",
 };
 
 const ABOUT_GUIDE = [
@@ -54,7 +67,18 @@ async function call(url: string, method: string, body: unknown) {
  * No PDF/PPT needed. Generated summaries stay drafts until approved and
  * published; a summary from an older About is flagged OUTDATED.
  */
-export function AboutSummaryPanel({ lecture, onLecture }: { lecture: AboutSummaryData; onLecture: (next: any) => void }) {
+export function AboutSummaryPanel({
+  lecture,
+  onLecture,
+  transcriptReady = false,
+}: {
+  lecture: AboutSummaryData;
+  onLecture: (next: any) => void;
+  /** The AI pass has the transcript + board: a summary can be made from the video. */
+  transcriptReady?: boolean;
+}) {
+  const ownLang = langOf(lecture.language);
+  const [tab, setTab] = useState<Lang>(ownLang);
   const [about, setAbout] = useState(lecture.about.content);
   const [aboutRevision, setAboutRevision] = useState(lecture.about.revision);
   const [savingAbout, setSavingAbout] = useState(false);
@@ -64,8 +88,12 @@ export function AboutSummaryPanel({ lecture, onLecture }: { lecture: AboutSummar
 
   const words = about.trim().split(/\s+/).filter(Boolean).length;
   const aboutDirty = about.trim() !== lecture.about.content.trim();
-  const working = lecture.summaries.find((s) => s.status !== "SUPERSEDED") ?? null;
-  const published = lecture.summaries.find((s) => s.status === "PUBLISHED") ?? null;
+  // One summary line per language: the latest working version and the published one.
+  const inTab = lecture.summaries.filter((s) => langOf(s.language ?? lecture.language) === tab);
+  const working = inTab.find((s) => s.status !== "SUPERSEDED") ?? null;
+  const published = inTab.find((s) => s.status === "PUBLISHED") ?? null;
+  const otherLang: Lang = tab === "hi" ? "en" : "hi";
+  const hasLang = (l: Lang) => lecture.summaries.some((s) => s.status !== "SUPERSEDED" && langOf(s.language ?? lecture.language) === l);
 
   const saveAbout = async () => {
     setSavingAbout(true);
@@ -87,8 +115,20 @@ export function AboutSummaryPanel({ lecture, onLecture }: { lecture: AboutSummar
       const data = await call(`/api/team/recorded-lectures/${lecture.id}/summary`, "POST", { action, ...extra });
       if (data.lecture) onLecture(data.lecture);
       setEditing(null);
+      if (action === "generate" || action === "generate-video") setTab(ownLang);
+      if (action === "translate") setTab(extra.to as Lang);
       toast.success(
-        action === "generate" ? "Summary generated — review it, then approve." : action === "approve" ? "Summary approved." : action === "publish" ? "Summary published to students." : action === "unpublish" ? "Summary hidden from students." : "Draft saved."
+        action === "generate" || action === "generate-video"
+          ? "Summary generated — review it, then approve."
+          : action === "translate"
+            ? "Translation ready as a draft — review it, then approve and publish."
+            : action === "approve"
+              ? "Summary approved."
+              : action === "publish"
+                ? "Summary published to students."
+                : action === "unpublish"
+                  ? "Summary hidden from students."
+                  : "Draft saved."
       );
     } catch (err) {
       toast.error((err as Error).message);
@@ -105,7 +145,7 @@ export function AboutSummaryPanel({ lecture, onLecture }: { lecture: AboutSummar
             <span className="material-symbols-outlined text-blue-600 text-xl">edit_note</span>
             About this lecture
           </h3>
-          <p className="text-xs text-slate-500 mt-1">Write what you taught. The lecture summary is made only from this — no PDF or PPT is needed.</p>
+          <p className="text-xs text-slate-500 mt-1">Write what you taught. A summary can be made from this (no PDF or PPT needed), or from the video itself after “Process with AI”.</p>
         </div>
         <ul className="grid gap-1 sm:grid-cols-2 text-xs text-slate-500 list-disc pl-5">
           {ABOUT_GUIDE.map((g) => (
@@ -144,16 +184,56 @@ export function AboutSummaryPanel({ lecture, onLecture }: { lecture: AboutSummar
             <span className="material-symbols-outlined text-blue-600 text-xl">summarize</span>
             Lecture summary
           </h3>
-          <button
-            type="button"
-            disabled={Boolean(busy) || aboutDirty || words < MIN_WORDS}
-            onClick={() => summaryAction("generate")}
-            title={aboutDirty ? "Save the About first" : words < MIN_WORDS ? `Write at least ${MIN_WORDS} words in the About` : undefined}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50 text-sm font-bold px-3 py-1.5"
-          >
-            <span className="material-symbols-outlined text-base">auto_awesome</span>
-            {busy === "generate" ? "Generating…" : working ? "Regenerate summary" : "Generate summary"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={Boolean(busy) || !transcriptReady}
+              onClick={() => summaryAction("generate-video")}
+              title={transcriptReady ? "Made from what the teacher said and wrote on the board" : "Run “Process with AI” on the video first"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold px-3 py-1.5"
+            >
+              <span className="material-symbols-outlined text-base">smart_display</span>
+              {busy === "generate-video" ? "Creating…" : "Create summary from video"}
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(busy) || aboutDirty || words < MIN_WORDS}
+              onClick={() => summaryAction("generate")}
+              title={aboutDirty ? "Save the About first" : words < MIN_WORDS ? `Write at least ${MIN_WORDS} words in the About` : undefined}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50 text-sm font-bold px-3 py-1.5"
+            >
+              <span className="material-symbols-outlined text-base">auto_awesome</span>
+              {busy === "generate" ? "Generating…" : "Summary from About"}
+            </button>
+          </div>
+        </div>
+
+        {!transcriptReady && (
+          <p className="text-xs text-slate-500">
+            “Create summary from video” uses what the teacher said and wrote on the board. It unlocks after “Process with AI” has read the video.
+          </p>
+        )}
+
+        <div role="tablist" aria-label="Summary language" className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
+          {(["hi", "en"] as Lang[])
+            .sort((a, b) => Number(b === ownLang) - Number(a === ownLang))
+            .map((l) => (
+              <button
+                key={l}
+                type="button"
+                role="tab"
+                aria-selected={tab === l}
+                onClick={() => {
+                  setTab(l);
+                  setEditing(null);
+                }}
+                className={`rounded-md px-3 py-1 text-xs font-bold ${tab === l ? "bg-blue-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+              >
+                {LANG_LABEL[l]}
+                {l === ownLang ? " (lecture)" : ""}
+                {hasLang(l) ? "" : " · none"}
+              </button>
+            ))}
         </div>
 
         {published && (!working || working.id !== published.id) && (
@@ -163,8 +243,28 @@ export function AboutSummaryPanel({ lecture, onLecture }: { lecture: AboutSummar
         )}
 
         {!working ? (
-          <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-6 text-center text-sm text-slate-500">
-            No summary yet. Save the About, then generate one. Students see nothing until you approve and publish it.
+          <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-6 text-center text-sm text-slate-500 space-y-3">
+            {tab === ownLang ? (
+              <p>No summary yet. Create one from the video or from the About. Students see nothing until you approve and publish it.</p>
+            ) : (
+              <>
+                <p>No {LANG_LABEL[tab]} summary yet. Translate the {LANG_LABEL[otherLang]} one (NCERT terms, formulas kept as they are).</p>
+                {(() => {
+                  const from = lecture.summaries.find((s) => s.status !== "SUPERSEDED" && langOf(s.language ?? lecture.language) === otherLang);
+                  return (
+                    <button
+                      type="button"
+                      disabled={Boolean(busy) || !from}
+                      onClick={() => from && summaryAction("translate", { summaryId: from.id, to: tab })}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold px-3 py-1.5"
+                    >
+                      <span className="material-symbols-outlined text-base">translate</span>
+                      {busy === "translate" ? "Translating…" : `Translate to ${LANG_LABEL[tab]}`}
+                    </button>
+                  );
+                })()}
+              </>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
@@ -177,6 +277,7 @@ export function AboutSummaryPanel({ lecture, onLecture }: { lecture: AboutSummar
               )}
               <span className="text-slate-500">
                 Version {working.revision}
+                {working.source ? ` · ${SOURCE_LABEL[working.source] ?? working.source}` : ""}
                 {working.aiModel ? ` · ${working.aiProvider} ${working.aiModel}` : ""}
                 {working.generatedAt ? ` · ${new Date(working.generatedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}` : ""}
               </span>
@@ -252,6 +353,16 @@ export function AboutSummaryPanel({ lecture, onLecture }: { lecture: AboutSummar
                       {busy === "publish" ? "Publishing…" : "Publish to students"}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    disabled={Boolean(busy)}
+                    onClick={() => summaryAction("translate", { summaryId: working.id, to: otherLang })}
+                    title={`A new ${LANG_LABEL[otherLang]} draft in NCERT terms; formulas stay as they are`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-bold px-3 py-1.5"
+                  >
+                    <span className="material-symbols-outlined text-sm">translate</span>
+                    {busy === "translate" ? "Translating…" : `Translate to ${LANG_LABEL[otherLang]}${hasLang(otherLang) ? " (new version)" : ""}`}
+                  </button>
                   {working.status === "PUBLISHED" && (
                     <button
                       type="button"

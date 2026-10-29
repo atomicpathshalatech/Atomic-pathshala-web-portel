@@ -26,6 +26,18 @@ import {
   MIN_ABOUT_WORDS,
 } from "../src/lib/recorded-lectures/summary-format";
 import { RecordedVideoUploader, type UploadProgress } from "../src/lib/recorded-lectures/uploader";
+import { buildSummaryTranslationPrompt, checkSummaryTranslation, sameSummaryLanguage } from "../src/lib/recorded-lectures/summary-format";
+import {
+  targetLanguages,
+  parseTranscriptWindow,
+  parseTranslation,
+  buildVoiceChunks,
+  toVtt,
+  pcmToWav,
+  fitRate,
+  lectureSourceText,
+} from "../src/lib/recorded-lectures/ai/format";
+import { clipAt } from "../src/components/recorded-lectures/useAiVoice";
 
 let passed = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -274,6 +286,105 @@ const OLD = {
     assert.ok(again);
     assert.equal(after, before, "a resumed upload sends only the missing parts");
     assert.equal(initCalls, 2);
+  });
+
+  // ── Lecture AI pass (transcript, translation, voice, subtitles) ──
+  await test("target languages: English → हिंदी, Hindi → English, mixed → both", () => {
+    assert.deepEqual(targetLanguages("English"), ["hi"]);
+    assert.deepEqual(targetLanguages("Hindi"), ["en"]);
+    assert.deepEqual(targetLanguages("Hinglish"), ["hi", "en"]);
+  });
+
+  await test("transcript window: times move onto the video clock, bad items dropped, no overlaps", () => {
+    const r = parseTranscriptWindow(
+      {
+        segments: [
+          { s: 5, e: 9, t: "second" },
+          { s: 0, e: 6, t: "first" },
+          { s: 2, e: 3, t: "  " },
+          { s: "x", e: 3, t: "bad" },
+          { s: 900, e: 905, t: "outside the window" },
+        ],
+        board: [{ at: 4, c: "$v = u + at$" }, { at: -1, c: "bad" }],
+      },
+      600,
+      1200
+    );
+    assert.deepEqual(r.segments, [
+      { s: 600, e: 605, t: "first" },
+      { s: 605, e: 609, t: "second" },
+    ]);
+    assert.deepEqual(r.board, [{ at: 604, c: "$v = u + at$" }]);
+  });
+
+  await test("translation must return the same number of lines", () => {
+    assert.deepEqual(parseTranslation({ t: ["a", "b"] }, 2), ["a", "b"]);
+    assert.equal(parseTranslation({ t: ["a"] }, 2), null);
+    assert.equal(parseTranslation({ t: ["a", ""] }, 2), null);
+    assert.equal(parseTranslation(null, 1), null);
+  });
+
+  await test("voice clips: grouped up to 25 s, broken at pauses over 2 s", () => {
+    const segs = [
+      { s: 0, e: 5, t: "" },
+      { s: 5, e: 12, t: "" },
+      { s: 12, e: 20, t: "" },
+      { s: 20, e: 30, t: "" },
+      { s: 35, e: 40, t: "" },
+    ];
+    const chunks = buildVoiceChunks(segs, ["a", "b", "c", "d", "e"]);
+    assert.deepEqual(chunks.map((c) => [c.s, c.e, c.from, c.to, c.text]), [
+      [0, 20, 0, 2, "a b c"],
+      [20, 30, 3, 3, "d"],
+      [35, 40, 4, 4, "e"],
+    ]);
+  });
+
+  await test("WebVTT: header, timestamps, translated text", () => {
+    const vtt = toVtt([{ s: 61.5, e: 64, t: "orig" }], ["अनुवाद"]);
+    assert.ok(vtt.startsWith("WEBVTT\n"));
+    assert.ok(vtt.includes("00:01:01.500 --> 00:01:04.000"));
+    assert.ok(vtt.includes("अनुवाद"));
+    assert.ok(!vtt.includes("orig"));
+  });
+
+  await test("PCM → WAV header is valid", () => {
+    const wav = pcmToWav(new Uint8Array(48000), 24000);
+    const dv = new DataView(wav.buffer);
+    assert.equal(new TextDecoder().decode(wav.slice(0, 4)), "RIFF");
+    assert.equal(new TextDecoder().decode(wav.slice(8, 12)), "WAVE");
+    assert.equal(dv.getUint32(24, true), 24000);
+    assert.equal(dv.getUint32(40, true), 48000);
+    assert.equal(wav.length, 48044);
+  });
+
+  await test("voice speed stays natural (0.9–1.35×) and the clip under the playhead is found", () => {
+    assert.equal(fitRate(10, 10), 1);
+    assert.equal(fitRate(30, 10), 1.35);
+    assert.equal(fitRate(5, 10), 0.9);
+    const clips = [
+      { s: 0, e: 10, dur: 9, url: "a" },
+      { s: 20, e: 30, dur: 13.5, url: "b" },
+    ];
+    assert.equal(clipAt(clips, 5), 0);
+    assert.equal(clipAt(clips, 15), -1, "silence between clips");
+    assert.equal(clipAt(clips, 25), 1);
+    assert.equal(clipAt(clips, 30.5), -1);
+  });
+
+  await test("summary source text: speech and board in time order", () => {
+    const txt = lectureSourceText([{ s: 10, e: 12, t: "hello" }], [{ at: 5, c: "$H_2O$" }]);
+    assert.equal(txt, "[0:05] BOARD: $H_2O$\n[0:10] SAID: hello");
+  });
+
+  await test("summary translation keeps headings, points and formulas", () => {
+    const en = "### Topics Covered\n- Water is $\text{H}_2\text{O}$\n- [ ] Revise bonds";
+    const hi = "### पढ़ाए गए विषय\n- जल $\text{H}_2\text{O}$ है\n- [ ] आबंध दोहराएँ";
+    assert.equal(checkSummaryTranslation(en, hi), hi);
+    assert.equal(checkSummaryTranslation(en, "### पढ़ाए गए विषय\n- जल $H_2O$ है\n- [ ] आबंध"), null, "a changed formula is refused");
+    assert.equal(checkSummaryTranslation(en, "- जल $\text{H}_2\text{O}$\n- [ ] x"), null, "a dropped heading is refused");
+    assert.ok(buildSummaryTranslationPrompt({ markdown: en, to: "hi", subject: "Chemistry" }).includes("NCERT"));
+    assert.ok(sameSummaryLanguage("Hindi", "हिंदी") && !sameSummaryLanguage("Hindi", "English"));
   });
 
   console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

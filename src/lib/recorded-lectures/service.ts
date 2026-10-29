@@ -20,7 +20,7 @@ const STAFF_INCLUDE = {
   teacher: { select: { id: true, user: { select: { name: true } } } },
   recordedMedia: { include: { batch: { select: { id: true, name: true } } } },
   about: true,
-  summaries: { orderBy: { revision: "desc" as const }, take: 10 },
+  summaries: { orderBy: { revision: "desc" as const }, take: 20 },
 } satisfies Prisma.LectureInclude;
 
 export type StaffRecordedLecture = Prisma.LectureGetPayload<{ include: typeof STAFF_INCLUDE }>;
@@ -69,6 +69,7 @@ export function serializeStaffLecture(l: StaffRecordedLecture) {
       aboutRevision: s.aboutRevision,
       content: s.content,
       language: s.language,
+      source: s.source,
       status: s.status,
       outdated: s.outdated,
       aiProvider: s.aiProvider,
@@ -200,7 +201,7 @@ export async function updateRecordedMetadata(lectureId: string, input: z.infer<t
 /**
  * Saves the About. Refuses when someone saved a newer version since the
  * editor loaded (baseRevision), so two editors cannot overwrite each other.
- * A changed About marks every summary made from an older version outdated.
+ * A changed About marks every About-based summary made from an older version outdated.
  */
 export async function saveAbout(lectureId: string, content: string, baseRevision: number, userId: string) {
   return prisma.$transaction(async (tx) => {
@@ -214,7 +215,8 @@ export async function saveAbout(lectureId: string, content: string, baseRevision
       ? await tx.lectureAbout.update({ where: { lectureId }, data: { content, revision: { increment: 1 }, updatedById: userId } })
       : await tx.lectureAbout.create({ data: { lectureId, content, revision: 1, updatedById: userId } });
     await tx.lectureSummary.updateMany({
-      where: { lectureId, aboutRevision: { lt: next.revision }, status: { not: "SUPERSEDED" } },
+      // Summaries made from the video (and their translations) do not depend on the About.
+      where: { lectureId, aboutRevision: { lt: next.revision }, status: { not: "SUPERSEDED" }, source: { in: ["ABOUT", "TRANSLATION"] } },
       data: { outdated: true },
     });
     return next;

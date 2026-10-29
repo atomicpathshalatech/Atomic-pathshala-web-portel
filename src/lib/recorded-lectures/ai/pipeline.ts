@@ -56,6 +56,8 @@ type VoiceState = Partial<Record<LangCode, VoiceTrack>>;
 type Translations = Partial<Record<LangCode, string[]>>;
 
 export class LectureAiError extends Error {}
+/** The job was restarted while this run worked on it: stop quietly, the new run owns it. */
+class SupersededRun extends Error {}
 
 /** Starts (or restarts) the AI pass for a lecture with a verified video. */
 export async function startLectureAi(lectureId: string, userId: string) {
@@ -157,11 +159,14 @@ export async function runSteps(lectureId: string, budgetMs: number): Promise<{ m
   }
 
   let status = "QUEUED";
+  let myAttempt: number | null = null;
   try {
     for (;;) {
       const job = await prisma.lectureAiJob.findUnique({ where: { lectureId } });
       if (!job) return { more: false, status: "NONE" };
       status = job.status;
+      if (myAttempt === null) myAttempt = job.attempts;
+      else if (job.attempts !== myAttempt) return { more: false, status };
       if (job.status === "READY" || job.status === "FAILED") return { more: false, status };
       const left = deadline - Date.now();
       if (left < 20_000) return { more: true, status };
@@ -169,14 +174,15 @@ export async function runSteps(lectureId: string, budgetMs: number): Promise<{ m
       if (r === "wait") return { more: false, status };
     }
   } catch (err) {
+    if (err instanceof SupersededRun) return { more: false, status };
     const quota = err instanceof GeminiHttpError && err.quota;
     const message = String((err as Error)?.message ?? err).slice(0, 900);
     const job = await prisma.lectureAiJob.findUnique({ where: { lectureId }, select: { error: true, status: true } });
     // Quota: wait and continue later. Anything else: up to 3 retries of the same step, then FAILED.
     const tries = (job?.error?.match(/\(try (\d)\)/)?.[1] ? Number(job.error.match(/\(try (\d)\)/)![1]) : 0) + 1;
     if (quota || tries < 3) {
-      await prisma.lectureAiJob.update({
-        where: { lectureId },
+      await prisma.lectureAiJob.updateMany({
+        where: { lectureId, ...(myAttempt !== null ? { attempts: myAttempt } : {}) },
         data: {
           error: quota ? `AI quota reached — continuing automatically in a few minutes. ${message}` : `${message} (try ${tries})`,
           retryAt: new Date(Date.now() + (quota ? 5 * 60_000 : 30_000)),
@@ -184,10 +190,10 @@ export async function runSteps(lectureId: string, budgetMs: number): Promise<{ m
       });
       return { more: false, status };
     }
-    await prisma.lectureAiJob.update({ where: { lectureId }, data: { status: "FAILED", error: message, finishedAt: new Date() } });
+    await prisma.lectureAiJob.updateMany({ where: { lectureId, ...(myAttempt !== null ? { attempts: myAttempt } : {}) }, data: { status: "FAILED", error: message, finishedAt: new Date() } });
     return { more: false, status: "FAILED" };
   } finally {
-    await prisma.lectureAiJob.updateMany({ where: { lectureId }, data: { lockedUntil: null } });
+    await prisma.lectureAiJob.updateMany({ where: { lectureId, ...(myAttempt !== null ? { attempts: myAttempt } : {}) }, data: { lockedUntil: null } });
   }
 }
 
@@ -209,8 +215,11 @@ async function step(job: Job, deadline: number): Promise<"continue" | "wait"> {
   const media = lecture?.recordedMedia;
   if (!lecture || !media) throw new LectureAiError("The lecture or its video is gone.");
   const size = Number(media.sizeBytes);
-  const save = (data: Parameters<typeof prisma.lectureAiJob.update>[0]["data"]) =>
-    prisma.lectureAiJob.update({ where: { id: job.id }, data: { ...data, error: null, retryAt: null } });
+  // Only while this run's attempt is current: a restart in the meantime wins.
+  const save = async (data: Parameters<typeof prisma.lectureAiJob.updateMany>[0]["data"]) => {
+    const res = await prisma.lectureAiJob.updateMany({ where: { id: job.id, attempts: job.attempts }, data: { ...data, error: null, retryAt: null } });
+    if (res.count === 0) throw new SupersededRun();
+  };
 
   switch (job.status) {
     case "QUEUED": {

@@ -77,3 +77,27 @@ As a second safety net, add an R2 lifecycle rule on the bucket:
 MP4 (H.264/AAC) plays everywhere. For quick start of playback, export with the
 "fast start" / "web optimised" option (moov atom at the start). Uploaded files
 are played as they are — there is no transcoding or HLS.
+
+## AI audio (हिंदी / English), subtitles and summary from the video
+
+On a lecture's page (team portal), **Process with AI** (Admin / Super Admin) runs a background pass:
+
+1. The video is copied from the recorded-lecture bucket to the Gemini Files API (max 2 GB).
+2. Gemini writes down what the teacher says (timed) and what is written on the board, 10 minutes at a time.
+3. The transcript is translated in NCERT terms: English lecture → Hindi, Hindi lecture → English, mixed → both.
+4. An AI voice (Gemini TTS) is recorded in ~25-second clips, stored next to the video under `<lecture>/ai/<attempt>/<lang>/`.
+
+Students then get **Audio: Original / हिंदी (AI) / English (AI)** and **Subtitles** in the player. The voice is
+an AI voice, synced sentence by sentence (each clip starts at its sentence's time, 0.9–1.35× speed to fit).
+
+The pass resumes itself (hand-over between invocations, the status poll on the lecture page, the daily
+reconcile cron) and waits out AI quota limits. A 1-hour lecture takes roughly 15–40 minutes and needs paid
+Gemini quota for TTS.
+
+Summaries: **Create summary from video** (speech + board, unlocks after the transcript is ready),
+**Summary from About** (as before), and **Translate to हिंदी / English** (NCERT terms; every heading, point and
+formula must survive or the translation is refused). Each language has its own approve → publish line;
+publishing a Hindi summary does not hide the English one.
+
+Database: migration `20261030120000_lecture_ai` (new `lecture_ai_jobs` table, `lecture_summaries.source` column).
+Run it **before** deploying this code.

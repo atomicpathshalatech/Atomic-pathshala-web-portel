@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { studentRecordedAccess } from "@/lib/recorded-lectures/access";
 import { watermarkLabel } from "@/lib/recorded-lectures/files";
 import { RecordedLecturePlayer } from "@/components/recorded-lectures/RecordedLecturePlayer";
-import { SummaryView } from "@/components/recorded-lectures/SummaryView";
+import { SummaryLanguageTabs } from "@/components/recorded-lectures/SummaryLanguageTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -39,13 +39,14 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
       chapter: { select: { id: true, title: true, subject: { select: { id: true, title: true } } } },
       teacher: { select: { displayName: true, user: { select: { name: true } } } },
       recordedMedia: { select: { lectureNumber: true, durationSec: true } },
-      summaries: { where: { status: "PUBLISHED" }, select: { content: true, publishedAt: true }, take: 1 },
+      summaries: { where: { status: "PUBLISHED" }, select: { content: true, language: true }, orderBy: { publishedAt: "asc" }, take: 4 },
       progress: { where: { studentId: student.id }, select: { id: true }, take: 1 },
     },
   });
   if (!lecture) notFound();
 
-  const summary = lecture.summaries[0] ?? null;
+  // One published summary per language; the lecture's own language first.
+  const summaries = [...lecture.summaries].sort((a, b) => Number(b.language === lecture.language) - Number(a.language === lecture.language));
   const teacher = lecture.teacher.displayName || lecture.teacher.user.name;
   const watermark = watermarkLabel(student.user.name, student.studentIdCode ?? student.enrollmentNumber);
   const backHref = `/courses/${access.batchId}`;
@@ -78,8 +79,8 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
           <span className="material-symbols-outlined text-primary text-xl">summarize</span>
           Lecture Summary
         </h2>
-        {summary ? (
-          <SummaryView markdown={summary.content} />
+        {summaries.length ? (
+          <SummaryLanguageTabs summaries={summaries} />
         ) : (
           <p className="text-sm text-slate-500">The teacher has not published a summary for this lecture yet. The video is ready to watch.</p>
         )}

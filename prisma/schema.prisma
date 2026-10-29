@@ -3864,7 +3864,7 @@ model LectureSummary {
   content       String               @db.Text // Markdown (+ $LaTeX$), editable
   language      String               @default("English")
   status        LectureSummaryStatus @default(DRAFT)
-  /// ABOUT (teacher's About), VIDEO (the lecture itself: speech + board), TRANSLATION (of another version)
+  /// ABOUT (teacher's About), VIDEO (the lecture itself: speech + board), TRANSLATION (of an ABOUT one), VIDEO_TRANSLATION (of a VIDEO one)
   source        String               @default("ABOUT")
   // The About changed after this was generated: regenerate and review before
   // publishing a new version. A published summary stays visible meanwhile.

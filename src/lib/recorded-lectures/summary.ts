@@ -2,7 +2,16 @@ import "server-only";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { lightThinking } from "@/lib/ai/gemini-models";
-import { buildSummaryPrompt, buildVideoSummaryPrompt, parseSummaryResponse, summaryToMarkdown, aboutWordCount, MIN_ABOUT_WORDS } from "./summary-format";
+import {
+  buildSummaryPrompt,
+  buildVideoSummaryPrompt,
+  buildSummaryTranslationPrompt,
+  checkSummaryTranslation,
+  parseSummaryResponse,
+  summaryToMarkdown,
+  aboutWordCount,
+  MIN_ABOUT_WORDS,
+} from "./summary-format";
 
 export class SummaryUnavailableError extends Error {
   constructor(message: string, public code: "AI_NOT_CONFIGURED" | "AI_FAILED" | "TIMEOUT" | "INSUFFICIENT" | "INVALID") {
@@ -105,4 +114,39 @@ async function runSummaryPrompt(prompt: string, language: string): Promise<{ mar
   const parsed = parseSummaryResponse(parsedJson);
   if (!parsed.ok) throw new SummaryUnavailableError(parsed.error, parsed.insufficient ? "INSUFFICIENT" : "INVALID");
   return { markdown: summaryToMarkdown(parsed.sections, language), provider: "gemini", model: usedModel || "gemini" };
+}
+
+/**
+ * Translates a summary to Hindi or English, NCERT style. Two tries: the
+ * translation must keep every heading, point and formula of the original.
+ */
+export async function translateLectureSummary(p: { markdown: string; to: "hi" | "en"; subject: string }): Promise<{ markdown: string; provider: string; model: string }> {
+  if (!summaryAiConfigured()) throw new SummaryUnavailableError("No AI provider is configured on the server (Gemini keys missing).", "AI_NOT_CONFIGURED");
+  const prompt = buildSummaryTranslationPrompt(p);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let usedModel = "";
+    let raw: string;
+    try {
+      raw = await executeGeminiWithFailover(async (client, modelName) => {
+        const model = client.getGenerativeModel({
+          model: modelName,
+          generationConfig: { responseMimeType: "application/json", temperature: 0.1, ...lightThinking(modelName, "low") },
+        });
+        const res = await model.generateContent(prompt);
+        usedModel = modelName;
+        return res.response.text();
+      });
+    } catch {
+      throw new SummaryUnavailableError("The AI service could not translate the summary right now. Try again shortly.", "AI_FAILED");
+    }
+    let parsed: unknown;
+    try {
+      parsed = (parseAiJson(String(raw).replace(/```json|```/gi, "").trim()) as { markdown?: unknown })?.markdown;
+    } catch {
+      continue;
+    }
+    const ok = checkSummaryTranslation(p.markdown, parsed);
+    if (ok) return { markdown: ok, provider: "gemini", model: usedModel || "gemini" };
+  }
+  throw new SummaryUnavailableError("The translation did not keep all headings, points and formulas. Try again.", "INVALID");
 }

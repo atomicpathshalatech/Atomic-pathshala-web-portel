@@ -71,6 +71,10 @@ export const aboutSaveSchema = z.object({
 
 export const summaryActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("generate") }),
+  // From the lecture video itself (needs the AI pass's transcript).
+  z.object({ action: z.literal("generate-video") }),
+  // A new draft in the other language, NCERT style.
+  z.object({ action: z.literal("translate"), summaryId: z.string().min(1), to: z.enum(["hi", "en"]) }),
   z.object({ action: z.literal("save"), summaryId: z.string().min(1), content: z.string().trim().min(1).max(30000) }),
   z.object({ action: z.literal("approve"), summaryId: z.string().min(1) }),
   z.object({ action: z.literal("publish"), summaryId: z.string().min(1) }),

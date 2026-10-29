@@ -142,3 +142,49 @@ STRICT RULES
 Return STRICT JSON only:
 {"insufficient": false, "reason": "", "sections": {"topics": [], "concepts": [], "definitions": [], "formulas": [], "examPoints": [], "examples": [], "mistakes": [], "checklist": [], "homework": []}}`;
 }
+
+/** Language label stored on a summary for a translation target. */
+export function summaryLanguageFor(to: "hi" | "en"): string {
+  return to === "hi" ? "Hindi" : "English";
+}
+
+/** Same language family? ("Hindi" / "हिंदी" count as one; anything else as English/mixed.) */
+export function sameSummaryLanguage(a: string, b: string): boolean {
+  return isHindi(a) === isHindi(b);
+}
+
+/**
+ * Translates an approved summary's Markdown, NCERT style — as questions are
+ * translated: standard NCERT Hindi-medium terms, formulas untouched.
+ */
+export function buildSummaryTranslationPrompt(p: { markdown: string; to: "hi" | "en"; subject: string }): string {
+  const to =
+    p.to === "hi"
+      ? `pure, simple Hindi (Devanagari) exactly as written in NCERT Hindi-medium ${p.subject} textbooks. Use NCERT's standard Hindi scientific terms (e.g. "सहसंयोजक आबंध", "विद्युत ऋणात्मकता", "त्वरण", "कोशिका झिल्ली", "प्रकाश संश्लेषण"), not transliterated English, except where NCERT itself keeps the English word`
+      : `clear academic English exactly as written in NCERT English-medium ${p.subject} textbooks, with NCERT's standard English terms`;
+  return `Translate this lecture summary for NEET/JEE students into ${to}.
+
+RULES
+- Keep the Markdown exactly: every "### " heading, "- " point and "- [ ] " checklist item stays, same order, same count. Translate the headings too.
+- Everything inside $...$ (formulas, equations, chemical formulas, units) stays EXACTLY as it is. Numbers stay as they are.
+- Translate only; do not add, drop, explain or correct anything.
+
+SUMMARY:
+"""
+${p.markdown}
+"""
+
+Return STRICT JSON only: {"markdown": "..."}`;
+}
+
+/** The translation must keep the summary's shape and every formula. */
+export function checkSummaryTranslation(original: string, translated: unknown): string | null {
+  if (typeof translated !== "string" || !translated.trim()) return null;
+  const out = translated.trim();
+  const count = (s: string, re: RegExp) => (s.match(re) ?? []).length;
+  if (count(out, /^###\s/gm) !== count(original, /^###\s/gm)) return null;
+  if (count(out, /^- /gm) !== count(original, /^- /gm)) return null;
+  const maths = (s: string) => (s.match(/\$[^$]+\$/g) ?? []).map((m) => m.replace(/\s+/g, "")).sort().join("|");
+  if (maths(out) !== maths(original)) return null;
+  return out;
+}
