@@ -8,24 +8,27 @@ import { canApproveSummary, canEditLectureContent } from "@/lib/recorded-lecture
 import { summaryActionSchema } from "@/lib/recorded-lectures/schemas";
 import { generateLectureSummary, generateVideoSummary, translateLectureSummary } from "@/lib/recorded-lectures/summary";
 import { sameSummaryLanguage, summaryLanguageFor } from "@/lib/recorded-lectures/summary-format";
-import { lectureSourceText, type BoardNote, type Segment } from "@/lib/recorded-lectures/ai/format";
+import { generateLectureNotes } from "@/lib/recorded-lectures/notes";
+import { lectureSourceText, notesSourceText, type BoardNote, type DictatedNote, type Segment } from "@/lib/recorded-lectures/ai/format";
 import { recordedApiError, requireUserId } from "@/lib/recorded-lectures/api";
 import { loadRecordedLecture, serializeStaffLecture, RecordedLectureError } from "@/lib/recorded-lectures/service";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /**
  * Lecture summary workflow:
  *
  *   generate       → new DRAFT revision from the current About (AI)
- *   generate-video → new DRAFT from the lecture itself: what the teacher said
- *                    and wrote on the board (needs the AI pass's transcript)
+ *   generate-video → new DRAFT from the lecture itself: what the teacher said,
+ *                    wrote on the board and dictated (needs the AI pass)
+ *   generate-notes → class NOTES (kind NOTES): only the board writing and the
+ *                    dictation, shown to students as a handwritten copy
  *   translate      → new DRAFT in Hindi / English (NCERT terms) of a version
  *   save           → teacher's edits to a draft (an approved one goes back to draft)
  *   approve        → APPROVED (teacher of the lecture or an admin)
- *   publish        → students see it; the previously published one in the
- *                    SAME language is SUPERSEDED (one per language)
+ *   publish        → students see it; the previously published one of the
+ *                    same kind in the SAME language is SUPERSEDED
  *   unpublish      → back to APPROVED
  *
  * Nothing is published automatically. A summary made from an older About is
@@ -43,7 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         teacherId: true,
         chapter: { select: { title: true, subject: { select: { title: true } } } },
         about: { select: { content: true, revision: true } },
-        aiJob: { select: { status: true, segments: true, board: true } },
+        aiJob: { select: { status: true, segments: true, board: true, dictated: true } },
       },
     });
     if (!lecture) return apiError("Lecture not found.", 404);
@@ -53,7 +56,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       : await canEditLectureContent(userId, lecture);
     if (!allowed) throw new ForbiddenError("Only this lecture's teacher or an admin can work on its summary.");
 
-    const createDraft = async (d: { content: string; language: string; source: string; aboutRevision: number; outdated: boolean; provider: string; model: string }) => {
+    const createDraft = async (d: { kind?: string; content: string; language: string; source: string; aboutRevision: number; outdated: boolean; provider: string; model: string }) => {
       for (let attempt = 0; attempt < 3; attempt++) {
         const last = await prisma.lectureSummary.aggregate({ where: { lectureId: lecture.id }, _max: { revision: true } });
         try {
@@ -65,6 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               content: d.content,
               language: d.language,
               source: d.source,
+              kind: d.kind ?? "SUMMARY",
               status: "DRAFT",
               outdated: d.outdated,
               aiProvider: d.provider,
@@ -81,7 +85,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       throw new Error("unreachable");
     };
 
-    if (body.action === "generate" || body.action === "generate-video" || body.action === "translate") {
+    if (body.action === "generate" || body.action === "generate-video" || body.action === "generate-notes" || body.action === "translate") {
       const rate = await checkRateLimit(request, "AUTH", `summary-gen:${userId}`);
       if (!rate.success) return rateLimitExceededResponse(rate);
     }
@@ -109,13 +113,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         provider: generated.provider,
         model: generated.model,
       });
-    } else if (body.action === "generate-video") {
+    } else if (body.action === "generate-video" || body.action === "generate-notes") {
       const job = lecture.aiJob;
-      if (!job || !["TRANSLATING", "VOICING", "READY"].includes(job.status)) {
-        return apiError("Run “Process with AI” on the video first — the summary is made from what the teacher said and wrote on the board.", 422, { code: "NO_TRANSCRIPT" });
+      if (!job || job.status !== "READY") {
+        return apiError("Run “Process with AI” on the video first and wait until it is ready — this is made from what the teacher wrote and dictated.", 422, { code: "NO_TRANSCRIPT" });
+      }
+      if (body.action === "generate-notes") {
+        const notes = await generateLectureNotes({
+          source: notesSourceText(job.board as BoardNote[], job.dictated as DictatedNote[]),
+          title: lecture.title,
+          subject: lecture.chapter.subject.title,
+          chapter: lecture.chapter.title,
+          language: lecture.language,
+        });
+        await createDraft({
+          kind: "NOTES",
+          content: notes.markdown,
+          language: lecture.language,
+          source: "VIDEO",
+          aboutRevision: lecture.about?.revision ?? 0,
+          outdated: false,
+          provider: notes.provider,
+          model: notes.model,
+        });
+        return respond();
       }
       const generated = await generateVideoSummary({
-        source: lectureSourceText(job.segments as Segment[], job.board as BoardNote[]),
+        source: lectureSourceText(job.segments as Segment[], job.board as BoardNote[], job.dictated as DictatedNote[]),
         about: lecture.about?.content ?? null,
         title: lecture.title,
         subject: lecture.chapter.subject.title,
@@ -142,6 +166,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const translated = await translateLectureSummary({ markdown: summary.content, to: body.to, subject: lecture.chapter.subject.title });
         const fromVideo = summary.source === "VIDEO" || summary.source === "VIDEO_TRANSLATION";
         await createDraft({
+          kind: summary.kind,
           content: translated.markdown,
           language,
           source: fromVideo ? "VIDEO_TRANSLATION" : "TRANSLATION",
@@ -171,7 +196,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         if (summary.outdated) throw new RecordedLectureError("The About changed after this summary was made. Regenerate it first.", 409, "OUTDATED");
         // One published summary per language: the Hindi one does not hide the English one.
         const published = await prisma.lectureSummary.findMany({
-          where: { lectureId: lecture.id, status: "PUBLISHED", id: { not: summary.id } },
+          where: { lectureId: lecture.id, kind: summary.kind, status: "PUBLISHED", id: { not: summary.id } },
           select: { id: true, language: true },
         });
         const replaced = published.filter((p) => sameSummaryLanguage(p.language, summary.language)).map((p) => p.id);
@@ -188,10 +213,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         .catch(() => null);
     }
 
-    const full = await loadRecordedLecture(lecture.id);
-    if (full) return apiSuccess({ lecture: serializeStaffLecture(full) });
-    const summaries = await prisma.lectureSummary.findMany({ where: { lectureId: lecture.id }, orderBy: { revision: "desc" }, take: 10 });
-    return apiSuccess({ summaries });
+    return respond();
+
+    async function respond() {
+      const full = await loadRecordedLecture(lecture!.id);
+      if (full) return apiSuccess({ lecture: serializeStaffLecture(full) });
+      const summaries = await prisma.lectureSummary.findMany({ where: { lectureId: lecture!.id }, orderBy: { revision: "desc" }, take: 10 });
+      return apiSuccess({ summaries });
+    }
   } catch (error) {
     return recordedApiError(error);
   }

@@ -10,23 +10,22 @@ type AiJob = {
   error: string | null;
   retryAt: string | null;
   sourceLanguage: string;
-  languages: { lang: "hi" | "en"; translated: boolean; voiceDone: number; voiceTotal: number }[];
+  windowsDone: number;
+  windowsTotal: number;
   segments: number;
   boardNotes: number;
+  dictatedNotes: number;
   durationSec: number | null;
-  ttsAudioSec: number;
   startedAt: string | null;
   finishedAt: string | null;
   transcriptReady: boolean;
 };
 
-const LANG = { hi: "हिंदी", en: "English" } as const;
-
 /**
- * The lecture's AI pass: reads the video (speech + board), translates it
- * (NCERT terms) and records the AI voice, so students can switch the audio
- * to हिंदी / English and turn on subtitles. Runs in the background; this
- * panel only shows progress (polled every 10 s while it runs).
+ * The lecture's AI pass: reads the video for what the teacher writes on the
+ * board, dictates and says. Class notes, a video summary and subtitles are
+ * made from it. The teacher's voice is never changed. Runs in the
+ * background; this panel only shows progress (polled every 10 s).
  */
 export function LectureAiPanel({
   lectureId,
@@ -67,7 +66,7 @@ export function LectureAiPanel({
   }, [load]);
 
   const start = async () => {
-    if (job && !confirm(job.status === "READY" ? "Process again? The current AI audio and subtitles are replaced when the new pass finishes." : "Restart the AI processing from the beginning?")) return;
+    if (job && !confirm(job.status === "READY" ? "Read the video again? Existing notes and summaries stay; new ones can be made when it finishes." : "Restart the AI processing from the beginning?")) return;
     setStarting(true);
     try {
       const res = await fetch(`/api/team/recorded-lectures/${lectureId}/ai`, { method: "POST" });
@@ -90,11 +89,11 @@ export function LectureAiPanel({
         <div>
           <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <span className="material-symbols-outlined text-blue-600 text-xl">translate</span>
-            AI audio, subtitles &amp; video summary
+            Read the video with AI (board + dictation)
           </h3>
           <p className="text-xs text-slate-500 mt-1 max-w-xl">
-            The AI listens to the lecture and reads the board, then gives students an audio switch (Original / हिंदी / English, AI voice), subtitles, and lets you
-            create the summary from the video. For a 1-hour lecture this takes roughly 15–40 minutes.
+            The AI (Gemini) watches the lecture and writes down everything on the board and everything the teacher dictates. Then you can create class notes
+            (handwritten copy) and a summary from it, and students get subtitles. The teacher&apos;s voice is not changed. A 1-hour lecture takes roughly 10–20 minutes.
           </p>
         </div>
         {canStart && (
@@ -117,7 +116,7 @@ export function LectureAiPanel({
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span className="font-bold text-slate-800 dark:text-slate-100">
-              {job.status === "READY" ? "Ready — students can switch the audio and subtitles" : job.status === "FAILED" ? "Failed" : job.stepNote || "Working…"}
+              {job.status === "READY" ? "Ready — create the notes and summary below" : job.status === "FAILED" ? "Failed" : job.stepNote || "Working…"}
             </span>
             {running && <span className="text-xs text-slate-500">{job.percent}%</span>}
           </div>
@@ -133,19 +132,15 @@ export function LectureAiPanel({
             </p>
           )}
           <ul className="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
-            <li className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">
-              Transcript: {job.segments ? `${job.segments} lines` : "—"} · Board: {job.boardNotes ? `${job.boardNotes} notes` : "—"}
-            </li>
-            {job.languages.map((l) => (
-              <li key={l.lang} className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">
-                {LANG[l.lang]}: {l.translated ? "subtitles ✓" : "subtitles …"} · voice {l.voiceTotal ? `${l.voiceDone}/${l.voiceTotal}` : "…"}
+            {job.windowsTotal > 0 && (
+              <li className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">
+                Parts read: {job.windowsDone}/{job.windowsTotal}
               </li>
-            ))}
-            {job.ttsAudioSec > 0 && <li className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">AI voice: {Math.round(job.ttsAudioSec / 60)} min</li>}
+            )}
+            <li className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">Board writing: {job.boardNotes}</li>
+            <li className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">Dictated points: {job.dictatedNotes}</li>
+            <li className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5">Spoken lines: {job.segments}</li>
           </ul>
-          <p className="text-[11px] text-slate-400">
-            The voice is an AI voice, not the teacher&apos;s; it follows the video sentence by sentence. Check a few minutes before telling students.
-          </p>
         </div>
       )}
     </div>

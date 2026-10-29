@@ -3866,6 +3866,8 @@ model LectureSummary {
   status        LectureSummaryStatus @default(DRAFT)
   /// ABOUT (teacher's About), VIDEO (the lecture itself: speech + board), TRANSLATION (of an ABOUT one), VIDEO_TRANSLATION (of a VIDEO one)
   source        String               @default("ABOUT")
+  /// SUMMARY (lecture summary) or NOTES (class notes: board + dictation, shown handwritten)
+  kind          String               @default("SUMMARY")
   // The About changed after this was generated: regenerate and review before
   // publishing a new version. A published summary stays visible meanwhile.
   outdated      Boolean              @default(false)
@@ -3884,6 +3886,7 @@ model LectureSummary {
 
   @@unique([lectureId, revision])
   @@index([lectureId, status])
+  @@index([lectureId, kind, status])
   @@map("lecture_summaries")
 }
 
@@ -3891,9 +3894,7 @@ enum LectureAiStatus {
   QUEUED        // waiting to start
   TRANSFERRING  // copying the video from the recorded-lecture bucket to the AI
   AI_PREPARING  // the AI is reading the file
-  TRANSCRIBING  // speech + board, window by window
-  TRANSLATING   // transcript into the other language(s)
-  VOICING       // the AI voice speaks the translated transcript
+  TRANSCRIBING  // speech, board and dictation, window by window
   READY
   FAILED
 }
@@ -3915,7 +3916,6 @@ model LectureAiJob {
   geminiFileName  String?
   geminiFileUri   String?
   sourceLanguage  String          @default("English")
-  targetLanguages String[]        @default([])
   durationSec     Int?
   windowSec       Int             @default(600)
   windowsDone     Int             @default(0)
@@ -3924,17 +3924,14 @@ model LectureAiJob {
   segments        Json            @default("[]")
   /// [{ at, c }] — what was written/drawn on the board and when
   board           Json            @default("[]")
-  /// { hi?: string[], en?: string[] } aligned with segments
-  translations    Json            @default("{}")
-  /// { hi?: { chunks: [{ s, e, key, dur }], total } , en?: … }
-  voice           Json            @default("{}")
+  /// [{ at, c }] — what the teacher dictated for students to write down
+  dictated        Json            @default("[]")
   error           String?         @db.Text
   retryAt         DateTime?
   lockedUntil     DateTime?
   attempts        Int             @default(0)
   tokensIn        Int             @default(0)
   tokensOut       Int             @default(0)
-  ttsAudioSec     Float           @default(0)
   requestedById   String
   startedAt       DateTime        @default(now())
   finishedAt      DateTime?

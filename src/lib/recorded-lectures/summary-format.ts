@@ -162,14 +162,14 @@ export function buildSummaryTranslationPrompt(p: { markdown: string; to: "hi" | 
     p.to === "hi"
       ? `pure, simple Hindi (Devanagari) exactly as written in NCERT Hindi-medium ${p.subject} textbooks. Use NCERT's standard Hindi scientific terms (e.g. "सहसंयोजक आबंध", "विद्युत ऋणात्मकता", "त्वरण", "कोशिका झिल्ली", "प्रकाश संश्लेषण"), not transliterated English, except where NCERT itself keeps the English word`
       : `clear academic English exactly as written in NCERT English-medium ${p.subject} textbooks, with NCERT's standard English terms`;
-  return `Translate this lecture summary for NEET/JEE students into ${to}.
+  return `Translate these lecture notes / summary for NEET/JEE students into ${to}.
 
 RULES
-- Keep the Markdown exactly: every "### " heading, "- " point and "- [ ] " checklist item stays, same order, same count. Translate the headings too.
+- Keep the Markdown exactly: every line keeps its marker ("### " heading, "- " point, "- [ ] " checklist, "1. " step, "> " important line, "[Diagram: …]"), same order, same count. Translate the headings and diagram descriptions too.
 - Everything inside $...$ (formulas, equations, chemical formulas, units) stays EXACTLY as it is. Numbers stay as they are.
 - Translate only; do not add, drop, explain or correct anything.
 
-SUMMARY:
+TEXT:
 """
 ${p.markdown}
 """

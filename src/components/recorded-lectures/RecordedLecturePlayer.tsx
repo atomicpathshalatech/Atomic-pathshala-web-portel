@@ -1,9 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAiVoice, type VoiceClip } from "./useAiVoice";
-
-const SUB_LABEL: Record<string, string> = { orig: "As spoken", hi: "हिंदी", en: "English" };
 
 const POSITIONS = [
   "top-[8%] left-[6%]",
@@ -47,45 +44,24 @@ export function RecordedLecturePlayer({
   const [completed, setCompleted] = useState(initiallyCompleted);
   const resumeKey = `rl-pos:${lectureId}`;
 
-  // AI voice tracks and subtitles (from the lecture's AI pass), when there are any.
-  const [ai, setAi] = useState<{ audio: { lang: "hi" | "en"; chunks: VoiceClip[] }[]; subtitles: string[] } | null>(null);
-  const [audioLang, setAudioLang] = useState<"orig" | "hi" | "en">("orig");
-  const [subLang, setSubLang] = useState<string>("off");
-  const aiTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadAi = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/student/recorded-lectures/${lectureId}/ai`, { cache: "no-store" });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) return;
-      setAi({ audio: json.data.audio ?? [], subtitles: json.data.subtitles ?? [] });
-      // Clip URLs are signed: fetch fresh ones before they expire.
-      if (aiTimer.current) clearTimeout(aiTimer.current);
-      aiTimer.current = setTimeout(() => void loadAi(), (Number(json.data.expiresInSeconds) || 3600) * 800);
-    } catch {
-      // no AI tracks: the original audio plays as usual
-    }
-  }, [lectureId]);
+  // Subtitles of what the teacher says (from the lecture's AI pass), when there are any.
+  const [hasSubtitles, setHasSubtitles] = useState(false);
+  const [subtitlesOn, setSubtitlesOn] = useState(false);
   useEffect(() => {
-    void loadAi();
+    let alive = true;
+    fetch(`/api/student/recorded-lectures/${lectureId}/ai`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => alive && setHasSubtitles(Boolean(json?.success && json.data?.subtitles?.length)))
+      .catch(() => null);
     return () => {
-      if (aiTimer.current) clearTimeout(aiTimer.current);
+      alive = false;
     };
-  }, [loadAi]);
-  const clipErrors = useRef(0);
-  const onClipError = useCallback(() => {
-    // An expired clip URL: renew once, then fall back to the original audio.
-    clipErrors.current += 1;
-    if (clipErrors.current <= 2) void loadAi();
-    else setAudioLang("orig");
-  }, [loadAi]);
-  const clips = audioLang === "orig" ? null : (ai?.audio.find((t) => t.lang === audioLang)?.chunks ?? null);
-  useAiVoice(videoRef, src, clips, onClipError);
-
+  }, [lectureId]);
   useEffect(() => {
     const tracks = videoRef.current?.textTracks;
     if (!tracks) return;
-    for (let i = 0; i < tracks.length; i++) tracks[i]!.mode = subLang !== "off" && i === 0 ? "showing" : "disabled";
-  }, [subLang, src]);
+    for (let i = 0; i < tracks.length; i++) tracks[i]!.mode = subtitlesOn ? "showing" : "disabled";
+  }, [subtitlesOn, src]);
 
   const authorise = useCallback(
     async (keepPosition: boolean) => {
@@ -207,61 +183,22 @@ export function RecordedLecturePlayer({
           onError={onError}
           className="absolute inset-0 w-full h-full"
         >
-          {subLang !== "off" && (
-            <track
-              key={subLang}
-              kind="subtitles"
-              default
-              srcLang={subLang === "orig" ? "und" : subLang}
-              label={SUB_LABEL[subLang] ?? subLang}
-              src={`/api/student/recorded-lectures/${lectureId}/subtitles?lang=${subLang}`}
-            />
-          )}
+          {subtitlesOn && <track kind="subtitles" default srcLang="und" label="Subtitles" src={`/api/student/recorded-lectures/${lectureId}/subtitles`} />}
         </video>
       )}
 
-      {ai && (ai.audio.length > 0 || ai.subtitles.length > 0) && (
-        <div className="absolute top-2 left-2 flex flex-wrap gap-1.5 text-[11px] sm:text-xs">
-          {ai.audio.length > 0 && (
-            <label className="flex items-center gap-1 rounded-lg bg-black/60 text-white px-2 py-1">
-              <span className="material-symbols-outlined text-sm" aria-hidden>
-                record_voice_over
-              </span>
-              <span className="sr-only">Audio language</span>
-              <select
-                value={audioLang}
-                onChange={(e) => {
-                  clipErrors.current = 0;
-                  setAudioLang(e.target.value as "orig" | "hi" | "en");
-                }}
-                className="bg-transparent font-bold outline-none [&>option]:text-slate-900"
-              >
-                <option value="orig">Audio: Original</option>
-                {ai.audio.map((t) => (
-                  <option key={t.lang} value={t.lang}>
-                    Audio: {t.lang === "hi" ? "हिंदी (AI)" : "English (AI)"}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {ai.subtitles.length > 0 && (
-            <label className="flex items-center gap-1 rounded-lg bg-black/60 text-white px-2 py-1">
-              <span className="material-symbols-outlined text-sm" aria-hidden>
-                subtitles
-              </span>
-              <span className="sr-only">Subtitles</span>
-              <select value={subLang} onChange={(e) => setSubLang(e.target.value)} className="bg-transparent font-bold outline-none [&>option]:text-slate-900">
-                <option value="off">Subtitles: Off</option>
-                {ai.subtitles.map((l) => (
-                  <option key={l} value={l}>
-                    Subtitles: {SUB_LABEL[l] ?? l}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
+      {hasSubtitles && (
+        <button
+          type="button"
+          onClick={() => setSubtitlesOn((v) => !v)}
+          aria-pressed={subtitlesOn}
+          className={`absolute top-2 left-2 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] sm:text-xs font-bold text-white ${subtitlesOn ? "bg-blue-600" : "bg-black/60 hover:bg-black/70"}`}
+        >
+          <span className="material-symbols-outlined text-sm" aria-hidden>
+            subtitles
+          </span>
+          Subtitles {subtitlesOn ? "on" : "off"}
+        </button>
       )}
 
       {/* Watermark: masked student id + date/time, moving. */}

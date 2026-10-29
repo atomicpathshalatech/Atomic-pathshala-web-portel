@@ -39,14 +39,16 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
       chapter: { select: { id: true, title: true, subject: { select: { id: true, title: true } } } },
       teacher: { select: { displayName: true, user: { select: { name: true } } } },
       recordedMedia: { select: { lectureNumber: true, durationSec: true } },
-      summaries: { where: { status: "PUBLISHED" }, select: { content: true, language: true }, orderBy: { publishedAt: "asc" }, take: 4 },
+      summaries: { where: { status: "PUBLISHED" }, select: { content: true, language: true, kind: true }, orderBy: { publishedAt: "asc" }, take: 8 },
       progress: { where: { studentId: student.id }, select: { id: true }, take: 1 },
     },
   });
   if (!lecture) notFound();
 
-  // One published summary per language; the lecture's own language first.
-  const summaries = [...lecture.summaries].sort((a, b) => Number(b.language === lecture.language) - Number(a.language === lecture.language));
+  // One published summary / notes per language; the lecture's own language first.
+  const ownFirst = (list: typeof lecture.summaries) => [...list].sort((a, b) => Number(b.language === lecture.language) - Number(a.language === lecture.language));
+  const summaries = ownFirst(lecture.summaries.filter((s) => s.kind !== "NOTES"));
+  const notes = ownFirst(lecture.summaries.filter((s) => s.kind === "NOTES"));
   const teacher = lecture.teacher.displayName || lecture.teacher.user.name;
   const watermark = watermarkLabel(student.user.name, student.studentIdCode ?? student.enrollmentNumber);
   const backHref = `/courses/${access.batchId}`;
@@ -73,6 +75,17 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
           {lecture.recordedMedia?.durationSec ? ` · ${Math.round(lecture.recordedMedia.durationSec / 60)} min` : ""}
         </p>
       </header>
+
+      {notes.length > 0 && (
+        <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 space-y-3">
+          <h2 className="text-base font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-xl">stylus_note</span>
+            Class Notes
+          </h2>
+          <p className="text-xs text-slate-500">What the teacher wrote on the board and dictated in this lecture.</p>
+          <SummaryLanguageTabs summaries={notes} handwritten />
+        </section>
+      )}
 
       <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 space-y-3">
         <h2 className="text-base font-extrabold text-[#031635] dark:text-white flex items-center gap-2">

@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { SummaryView } from "./SummaryView";
+import { HandwrittenNotes } from "./HandwrittenNotes";
 
-/** Published summaries, one per language: tabs when there is more than one. */
-export function SummaryLanguageTabs({ summaries }: { summaries: { language: string; content: string }[] }) {
+/** Published summaries (or class notes), one per language: tabs when there is more than one. */
+export function SummaryLanguageTabs({ summaries, handwritten = false }: { summaries: { language: string; content: string }[]; handwritten?: boolean }) {
   const [active, setActive] = useState(0);
   const label = (l: string) => (/hindi|हिंदी|हिन्दी/i.test(l) ? "हिंदी" : l || "English");
   const current = summaries[Math.min(active, summaries.length - 1)];
@@ -27,7 +28,7 @@ export function SummaryLanguageTabs({ summaries }: { summaries: { language: stri
           ))}
         </div>
       )}
-      <SummaryView markdown={current.content} />
+      {handwritten ? <HandwrittenNotes markdown={current.content} /> : <SummaryView markdown={current.content} />}
     </div>
   );
 }

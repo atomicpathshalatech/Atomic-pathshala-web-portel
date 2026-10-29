@@ -78,26 +78,30 @@ MP4 (H.264/AAC) plays everywhere. For quick start of playback, export with the
 "fast start" / "web optimised" option (moov atom at the start). Uploaded files
 are played as they are — there is no transcoding or HLS.
 
-## AI audio (हिंदी / English), subtitles and summary from the video
+## Class notes from the board (AI), summary from the video, subtitles
 
-On a lecture's page (team portal), **Process with AI** (Admin / Super Admin) runs a background pass:
+On a lecture's page (team portal), **Process with AI** (Admin / Super Admin) runs a background pass with
+Gemini (the only one of our AI providers that watches video):
 
 1. The video is copied from the recorded-lecture bucket to the Gemini Files API (max 2 GB).
-2. Gemini writes down what the teacher says (timed) and what is written on the board, 10 minutes at a time.
-3. The transcript is translated in NCERT terms: English lecture → Hindi, Hindi lecture → English, mixed → both.
-4. An AI voice (Gemini TTS) is recorded in ~25-second clips, stored next to the video under `<lecture>/ai/<attempt>/<lang>/`.
+2. Gemini reads it 10 minutes at a time, at medium resolution so board text is readable: everything written
+   or drawn on the board, everything the teacher **dictates** ("ye likh lo…"), and what is said (timed).
 
-Students then get **Audio: Original / हिंदी (AI) / English (AI)** and **Subtitles** in the player. The voice is
-an AI voice, synced sentence by sentence (each clip starts at its sentence's time, 0.9–1.35× speed to fit).
+Then, on the same page:
+
+- **Create notes from video** — ChatGPT (`OPENAI_MODEL`, default gpt-4o; Gemini if OpenAI fails) turns the board
+  writing and dictation into clean class notes. Nothing is added that the teacher did not write or dictate.
+  Students see them as a handwritten notebook page (Kalam font, ruled paper, red headings, highlighted
+  important lines, formulas in KaTeX).
+- **Create summary from video** / **Summary from About** — the lecture summary, as before.
+- **Translate to हिंदी / English** — NCERT terms; every heading, point and formula must survive.
+
+Notes and summaries are drafts until a teacher/admin checks them against the video, approves and publishes.
+Each kind and language has its own published version. Students also get subtitles of what was said.
+The teacher's voice is never changed.
 
 The pass resumes itself (hand-over between invocations, the status poll on the lecture page, the daily
-reconcile cron) and waits out AI quota limits. A 1-hour lecture takes roughly 15–40 minutes and needs paid
-Gemini quota for TTS.
+reconcile cron) and waits out AI quota limits. A 1-hour lecture takes roughly 10–20 minutes.
 
-Summaries: **Create summary from video** (speech + board, unlocks after the transcript is ready),
-**Summary from About** (as before), and **Translate to हिंदी / English** (NCERT terms; every heading, point and
-formula must survive or the translation is refused). Each language has its own approve → publish line;
-publishing a Hindi summary does not hide the English one.
-
-Database: migration `20261030120000_lecture_ai` (new `lecture_ai_jobs` table, `lecture_summaries.source` column).
-Run it **before** deploying this code.
+Database: migration `20261030120000_lecture_ai` (new `lecture_ai_jobs` table, `lecture_summaries.source` and
+`lecture_summaries.kind` columns). Run it **before** deploying this code.

@@ -20,7 +20,7 @@ const STAFF_INCLUDE = {
   teacher: { select: { id: true, user: { select: { name: true } } } },
   recordedMedia: { include: { batch: { select: { id: true, name: true } } } },
   about: true,
-  summaries: { orderBy: { revision: "desc" as const }, take: 20 },
+  summaries: { orderBy: { revision: "desc" as const }, take: 30 },
 } satisfies Prisma.LectureInclude;
 
 export type StaffRecordedLecture = Prisma.LectureGetPayload<{ include: typeof STAFF_INCLUDE }>;
@@ -70,6 +70,7 @@ export function serializeStaffLecture(l: StaffRecordedLecture) {
       content: s.content,
       language: s.language,
       source: s.source,
+      kind: s.kind,
       status: s.status,
       outdated: s.outdated,
       aiProvider: s.aiProvider,
@@ -216,7 +217,7 @@ export async function saveAbout(lectureId: string, content: string, baseRevision
       : await tx.lectureAbout.create({ data: { lectureId, content, revision: 1, updatedById: userId } });
     await tx.lectureSummary.updateMany({
       // Summaries made from the video (and their translations) do not depend on the About.
-      where: { lectureId, aboutRevision: { lt: next.revision }, status: { not: "SUPERSEDED" }, source: { in: ["ABOUT", "TRANSLATION"] } },
+      where: { lectureId, aboutRevision: { lt: next.revision }, status: { not: "SUPERSEDED" }, source: { in: ["ABOUT", "TRANSLATION"] }, kind: "SUMMARY" },
       data: { outdated: true },
     });
     return next;

@@ -28,16 +28,13 @@ import {
 import { RecordedVideoUploader, type UploadProgress } from "../src/lib/recorded-lectures/uploader";
 import { buildSummaryTranslationPrompt, checkSummaryTranslation, sameSummaryLanguage } from "../src/lib/recorded-lectures/summary-format";
 import {
-  targetLanguages,
   parseTranscriptWindow,
-  parseTranslation,
-  buildVoiceChunks,
   toVtt,
-  pcmToWav,
-  fitRate,
   lectureSourceText,
+  notesSourceText,
+  buildNotesPrompt,
+  parseNotesResponse,
 } from "../src/lib/recorded-lectures/ai/format";
-import { clipAt } from "../src/components/recorded-lectures/useAiVoice";
 
 let passed = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -288,14 +285,8 @@ const OLD = {
     assert.equal(initCalls, 2);
   });
 
-  // ── Lecture AI pass (transcript, translation, voice, subtitles) ──
-  await test("target languages: English → हिंदी, Hindi → English, mixed → both", () => {
-    assert.deepEqual(targetLanguages("English"), ["hi"]);
-    assert.deepEqual(targetLanguages("Hindi"), ["en"]);
-    assert.deepEqual(targetLanguages("Hinglish"), ["hi", "en"]);
-  });
-
-  await test("transcript window: times move onto the video clock, bad items dropped, no overlaps", () => {
+  // ── Lecture AI pass (speech, board, dictation → notes) ──
+  await test("video window: times move onto the video clock, bad items dropped, no overlaps", () => {
     const r = parseTranscriptWindow(
       {
         segments: [
@@ -306,6 +297,7 @@ const OLD = {
           { s: 900, e: 905, t: "outside the window" },
         ],
         board: [{ at: 4, c: "$v = u + at$" }, { at: -1, c: "bad" }],
+        dictated: [{ at: 50, c: "Velocity is the rate of change of displacement." }, { at: 20, c: "" }],
       },
       600,
       1200
@@ -315,66 +307,43 @@ const OLD = {
       { s: 605, e: 609, t: "second" },
     ]);
     assert.deepEqual(r.board, [{ at: 604, c: "$v = u + at$" }]);
+    assert.deepEqual(r.dictated, [{ at: 650, c: "Velocity is the rate of change of displacement." }]);
   });
 
-  await test("translation must return the same number of lines", () => {
-    assert.deepEqual(parseTranslation({ t: ["a", "b"] }, 2), ["a", "b"]);
-    assert.equal(parseTranslation({ t: ["a"] }, 2), null);
-    assert.equal(parseTranslation({ t: ["a", ""] }, 2), null);
-    assert.equal(parseTranslation(null, 1), null);
+  await test("a window answer without dictation still parses", () => {
+    const r = parseTranscriptWindow({ segments: [], board: [{ at: 1, c: "Heading" }] }, 0, 600);
+    assert.deepEqual(r.dictated, []);
+    assert.equal(r.board.length, 1);
   });
 
-  await test("voice clips: grouped up to 25 s, broken at pauses over 2 s", () => {
-    const segs = [
-      { s: 0, e: 5, t: "" },
-      { s: 5, e: 12, t: "" },
-      { s: 12, e: 20, t: "" },
-      { s: 20, e: 30, t: "" },
-      { s: 35, e: 40, t: "" },
-    ];
-    const chunks = buildVoiceChunks(segs, ["a", "b", "c", "d", "e"]);
-    assert.deepEqual(chunks.map((c) => [c.s, c.e, c.from, c.to, c.text]), [
-      [0, 20, 0, 2, "a b c"],
-      [20, 30, 3, 3, "d"],
-      [35, 40, 4, 4, "e"],
-    ]);
-  });
-
-  await test("WebVTT: header, timestamps, translated text", () => {
-    const vtt = toVtt([{ s: 61.5, e: 64, t: "orig" }], ["अनुवाद"]);
+  await test("WebVTT: header, timestamps, text", () => {
+    const vtt = toVtt([{ s: 61.5, e: 64, t: "नमस्ते students" }]);
     assert.ok(vtt.startsWith("WEBVTT\n"));
     assert.ok(vtt.includes("00:01:01.500 --> 00:01:04.000"));
-    assert.ok(vtt.includes("अनुवाद"));
-    assert.ok(!vtt.includes("orig"));
+    assert.ok(vtt.includes("नमस्ते students"));
   });
 
-  await test("PCM → WAV header is valid", () => {
-    const wav = pcmToWav(new Uint8Array(48000), 24000);
-    const dv = new DataView(wav.buffer);
-    assert.equal(new TextDecoder().decode(wav.slice(0, 4)), "RIFF");
-    assert.equal(new TextDecoder().decode(wav.slice(8, 12)), "WAVE");
-    assert.equal(dv.getUint32(24, true), 24000);
-    assert.equal(dv.getUint32(40, true), 48000);
-    assert.equal(wav.length, 48044);
+  await test("notes source: board + dictation only, in time order (no speech)", () => {
+    const txt = notesSourceText([{ at: 70, c: "$H_2O$" }], [{ at: 5, c: "Water is a compound." }]);
+    assert.equal(txt, "[0:05] DICTATED: Water is a compound.\n[1:10] BOARD: $H_2O$");
+    const all = lectureSourceText([{ s: 10, e: 12, t: "hello" }], [{ at: 5, c: "$H_2O$" }], [{ at: 20, c: "note" }]);
+    assert.equal(all, "[0:05] BOARD: $H_2O$\n[0:10] SAID: hello\n[0:20] DICTATED: note");
   });
 
-  await test("voice speed stays natural (0.9–1.35×) and the clip under the playhead is found", () => {
-    assert.equal(fitRate(10, 10), 1);
-    assert.equal(fitRate(30, 10), 1.35);
-    assert.equal(fitRate(5, 10), 0.9);
-    const clips = [
-      { s: 0, e: 10, dur: 9, url: "a" },
-      { s: 20, e: 30, dur: 13.5, url: "b" },
-    ];
-    assert.equal(clipAt(clips, 5), 0);
-    assert.equal(clipAt(clips, 15), -1, "silence between clips");
-    assert.equal(clipAt(clips, 25), 1);
-    assert.equal(clipAt(clips, 30.5), -1);
+  await test("notes prompt forbids adding content and asks for the notebook structure", () => {
+    const prompt = buildNotesPrompt({ source: "[0:05] BOARD: x", title: "T", subject: "Chemistry", chapter: "C", language: "Hindi" });
+    assert.ok(prompt.includes("ONLY what is in the source"));
+    assert.ok(prompt.includes("[Diagram:"));
+    assert.ok(prompt.includes("Devanagari"));
   });
 
-  await test("summary source text: speech and board in time order", () => {
-    const txt = lectureSourceText([{ s: 10, e: 12, t: "hello" }], [{ at: 5, c: "$H_2O$" }]);
-    assert.equal(txt, "[0:05] BOARD: $H_2O$\n[0:10] SAID: hello");
+  await test("notes answer: Markdown with points accepted; empty / shapeless refused", () => {
+    assert.deepEqual(parseNotesResponse({ empty: false, markdown: "### Bonds\n- Ionic bond\n> Important!" }), { ok: true, markdown: "### Bonds\n- Ionic bond\n> Important!" });
+    assert.equal(parseNotesResponse({ empty: true }).ok, false);
+    const empty = parseNotesResponse({ empty: true });
+    assert.ok(!empty.ok && empty.empty);
+    assert.equal(parseNotesResponse({ markdown: "just a sentence" }).ok, false);
+    assert.equal(parseNotesResponse(null).ok, false);
   });
 
   await test("summary translation keeps headings, points and formulas", () => {

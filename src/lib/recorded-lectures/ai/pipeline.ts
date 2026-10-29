@@ -1,22 +1,11 @@
 import "server-only";
-import { randomUUID } from "crypto";
 import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/db";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { lightThinking } from "@/lib/ai/gemini-models";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
-import { putGeneratedObject, signedObjectUrl } from "../storage";
-import {
-  buildVoiceChunks,
-  parseTranscriptWindow,
-  parseTranslation,
-  targetLanguages,
-  transcriptionPrompt,
-  translationPrompt,
-  type BoardNote,
-  type LangCode,
-  type Segment,
-} from "./format";
+import { signedObjectUrl } from "../storage";
+import { parseTranscriptWindow, transcriptionPrompt, type BoardNote, type DictatedNote, type Segment } from "./format";
 import {
   GeminiHttpError,
   MAX_AI_FILE_BYTES,
@@ -25,7 +14,6 @@ import {
   deleteAiFile,
   geminiKeys,
   getAiFile,
-  speakAnyKey,
   startFileUpload,
   uploadFileChunk,
 } from "./gemini";
@@ -39,21 +27,14 @@ import {
  *
  *   QUEUED → TRANSFERRING (video → Gemini Files, 64 MB chunks)
  *          → AI_PREPARING (Gemini processes the file)
- *          → TRANSCRIBING (10-minute windows: speech with times + board)
- *          → TRANSLATING  (transcript → Hindi / English, NCERT terms)
- *          → VOICING      (AI teacher voice per ~25 s, stored in the
- *                          recorded-lecture bucket)
- *          → READY
+ *          → TRANSCRIBING (10-minute windows: speech with times, the
+ *                          board, and what the teacher dictates)
+ *          → READY        (notes / summary are made from it on request)
  */
 
 const CHUNK_BYTES = 64 * 1024 * 1024;
-const TRANSLATE_BATCH = 60;
-const VOICE_PARALLEL = 3;
 const LOCK_MS = 290_000;
 
-type VoiceTrack = { chunks: { s: number; e: number; key: string; dur: number }[]; total: number };
-type VoiceState = Partial<Record<LangCode, VoiceTrack>>;
-type Translations = Partial<Record<LangCode, string[]>>;
 
 export class LectureAiError extends Error {}
 /** The job was restarted while this run worked on it: stop quietly, the new run owns it. */
@@ -85,21 +66,18 @@ export async function startLectureAi(lectureId: string, userId: string) {
     geminiFileName: null,
     geminiFileUri: null,
     sourceLanguage: lecture.language,
-    targetLanguages: targetLanguages(lecture.language),
     durationSec: lecture.recordedMedia.durationSec,
     windowsDone: 0,
     windowsTotal: 0,
     segments: [],
     board: [],
-    translations: {},
-    voice: {},
+    dictated: [],
     error: null,
     retryAt: null,
     lockedUntil: null,
     attempts: (old?.attempts ?? 0) + 1,
     tokensIn: 0,
     tokensOut: 0,
-    ttsAudioSec: 0,
     requestedById: userId,
     startedAt: new Date(),
     finishedAt: null,
@@ -263,14 +241,15 @@ async function step(job: Job, deadline: number): Promise<"continue" | "wait"> {
         durationSec: duration,
         windowsTotal: Math.ceil(duration / job.windowSec),
         windowsDone: 0,
-        stepNote: "Writing down what the teacher says and the board",
+        stepNote: "Reading the board and what the teacher dictates",
       });
       return "continue";
     }
 
     case "TRANSCRIBING": {
       if (job.windowsDone >= job.windowsTotal) {
-        await save({ status: "TRANSLATING", stepNote: "Translating the lecture" });
+        await save({ status: "READY", stepNote: "Ready", finishedAt: new Date() });
+        if (job.geminiFileName) await deleteAiFile(key, job.geminiFileName).catch(() => null);
         return "continue";
       }
       if (deadline - Date.now() < 150_000) return "continue"; // a window needs a fresh budget
@@ -290,10 +269,11 @@ async function step(job: Job, deadline: number): Promise<"continue" | "wait"> {
           await save({
             segments: [...(job.segments as Segment[]), ...parsed.segments],
             board: [...(job.board as BoardNote[]), ...parsed.board],
+            dictated: [...(job.dictated as DictatedNote[]), ...parsed.dictated],
             windowsDone: job.windowsDone + 1,
             tokensIn: job.tokensIn + r.tokensIn,
             tokensOut: job.tokensOut + r.tokensOut,
-            stepNote: `Writing down the lecture (${Math.min(job.windowsDone + 1, job.windowsTotal)} of ${job.windowsTotal} parts)`,
+            stepNote: `Reading the lecture (${Math.min(job.windowsDone + 1, job.windowsTotal)} of ${job.windowsTotal} parts)`,
           });
           return "continue";
         } catch (err) {
@@ -303,67 +283,6 @@ async function step(job: Job, deadline: number): Promise<"continue" | "wait"> {
         }
       }
       throw lastErr ?? new LectureAiError("No AI model could read the video.");
-    }
-
-    case "TRANSLATING": {
-      const segments = job.segments as Segment[];
-      const translations = { ...(job.translations as Translations) };
-      for (const lang of job.targetLanguages as LangCode[]) {
-        const done = translations[lang] ?? [];
-        if (done.length >= segments.length) continue;
-        const batch = segments.slice(done.length, done.length + TRANSLATE_BATCH).map((x) => x.t);
-        const out = await executeGeminiWithFailover(async (client, modelName) => {
-          const model = client.getGenerativeModel({
-            model: modelName,
-            generationConfig: { responseMimeType: "application/json", temperature: 0.2, ...lightThinking(modelName, "low") },
-          });
-          const res = await model.generateContent(translationPrompt(batch, lang, lecture.chapter.subject.title));
-          const parsed = parseTranslation(parseAiJson(res.response.text().replace(/```json|```/gi, "").trim()), batch.length);
-          if (!parsed) throw new Error("Translation came back with the wrong number of lines.");
-          return parsed;
-        });
-        translations[lang] = [...done, ...out];
-        const total = segments.length * (job.targetLanguages.length || 1);
-        const have = (job.targetLanguages as LangCode[]).reduce((n, l) => n + (translations[l]?.length ?? 0), 0);
-        await save({ translations, stepNote: `Translating the lecture (${Math.round((have / total) * 100)}%)` });
-        return "continue";
-      }
-      await save({ status: "VOICING", stepNote: "Recording the AI voice" });
-      return "continue";
-    }
-
-    case "VOICING": {
-      const segments = job.segments as Segment[];
-      const translations = job.translations as Translations;
-      const voice = { ...(job.voice as VoiceState) };
-      for (const lang of job.targetLanguages as LangCode[]) {
-        const plan = buildVoiceChunks(segments, translations[lang] ?? []);
-        const track: VoiceTrack = voice[lang] ?? { chunks: [], total: plan.length };
-        track.total = plan.length;
-        if (track.chunks.length >= plan.length) continue;
-        let added = 0;
-        let ttsSec = 0;
-        while (track.chunks.length < plan.length && deadline - Date.now() > 40_000) {
-          const next = plan.slice(track.chunks.length, track.chunks.length + VOICE_PARALLEL);
-          const made = await Promise.all(next.map((c) => speakAnyKey(c.text, lang)));
-          for (const [i, m] of made.entries()) {
-            const c = next[i]!;
-            const objKey = `${media.objectKey.replace(/\/[^/]+$/, "")}/ai/${job.attempts}/${lang}/${String(track.chunks.length).padStart(5, "0")}-${randomUUID().slice(0, 8)}.wav`;
-            await putGeneratedObject({ key: objKey, body: m.wav, contentType: "audio/wav" });
-            track.chunks.push({ s: c.s, e: c.e, key: objKey, dur: Math.round(m.seconds * 100) / 100 });
-            added++;
-            ttsSec += m.seconds;
-          }
-          voice[lang] = track;
-          await save({ voice, ttsAudioSec: job.ttsAudioSec + ttsSec, stepNote: `Recording the ${lang === "hi" ? "Hindi" : "English"} AI voice (${track.chunks.length} of ${plan.length})` });
-          job.ttsAudioSec += ttsSec;
-          ttsSec = 0;
-        }
-        if (added || track.chunks.length < plan.length) return "continue";
-      }
-      await save({ status: "READY", stepNote: "Ready", finishedAt: new Date() });
-      if (job.geminiFileName) await deleteAiFile(key, job.geminiFileName).catch(() => null);
-      return "continue";
     }
   }
   return "wait";

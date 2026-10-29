@@ -5,7 +5,6 @@ import { ForbiddenError } from "@/lib/rbac/guard";
 import { canEditLectureContent, canManageRecordedLectures } from "@/lib/recorded-lectures/access";
 import { recordedApiError, requireUserId } from "@/lib/recorded-lectures/api";
 import { LectureAiError, jobIsDue, startLectureAi, triggerRun } from "@/lib/recorded-lectures/ai/pipeline";
-import { buildVoiceChunks, type LangCode, type Segment } from "@/lib/recorded-lectures/ai/format";
 
 export const dynamic = "force-dynamic";
 
@@ -22,27 +21,13 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     // The page is open and the job is due (lost hand-over / quota wait over): keep it moving.
     if (jobIsDue(job) && Date.now() - job.updatedAt.getTime() > 60_000) triggerRun(params.id);
 
-    const segments = job.segments as Segment[];
-    const translations = job.translations as Partial<Record<LangCode, string[]>>;
-    const voice = job.voice as Partial<Record<LangCode, { chunks: unknown[]; total: number }>>;
-    const languages = (job.targetLanguages as LangCode[]).map((l) => ({
-      lang: l,
-      translated: (translations[l]?.length ?? 0) >= segments.length && segments.length > 0,
-      voiceDone: voice[l]?.chunks.length ?? 0,
-      voiceTotal: voice[l]?.total ?? (translations[l] ? buildVoiceChunks(segments, translations[l]!).length : 0),
-    }));
     // Rough progress over the whole pass.
-    const stagePct: Record<string, number> = { QUEUED: 0, TRANSFERRING: 5, AI_PREPARING: 15, TRANSCRIBING: 20, TRANSLATING: 50, VOICING: 60, READY: 100, FAILED: 0 };
+    const stagePct: Record<string, number> = { QUEUED: 0, TRANSFERRING: 5, AI_PREPARING: 25, TRANSCRIBING: 30, READY: 100, FAILED: 0 };
     let pct = stagePct[job.status] ?? 0;
     if (job.status === "TRANSFERRING") {
       const size = Number((await prisma.recordedLectureMedia.findUnique({ where: { lectureId: params.id }, select: { sizeBytes: true } }))?.sizeBytes ?? 0);
-      pct = 5 + Math.round((Number(job.uploadedBytes) / Math.max(1, size)) * 10);
-    } else if (job.status === "TRANSCRIBING" && job.windowsTotal) pct = 20 + Math.round((job.windowsDone / job.windowsTotal) * 30);
-    else if (job.status === "VOICING") {
-      const done = languages.reduce((n, l) => n + l.voiceDone, 0);
-      const total = languages.reduce((n, l) => n + l.voiceTotal, 0);
-      pct = 60 + Math.round((done / Math.max(1, total)) * 40);
-    }
+      pct = 5 + Math.round((Number(job.uploadedBytes) / Math.max(1, size)) * 20);
+    } else if (job.status === "TRANSCRIBING" && job.windowsTotal) pct = 30 + Math.round((job.windowsDone / job.windowsTotal) * 70);
 
     return apiSuccess({
       job: {
@@ -52,16 +37,17 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         error: job.error,
         retryAt: job.retryAt,
         sourceLanguage: job.sourceLanguage,
-        languages,
-        segments: segments.length,
+        windowsDone: job.windowsDone,
+        windowsTotal: job.windowsTotal,
+        segments: (job.segments as unknown[]).length,
         boardNotes: (job.board as unknown[]).length,
+        dictatedNotes: (job.dictated as unknown[]).length,
         durationSec: job.durationSec,
         tokensIn: job.tokensIn,
         tokensOut: job.tokensOut,
-        ttsAudioSec: Math.round(job.ttsAudioSec),
         startedAt: job.startedAt,
         finishedAt: job.finishedAt,
-        transcriptReady: ["TRANSLATING", "VOICING", "READY"].includes(job.status),
+        transcriptReady: job.status === "READY",
       },
     });
   } catch (error) {

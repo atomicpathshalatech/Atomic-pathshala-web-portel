@@ -73,6 +73,8 @@ export const summaryActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("generate") }),
   // From the lecture video itself (needs the AI pass's transcript).
   z.object({ action: z.literal("generate-video") }),
+  // Class notes: what the teacher wrote on the board and dictated (needs the AI pass).
+  z.object({ action: z.literal("generate-notes") }),
   // A new draft in the other language, NCERT style.
   z.object({ action: z.literal("translate"), summaryId: z.string().min(1), to: z.enum(["hi", "en"]) }),
   z.object({ action: z.literal("save"), summaryId: z.string().min(1), content: z.string().trim().min(1).max(30000) }),

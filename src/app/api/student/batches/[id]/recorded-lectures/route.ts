@@ -36,7 +36,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         chapter: { select: { id: true, title: true, order: true, subject: { select: { id: true, title: true } } } },
         teacher: { select: { displayName: true, user: { select: { name: true } } } },
         recordedMedia: { select: { durationSec: true, lectureNumber: true, thumbnailKey: true, publishedAt: true } },
-        summaries: { where: { status: "PUBLISHED" }, select: { content: true }, take: 1 },
+        summaries: { where: { status: "PUBLISHED", kind: "SUMMARY" }, select: { content: true }, take: 1 },
         progress: { where: { studentId: student.id }, select: { id: true }, take: 1 },
       },
     });
