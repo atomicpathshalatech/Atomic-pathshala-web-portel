@@ -146,7 +146,8 @@ Write the notes exactly as a good student's notebook would have them after this 
 - Keep the teacher's words for definitions and dictated points; you may fix obvious spelling and put things in order.
 - Remove repeats (the same board writing seen twice).
 - Structure: "### " for each topic heading as the teacher used them; "- " for points; "1. " for steps; "> " for a line the teacher stressed as important / a note / a trick.
-- Every formula, equation, unit, chemical formula and reaction in LaTeX inside $...$, copied exactly.
+- Every formula, equation, unit, chemical formula and reaction in LaTeX inside $...$, copied exactly. Only standard KaTeX commands; symbols such as ♀ ♂ ✓ ✗ as plain characters. A chain of words with arrows (Gene → RNA → Protein) is plain text with →, not LaTeX.
+- "**term**" for the word a definition defines; sub-points indented by two spaces under their point.
 - A diagram the teacher drew: one line "[Diagram: <what it shows, with its labels>]" where it came.
 - "[unclear]" in the source stays "[unclear]".
 - Language: ${hindi ? "as the teacher wrote/dictated it (Hindi in Devanagari; keep English technical terms the teacher used)" : "as the teacher wrote/dictated it (English; keep Hindi words the teacher used)"}.

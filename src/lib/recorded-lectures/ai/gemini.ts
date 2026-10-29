@@ -9,7 +9,8 @@ import { readGeminiKeys } from "@/lib/ai/gemini-models";
 
 const API = "https://generativelanguage.googleapis.com";
 
-export const VIDEO_MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-3-flash-preview"] as const;
+// gemini-2.5-flash is closed to new API users (404), so it is not tried.
+export const VIDEO_MODELS = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-3-flash-preview"] as const;
 export const MAX_AI_FILE_BYTES = 2 * 1024 ** 3; // Files API limit per file
 
 export class GeminiHttpError extends Error {
