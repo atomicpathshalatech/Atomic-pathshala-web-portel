@@ -132,6 +132,7 @@ const AREA_NAMES: Record<string, string> = {
   classroom: "Live Class — Classroom",
   live_class: "Live Class — Administration",
   lecture: "Lectures",
+  recorded_lecture: "Recorded Lectures",
   chapter: "Chapters",
   study_material: "Study Material",
   document: "Documents",

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatISTDate, formatISTTime } from "@/lib/date-utils";
 import { getEffectiveScheduleStatus, canStudentJoinClass } from "@/lib/schedule/access-rules";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
+import { RecordedLecturesBlock } from "@/components/recorded-lectures/RecordedLecturesBlock";
 
 export function ClassesSection({ course }: { course?: any }) {
   const schedules = course?.schedules || [];
@@ -17,6 +18,7 @@ export function ClassesSection({ course }: { course?: any }) {
   }, []);
 
   return (
+    <div className="space-y-4">
     <section id="classes" className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-6 space-y-4">
       <div>
         <h2 className="text-base sm:text-lg font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
@@ -167,5 +169,8 @@ export function ClassesSection({ course }: { course?: any }) {
         </div>
       )}
     </section>
+    {/* Recorded lectures of this batch (separate storage; enrolled students only). */}
+    {course?.id && <RecordedLecturesBlock batchId={course.id} />}
+    </div>
   );
 }

@@ -1,0 +1,84 @@
+import "server-only";
+import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
+import { parseAiJson } from "@/lib/ai/latex-json";
+import { lightThinking } from "@/lib/ai/gemini-models";
+import { buildSummaryPrompt, parseSummaryResponse, summaryToMarkdown, aboutWordCount, MIN_ABOUT_WORDS } from "./summary-format";
+
+export class SummaryUnavailableError extends Error {
+  constructor(message: string, public code: "AI_NOT_CONFIGURED" | "AI_FAILED" | "TIMEOUT" | "INSUFFICIENT" | "INVALID") {
+    super(message);
+    this.name = "SummaryUnavailableError";
+  }
+}
+
+const TIMEOUT_MS = 90_000;
+
+/** Is an AI provider configured at all? (The existing Gemini setup.) */
+export function summaryAiConfigured(): boolean {
+  return Boolean(
+    process.env.GEMINI_API_KEY?.trim() ||
+      process.env.GEMINI_API_KEYS?.trim() ||
+      process.env.GEMINI_FREE_KEYS?.trim() ||
+      process.env.GEMINI_PAID_KEYS?.trim()
+  );
+}
+
+/**
+ * Generates a summary from the teacher's About — through the app's existing
+ * Gemini integration (key rotation + model fallback), nothing new. Throws
+ * SummaryUnavailableError with a clear reason; never returns made-up text.
+ */
+export async function generateLectureSummary(p: {
+  about: string;
+  title: string;
+  subject: string;
+  chapter: string;
+  language: string;
+}): Promise<{ markdown: string; provider: string; model: string }> {
+  if (aboutWordCount(p.about) < MIN_ABOUT_WORDS) {
+    throw new SummaryUnavailableError(
+      `The About has ${aboutWordCount(p.about)} words. Write at least ${MIN_ABOUT_WORDS} words about what was taught (topics, formulas, examples, exam points) so the summary can be made from it.`,
+      "INSUFFICIENT"
+    );
+  }
+  if (!summaryAiConfigured()) {
+    throw new SummaryUnavailableError("No AI provider is configured on the server (Gemini keys missing). The About is saved; the summary can be generated once AI is set up.", "AI_NOT_CONFIGURED");
+  }
+
+  const prompt = buildSummaryPrompt(p);
+  let usedModel = "";
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new SummaryUnavailableError("The AI took too long. Try again in a minute.", "TIMEOUT")), TIMEOUT_MS);
+  });
+  let raw: string;
+  try {
+    raw = await Promise.race([
+      executeGeminiWithFailover(async (client, modelName) => {
+        const model = client.getGenerativeModel({
+          model: modelName,
+          generationConfig: { responseMimeType: "application/json", temperature: 0.2, ...lightThinking(modelName, "low") },
+        });
+        const res = await model.generateContent(prompt);
+        usedModel = modelName;
+        return res.response.text();
+      }),
+      timeout,
+    ]);
+  } catch (err) {
+    if (err instanceof SummaryUnavailableError) throw err;
+    throw new SummaryUnavailableError("The AI service could not make the summary right now. The About is saved — try again shortly.", "AI_FAILED");
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = parseAiJson(String(raw).replace(/```json|```/gi, "").trim());
+  } catch {
+    throw new SummaryUnavailableError("The AI answer could not be read. Try generating again.", "INVALID");
+  }
+  const parsed = parseSummaryResponse(parsedJson);
+  if (!parsed.ok) throw new SummaryUnavailableError(parsed.error, parsed.insufficient ? "INSUFFICIENT" : "INVALID");
+  return { markdown: summaryToMarkdown(parsed.sections, p.language), provider: "gemini", model: usedModel || "gemini" };
+}

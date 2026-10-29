@@ -583,6 +583,7 @@ model Batch {
   activityEvents StudentActivityEvent[]
   orders      BatchOrder[]
   chapterAssignments BatchChapter[]
+  recordedLectures   RecordedLectureMedia[]
   testSeries  BatchTestSeries[]
   whatsAppContacts WhatsAppContact[]
   whatsAppCampaigns WhatsAppCampaign[]
@@ -3762,11 +3763,127 @@ model Lecture {
   progress     LectureProgress[]
   videoWatches VideoWatch[]
   batchSchedules BatchSchedule[]
+  recordedMedia  RecordedLectureMedia?
+  about          LectureAbout?
+  summaries      LectureSummary[]
 
   @@index([chapterId])
   @@index([status])
   @@map("lectures")
 }
+// ----------------------------------------------------------------------------
+// RECORDED LECTURES (separate storage) — a recorded lecture IS a Lecture
+// (chapter → subject → course, teacher, title, order, DRAFT/PUBLISHED); this
+// table holds its video file, kept in a SEPARATE Cloudflare R2 account
+// (RECORDED_R2_* env vars, lib/recorded-lectures/storage.ts) — never the
+// main R2 account. New tables only: the existing `lectures` table is not
+// changed, so nothing that reads lectures depends on this migration.
+// ----------------------------------------------------------------------------
+
+enum RecordedUploadStatus {
+  PENDING    // record made, upload not started
+  UPLOADING  // multipart upload open in the recorded-lecture bucket
+  VERIFYING  // parts assembled, checking size + file signature
+  READY      // stored and verified — can be published
+  FAILED     // upload or verification failed (uploadError says why)
+  ABORTED    // upload cancelled / abandoned upload cleaned up
+}
+
+model RecordedLectureMedia {
+  id                String               @id @default(cuid())
+  lectureId         String               @unique
+  // Which storage holds the file — always "recorded-r2" (the separate
+  // account). Kept so a record never gets read through the wrong client.
+  storageNamespace  String               @default("recorded-r2")
+  bucket            String
+  objectKey         String               @unique
+  originalFileName  String?
+  mimeType          String
+  sizeBytes         BigInt
+  durationSec       Int?
+  thumbnailKey      String?
+  uploadStatus      RecordedUploadStatus @default(PENDING)
+  multipartUploadId String?
+  partSizeBytes     Int?
+  uploadError       String?
+  uploadStartedAt   DateTime?
+  verifiedAt        DateTime?
+  // The batch the lecture was uploaded for (students of other batches of the
+  // same course do not see it). Null = every batch that has this chapter.
+  batchId           String?
+  lectureNumber     Int?
+  tags              String[]             @default([])
+  additionalNotes   String?              @db.Text
+  publishedAt       DateTime?
+  archivedAt        DateTime?
+  createdById       String
+  updatedById       String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  batch   Batch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([batchId])
+  @@index([uploadStatus])
+  @@map("recorded_lecture_media")
+}
+
+/// What the teacher wrote about a lecture ("About"): the source of its
+/// lecture summary. `revision` goes up on every saved change, so a summary
+/// knows which version of the About it was made from.
+model LectureAbout {
+  id          String   @id @default(cuid())
+  lectureId   String   @unique
+  content     String   @db.Text
+  revision    Int      @default(1)
+  updatedById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+
+  @@map("lecture_abouts")
+}
+
+enum LectureSummaryStatus {
+  DRAFT       // generated / edited, not approved
+  APPROVED    // approved by the teacher or an admin, not shown to students yet
+  PUBLISHED   // shown to students (one per lecture at a time)
+  SUPERSEDED  // an older version, replaced by a newer published one
+}
+
+/// One version of a lecture summary. Every generation is a new revision;
+/// students only ever see the PUBLISHED one.
+model LectureSummary {
+  id            String               @id @default(cuid())
+  lectureId     String
+  revision      Int
+  aboutRevision Int                  // the About version this was generated from
+  content       String               @db.Text // Markdown (+ $LaTeX$), editable
+  language      String               @default("English")
+  status        LectureSummaryStatus @default(DRAFT)
+  // The About changed after this was generated: regenerate and review before
+  // publishing a new version. A published summary stays visible meanwhile.
+  outdated      Boolean              @default(false)
+  aiProvider    String?
+  aiModel       String?
+  generatedAt   DateTime?
+  generatedById String?
+  editedById    String?
+  approvedById  String?
+  approvedAt    DateTime?
+  publishedAt   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+
+  @@unique([lectureId, revision])
+  @@index([lectureId, status])
+  @@map("lecture_summaries")
+}
+
 
 // One row per (lecture, student) once the student has watched it through —
 // the data source "completed lectures" needs to mean anything. Written by

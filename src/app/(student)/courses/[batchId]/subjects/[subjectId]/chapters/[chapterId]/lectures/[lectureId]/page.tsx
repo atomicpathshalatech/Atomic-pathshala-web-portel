@@ -70,6 +70,11 @@ export default async function LecturePlayerPage({
   if (lecture.videoUrl?.startsWith("/live-class") || lecture.videoUrl?.startsWith("/classroom")) {
     redirect(lecture.videoUrl);
   }
+  // A recorded lecture in the separate storage plays only through its own
+  // page (strict enrollment check + short-lived signed URL).
+  if (lecture.videoUrl?.startsWith("/recorded-lectures/")) {
+    redirect(lecture.videoUrl);
+  }
 
   const activeLiveSchedule = lecture.batchSchedules?.find(
     (s: any) => s.status === "LIVE" || s.liveWhiteboardSession?.status === "ACTIVE"
@@ -98,7 +103,10 @@ export default async function LecturePlayerPage({
 
   // prev/next among this chapter's lectures, ordered by `order`
   const siblings = await prisma.lecture.findMany({
-    where: { chapterId: lecture.chapterId, status: { in: ["PUBLISHED", "DRAFT"] } },
+    where: {
+      chapterId: lecture.chapterId,
+      OR: [{ status: "PUBLISHED" }, { status: "DRAFT", NOT: { videoUrl: { startsWith: "/recorded-lectures/" } } }],
+    },
     orderBy: { order: "asc" },
     select: { id: true },
   });

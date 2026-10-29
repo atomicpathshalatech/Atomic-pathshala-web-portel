@@ -123,6 +123,11 @@ export const PERMISSIONS = {
   LECTURE_PUBLISH: "lecture.publish",
   LECTURE_DELETE: "lecture.delete",
 
+  // Recorded lectures in the separate recorded-lecture storage: upload,
+  // publish, archive. Admin / Super Admin hold it (they pass every check);
+  // grant it to other roles from Roles & Permissions.
+  RECORDED_LECTURE_MANAGE: "recorded_lecture.manage",
+
   // Chapter Management System
   CHAPTER_READ: "chapter.read",
   CHAPTER_CREATE: "chapter.create",

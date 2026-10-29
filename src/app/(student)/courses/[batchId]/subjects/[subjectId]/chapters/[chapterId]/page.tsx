@@ -48,7 +48,8 @@ export default async function ChapterPage({
     prisma.lecture.findMany({
       where: {
         chapterId: chapter.id,
-        status: { in: ["PUBLISHED", "DRAFT"] },
+        // Draft recorded lectures (separate storage) stay hidden until published.
+        OR: [{ status: "PUBLISHED" }, { status: "DRAFT", NOT: { videoUrl: { startsWith: "/recorded-lectures/" } } }],
       },
       orderBy: { order: "asc" },
       include: {
