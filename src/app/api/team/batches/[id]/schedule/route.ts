@@ -9,6 +9,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchScheduleCreateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
+import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
 
 /** A pasted YouTube link is stored as its video id (the player embeds by id) — never the raw link. */
 const ytIdOf = (v: string | null | undefined) => (v && v.trim() ? parseYouTubeVideoId(v) : null);
@@ -19,7 +20,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     await requirePermission(session?.user?.id, PERMISSIONS.BATCH_READ);
 
     const schedules = await prisma.batchSchedule.findMany({
-      where: { batchId: params.id },
+      where: { batchId: params.id, ...NOT_RECORDED_SLOT },
       include: {
         teacher: { include: { user: true } },
         liveWhiteboardSession: {

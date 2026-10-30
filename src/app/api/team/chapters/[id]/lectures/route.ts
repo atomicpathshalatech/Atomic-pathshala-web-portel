@@ -11,6 +11,7 @@ import { computeISTScheduleDates } from "@/lib/date-utils";
 import { newTimeBlockReason } from "@/lib/schedule/reschedule-guard";
 import { regenerateCreativeAwaited } from "@/lib/creative/engine";
 import { assertChapterAccess } from "@/lib/chapters/access";
+import { NOT_RECORDED_LECTURE } from "@/lib/recorded-lectures/visibility";
 
 export async function GET(
   request: NextRequest,
@@ -23,7 +24,7 @@ export async function GET(
     await assertChapterAccess(session?.user?.id ?? "", params.id, "read");
 
     const lectures = await prisma.lecture.findMany({
-      where: { chapterId: params.id },
+      where: { chapterId: params.id, ...NOT_RECORDED_LECTURE },
       include: {
         teacher: { include: { user: { select: { name: true, email: true } } } },
       },

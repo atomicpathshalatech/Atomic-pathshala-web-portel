@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { NotificationType } from "./types";
 import { triggerNotificationEvent } from "./engine";
+import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
 
 /**
  * Builds personalized daily targets for a student from live database entities.
@@ -31,6 +32,7 @@ export async function generateDailyTargetsForStudent(userId: string): Promise<bo
       batchId: { in: batchIds },
       startsAt: { gte: startOfDay, lte: endOfDay },
       status: { not: "CANCELLED" },
+      ...NOT_RECORDED_SLOT,
     },
     orderBy: { startsAt: "asc" },
     take: 3,

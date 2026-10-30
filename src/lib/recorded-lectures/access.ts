@@ -1,28 +1,26 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac/guard";
-import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { canManageLecture } from "@/lib/lecture/access";
+import { isSuperAdminUser } from "@/lib/rbac/guard";
 import { pickPremiere, premiereState, RECORDED_CLASS_MODE, type PremiereState } from "./premiere";
-import { blockedChapters, isBlocked } from "./viewers";
-
-/** Upload, publish, archive recorded lectures (Admin / Super Admin, or granted). */
-export function canManageRecordedLectures(userId: string): Promise<boolean> {
-  return hasPermission(userId, PERMISSIONS.RECORDED_LECTURE_MANAGE);
-}
+import { allowedChapters, isAllowed } from "./viewers";
 
 /**
- * Write the About and work on the summary of this lecture: its own teacher,
- * a lecture admin (LECTURE_PUBLISH), or a recorded-lecture manager. A teacher
- * never gets another teacher's lectures.
+ * Recorded lectures are private to the owner: only the Super Admin / Founder
+ * sees, uploads, publishes and works on them in the team portal. No other
+ * team member (Admin, teacher — not even the lecture's own teacher) sees
+ * them; students see them only when chosen (see viewers.ts).
  */
-export async function canEditLectureContent(userId: string, lecture: { teacherId: string }): Promise<boolean> {
-  if (await canManageLecture(userId, lecture.teacherId)) return true;
-  return canManageRecordedLectures(userId);
+export function canManageRecordedLectures(userId: string): Promise<boolean> {
+  return isSuperAdminUser(userId);
 }
 
-/** Approve / publish a summary: the lecture's own teacher or a lecture admin. */
+/** The About and the summary / notes: the same owner-only rule. */
+export async function canEditLectureContent(userId: string, _lecture: { teacherId: string }): Promise<boolean> {
+  return isSuperAdminUser(userId);
+}
+
+/** Approve / publish a summary: the same owner-only rule. */
 export function canApproveSummary(userId: string, lecture: { teacherId: string }): Promise<boolean> {
   return canEditLectureContent(userId, lecture);
 }
@@ -104,9 +102,9 @@ export async function studentRecordedAccess(studentId: string, lectureId: string
     orderBy: { enrolledAt: "desc" },
   });
   if (!enrollments.length) return { ok: false, reason: "NOT_ENROLLED" };
-  // A chapter limited to chosen students in a batch: only they get it through that batch.
-  const blocked = await blockedChapters(studentId, enrollments.map((e) => e.batchId));
-  const enrollment = enrollments.find((e) => !isBlocked(blocked, e.batchId, lecture.chapterId));
+  // Only students chosen for this chapter in their batch.
+  const allowed = await allowedChapters(studentId, enrollments.map((e) => e.batchId));
+  const enrollment = enrollments.find((e) => isAllowed(allowed, e.batchId, lecture.chapterId));
   if (!enrollment) return { ok: false, reason: "NOT_SELECTED" };
   return { ok: true, batchId: enrollment.batchId, premiere: await premiereForBatch(lectureId, enrollment.batchId) };
 }

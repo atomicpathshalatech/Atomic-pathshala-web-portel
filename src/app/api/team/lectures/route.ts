@@ -6,6 +6,7 @@ import { requirePermission, hasPermission, UnauthorizedError, ForbiddenError } f
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { lectureCreateSchema } from "@/lib/validation/lecture";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { NOT_RECORDED_LECTURE } from "@/lib/recorded-lectures/visibility";
 
 /**
  * Lectures are scoped by ownership, not by batch: a non-admin teacher only
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     if (isAdmin) {
       const lectures = await prisma.lecture.findMany({
-        where: chapterId ? { chapterId } : {},
+        where: chapterId ? { chapterId, ...NOT_RECORDED_LECTURE } : NOT_RECORDED_LECTURE,
         include: chapterInclude,
         orderBy: [{ chapterId: "asc" }, { order: "asc" }],
       });
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
     if (!teacher) return apiSuccess({ lectures: [] });
 
     const lectures = await prisma.lecture.findMany({
-      where: { teacherId: teacher.id, ...(chapterId && { chapterId }) },
+      where: { teacherId: teacher.id, ...(chapterId && { chapterId }), ...NOT_RECORDED_LECTURE },
       include: chapterInclude,
       orderBy: [{ chapterId: "asc" }, { order: "asc" }],
     });

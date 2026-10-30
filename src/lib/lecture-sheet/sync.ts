@@ -4,6 +4,7 @@ import { APP_BLOCKS, LAST_COLUMN, LECTURE_SHEET_COLUMNS, col, letter, sheetTab, 
 import type { SheetsClient } from "./sheets-client";
 import { checkYoutubeVideo, type VideoCheck } from "./verify-video";
 import { parseYoutubeVideoInput, youtubeWatchUrl } from "./youtube-input";
+import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
 
 /**
  * Two-way sync between scheduled classes and the lecture-mapping Sheet.
@@ -165,11 +166,11 @@ export async function pushLectures(client: SheetsClient, opts: { scheduleIds?: s
 
   let schedules: ScheduleForSheet[];
   if (opts.scheduleIds) {
-    schedules = (await prisma.batchSchedule.findMany({ where: { id: { in: opts.scheduleIds }, type: "LIVE_CLASS" }, select: SCHEDULE_SELECT })) as ScheduleForSheet[];
+    schedules = (await prisma.batchSchedule.findMany({ where: { id: { in: opts.scheduleIds }, type: "LIVE_CLASS", ...NOT_RECORDED_SLOT }, select: SCHEDULE_SELECT })) as ScheduleForSheet[];
   } else {
     const since = new Date(now.getTime() - PUSH_WINDOW_DAYS * 86_400_000);
     const candidates = (await prisma.batchSchedule.findMany({
-      where: { type: "LIVE_CLASS", isTest: false, startsAt: { gte: since } },
+      where: { type: "LIVE_CLASS", isTest: false, startsAt: { gte: since }, ...NOT_RECORDED_SLOT },
       select: SCHEDULE_SELECT,
       orderBy: { startsAt: "asc" },
     })) as ScheduleForSheet[];

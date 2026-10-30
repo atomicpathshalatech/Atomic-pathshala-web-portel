@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { cleanBatchName } from "@/lib/academic/canonical-courses";
 import { generateSlug } from "@/lib/teacher/profile";
 import { getFooterData, getPublishedFaqs, type HomepageFaq } from "@/lib/homepage";
+import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
 
 /**
  * Everything the public homepage shows, read from the real tables. Each part
@@ -166,7 +167,7 @@ export const getPublicHomeData = cache(async function getPublicHomeData(): Promi
       ),
       safe(
         prisma.batchSchedule.findMany({
-          where: { type: "LIVE_CLASS", status: { not: "CANCELLED" }, startsAt: { gte: start, lt: end } },
+          where: { type: "LIVE_CLASS", status: { not: "CANCELLED" }, startsAt: { gte: start, lt: end }, ...NOT_RECORDED_SLOT },
           orderBy: { startsAt: "asc" },
           take: 6,
           select: { title: true, subject: true, startsAt: true, batch: { select: { name: true } } },

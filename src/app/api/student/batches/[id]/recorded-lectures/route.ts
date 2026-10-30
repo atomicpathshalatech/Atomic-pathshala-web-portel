@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { UnauthorizedError } from "@/lib/rbac/guard";
 import { activeEnrollment, recordedForBatchWhere } from "@/lib/recorded-lectures/access";
-import { blockedChapters } from "@/lib/recorded-lectures/viewers";
+import { allowedChapterIds, allowedChapters } from "@/lib/recorded-lectures/viewers";
 import { recordedWatchPath } from "@/lib/recorded-lectures/service";
 import { signedThumbnailUrl } from "@/lib/recorded-lectures/storage";
 import { pickPremiere, premiereState, RECORDED_CLASS_MODE } from "@/lib/recorded-lectures/premiere";
@@ -27,11 +27,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const enrolled = await activeEnrollment(student.id, params.id);
     if (!enrolled) return apiError("You are not enrolled in this batch.", 403);
 
-    // Chapters limited to chosen students that this student is not one of: not listed at all.
-    const blocked = await blockedChapters(student.id, [enrolled.batch.id]);
-    const hiddenChapters = Array.from(blocked).map((k) => k.split(":")[1]!);
+    // Only the chapters this student was chosen for (nobody else sees them).
+    const chosen = allowedChapterIds(await allowedChapters(student.id, [enrolled.batch.id]), enrolled.batch.id);
     const lectures = await prisma.lecture.findMany({
-      where: { ...recordedForBatchWhere(enrolled.batch), ...(hiddenChapters.length ? { chapterId: { notIn: hiddenChapters } } : {}) },
+      where: { ...recordedForBatchWhere(enrolled.batch), chapterId: { in: chosen } },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,

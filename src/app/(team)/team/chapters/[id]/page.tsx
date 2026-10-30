@@ -14,6 +14,7 @@ import { ChapterTeamViewWrapper } from "@/components/team-portal/ChapterTeamView
 import { ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
 import { RoadmapTopicGroup } from "@/components/chapter-detail/ChapterRoadmapTimeline";
 import { lecturesAsScheduled } from "@/lib/chapters/lecture-class-view";
+import { NOT_RECORDED_LECTURE } from "@/lib/recorded-lectures/visibility";
 
 export const metadata: Metadata = {
   title: "Chapter Detail",
@@ -56,7 +57,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
       include: { role: true },
     }),
     prisma.lecture.findMany({
-      where: { chapterId: chapter.id },
+      where: { chapterId: chapter.id, ...NOT_RECORDED_LECTURE },
       include: { teacher: { include: { user: { select: { name: true, photoUrl: true, email: true } } } } },
       orderBy: { order: "asc" },
     }),

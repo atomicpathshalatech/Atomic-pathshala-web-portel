@@ -9,6 +9,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ChaptersBoard, type ChapterCard } from "@/components/team-portal/ChaptersBoard";
 import { chapterListWhere, getChapterScope } from "@/lib/chapters/access";
+import { NOT_RECORDED_LECTURE } from "@/lib/recorded-lectures/visibility";
 
 export const metadata: Metadata = {
   title: "Chapters",
@@ -45,6 +46,7 @@ export default async function ChaptersListPage({
       subject: { select: { id: true, title: true, course: { select: { id: true, title: true } } } },
       _count: { select: { lectures: true, dpps: true, tests: true } },
       lectures: {
+        where: NOT_RECORDED_LECTURE,
         orderBy: { order: "asc" },
         select: { teacher: { select: { id: true, displayName: true, user: { select: { name: true, photoUrl: true } } } } },
       },

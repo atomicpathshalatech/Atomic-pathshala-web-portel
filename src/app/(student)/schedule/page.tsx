@@ -5,7 +5,7 @@ import { HorizontalScheduleCalendar, type ScheduleItem, type BatchOption } from 
 import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import { chaptersOfBatches } from "@/lib/batch/batch-chapters";
-import { blockedChapters, isBlocked } from "@/lib/recorded-lectures/viewers";
+import { allowedChapters, isAllowed } from "@/lib/recorded-lectures/viewers";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -116,11 +116,11 @@ export default async function SchedulePage({
   }
 
   // Flatten all schedules WITHOUT filtering out past, completed or cancelled
-  // Recorded-lecture slots of chapters limited to other chosen students: not shown.
-  const blocked = await blockedChapters(student.id, enrollments.map((e) => e.batch.id));
+  // Recorded-lecture slots: only for students chosen for that chapter in the batch.
+  const chosen = await allowedChapters(student.id, enrollments.map((e) => e.batch.id));
   const flatSchedules = enrollments
     .flatMap((e) => e.batch.schedules)
-    .filter((s) => !(s.classMode === "RECORDED" && s.lecture && isBlocked(blocked, s.batchId, s.lecture.chapterId)));
+    .filter((s) => !(s.classMode === "RECORDED" && !(s.lecture && isAllowed(chosen, s.batchId, s.lecture.chapterId))));
 
   // Self-heal any recording whose egress_ended webhook never landed (see
   // reconcileRecordingStatus) before rendering - otherwise a missed webhook

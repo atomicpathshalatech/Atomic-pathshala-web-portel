@@ -6,6 +6,7 @@ import { queueWhatsAppMessage, processWhatsAppQueue } from "@/lib/whatsapp/engin
 import { sanitizeIndianPhoneNumber } from "@/lib/whatsapp/provider";
 import { getWhatsAppSettings } from "@/lib/whatsapp/settings";
 import { WhatsAppMessageType } from "@prisma/client";
+import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
 
 export interface ClassScheduleItem {
   id: string;
@@ -202,6 +203,8 @@ export async function buildTomorrowStudentDigests(options?: {
       status: { in: ["SCHEDULED", "LIVE"] },
       isTest: false,
       ...(options?.filterBatchId ? { batchId: options.filterBatchId } : {}),
+      // Scheduled recorded lectures are private (chosen students only): no class alerts.
+      ...NOT_RECORDED_SLOT,
     },
     include: {
       batch: true,

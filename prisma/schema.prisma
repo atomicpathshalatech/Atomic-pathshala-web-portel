@@ -7642,22 +7642,8 @@ model QuestionReviewAudit {
 
 // ── Recorded lectures: who may watch, and one device at a time ──────────────
 
-/// A chapter's recorded lectures in one batch limited to chosen students
-/// (no row: every active student of the batch).
-model RecordedChapterAccess {
-  id           String   @id @default(cuid())
-  batchId      String
-  chapterId    String
-  selectedOnly Boolean  @default(true)
-  updatedById  String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([batchId, chapterId])
-  @@map("recorded_chapter_access")
-}
-
 /// A student chosen to watch a chapter's recorded lectures in a batch.
+/// Only chosen students see them — nobody else in the batch.
 model RecordedChapterViewer {
   id        String   @id @default(cuid())
   batchId   String

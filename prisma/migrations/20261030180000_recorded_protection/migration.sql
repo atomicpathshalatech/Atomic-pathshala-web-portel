@@ -1,17 +1,6 @@
--- Recorded lectures: chosen students per chapter and batch; one playback device per student.
+-- Recorded lectures: the students chosen per chapter and batch (nobody else sees them); one playback device per student.
 -- New tables only.
 
-CREATE TABLE IF NOT EXISTS "recorded_chapter_access" (
-    "id" TEXT NOT NULL,
-    "batchId" TEXT NOT NULL,
-    "chapterId" TEXT NOT NULL,
-    "selectedOnly" BOOLEAN NOT NULL DEFAULT true,
-    "updatedById" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    CONSTRAINT "recorded_chapter_access_pkey" PRIMARY KEY ("id")
-);
-CREATE UNIQUE INDEX IF NOT EXISTS "recorded_chapter_access_batchId_chapterId_key" ON "recorded_chapter_access"("batchId", "chapterId");
 
 CREATE TABLE IF NOT EXISTS "recorded_chapter_viewers" (
     "id" TEXT NOT NULL,

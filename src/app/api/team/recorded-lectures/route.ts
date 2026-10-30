@@ -21,8 +21,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const userId = await requireUserId();
+    // Super Admin only — recorded lectures are private.
     const manage = await canManageRecordedLectures(userId);
-    if (!manage && !(await hasPermission(userId, PERMISSIONS.LECTURE_READ))) throw new ForbiddenError();
+    if (!manage) throw new ForbiddenError();
 
     const sp = request.nextUrl.searchParams;
     const where: Prisma.LectureWhereInput = { recordedMedia: { isNot: null } };

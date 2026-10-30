@@ -3,6 +3,7 @@ import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import { prisma } from "@/lib/db";
 import { canStudentJoinClass, getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 import { areResultsReleased } from "@/lib/tests/schedule-rules";
+import { withoutUnchosenRecordedSlots } from "@/lib/recorded-lectures/viewers";
 
 const IST = "Asia/Kolkata";
 const dayKey = (d: string | Date) => new Date(d).toLocaleDateString("en-CA", { timeZone: IST });
@@ -273,7 +274,7 @@ export async function loadStudentBatchHome(
   const testSeriesIds = (batch.testSeries || []).map((ts) => ts.testSeriesId);
 
   // 2. Fetch Assigned Chapters, Course Chapters, & Batch Schedules in parallel
-  const [assignedChapters, courseChapters, schedules, dppSchedules] = await Promise.all([
+  const [assignedChapters, courseChapters, allSchedules, dppSchedules] = await Promise.all([
     prisma.batchChapter.findMany({
       where: { batchId },
       include: {
@@ -281,7 +282,8 @@ export async function loadStudentBatchHome(
           include: {
             subject: { select: { id: true, title: true } },
             lectures: {
-              where: { status: "PUBLISHED" },
+              // Recorded lectures are listed only for chosen students (Classes → Recorded), never here.
+              where: { status: "PUBLISHED", NOT: { videoUrl: { startsWith: "/recorded-lectures/" } } },
               orderBy: { order: "asc" },
               select: {
                 id: true,
@@ -303,7 +305,8 @@ export async function loadStudentBatchHome(
           include: {
             subject: { select: { id: true, title: true } },
             lectures: {
-              where: { status: "PUBLISHED" },
+              // Recorded lectures are listed only for chosen students (Classes → Recorded), never here.
+              where: { status: "PUBLISHED", NOT: { videoUrl: { startsWith: "/recorded-lectures/" } } },
               orderBy: { order: "asc" },
               select: {
                 id: true,
@@ -375,6 +378,8 @@ export async function loadStudentBatchHome(
       },
     }),
   ]);
+  // Recorded-lecture slots only for the students chosen for them.
+  const schedules = await withoutUnchosenRecordedSlots(studentId, allSchedules);
 
   const chapterMap = new Map<string, BatchChapterItem & { order: number }>();
   for (const c of [...assignedChapters.map((a) => a.chapter), ...courseChapters]) {

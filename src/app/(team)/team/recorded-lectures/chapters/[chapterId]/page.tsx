@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { hasPermission } from "@/lib/rbac/guard";
-import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { isSuperAdminUser } from "@/lib/rbac/guard";
 import { RecordedChapterView } from "@/components/recorded-lectures/RecordedChapterView";
 
 export const metadata: Metadata = {
@@ -13,6 +12,7 @@ export const metadata: Metadata = {
 export default async function RecordedChapterPage({ params }: { params: { chapterId: string } }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
-  if (!(await hasPermission(session.user.id, PERMISSIONS.RECORDED_LECTURE_MANAGE))) redirect("/team/recorded-lectures");
+  // Recorded lectures are private to the Super Admin.
+  if (!(await isSuperAdminUser(session.user.id))) redirect("/team");
   return <RecordedChapterView chapterId={params.chapterId} />;
 }

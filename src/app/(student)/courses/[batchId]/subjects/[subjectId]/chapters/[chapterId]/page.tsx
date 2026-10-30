@@ -8,7 +8,7 @@ import { ChapterDetailView, ChapterDetailData } from "@/components/chapter-detai
 import { RoadmapTopicGroup } from "@/components/chapter-detail/ChapterRoadmapTimeline";
 
 import { getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
-import { blockedChapters, isBlocked } from "@/lib/recorded-lectures/viewers";
+import { allowedChapters, isAllowed } from "@/lib/recorded-lectures/viewers";
 
 export const metadata: Metadata = {
   title: "Chapter Detail",
@@ -45,8 +45,8 @@ export default async function ChapterPage({
     })) > 0;
   if (!enrolled) redirect("/courses");
 
-  // This chapter's recorded lectures limited to chosen students of the batch, and this student not one: hidden.
-  const recordedHidden = isBlocked(await blockedChapters(student.id, [resolvedParams.batchId]), resolvedParams.batchId, chapter.id);
+  // This chapter's recorded lectures: only for students chosen for it in this batch.
+  const recordedHidden = !isAllowed(await allowedChapters(student.id, [resolvedParams.batchId]), resolvedParams.batchId, chapter.id);
 
   const [lectures, standaloneSchedules, dpps, tests, notices] = await Promise.all([
     prisma.lecture.findMany({

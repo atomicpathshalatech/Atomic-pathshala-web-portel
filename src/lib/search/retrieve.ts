@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { containsAll, containsAllAcross } from "@/lib/search/normalize";
 import type { SearchResult } from "@/lib/search/types";
 import type { SearchScope } from "@/lib/search/scope";
+import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
 
 /** How many raw rows to pull per entity before ranking trims to the top N. */
 const RAW_TAKE = 12;
@@ -438,6 +439,8 @@ export async function findClasses(
   }
   if (!scope.isTeam) and.push({ batchId: { in: scope.batchIds } });
   if (opts.extraWhere) and.push(opts.extraWhere);
+  // Scheduled recorded lectures are private: never in search.
+  and.push(NOT_RECORDED_SLOT);
   if (opts.onlyWithRecording) {
     and.push({ liveWhiteboardSession: { recordingStatus: "READY" } });
   }

@@ -10,6 +10,7 @@ import { batchUpdateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { clearAttemptsForSchedules } from "@/lib/team/resource-delete";
 import { thumbnailFields } from "@/lib/creative/thumbnail";
+import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -26,6 +27,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
           orderBy: { enrolledAt: "desc" },
         },
         schedules: {
+          where: NOT_RECORDED_SLOT,
           include: { teacher: { include: { user: true } } },
           orderBy: { startsAt: "asc" },
         },

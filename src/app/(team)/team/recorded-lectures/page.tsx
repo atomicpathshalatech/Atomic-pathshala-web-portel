@@ -2,24 +2,21 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { hasPermission } from "@/lib/rbac/guard";
-import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { RecordedLecturesManager } from "@/components/recorded-lectures/RecordedLecturesManager";
+import { isSuperAdminUser } from "@/lib/rbac/guard";
 import { RecordedChaptersManager } from "@/components/recorded-lectures/RecordedChaptersManager";
 
 export const metadata: Metadata = {
   title: "Recorded Lectures — Atomic Pathshala",
 };
 
+/**
+ * Recorded lectures are private to the Super Admin: no other team member
+ * (Admin or teacher) sees this page or the lectures. Chapters first
+ * (create a chapter → add it to batches → choose students → add lectures).
+ */
 export default async function RecordedLecturesPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
-  const [manage, read] = await Promise.all([
-    hasPermission(session.user.id, PERMISSIONS.RECORDED_LECTURE_MANAGE),
-    hasPermission(session.user.id, PERMISSIONS.LECTURE_READ),
-  ]);
-  if (!manage && !read) redirect("/team");
-  // Admins: chapters first (create a chapter → add it to batches → add lectures).
-  // Teachers: their own recorded lectures, to write the About and summary.
-  return manage ? <RecordedChaptersManager /> : <RecordedLecturesManager />;
+  if (!(await isSuperAdminUser(session.user.id))) redirect("/team");
+  return <RecordedChaptersManager />;
 }

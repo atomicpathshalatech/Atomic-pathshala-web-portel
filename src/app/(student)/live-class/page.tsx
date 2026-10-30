@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 import { requireStudentSession } from "@/lib/auth/session";
+import { withoutUnchosenRecordedSlots } from "@/lib/recorded-lectures/viewers";
 import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User, Batch } from "@prisma/client";
 
@@ -40,7 +41,7 @@ export default async function LiveClassesListPage() {
   });
   const batchIds = enrollments.map((e) => e.batchId);
 
-  const schedules = (batchIds.length === 0
+  const allSchedules = (batchIds.length === 0
     ? []
     : await prisma.batchSchedule.findMany({
         where: {
@@ -63,6 +64,8 @@ export default async function LiveClassesListPage() {
           },
         },
       })) as ScheduleWithRefs[];
+  // Recorded-lecture slots only for the students chosen for them.
+  const schedules = await withoutUnchosenRecordedSlots(student.id, allSchedules);
 
   const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
   const live = schedules.filter((s) => s.status === "LIVE" || (s.startsAt <= now && s.endsAt >= now));

@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { chapterSchema } from "@/lib/validation/chapter";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { assertChapterAccess } from "@/lib/chapters/access";
+import { NOT_RECORDED_LECTURE } from "@/lib/recorded-lectures/visibility";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -18,7 +19,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       where: { id: params.id },
       include: {
         subject: { include: { course: true } },
-        lectures: { orderBy: { order: "asc" }, include: { teacher: { include: { user: { select: { name: true } } } } } },
+        lectures: { where: NOT_RECORDED_LECTURE, orderBy: { order: "asc" }, include: { teacher: { include: { user: { select: { name: true } } } } } },
         dpps: { orderBy: { level: "asc" } },
         tests: { orderBy: { createdAt: "desc" } },
       },

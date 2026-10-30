@@ -3,11 +3,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 /**
- * Chosen students: a chapter's recorded lectures in a batch can be limited
- * to students picked by the team (RecordedChapterAccess.selectedOnly +
- * RecordedChapterViewer rows). No access row: every active student of the
- * batch. Before the migration has run the tables are missing — then nothing
- * is limited (same as before this feature).
+ * Chosen students only: a chapter's recorded lectures are seen in a batch
+ * only by the students ticked for it (RecordedChapterViewer rows). Nobody
+ * else — not the rest of the batch. Before the migration has run the table
+ * is missing: then nobody sees them (fail closed).
  */
 
 const key = (batchId: string, chapterId: string) => `${batchId}:${chapterId}`;
@@ -16,48 +15,59 @@ function missingTable(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && (err.code === "P2021" || err.code === "P2022");
 }
 
-/** "batchId:chapterId" pairs this student may NOT see (limited to others). */
-export async function blockedChapters(studentId: string, batchIds: string[]): Promise<Set<string>> {
+/** "batchId:chapterId" pairs this student has been chosen for. */
+export async function allowedChapters(studentId: string, batchIds: string[]): Promise<Set<string>> {
   if (!batchIds.length) return new Set();
   try {
-    const limited = await prisma.recordedChapterAccess.findMany({
-      where: { batchId: { in: batchIds }, selectedOnly: true },
-      select: { batchId: true, chapterId: true },
-    });
-    if (!limited.length) return new Set();
     const mine = await prisma.recordedChapterViewer.findMany({
       where: { studentId, batchId: { in: batchIds } },
       select: { batchId: true, chapterId: true },
     });
-    const allowed = new Set(mine.map((m) => key(m.batchId, m.chapterId)));
-    return new Set(limited.map((l) => key(l.batchId, l.chapterId)).filter((k) => !allowed.has(k)));
+    return new Set(mine.map((m) => key(m.batchId, m.chapterId)));
   } catch (err) {
     if (missingTable(err)) return new Set();
     throw err;
   }
 }
 
-export function isBlocked(blocked: Set<string>, batchId: string, chapterId: string): boolean {
-  return blocked.has(key(batchId, chapterId));
+export function isAllowed(allowed: Set<string>, batchId: string, chapterId: string): boolean {
+  return allowed.has(key(batchId, chapterId));
 }
 
-/** The team's setting for one chapter in one batch. */
-export async function chapterViewerSetting(batchId: string, chapterId: string): Promise<{ selectedOnly: boolean; studentIds: string[] }> {
-  const [access, viewers] = await Promise.all([
-    prisma.recordedChapterAccess.findUnique({ where: { batchId_chapterId: { batchId, chapterId } }, select: { selectedOnly: true } }),
-    prisma.recordedChapterViewer.findMany({ where: { batchId, chapterId }, select: { studentId: true } }),
+/** Chapters (ids) this student was chosen for in one batch. */
+export function allowedChapterIds(allowed: Set<string>, batchId: string): string[] {
+  const prefix = `${batchId}:`;
+  return Array.from(allowed)
+    .filter((k) => k.startsWith(prefix))
+    .map((k) => k.slice(prefix.length));
+}
+
+/** Class slots without the recorded-lecture slots this student was not chosen for. */
+export async function withoutUnchosenRecordedSlots<T extends { classMode?: string | null; lectureId: string | null; batchId: string }>(studentId: string, slots: T[]): Promise<T[]> {
+  const recorded = slots.filter((s) => s.classMode === "RECORDED");
+  if (!recorded.length) return slots;
+  const lectureIds = Array.from(new Set(recorded.map((s) => s.lectureId).filter((id): id is string => Boolean(id))));
+  const [lectures, chosen] = await Promise.all([
+    prisma.lecture.findMany({ where: { id: { in: lectureIds } }, select: { id: true, chapterId: true } }),
+    allowedChapters(studentId, Array.from(new Set(recorded.map((s) => s.batchId)))),
   ]);
-  return { selectedOnly: Boolean(access?.selectedOnly), studentIds: viewers.map((v) => v.studentId) };
+  const chapterOf = new Map(lectures.map((l) => [l.id, l.chapterId]));
+  return slots.filter((s) => {
+    if (s.classMode !== "RECORDED") return true;
+    const chapterId = s.lectureId ? chapterOf.get(s.lectureId) : undefined;
+    return Boolean(chapterId && isAllowed(chosen, s.batchId, chapterId));
+  });
 }
 
-/** Replaces the setting: everyone, or exactly these students. */
-export async function saveChapterViewers(p: { batchId: string; chapterId: string; selectedOnly: boolean; studentIds: string[]; userId: string }) {
+/** The students chosen for one chapter in one batch. */
+export async function chapterViewerIds(batchId: string, chapterId: string): Promise<string[]> {
+  const viewers = await prisma.recordedChapterViewer.findMany({ where: { batchId, chapterId }, select: { studentId: true } });
+  return viewers.map((v) => v.studentId);
+}
+
+/** Replaces the chosen students of a chapter in a batch (empty: nobody). */
+export async function saveChapterViewers(p: { batchId: string; chapterId: string; studentIds: string[]; userId: string }) {
   await prisma.$transaction(async (tx) => {
-    await tx.recordedChapterAccess.upsert({
-      where: { batchId_chapterId: { batchId: p.batchId, chapterId: p.chapterId } },
-      update: { selectedOnly: p.selectedOnly, updatedById: p.userId },
-      create: { batchId: p.batchId, chapterId: p.chapterId, selectedOnly: p.selectedOnly, updatedById: p.userId },
-    });
     await tx.recordedChapterViewer.deleteMany({ where: { batchId: p.batchId, chapterId: p.chapterId, studentId: { notIn: p.studentIds } } });
     if (p.studentIds.length) {
       await tx.recordedChapterViewer.createMany({
