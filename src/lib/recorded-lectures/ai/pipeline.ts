@@ -183,11 +183,24 @@ export async function runSteps(lectureId: string, budgetMs: number): Promise<{ m
   } catch (err) {
     if (err instanceof SupersededRun) return { more: false, status };
     const quota = err instanceof GeminiHttpError && err.quota;
+    // Google's side overloaded / down for a moment (500, 502, 503, 504): not our failure — wait and continue.
+    const busy = err instanceof GeminiHttpError && err.status >= 500 && err.status <= 504;
     const message = String((err as Error)?.message ?? err).slice(0, 900);
     const job = await prisma.lectureAiJob.findUnique({ where: { lectureId }, select: { error: true, status: true } });
+    if (busy) {
+      // Up to ~40 minutes of waiting (2 minutes apart) before giving up.
+      const waits = (job?.error?.match(/\(busy (\d+)\)/)?.[1] ? Number(job.error.match(/\(busy (\d+)\)/)![1]) : 0) + 1;
+      if (waits <= 20) {
+        await prisma.lectureAiJob.updateMany({
+          where: { lectureId, ...(myAttempt !== null ? { attempts: myAttempt } : {}) },
+          data: { error: `The AI service is busy — continuing automatically in 2 minutes (busy ${waits})`, retryAt: new Date(Date.now() + 2 * 60_000) },
+        });
+        return { more: false, status };
+      }
+    }
     // Quota: wait and continue later. Anything else: up to 3 retries of the same step, then FAILED.
     const tries = (job?.error?.match(/\(try (\d)\)/)?.[1] ? Number(job.error.match(/\(try (\d)\)/)![1]) : 0) + 1;
-    if (quota || tries < 3) {
+    if (quota || (!busy && tries < 3)) {
       await prisma.lectureAiJob.updateMany({
         where: { lectureId, ...(myAttempt !== null ? { attempts: myAttempt } : {}) },
         data: {
