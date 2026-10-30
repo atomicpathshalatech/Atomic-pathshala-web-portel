@@ -7639,3 +7639,45 @@ model QuestionReviewAudit {
   @@index([createdAt])
   @@map("question_review_audits")
 }
+
+// ── Recorded lectures: who may watch, and one device at a time ──────────────
+
+/// A chapter's recorded lectures in one batch limited to chosen students
+/// (no row: every active student of the batch).
+model RecordedChapterAccess {
+  id           String   @id @default(cuid())
+  batchId      String
+  chapterId    String
+  selectedOnly Boolean  @default(true)
+  updatedById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([batchId, chapterId])
+  @@map("recorded_chapter_access")
+}
+
+/// A student chosen to watch a chapter's recorded lectures in a batch.
+model RecordedChapterViewer {
+  id        String   @id @default(cuid())
+  batchId   String
+  chapterId String
+  studentId String
+  addedById String
+  createdAt DateTime @default(now())
+
+  @@unique([batchId, chapterId, studentId])
+  @@index([studentId])
+  @@map("recorded_chapter_viewers")
+}
+
+/// The one device a student is watching recorded lectures on right now
+/// (a shared login cannot play on a second device at the same time).
+model RecordedPlaybackSession {
+  studentId  String   @id
+  deviceId   String
+  lectureId  String
+  lastSeenAt DateTime @default(now())
+
+  @@map("recorded_playback_sessions")
+}

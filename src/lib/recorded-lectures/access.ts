@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageLecture } from "@/lib/lecture/access";
 import { pickPremiere, premiereState, RECORDED_CLASS_MODE, type PremiereState } from "./premiere";
+import { blockedChapters, isBlocked } from "./viewers";
 
 /** Upload, publish, archive recorded lectures (Admin / Super Admin, or granted). */
 export function canManageRecordedLectures(userId: string): Promise<boolean> {
@@ -55,7 +56,7 @@ export type StudentPremiere = { scheduleId: string; startsAt: Date; endsAt: Date
 
 export type StudentLectureAccess =
   | { ok: true; batchId: string; premiere: StudentPremiere | null }
-  | { ok: false; reason: "NOT_FOUND" | "NOT_PUBLISHED" | "NOT_ENROLLED" };
+  | { ok: false; reason: "NOT_FOUND" | "NOT_PUBLISHED" | "NOT_ENROLLED" | "NOT_SELECTED" };
 
 /**
  * The premiere slot of this lecture for one batch (null: not scheduled —
@@ -91,7 +92,7 @@ export async function studentRecordedAccess(studentId: string, lectureId: string
   if (lecture.status !== "PUBLISHED" || media.uploadStatus !== "READY" || media.archivedAt) return { ok: false, reason: "NOT_PUBLISHED" };
 
   const courseId = lecture.chapter.subject.courseId;
-  const enrollment = await prisma.batchEnrollment.findFirst({
+  const enrollments = await prisma.batchEnrollment.findMany({
     where: {
       studentId,
       status: "ACTIVE",
@@ -102,7 +103,11 @@ export async function studentRecordedAccess(studentId: string, lectureId: string
     select: { batchId: true },
     orderBy: { enrolledAt: "desc" },
   });
-  if (!enrollment) return { ok: false, reason: "NOT_ENROLLED" };
+  if (!enrollments.length) return { ok: false, reason: "NOT_ENROLLED" };
+  // A chapter limited to chosen students in a batch: only they get it through that batch.
+  const blocked = await blockedChapters(studentId, enrollments.map((e) => e.batchId));
+  const enrollment = enrollments.find((e) => !isBlocked(blocked, e.batchId, lecture.chapterId));
+  if (!enrollment) return { ok: false, reason: "NOT_SELECTED" };
   return { ok: true, batchId: enrollment.batchId, premiere: await premiereForBatch(lectureId, enrollment.batchId) };
 }
 

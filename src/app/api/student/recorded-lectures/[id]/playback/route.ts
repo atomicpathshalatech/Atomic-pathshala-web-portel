@@ -6,19 +6,25 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { UnauthorizedError } from "@/lib/rbac/guard";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/security/rate-limit";
 import { studentRecordedAccess } from "@/lib/recorded-lectures/access";
+import { claimPlayback } from "@/lib/recorded-lectures/viewers";
 import { signedPlaybackUrl } from "@/lib/recorded-lectures/storage";
 import { RecordedStorageNotConfiguredError } from "@/lib/recorded-lectures/storage";
 
 export const dynamic = "force-dynamic";
 
-const URL_TTL_SECONDS = 900;
+// Short: a copied video link stops working within minutes.
+const URL_TTL_SECONDS = 300;
 
 /**
  * Playback authorisation for one recorded lecture: re-checks the student's
- * enrollment and the lecture's published state on EVERY request, then hands
- * out a 15-minute signed URL to the private object. The player asks again
- * when the URL is about to expire or fails — a dropped enrollment or an
- * unpublished lecture stops playback at that point.
+ * enrollment, chosen-student limit and the lecture's published state on
+ * EVERY request, then hands out a 5-minute signed URL to the private
+ * object. The player asks again before it expires (and after an error).
+ *
+ * One device at a time: the request carries the device's id; starting on a
+ * new device takes over, and the old device's next heartbeat
+ * ({heartbeat: true}, every minute while playing) is refused, so a shared
+ * login cannot watch on two devices at once.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -35,11 +41,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const message =
         access.reason === "NOT_ENROLLED"
           ? "This lecture is for students of another batch."
-          : access.reason === "NOT_PUBLISHED"
+          : access.reason === "NOT_PUBLISHED" || access.reason === "NOT_SELECTED"
             ? "This lecture is not available right now."
             : "Lecture not found.";
       return apiError(message, access.reason === "NOT_FOUND" ? 404 : 403, { code: access.reason });
     }
+
+    const body = (await request.json().catch(() => ({}))) as { deviceId?: unknown; heartbeat?: unknown; renew?: unknown };
+    const deviceId = typeof body.deviceId === "string" && /^[a-zA-Z0-9_-]{8,64}$/.test(body.deviceId) ? body.deviceId : null;
+    if (!deviceId) return apiError("Reload the page to play this lecture.", 400, { code: "NO_DEVICE" });
+    const heartbeat = body.heartbeat === true;
+    // Only a fresh start (opening / Retry) takes over from another device; a heartbeat or URL renewal does not.
+    const mine = await claimPlayback({ studentId: student.id, deviceId, lectureId: params.id, takeOver: !heartbeat && body.renew !== true });
+    if (!mine) {
+      return apiError("Your account started a lecture on another device, so it stopped here. Only one device can play at a time.", 409, { code: "OTHER_DEVICE" });
+    }
+    if (heartbeat) return apiSuccess({ ok: true });
 
     // Scheduled for this batch: nothing to play before the slot starts.
     const premiere = access.premiere;

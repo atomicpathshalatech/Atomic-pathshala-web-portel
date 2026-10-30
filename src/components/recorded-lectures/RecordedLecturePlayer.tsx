@@ -3,6 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clampToLive, livePositionSec } from "@/lib/recorded-lectures/premiere";
 
+/** This browser's id for the one-device rule (kept across visits). */
+function deviceId(): string {
+  try {
+    let id = localStorage.getItem("rl-device");
+    if (!id) {
+      id = (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}${Math.random()}`).replace(/[^a-zA-Z0-9_-]/g, "");
+      localStorage.setItem("rl-device", id);
+    }
+    return id;
+  } catch {
+    return "nostorage-" + Math.random().toString(36).slice(2, 12);
+  }
+}
+
 const POSITIONS = [
   "top-[8%] left-[6%]",
   "top-[12%] right-[6%]",
@@ -18,11 +32,15 @@ const POSITIONS = [
  * fresh enrollment check; the URL is renewed before it expires (and after a
  * playback error) without losing the position.
  *
- * Deterrents, not DRM: a moving watermark with the student's masked id and
- * the date (kept on screen in fullscreen — the whole player goes
- * fullscreen, not the bare <video>), no download button, no
- * picture-in-picture, no right-click menu on the video. Screen recording
- * and screenshots cannot be blocked in a browser.
+ * Protection (deterrents — a browser cannot fully block screen recording;
+ * that needs DRM): a moving watermark with the student's name, id and the
+ * time, also tiled faintly over the whole picture (kept in fullscreen — the
+ * whole player goes fullscreen, not the bare <video>); no download, no
+ * picture-in-picture, no right-click; 5-minute video links; one device at a
+ * time (a heartbeat every minute — another device starting the lecture stops
+ * it here); and the picture is covered and paused whenever the window loses
+ * focus or Print Screen is pressed (snipping tools and most recorders take
+ * the focus).
  *
  * A lecture scheduled for the batch plays like a live class in its slot:
  * it starts at the live point (where the class is now), the student can go
@@ -54,6 +72,9 @@ export function RecordedLecturePlayer({
   liveRef.current = live;
   const [behindSec, setBehindSec] = useState(0);
   const resumeKey = `rl-pos:${lectureId}`;
+  const device = useRef<string>("");
+  // Covered and paused: the window lost focus / Print Screen (see the comment above).
+  const [shielded, setShielded] = useState(false);
 
   // Subtitles of what the teacher says (from the lecture's AI pass), when there are any.
   const [hasSubtitles, setHasSubtitles] = useState(false);
@@ -75,14 +96,23 @@ export function RecordedLecturePlayer({
   }, [subtitlesOn, src]);
 
   const authorise = useCallback(
-    async (keepPosition: boolean) => {
+    async (keepPosition: boolean, renew = false) => {
       const v = videoRef.current;
       const at = keepPosition && v ? v.currentTime : null;
       const wasPlaying = keepPosition && v ? !v.paused : false;
+      if (!device.current) device.current = deviceId();
       try {
-        const res = await fetch(`/api/student/recorded-lectures/${lectureId}/playback`, { method: "POST", cache: "no-store" });
+        const res = await fetch(`/api/student/recorded-lectures/${lectureId}/playback`, {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          // A renewal does not take the lecture over from another device; opening / Retry does.
+          body: JSON.stringify({ deviceId: device.current, renew }),
+        });
         const json = await res.json().catch(() => ({}));
         if (!res.ok || !json.success) {
+          v?.pause();
+          if (json.code === "OTHER_DEVICE") setSrc(null);
           setError(typeof json.error === "string" ? json.error : "This lecture cannot be played right now.");
           setLoading(false);
           return;
@@ -102,7 +132,7 @@ export function RecordedLecturePlayer({
         // Renew at 80% of the URL's life.
         if (refreshTimer.current) clearTimeout(refreshTimer.current);
         const ttl = Number(json.data.expiresInSeconds) || 600;
-        refreshTimer.current = setTimeout(() => void authorise(true), ttl * 800);
+        refreshTimer.current = setTimeout(() => void authorise(true, true), ttl * 800);
       } catch {
         setError("Network problem. Check your connection and press Retry.");
         setLoading(false);
@@ -123,8 +153,66 @@ export function RecordedLecturePlayer({
     const t = setInterval(() => {
       setPos((p) => (p + 1) % POSITIONS.length);
       setNow(new Date());
-    }, 12000);
+    }, 5000);
     return () => clearInterval(t);
+  }, []);
+
+  // One device at a time: while playing, tell the server every minute; another device took over → stop here.
+  useEffect(() => {
+    const t = setInterval(async () => {
+      const v = videoRef.current;
+      if (!v || v.paused || !device.current) return;
+      try {
+        const res = await fetch(`/api/student/recorded-lectures/${lectureId}/playback`, {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId: device.current, heartbeat: true }),
+        });
+        if (res.status === 409 || res.status === 403) {
+          const json = await res.json().catch(() => ({}));
+          v.pause();
+          setSrc(null);
+          setError(typeof json.error === "string" ? json.error : "This lecture stopped here.");
+        }
+      } catch {
+        // offline for a moment: the next beat tries again
+      }
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [lectureId]);
+
+  // Cover and pause when the window loses focus (snipping tool, screen recorder, another app) or on Print Screen.
+  useEffect(() => {
+    const shield = () => {
+      videoRef.current?.pause();
+      setShielded(true);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") shield();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const k = (e.key || "").toLowerCase();
+      if (e.key === "PrintScreen" || (e.metaKey && e.shiftKey) || ((e.ctrlKey || e.metaKey) && (k === "s" || k === "p"))) {
+        if (e.key !== "PrintScreen") e.preventDefault();
+        shield();
+        try {
+          void navigator.clipboard?.writeText(" ").catch(() => null);
+        } catch {
+          // clipboard not available
+        }
+      }
+    };
+    window.addEventListener("blur", shield);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("blur", shield);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
   }, []);
 
   const livePoint = useCallback(() => {
@@ -209,7 +297,7 @@ export function RecordedLecturePlayer({
     failures.current += 1;
     if (failures.current <= 2) {
       setLoading(true);
-      void authorise(true);
+      void authorise(true, true);
     } else {
       setLoading(false);
       setError("The video stopped loading. Press Retry.");
@@ -228,7 +316,12 @@ export function RecordedLecturePlayer({
   };
 
   return (
-    <div ref={boxRef} className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden select-none" onContextMenu={(e) => e.preventDefault()}>
+    <div
+      ref={boxRef}
+      className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden select-none [-webkit-touch-callout:none]"
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
       {src && (
         <video
           ref={videoRef}
@@ -265,10 +358,34 @@ export function RecordedLecturePlayer({
         </button>
       )}
 
-      {/* Watermark: masked student id + date/time, moving. */}
-      <div aria-hidden className={`pointer-events-none absolute ${POSITIONS[pos]} transition-all duration-[2000ms] text-white/35 text-[11px] sm:text-sm font-bold tracking-wide drop-shadow`}>
-        {watermark} · {now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+      {/* Watermark: faint tiles over the whole picture + a clear moving one (student, id, time). */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -inset-1/4 grid grid-cols-3 gap-x-10 gap-y-16 -rotate-[24deg] place-items-center">
+          {Array.from({ length: 24 }, (_, i) => (
+            <span key={i} className="text-white/[0.08] text-xs sm:text-sm font-bold whitespace-nowrap">
+              {watermark}
+            </span>
+          ))}
+        </div>
       </div>
+      <div aria-hidden className={`pointer-events-none absolute ${POSITIONS[pos]} transition-all duration-[1500ms] text-white/50 text-[11px] sm:text-sm font-black tracking-wide drop-shadow`}>
+        {watermark} · {now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+      </div>
+
+      {shielded && (
+        <button
+          type="button"
+          onClick={() => {
+            setShielded(false);
+            void videoRef.current?.play().catch(() => null);
+          }}
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black text-white text-center px-6"
+        >
+          <span className="material-symbols-outlined text-4xl">visibility_off</span>
+          <span className="text-sm font-bold">Paused — the lecture is hidden while this window is not in use.</span>
+          <span className="text-xs text-white/70">Tap to continue watching</span>
+        </button>
+      )}
 
       {live && (
         <div className="absolute top-2 left-2">
@@ -304,6 +421,7 @@ export function RecordedLecturePlayer({
             onClick={() => {
               failures.current = 0;
               setLoading(true);
+              setError(null);
               void authorise(true);
             }}
             className="rounded-lg bg-white text-slate-900 text-sm font-bold px-4 py-2"

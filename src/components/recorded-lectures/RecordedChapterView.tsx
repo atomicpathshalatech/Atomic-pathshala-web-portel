@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { StorageBanner } from "./RecordedLecturesManager";
 import { formatBytes } from "./VideoUploadPanel";
 import { premiereState } from "@/lib/recorded-lectures/premiere";
+import { ChapterViewersPanel } from "./ChapterViewersPanel";
 
 type LectureRow = {
   id: string;
@@ -213,6 +214,8 @@ export function RecordedChapterView({ chapterId }: { chapterId: string }) {
           </div>
         )}
       </section>
+
+      {chapter.batches.length > 0 && <ChapterViewersPanel chapterId={chapter.id} batches={chapter.batches} />}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
