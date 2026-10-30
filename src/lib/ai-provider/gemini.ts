@@ -120,6 +120,9 @@ Solve it yourself first, then compare.
 Return ONLY a JSON object:
 {
   "solvedAnswer": "A",
+  "stepByStepSolution": "Core Concept: ...\\nStep-by-Step Derivation: ...\\nConclusion: Option (A)",
+  "identifiedMistakes": [],
+  "recommendApproval": true,
   "answerMatches": true,
   "isScientificallyCorrect": true,
   "isMathematicallyCorrect": true,
@@ -169,6 +172,9 @@ Return ONLY a JSON object:
         provider: "gemini",
         model: modelName,
         solvedAnswer: solved || (stored[0] ?? "A"),
+        stepByStepSolution: String(parsed.stepByStepSolution || parsed.solutionCorrections || "").trim() || null,
+        identifiedMistakes: Array.isArray(parsed.identifiedMistakes) ? parsed.identifiedMistakes : (Array.isArray(parsed.scientificErrors) ? parsed.scientificErrors : []),
+        recommendApproval: Boolean(parsed.recommendApproval ?? (answerMatches && !parsed.ambiguityDetected)),
         answerMatches,
         isScientificallyCorrect: Boolean(parsed.isScientificallyCorrect ?? true),
         isMathematicallyCorrect: Boolean(parsed.isMathematicallyCorrect ?? true),

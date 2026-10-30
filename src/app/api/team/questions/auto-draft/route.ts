@@ -1,8 +1,10 @@
+import { triggerQuestionVerification } from "@/lib/questions/verification-service";
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { withNewQuestionCode } from "@/lib/questions/create-with-code";
+import { createQuestion } from "@/lib/questions/question-management-service";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -187,9 +189,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const created = await withNewQuestionCode(subject, (questionCode) => prisma.question.create({
-      data: {
-        questionCode,
+    const created = (await createQuestion(
+      {
+        questionCode: firstQuestionCode,
         subject: subject.trim() || "Biology",
         chapter: chapter.trim() || "General",
         topic: topic.trim() || "Core Concept",
@@ -204,9 +206,9 @@ export async function POST(request: NextRequest) {
         solution: solutionEn.trim() || solutionHi.trim() || null,
         tags: autoTags,
         createdById: session.user.id,
-        translations: {
-          create: translationsToCreate,
-        },
+      },
+      translationsToCreate,
+      {
         versions: {
           create: {
             versionNumber: 1,
@@ -227,8 +229,10 @@ export async function POST(request: NextRequest) {
             },
           },
         },
-      },
-    }), firstQuestionCode);
+        auditUserId: session.user.id,
+        sourceLabel: categoryName,
+      }
+    )).question;
     const questionCode = created.questionCode;
 
     if (refImg) {

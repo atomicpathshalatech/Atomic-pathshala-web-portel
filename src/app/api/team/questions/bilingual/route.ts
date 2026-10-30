@@ -2,12 +2,13 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { withNewQuestionCode } from "@/lib/questions/create-with-code";
+import { createQuestion } from "@/lib/questions/question-management-service";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { bilingualQuestionSchema } from "@/lib/validation/question-v2";
 import { resolveSubjectChapterNames, legacyTagsToString } from "@/lib/questions/legacy";
+import { triggerQuestionVerification } from "@/lib/questions/verification-service";
 
 function toOptionsJson(t: { optionA?: string; optionB?: string; optionC?: string; optionD?: string }) {
   const options: Record<string, string> = {};
@@ -37,33 +38,37 @@ export async function POST(request: NextRequest) {
       data.chapterId || undefined
     );
 
-    // A typed-in code is kept; otherwise the question gets the next 8-digit Question ID.
-    const create = (questionCode: string | null) => prisma.question.create({
-      data: {
+    // A typed-in code is kept (honoured as the first attempt); otherwise the
+    // question gets the next canonical Question ID. Centralized create adds the
+    // fingerprint + exact-duplicate idempotency check.
+    const result = await createQuestion(
+      {
         subject,
         chapter,
         topic: data.topic || null,
         subTopic: data.subTopic || null,
         category: data.category || null,
         pyqSource: data.pyqSource || null,
-        questionCode,
+        questionCode: data.questionCode || undefined,
         type: data.type,
         difficulty: data.difficulty,
         tags: legacyTagsToString(data.tags),
         createdById: session.user.id,
-        translations: {
-          create: data.translations.map((t) => ({
-            language: t.language,
-            statement: t.statement,
-            options: toOptionsJson(t),
-            correctOptionIds: t.correctOptionIds,
-            solution: t.solution || null,
-          })),
-        },
       },
+      data.translations.map((t) => ({
+        language: t.language,
+        statement: t.statement,
+        options: toOptionsJson(t),
+        correctOptionIds: t.correctOptionIds,
+        solution: t.solution || null,
+      })),
+      { sourceLabel: "MANUAL_BILINGUAL" }
+    );
+    const question = await prisma.question.findUnique({
+      where: { id: result.question.id },
       include: { translations: true },
     });
-    const question = data.questionCode ? await create(data.questionCode) : await withNewQuestionCode(subject, (code) => create(code));
+    if (!question) throw new Error("Question not found after create.");
 
     await prisma.auditLog.create({
       data: {
@@ -72,6 +77,14 @@ export async function POST(request: NextRequest) {
         entityType: "Question",
         entityId: question.id,
       },
+    });
+
+    // Automatically trigger non-blocking Multi-AI Verification across all 4 providers
+    triggerQuestionVerification(question.id, {
+      triggerSource: "MANUAL",
+      userId: session.user.id,
+    }).catch((err) => {
+      console.error(`[MultiAiVerification] Background trigger failed for bilingual question ${question.id}:`, err);
     });
 
     return apiSuccess({ question }, 201);

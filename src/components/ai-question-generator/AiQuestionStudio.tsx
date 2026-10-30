@@ -22,6 +22,7 @@ import {
   HelpCircle,
   ChevronRight,
   ExternalLink,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -34,6 +35,7 @@ import { TaxonomyConfigStep } from "./TaxonomyConfigStep";
 import { GenerationProgressModal } from "./GenerationProgressModal";
 import { ProviderHealthBadge } from "./ProviderHealthBadge";
 import { GeneratedQuestionCard, GeneratedQuestionItem } from "./GeneratedQuestionCard";
+import { QuestionReviewModal } from "./QuestionReviewModal";
 import { GenerationHistoryView } from "./GenerationHistoryView";
 
 type ActiveTab = "PDF" | "AI";
@@ -108,6 +110,7 @@ export function AiQuestionStudio() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
   const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [studioReviewIndex, setStudioReviewIndex] = useState<number | null>(null);
 
   // 1. Initial Load: Fetch Subjects
   useEffect(() => {
@@ -864,6 +867,18 @@ export function AiQuestionStudio() {
                       <Send className="w-3.5 h-3.5" />
                       <span>Submit to Review (Stage 1)</span>
                     </button>
+
+                    {filteredQuestions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setStudioReviewIndex(0)}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-sm transition cursor-pointer"
+                        title="Open sequential review mode across all generated questions"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Continuous Review ({filteredQuestions.length})</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -903,6 +918,8 @@ export function AiQuestionStudio() {
                         <div className={`transition-all ${isSelected ? "ring-2 ring-blue-600 rounded-3xl" : ""}`}>
                           <GeneratedQuestionCard
                             question={q}
+                            allQuestions={filteredQuestions}
+                            onReviewQuestion={(idx) => setStudioReviewIndex(idx)}
                             pdfFileName={pdfResult?.fileName || activeBatchInfo?.sourcePdf?.fileName}
                             onSaveToDraft={handleSaveToDraft}
                             onRegenerate={handleRegenerate}
@@ -917,6 +934,16 @@ export function AiQuestionStudio() {
             </div>
           )}
         </div>
+      )}
+      {studioReviewIndex !== null && filteredQuestions[studioReviewIndex] && (
+        <QuestionReviewModal
+          questions={filteredQuestions}
+          currentIndex={studioReviewIndex}
+          onNavigate={(idx) => setStudioReviewIndex(idx)}
+          onClose={() => setStudioReviewIndex(null)}
+          onUpdateQuestion={handleUpdateQuestion}
+          onSaveToDraft={handleSaveToDraft}
+        />
       )}
     </div>
   );

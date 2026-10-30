@@ -22,6 +22,8 @@ import {
 import { validateAndClassifyQuestions } from "./validator";
 import { questionFingerprint } from "@/lib/pyq/fingerprint";
 import { cropQuestionImages, hasFigure } from "./question-images";
+import { classifyPeriodicTableQuestion } from "@/lib/academic/periodic-table-classifier";
+import { ensureBatchSequenceAndCodes } from "./sequence-manager";
 
 export interface ChunkMetadata {
   index: number;
@@ -524,6 +526,32 @@ export async function processChunkForJob(
       const sourceKey = `p${q.sourcePage || chunkMeta.firstPage}-q${q.originalNumber}`;
       const duplicateOf = await findDuplicate(fingerprint, jobId, sourceKey);
 
+      // Periodic Table Chemistry concept classification
+      let pTopic = q.topic || null;
+      let pSubTopic = q.subTopic || null;
+      let pDiff = q.difficulty || "MEDIUM";
+      const extraReviewReasons: string[] = [];
+
+      const isChemistryPeriodic =
+        Boolean(job.subject && /chemistry/i.test(job.subject)) ||
+        Boolean(job.chapter && /classifi|period/i.test(job.chapter)) ||
+        Boolean(q.chapter && /classifi|period/i.test(q.chapter));
+
+      if (isChemistryPeriodic) {
+        const classified = classifyPeriodicTableQuestion({
+          statement: q.statement || "",
+          options: q.options,
+          solution: q.solution,
+          sectionHeader: q.section,
+        });
+        pTopic = classified.topic;
+        pSubTopic = classified.subTopic;
+        pDiff = classified.difficulty;
+        if (classified.needsReview) {
+          extraReviewReasons.push(`⚠️ Needs Concept Review: ${classified.reasoning}`);
+        }
+      }
+
       const questionData = {
         jobId,
         sourceKey,
@@ -560,18 +588,26 @@ export async function processChunkForJob(
           pyqYear: q.pyqYear ?? null,
         } as any,
         hasEquation: Boolean(q.hasEquation),
-        subject: q.subject || job.subject || "General",
-        chapter: q.chapter || job.chapter || null,
-        topic: q.topic || null,
-        subTopic: q.subTopic || null,
+        sectionHeader: q.section ?? null,
+        approvalStatus: "PENDING",
+        subject: q.subject || job.subject || "Chemistry",
+        chapter: isChemistryPeriodic
+          ? "Classification of Elements and Periodicity in Properties"
+          : q.chapter || job.chapter || null,
+        topic: pTopic,
+        subTopic: pSubTopic,
         questionType: q.questionType || "SINGLE_CORRECT",
-        difficulty: q.difficulty || "MEDIUM",
-        status: duplicateOf ? "DUPLICATE" : q.status || "VERIFIED",
+        difficulty: pDiff,
+        status: duplicateOf
+          ? "DUPLICATE"
+          : extraReviewReasons.length > 0
+          ? "REVIEW_REQUIRED"
+          : q.status || "VERIFIED",
         confidence: q.confidence || 95.0,
         confidenceBreakdown: q.confidenceBreakdown ? (q.confidenceBreakdown as any) : (Prisma.DbNull as any),
         reviewReasons: duplicateOf
-          ? [...(q.reviewReasons || []), `🔁 Duplicate: the same question is already ${duplicateOf.where} (${duplicateOf.code}).`]
-          : q.reviewReasons || [],
+          ? [...(q.reviewReasons || []), `🔁 Duplicate: the same question is already ${duplicateOf.where} (${duplicateOf.code}).`, ...extraReviewReasons]
+          : [...(q.reviewReasons || []), ...extraReviewReasons],
         originalSnapshot: {
           statement: q.statement,
           options: q.options,
@@ -625,6 +661,13 @@ export async function processChunkForJob(
   if (isComplete && Array.isArray(report.answerKeys) && report.answerKeys.length) {
     await applyPrintedAnswers(jobId, report.answerKeys as PrintedAnswer[]).catch((err) =>
       console.warn("[chunk-pipeline] applying the printed answer key failed:", err)
+    );
+  }
+
+  // Guarantee continuous 1..N sequence and pre-assign stable unique Question IDs
+  if (isComplete) {
+    await ensureBatchSequenceAndCodes(jobId).catch((err) =>
+      console.warn("[chunk-pipeline] ensureBatchSequenceAndCodes failed:", err)
     );
   }
 

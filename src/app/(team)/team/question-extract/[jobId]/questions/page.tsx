@@ -7,11 +7,11 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { TwoPanelQuestionReviewer } from "@/components/team-portal/extraction/TwoPanelQuestionReviewer";
-import { ChevronLeft, Database, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { ImportToDraftButton } from "@/components/team-portal/extraction/ImportToDraftButton";
 
 export const metadata: Metadata = {
-  title: "Extracted Questions Explorer",
+  title: "Extracted Questions Explorer & Approval",
 };
 
 export default async function ExtractedQuestionsExplorerPage({
@@ -31,7 +31,12 @@ export default async function ExtractedQuestionsExplorerPage({
     where: { id: params.jobId },
     include: {
       questions: {
-        orderBy: { originalNumber: "asc" },
+        orderBy: [
+          { sourceSequenceNumber: "asc" },
+          { sourcePage: "asc" },
+          { originalNumber: "asc" },
+          { id: "asc" },
+        ],
       },
     },
   });
@@ -39,6 +44,7 @@ export default async function ExtractedQuestionsExplorerPage({
   if (!job) notFound();
 
   const verifiedCount = job.questions.filter((q) => q.status === "VERIFIED").length;
+  const approvedCount = job.questions.filter((q) => q.approvalStatus === "APPROVED").length;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -52,10 +58,10 @@ export default async function ExtractedQuestionsExplorerPage({
           <span>Back to Extraction Report</span>
         </Link>
 
-        {/* Move Verified to Draft CTA */}
+        {/* Publication Stats */}
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500 font-mono">
-            Verified: <b className="text-emerald-600">{verifiedCount}</b> of {job.expectedCount}
+            Approved: <b className="text-emerald-600">{approvedCount}</b> of {job.questions.length} • Verified: <b className="text-blue-600">{verifiedCount}</b>
           </span>
           <ImportToDraftButton
             jobId={job.id}
@@ -65,12 +71,18 @@ export default async function ExtractedQuestionsExplorerPage({
         </div>
       </div>
 
-      {/* Two-Panel Question Explorer Component */}
+      {/* Two-Panel Sequence-Preserving Question Explorer Component */}
       <TwoPanelQuestionReviewer
         questions={job.questions.map((q) => ({
           ...q,
           options: q.options as any,
           status: q.status as any,
+          approvalStatus: q.approvalStatus,
+          rejectionReason: q.rejectionReason,
+          publishedQuestionId: q.publishedQuestionId,
+          sourceSequenceNumber: q.sourceSequenceNumber,
+          assignedQuestionCode: q.assignedQuestionCode,
+          sectionHeader: q.sectionHeader,
           reviewReasons: (q.reviewReasons as string[]) || [],
         }))}
         jobId={job.id}

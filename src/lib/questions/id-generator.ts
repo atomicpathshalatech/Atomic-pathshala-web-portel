@@ -65,8 +65,8 @@ export async function generateQuestionId(
   const prefixMin = `${prefix}0000001`;
   const prefixMax = `${prefix}9999999`;
 
-  // Find highest existing question code in this subject prefix (10-char length format)
-  const highest = await prisma.question.findFirst({
+  // Find highest existing question code in this subject prefix across questions table
+  const highestPub = await prisma.question.findFirst({
     where: {
       questionCode: {
         gte: prefixMin,
@@ -81,26 +81,60 @@ export async function generateQuestionId(
     },
   });
 
+  // Also check extracted_questions to prevent collisions across staged batches
+  const highestStaged = await prisma.extractedQuestion.findFirst({
+    where: {
+      assignedQuestionCode: {
+        gte: prefixMin,
+        lte: prefixMax,
+      },
+    },
+    orderBy: {
+      assignedQuestionCode: "desc",
+    },
+    select: {
+      assignedQuestionCode: true,
+    },
+  });
+
   let nextSequence = 1;
-  if (highest?.questionCode && highest.questionCode.startsWith(prefix) && highest.questionCode.length === 10) {
-    const numericPart = parseInt(highest.questionCode.slice(3), 10);
-    if (!isNaN(numericPart)) {
-      nextSequence = numericPart + 1;
+  const parseSeq = (code?: string | null) => {
+    if (code && code.startsWith(prefix) && code.length === 10) {
+      const num = parseInt(code.slice(3), 10);
+      return isNaN(num) ? 0 : num;
     }
+    return 0;
+  };
+
+  const highestSeq = Math.max(
+    parseSeq(highestPub?.questionCode),
+    parseSeq(highestStaged?.assignedQuestionCode)
+  );
+
+  if (highestSeq > 0) {
+    nextSequence = highestSeq + 1;
   }
 
   // Attempt to claim next available unique ID
   let candidate = `${prefix}${String(nextSequence).padStart(7, "0")}`;
-  let exists = await prisma.question.findUnique({
+  let existsPub = await prisma.question.findUnique({
     where: { questionCode: candidate },
     select: { id: true },
   });
+  let existsStaged = await prisma.extractedQuestion.findFirst({
+    where: { assignedQuestionCode: candidate },
+    select: { id: true },
+  });
 
-  while (exists) {
+  while (existsPub || existsStaged) {
     nextSequence++;
     candidate = `${prefix}${String(nextSequence).padStart(7, "0")}`;
-    exists = await prisma.question.findUnique({
+    existsPub = await prisma.question.findUnique({
       where: { questionCode: candidate },
+      select: { id: true },
+    });
+    existsStaged = await prisma.extractedQuestion.findFirst({
+      where: { assignedQuestionCode: candidate },
       select: { id: true },
     });
   }

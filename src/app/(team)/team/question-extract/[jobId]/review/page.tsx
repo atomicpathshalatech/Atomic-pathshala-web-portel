@@ -33,7 +33,12 @@ export default async function ReviewRequiredQueuePage({
         where: {
           status: { in: ["REVIEW_REQUIRED", "EXTRACTION_ERROR", "DUPLICATE", "MISSING"] },
         },
-        orderBy: { originalNumber: "asc" },
+        orderBy: [
+          { sourceSequenceNumber: "asc" },
+          { sourcePage: "asc" },
+          { originalNumber: "asc" },
+          { id: "asc" },
+        ],
       },
     },
   });
@@ -93,6 +98,12 @@ export default async function ReviewRequiredQueuePage({
             options: q.options as any,
             // Hindi options live in the snapshot (edited copy first, else as extracted).
             optionsHi: ((q.originalSnapshot as any)?.currentOptionsHi ?? (q.originalSnapshot as any)?.optionsHi ?? undefined) as any,
+            approvalStatus: q.approvalStatus,
+            rejectionReason: q.rejectionReason,
+            publishedQuestionId: q.publishedQuestionId,
+            sourceSequenceNumber: q.sourceSequenceNumber,
+            assignedQuestionCode: q.assignedQuestionCode,
+            sectionHeader: q.sectionHeader,
             status: q.status as any,
             reviewReasons: (q.reviewReasons as string[]) || [],
           }))}

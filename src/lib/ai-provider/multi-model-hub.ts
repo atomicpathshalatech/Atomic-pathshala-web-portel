@@ -1,6 +1,6 @@
 /**
  * ATOMIC PATHSHALA — MULTI-MODEL AI QUALITY CONTROL HUB
- * Coordinates Gemini L1, OpenAI L2, and Claude L3 independent reviews,
+ * Coordinates Gemini L1, OpenAI L2, Claude L3, and Grok L4 independent reviews,
  * executes deterministic math and chemical validators, computes final consensus,
  * and records auditable reviews to PostgreSQL.
  */
@@ -16,6 +16,7 @@ import { generateQuestionWithGemini, reviewQuestionWithGemini } from "./gemini";
 import { reviewQuestionWithOpenAI } from "./openai";
 import { reviewQuestionWithClaude } from "./claude";
 import { reviewQuestionWithGroq } from "./groq";
+import { reviewQuestionWithGrok } from "./grok";
 import { validateMathematics } from "../question-qc/math-validator";
 import { validateChemistry } from "../question-qc/chemical-validator";
 import { evaluateFinalQualityDecision } from "../question-qc/decision-engine";
@@ -46,14 +47,12 @@ export async function runMultiModelAudit(
     sourceMaterialId?: string;
   }
 ): Promise<CompleteReviewPayload> {
-  // Execute all three independent AI reviews in parallel
-  const [geminiResult, openaiResult, claudeResult] = await Promise.allSettled([
+  // Execute all four independent AI reviews in parallel: Gemini, OpenAI, Claude, Grok
+  const [geminiResult, openaiResult, claudeResult, grokResult] = await Promise.allSettled([
     withReviewTimeout(reviewQuestionWithGemini(snapshot, sourceContext), 25_000, "Gemini"),
     withReviewTimeout(reviewQuestionWithOpenAI(snapshot, sourceContext), 25_000, "OpenAI"),
-    // Prefer Groq as requested; fallback to Claude only if GROQ_API_KEY is not set but ANTHROPIC_API_KEY is
-    process.env.GROQ_API_KEY || !process.env.ANTHROPIC_API_KEY
-      ? withReviewTimeout(reviewQuestionWithGroq(snapshot, sourceContext), 25_000, "Groq")
-      : withReviewTimeout(reviewQuestionWithClaude(snapshot, sourceContext), 25_000, "Claude"),
+    withReviewTimeout(reviewQuestionWithClaude(snapshot, sourceContext), 25_000, "Claude"),
+    withReviewTimeout(reviewQuestionWithGrok(snapshot, sourceContext), 25_000, "Grok"),
   ]);
 
   const geminiReview: SingleModelReview =
@@ -134,18 +133,45 @@ export async function runMultiModelAudit(
           tokenUsage: { inputTokens: 0, outputTokens: 0, durationMs: 0, estimatedCostUsd: 0 },
         };
 
+  const grokReview: SingleModelReview =
+    grokResult.status === "fulfilled"
+      ? grokResult.value
+      : {
+          provider: "grok",
+          model: "grok-2-latest",
+          solvedAnswer: "",
+          answerMatches: false,
+          isScientificallyCorrect: false,
+          isMathematicallyCorrect: false,
+          scientificErrors: [`Grok failed: ${String(grokResult.reason)}`],
+          mathematicalErrors: [],
+          solutionCorrections: null,
+          suggestedQuestion: null,
+          suggestedOptions: null,
+          suggestedAnswer: null,
+          topicCorrections: null,
+          ncertAlignment: { supported: false, status: "UNVERIFIED" },
+          ambiguityDetected: false,
+          multipleCorrectOptionsDetected: false,
+          decision: "REJECT",
+          rejectionReasons: ["API_ERROR"],
+          confidenceScore: 0,
+          tokenUsage: { inputTokens: 0, outputTokens: 0, durationMs: 0, estimatedCostUsd: 0 },
+        };
+
   // Run deterministic math & chemical checks
   const mathValidation = validateMathematics(snapshot.statement, snapshot.solution);
   const chemValidation = validateChemistry(snapshot.statement, snapshot.solution);
 
-  // Compute final quality decision using strict deterministic consensus logic
+  // Compute final quality decision using strict deterministic consensus logic across all 4 models
   const finalDecision = evaluateFinalQualityDecision(
     snapshot,
     geminiReview,
     openaiReview,
     claudeReview,
     mathValidation,
-    chemValidation
+    chemValidation,
+    grokReview
   );
 
   let auditId: string | undefined;
@@ -162,6 +188,7 @@ export async function runMultiModelAudit(
           geminiReview: geminiReview as any,
           openaiReview: openaiReview as any,
           claudeReview: claudeReview as any,
+          grokReview: grokReview as any,
           mathValidation: mathValidation as any,
           chemValidation: chemValidation as any,
           ncertValidation: finalDecision.ncertValidation as any,
@@ -173,10 +200,12 @@ export async function runMultiModelAudit(
             gemini: geminiReview.tokenUsage,
             openai: openaiReview.tokenUsage,
             claude: claudeReview.tokenUsage,
+            grok: grokReview.tokenUsage,
             totalCostUsd:
               geminiReview.tokenUsage.estimatedCostUsd +
               openaiReview.tokenUsage.estimatedCostUsd +
-              claudeReview.tokenUsage.estimatedCostUsd,
+              claudeReview.tokenUsage.estimatedCostUsd +
+              grokReview.tokenUsage.estimatedCostUsd,
           } as any,
         },
       });
@@ -191,6 +220,7 @@ export async function runMultiModelAudit(
     geminiReview,
     openaiReview,
     claudeReview,
+    grokReview,
     mathValidation,
     chemValidation,
     finalDecision,
@@ -206,7 +236,7 @@ export async function generateAndAuditQuestion(
   // Step 1: Gemini Generation
   const generatedSnapshot = await generateQuestionWithGemini(request, sourceContext);
 
-  // Step 2-4: Multi-model L1, L2, L3 Review + Deterministic Validation
+  // Step 2-4: Multi-model L1, L2, L3, L4 Review + Deterministic Validation
   return runMultiModelAudit(generatedSnapshot, sourceContext, {
     persist: true,
     userId: options?.userId,

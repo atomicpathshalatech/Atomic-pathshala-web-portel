@@ -137,6 +137,9 @@ AUDIT CHECKLIST:
 Return ONLY a JSON response in this exact format:
 {
   "solvedAnswer": "A",
+  "stepByStepSolution": "Core Concept: ...\\nStep-by-Step Derivation: ...\\nConclusion: Option (A)",
+  "identifiedMistakes": [],
+  "recommendApproval": false,
   "answerMatches": true,
   "isScientificallyCorrect": true,
   "isMathematicallyCorrect": true,
@@ -268,6 +271,9 @@ Return ONLY a JSON response in this exact format:
       provider: "groq",
       model: usedModel,
       solvedAnswer: solved || (stored[0] ?? "A"),
+      stepByStepSolution: String(parsed.stepByStepSolution || parsed.solutionCorrections || "").trim() || null,
+      identifiedMistakes: Array.isArray(parsed.identifiedMistakes) ? parsed.identifiedMistakes : (Array.isArray(parsed.scientificErrors) ? parsed.scientificErrors : []),
+      recommendApproval: Boolean(parsed.recommendApproval ?? (answerMatches && !parsed.ambiguityDetected)),
       answerMatches,
       isScientificallyCorrect: Boolean(parsed.isScientificallyCorrect ?? true),
       isMathematicallyCorrect: Boolean(parsed.isMathematicallyCorrect ?? true),

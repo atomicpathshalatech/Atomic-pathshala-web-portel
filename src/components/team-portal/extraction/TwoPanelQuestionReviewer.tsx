@@ -40,7 +40,13 @@ export interface ExtractedQuestionRecord {
   id: string;
   jobId: string;
   questionIndex: number;
+  sourceSequenceNumber?: number | null;
+  assignedQuestionCode?: string | null;
   originalNumber: number;
+  sectionHeader?: string | null;
+  approvalStatus?: string;
+  rejectionReason?: string | null;
+  publishedQuestionId?: string | null;
   sourceName: string;
   sourcePdfUrl: string;
   sourcePdfName: string;
@@ -114,6 +120,14 @@ export function TwoPanelQuestionReviewer({
   const [bulkApplyTo, setBulkApplyTo] = useState<"ALL" | "REVIEW_ONLY">("ALL");
   const [bulkLoading, setBulkLoading] = useState(false);
 
+  // Explicit Human Approval System State
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [approvingSingle, setApprovingSingle] = useState(false);
+  const [rejectingSingle, setRejectingSingle] = useState(false);
+  const [showBulkApprovalModal, setShowBulkApprovalModal] = useState(false);
+  const [bulkApprovalSummary, setBulkApprovalSummary] = useState<any>(null);
+  const [bulkApproving, setBulkApproving] = useState(false);
+
   // Edit states for currently selected question
   const current = questions[selectedIndex] || questions[0];
   const [statementEdit, setStatementEdit] = useState(current?.statement || "");
@@ -140,6 +154,175 @@ export function TwoPanelQuestionReviewer({
   const [imageUploading, setImageUploading] = useState(false);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Human Approval Action Handlers
+  const handleApproveSingle = async (qid?: string) => {
+    const target = qid ? questions.find((x) => x.id === qid) : current;
+    if (!target) return;
+    setApprovingSingle(true);
+    const tid = toast.loading(`Approving & publishing Q.${target.originalNumber} (${target.assignedQuestionCode || target.id.slice(0, 8)})... `);
+    try {
+      const res = await fetch(`/api/team/question-extract/questions/${target.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          overrides: isEditing ? {
+            statement: statementEdit,
+            statementHi: statementHiEdit || null,
+            options: { A: optionAEdit, B: optionBEdit, C: optionCEdit, D: optionDEdit },
+            correctAnswer: correctAnswerEdit,
+            solution: solutionEdit || null,
+            solutionHi: solutionHiEdit || null,
+            subject: subjectEdit,
+            chapter: chapterEdit || null,
+            topic: topicEdit || null,
+            subTopic: subTopicEdit || null,
+            difficulty: difficultyEdit,
+            questionType: questionTypeEdit,
+          } : undefined,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Approval failed.");
+
+      setQuestions((prev) =>
+        prev.map((q) =>
+          q.id === target.id
+            ? {
+                ...q,
+                approvalStatus: "APPROVED",
+                status: "IMPORTED",
+                publishedQuestionId: json.data?.result?.publishedQuestionId || q.publishedQuestionId,
+              }
+            : q
+        )
+      );
+
+      toast.success(
+        `Question ${json.data?.result?.questionCode || target.assignedQuestionCode} officially published to Chapter-wise Question Bank!`,
+        { id: tid }
+      );
+      setIsEditing(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to approve question.", { id: tid });
+    } finally {
+      setApprovingSingle(false);
+    }
+  };
+
+  const handleRejectSingle = async (qid?: string) => {
+    const target = qid ? questions.find((x) => x.id === qid) : current;
+    if (!target) return;
+    const reason = window.prompt("Reason for rejection (optional):", "Needs manual re-extraction or corrupted OCR");
+    if (reason === null) return;
+
+    setRejectingSingle(true);
+    const tid = toast.loading(`Rejecting Q.${target.originalNumber}...`);
+    try {
+      const res = await fetch(`/api/team/question-extract/questions/${target.id}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Rejection failed.");
+
+      setQuestions((prev) =>
+        prev.map((q) =>
+          q.id === target.id
+            ? {
+                ...q,
+                approvalStatus: "REJECTED",
+                rejectionReason: reason,
+              }
+            : q
+        )
+      );
+
+      toast.success(`Question Q.${target.originalNumber} rejected and kept in staging history.`, { id: tid });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reject question.", { id: tid });
+    } finally {
+      setRejectingSingle(false);
+    }
+  };
+
+  const handleOpenBulkApprovalModal = async () => {
+    if (selectedQuestionIds.length === 0) {
+      toast.error("Please select at least one question to approve.");
+      return;
+    }
+    const tid = toast.loading("Analyzing selected questions and generating validation summary...");
+    try {
+      const res = await fetch(`/api/team/question-extract/jobs/${jobId}/approval-summary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionIds: selectedQuestionIds }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to load approval summary.");
+
+      setBulkApprovalSummary(json.data.summary);
+      setShowBulkApprovalModal(true);
+      toast.dismiss(tid);
+    } catch (err: any) {
+      toast.error(err.message || "Could not generate summary.", { id: tid });
+    }
+  };
+
+  const handleConfirmBulkApproval = async () => {
+    setBulkApproving(true);
+    const tid = toast.loading(`Publishing ${selectedQuestionIds.length} approved question(s) to official Question Bank...`);
+    try {
+      const res = await fetch(`/api/team/question-extract/jobs/${jobId}/bulk-approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionIds: selectedQuestionIds }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Bulk approval failed.");
+
+      const approvedSet = new Set(selectedQuestionIds);
+      setQuestions((prev) =>
+        prev.map((q) =>
+          approvedSet.has(q.id)
+            ? {
+                ...q,
+                approvalStatus: "APPROVED",
+                status: "IMPORTED",
+              }
+            : q
+        )
+      );
+
+      toast.success(
+        `Successfully published ${json.data.result?.successCount || selectedQuestionIds.length} approved question(s) into the Question Bank!`,
+        { id: tid }
+      );
+      setShowBulkApprovalModal(false);
+      setSelectedQuestionIds([]);
+    } catch (err: any) {
+      toast.error(err.message || "Bulk approval failed.", { id: tid });
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
+  const toggleSelectQuestion = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedQuestionIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedQuestionIds.length === filteredQuestions.length) {
+      setSelectedQuestionIds([]);
+    } else {
+      setSelectedQuestionIds(filteredQuestions.map((q) => q.id));
+    }
+  };
 
   // Synchronize when question selection changes
   const handleSelectQuestion = (idx: number) => {
@@ -332,16 +515,27 @@ export function TwoPanelQuestionReviewer({
     } else if (statusFilter === "INCOMPLETE") {
       const isIncomplete = !q.options?.A || !q.options?.B || !q.options?.C || !q.options?.D || !q.correctAnswer;
       if (!isIncomplete) return false;
+    } else if (statusFilter === "PENDING_APPROVAL") {
+      if (q.approvalStatus === "APPROVED" || q.approvalStatus === "REJECTED") return false;
+    } else if (statusFilter === "APPROVED") {
+      if (q.approvalStatus !== "APPROVED") return false;
+    } else if (statusFilter === "REJECTED") {
+      if (q.approvalStatus !== "REJECTED") return false;
+    } else if (statusFilter === "DUPLICATE") {
+      if (q.status !== "DUPLICATE") return false;
     } else if (statusFilter !== "ALL" && q.status !== statusFilter) {
       return false;
     }
 
     if (searchQuery) {
       const qNumMatch = String(q.originalNumber).includes(searchQuery);
+      const seqMatch = String(q.sourceSequenceNumber || "").includes(searchQuery);
+      const codeMatch = (q.assignedQuestionCode || "").toLowerCase().includes(searchQuery.toLowerCase());
       const textMatch = (q.statement + " " + (q.statementHi || "")).toLowerCase().includes(searchQuery.toLowerCase());
       const subjectMatch = q.subject.toLowerCase().includes(searchQuery.toLowerCase());
       const chapterMatch = (q.chapter || "").toLowerCase().includes(searchQuery.toLowerCase());
-      if (!qNumMatch && !textMatch && !subjectMatch && !chapterMatch) return false;
+      const topicMatch = (q.topic || "").toLowerCase().includes(searchQuery.toLowerCase());
+      if (!qNumMatch && !seqMatch && !codeMatch && !textMatch && !subjectMatch && !chapterMatch && !topicMatch) return false;
     }
     return true;
   });
@@ -429,7 +623,11 @@ export function TwoPanelQuestionReviewer({
         {/* Left Stats & Warnings */}
         <div className="flex items-center gap-2.5 flex-wrap text-xs">
           <span className="px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold font-mono">
-            {sourceName} ({questions.length} Qs)
+            {sourceName} ({questions.length} Questions)
+          </span>
+          <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1.5 border border-emerald-200 dark:border-emerald-800">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Approved: <b>{questions.filter((x) => x.approvalStatus === "APPROVED").length}</b> / {questions.length}</span>
           </span>
 
           {missingDiagramQuestions.length > 0 && (
@@ -463,15 +661,25 @@ export function TwoPanelQuestionReviewer({
           )}
         </div>
 
-        {/* Right Action: 1-Click Bulk Metadata */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Right Actions: Bulk Approval & Metadata */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            type="button"
+            disabled={selectedQuestionIds.length === 0}
+            onClick={handleOpenBulkApprovalModal}
+            className="px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/25 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <CheckCheck className="w-4 h-4" />
+            <span>✓ Bulk Approve Selected ({selectedQuestionIds.length})</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowBulkModal(true)}
-            className="px-4 py-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-blue-500/25 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+            className="px-4 py-2 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 font-bold text-xs shadow-sm transition flex items-center gap-1.5 cursor-pointer active:scale-95"
           >
-            <Zap className="w-4 h-4 text-amber-300" />
-            <span>⚡ 1-Click Bulk Apply Metadata</span>
+            <Zap className="w-4 h-4 text-amber-400" />
+            <span>Bulk Metadata</span>
           </button>
         </div>
       </div>
@@ -675,10 +883,12 @@ export function TwoPanelQuestionReviewer({
             <div className="flex gap-1 overflow-x-auto pb-1 text-[10px] font-bold no-scrollbar">
               {[
                 { id: "ALL", label: "All" },
+                { id: "PENDING_APPROVAL", label: `Pending Approval (${questions.filter((x) => x.approvalStatus !== "APPROVED" && x.approvalStatus !== "REJECTED").length})` },
+                { id: "APPROVED", label: `Approved (${questions.filter((x) => x.approvalStatus === "APPROVED").length})` },
+                { id: "REJECTED", label: `Rejected (${questions.filter((x) => x.approvalStatus === "REJECTED").length})` },
+                { id: "DUPLICATE", label: `Duplicates (${questions.filter((x) => x.status === "DUPLICATE").length})` },
                 { id: "MISSING_IMAGE", label: `Missing Diagram (${missingDiagramQuestions.length})` },
                 { id: "INCOMPLETE", label: `Incomplete (${incompleteQuestions.length})` },
-                { id: "VERIFIED", label: "Verified" },
-                { id: "REVIEW_REQUIRED", label: "Review" },
               ].map((st) => (
                 <button
                   key={st.id}
@@ -694,6 +904,24 @@ export function TwoPanelQuestionReviewer({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Select All Checkbox Header */}
+          <div className="flex items-center justify-between px-1 py-1 text-[11px] font-bold text-slate-500">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={filteredQuestions.length > 0 && selectedQuestionIds.length === filteredQuestions.length}
+                onChange={toggleSelectAll}
+                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <span>Select All Visible ({filteredQuestions.length})</span>
+            </label>
+            {selectedQuestionIds.length > 0 && (
+              <span className="text-emerald-600 dark:text-emerald-400 font-mono">
+                {selectedQuestionIds.length} chosen
+              </span>
+            )}
           </div>
 
           {/* Scrollable Question Number Grid / List */}
@@ -1252,6 +1480,136 @@ export function TwoPanelQuestionReviewer({
           </div>
         </div>
       </div>
+    
+      {/* ============================================================ */}
+      {/* CONFIRMATION SUMMARY MODAL FOR BULK APPROVAL (Mandatory Gate) */}
+      {/* ============================================================ */}
+      {showBulkApprovalModal && bulkApprovalSummary && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                    Confirm Bulk Approval &amp; Official Publication
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Verify batch composition before publishing to the Chapter-wise Question Bank.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkApprovalModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 flex items-center justify-center font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Summary Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <span className="text-[10px] text-slate-400 font-mono block">Selected Questions</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white font-mono">
+                  {bulkApprovalSummary.totalSelected}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <span className="text-[10px] text-slate-400 font-mono block">Subject</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-white">
+                  {bulkApprovalSummary.subject}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 sm:col-span-2">
+                <span className="text-[10px] text-slate-400 font-mono block">Question ID Range</span>
+                <span className="text-xs font-mono font-black text-indigo-600 dark:text-indigo-400">
+                  {bulkApprovalSummary.questionCodeRange || "Assigned on approval"}
+                </span>
+              </div>
+            </div>
+
+            {/* Chapter */}
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
+              <span className="text-[10px] text-slate-400 font-mono block">Official Chapter</span>
+              <span className="font-extrabold text-slate-900 dark:text-white">
+                {bulkApprovalSummary.chapter || "Auto-detected / Not set"}
+              </span>
+            </div>
+
+            {/* Topic Distribution */}
+            <div className="space-y-2">
+              <h5 className="font-extrabold text-xs text-slate-900 dark:text-white flex items-center justify-between">
+                <span>Topic Distribution</span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  {Object.keys(bulkApprovalSummary.topicDistribution || {}).length} unique topics
+                </span>
+              </h5>
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-xs">
+                {Object.entries(bulkApprovalSummary.topicDistribution || {}).map(([topic, count]) => (
+                  <span
+                    key={topic}
+                    className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-medium text-[11px] text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <span>{topic}</span>
+                    <b className="px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200 text-[10px] font-mono font-bold">
+                      {count as number}
+                    </b>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Warnings: Unresolved Errors or Duplicates */}
+            {bulkApprovalSummary.questionsWithErrors?.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 space-y-1.5 text-xs text-amber-900 dark:text-amber-200">
+                <div className="flex items-center gap-2 font-black">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span>{bulkApprovalSummary.questionsWithErrors.length} question(s) have validation warnings</span>
+                </div>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                  Please verify that all questions have valid options and an official topic before proceeding.
+                </p>
+              </div>
+            )}
+
+            {bulkApprovalSummary.questionsWithDuplicateWarning?.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-1.5 text-xs text-blue-900 dark:text-blue-200">
+                <div className="flex items-center gap-2 font-black">
+                  <span>🔁 {bulkApprovalSummary.questionsWithDuplicateWarning.length} question(s) have duplicate warnings</span>
+                </div>
+                <p className="text-[11px] text-blue-800 dark:text-blue-300">
+                  Approving duplicates will create distinct records preserving their original source sequence.
+                </p>
+              </div>
+            )}
+
+            {/* Confirmation Buttons */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setShowBulkApprovalModal(false)}
+                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkApproving}
+                onClick={handleConfirmBulkApproval}
+                className="px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-md shadow-emerald-600/25 transition flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{bulkApproving ? "Publishing to Question Bank..." : `Confirm & Publish ${bulkApprovalSummary.totalSelected} Question(s)`}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

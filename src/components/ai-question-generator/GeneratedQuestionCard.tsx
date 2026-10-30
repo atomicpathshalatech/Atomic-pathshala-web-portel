@@ -17,9 +17,11 @@ import {
   Check,
   Send,
   Eye,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { canonicalChapter } from "@/lib/academic/canonical-chapter";
 import { QuestionReviewModal } from "./QuestionReviewModal";
 import { MultiModelReviewDeck } from "./MultiModelReviewDeck";
 
@@ -61,23 +63,26 @@ export interface GeneratedQuestionItem {
 
 interface Props {
   question: GeneratedQuestionItem;
+  allQuestions?: GeneratedQuestionItem[];
   pdfFileName?: string;
   onSaveToDraft: (id: string, submitToReview?: boolean) => Promise<void>;
   onRegenerate: (id: string, mode: string) => Promise<void>;
   onUpdateQuestion: (id: string, updated: Partial<GeneratedQuestionItem>) => Promise<void>;
+  onReviewQuestion?: (index: number) => void;
 }
 
 export function GeneratedQuestionCard({
   question,
+  allQuestions,
   pdfFileName,
   onSaveToDraft,
   onRegenerate,
   onUpdateQuestion,
+  onReviewQuestion,
 }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [showSolution, setShowSolution] = useState(true);
-  const [showSource, setShowSource] = useState(true);
   const [showQuality, setShowQuality] = useState(false);
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -147,6 +152,18 @@ export function GeneratedQuestionCard({
     languageQuality: 95,
     overallScore: 96,
   };
+
+  // Academic Class mapping
+  const classInfo = canonicalChapter(question.subject, question.chapter);
+  const classLabel = classInfo?.classNumber ? `Class ${classInfo.classNumber}` : null;
+
+  // Genuine Question Similarity calculation & report
+  const simReport = question.validationReport?.similarityReport;
+  const highestMatch = simReport?.highestMatch;
+  const simScore = simReport?.highestScore ?? question.validationReport?.duplicateScore ?? 0;
+  const dupCode = highestMatch?.questionCode || question.validationReport?.potentialDuplicateCode;
+
+  const currentIdx = allQuestions ? allQuestions.findIndex((q) => q.id === question.id) : 0;
 
   return (
     <div
@@ -234,22 +251,104 @@ export function GeneratedQuestionCard({
         </div>
       </div>
 
-      {/* 2. TAXONOMY BREADCRUMB & CONTEXT */}
-      <div className="px-6 py-2 bg-slate-50/50 border-b border-slate-100 text-xs text-slate-500 flex flex-wrap items-center gap-2">
-        <span className="font-bold text-slate-700">{question.subject}</span>
+      {/* 2. TAXONOMY BREADCRUMB & CONTEXT (With Class 11/12, Topic, Subtopic) */}
+      <div className="px-6 py-2.5 bg-slate-50/50 border-b border-slate-100 text-xs text-slate-500 flex flex-wrap items-center gap-2">
+        <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+          {question.subject}
+        </span>
+        {classLabel && (
+          <>
+            <span>›</span>
+            <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+              {classLabel}
+            </span>
+          </>
+        )}
         <span>›</span>
         <span className="font-semibold text-slate-700">{question.chapter}</span>
         <span>›</span>
-        <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium">
-          {question.topic}
+        <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-semibold border border-blue-200">
+          Topic: {question.topic}
         </span>
         {question.subTopic && (
           <>
             <span>›</span>
-            <span className="text-slate-500">{question.subTopic}</span>
+            <span className="text-purple-700 bg-purple-50 px-2 py-0.5 rounded font-medium border border-purple-200">
+              Subtopic: {question.subTopic}
+            </span>
           </>
         )}
+        <span className="text-slate-300">|</span>
+        <span className="text-[11px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+          Format: {question.pyqStyle || "NEET Standard"}
+        </span>
       </div>
+
+      {/* 2.5 ACCURATE QUESTION SIMILARITY & DUPLICATE CHECK */}
+      {simScore > 0 && (
+        <div
+          className={`px-6 py-3 border-b text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            simScore >= 85
+              ? "bg-rose-50/80 border-rose-200 text-rose-950"
+              : simScore >= 60
+              ? "bg-amber-50/80 border-amber-200 text-amber-950"
+              : "bg-slate-50 border-slate-200 text-slate-800"
+          }`}
+        >
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span
+              className={`font-mono text-xs font-black px-2.5 py-1 rounded-lg flex items-center gap-1 ${
+                simScore >= 85
+                  ? "bg-rose-600 text-white shadow-sm"
+                  : simScore >= 60
+                  ? "bg-amber-500 text-white shadow-sm"
+                  : "bg-slate-200 text-slate-700"
+              }`}
+            >
+              <span>{simScore}% Similarity</span>
+            </span>
+
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                highestMatch?.classification === "EXACT_DUPLICATE" || simScore >= 95
+                  ? "bg-rose-100 text-rose-800 border-rose-300"
+                  : highestMatch?.classification === "NEAR_DUPLICATE" || simScore >= 85
+                  ? "bg-rose-100 text-rose-800 border-rose-300"
+                  : simScore >= 60
+                  ? "bg-amber-100 text-amber-800 border-amber-300"
+                  : "bg-emerald-100 text-emerald-800 border-emerald-300"
+              }`}
+            >
+              {highestMatch?.classification ||
+                (simScore >= 85 ? "NEAR_DUPLICATE" : simScore >= 60 ? "SIMILAR_CONCEPT" : "UNIQUE")}
+            </span>
+
+            {dupCode && (
+              <span className="font-mono text-xs font-semibold text-slate-700">
+                Matched Question: <span className="font-bold text-slate-900">{dupCode}</span>
+              </span>
+            )}
+
+            {highestMatch?.statementEn && (
+              <span className="text-[11px] text-slate-600 line-clamp-1 italic max-w-md">
+                &ldquo;{highestMatch.statementEn}&rdquo;
+              </span>
+            )}
+          </div>
+
+          {highestMatch?.questionId && (
+            <a
+              href={`/team/questions/${highestMatch.questionId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 px-3 py-1.5 rounded-xl shadow-sm transition shrink-0"
+            >
+              <span>Open Matched Question ({dupCode})</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
+        </div>
+      )}
 
       {/* 3. QUALITY SCORE METERS (Collapsible) */}
       {showQuality && (
@@ -459,7 +558,6 @@ export function GeneratedQuestionCard({
           <>
             {/* English Question Statement */}
             <div className="space-y-2">
-              {/* Tables (match the column, data tables) and formulas shown as the student sees them. */}
               <FormulaText text={question.statementEn} className="block text-slate-900 font-medium text-sm leading-relaxed" />
 
               {/* Hindi Statement if present */}
@@ -577,6 +675,13 @@ export function GeneratedQuestionCard({
           });
           toast.success("Question approved via Faculty Override!");
         }}
+        onAcceptAiSolution={async (answer: string[], solution: string) => {
+          await onUpdateQuestion(question.id, {
+            correctAnswer: answer,
+            solutionEn: solution,
+          });
+          toast.success("Applied AI solution and answer key to question draft!");
+        }}
       />
 
       {/* 7. CARD ACTIONS FOOTER: [EDIT] [REVIEW] [SAVE TO DRAFT] [REGENERATE] */}
@@ -610,12 +715,18 @@ export function GeneratedQuestionCard({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setReviewing(true)}
+            onClick={() => {
+              if (onReviewQuestion) {
+                onReviewQuestion(currentIdx);
+              } else {
+                setReviewing(true);
+              }
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition shadow-sm"
-            title="See this question exactly as students will see it in a test"
+            title="Review question sequentially as students see it"
           >
             <Eye className="w-3.5 h-3.5" />
-            <span>Review</span>
+            <span>Continuous Review</span>
           </button>
 
           <button
@@ -653,7 +764,17 @@ export function GeneratedQuestionCard({
           </button>
         </div>
       </div>
-      {reviewing && <QuestionReviewModal question={question} onClose={() => setReviewing(false)} />}
+
+      {reviewing && (
+        <QuestionReviewModal
+          question={question}
+          questions={allQuestions && allQuestions.length > 0 ? allQuestions : [question]}
+          currentIndex={currentIdx >= 0 ? currentIdx : 0}
+          onClose={() => setReviewing(false)}
+          onUpdateQuestion={onUpdateQuestion}
+          onSaveToDraft={onSaveToDraft}
+        />
+      )}
     </div>
   );
 }

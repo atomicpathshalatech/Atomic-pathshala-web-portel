@@ -22,7 +22,8 @@ export function evaluateFinalQualityDecision(
   openaiReview: SingleModelReview,
   claudeReview: SingleModelReview,
   mathValidation: MathematicalValidationResult,
-  chemValidation: ChemicalValidationResult
+  chemValidation: ChemicalValidationResult,
+  grokReview?: SingleModelReview
 ): FinalQualityDecision {
   const disagreements: string[] = [];
   const reasons: string[] = [];
@@ -50,6 +51,7 @@ export function evaluateFinalQualityDecision(
   const geminiAns = (geminiReview.solvedAnswer || "").trim().toUpperCase();
   const openaiAns = (openaiReview.solvedAnswer || "").trim().toUpperCase();
   const claudeAns = (claudeReview.solvedAnswer || "").trim().toUpperCase();
+  const grokAns = (grokReview?.solvedAnswer || "").trim().toUpperCase();
   const l3Provider = claudeReview.provider === "groq" ? "Groq" : "Claude";
 
   // Answer matching checks
@@ -58,6 +60,9 @@ export function evaluateFinalQualityDecision(
   }
   if (geminiAns && claudeAns && geminiAns !== claudeAns) {
     disagreements.push(`Answer Key Disagreement: Gemini solved [${geminiAns}] vs ${l3Provider} solved [${claudeAns}]`);
+  }
+  if (grokAns && geminiAns && geminiAns !== grokAns) {
+    disagreements.push(`Answer Key Disagreement: Gemini solved [${geminiAns}] vs Grok solved [${grokAns}]`);
   }
   if (openaiAns && claudeAns && openaiAns !== claudeAns) {
     disagreements.push(`Answer Key Disagreement: OpenAI solved [${openaiAns}] vs ${l3Provider} solved [${claudeAns}]`);
@@ -231,6 +236,7 @@ export function evaluateFinalQualityDecision(
     geminiDecision: geminiReview.decision,
     openaiDecision: openaiReview.decision,
     claudeDecision: claudeReview.decision,
+    grokDecision: grokReview?.decision,
     ncertValidation: bestNcert || {
       supported: false,
       status: "UNVERIFIED",

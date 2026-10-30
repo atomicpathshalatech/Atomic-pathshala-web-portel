@@ -164,6 +164,12 @@ SOLUTION CONCISENESS & FORMATTING RULES:
   हल : [संक्षिप्त 1-3 पंक्ति का चरणबद्ध हल]
   अंतिम उत्तर : विकल्प (X)
 
+MATHEMATICAL & ACADEMIC CLEANLINESS RULES:
+- Use standard LaTeX enclosed in single dollar signs ($...$) for inline equations, units, and chemical charges (e.g. $F = ma$, $\text{Ca}^{2+}$, $\lambda = \frac{h}{p}$).
+- All LaTeX formulas must have balanced braces and valid syntax.
+- Absolutely NO raw JSON fragments, stray escape characters, or markdown asterisks (**) within the statement, options, or solution text. All text must be natural, polished academic text suitable for NEET aspirants.
+- "topic" and "subTopic" must strictly adhere to authentic NCERT curriculum taxonomy and never be left empty or generic.
+
 OUTPUT FORMAT:
 Return ONLY a valid JSON object matching the following JSON schema with NO markdown codeblock fencing or commentary:
 

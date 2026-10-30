@@ -54,6 +54,8 @@ export async function PUT(
         subTopic: subTopic !== undefined ? subTopic : existing.subTopic,
         questionType: questionType !== undefined ? questionType : existing.questionType,
         difficulty: difficulty !== undefined ? difficulty : existing.difficulty,
+        approvalStatus: body.approvalStatus !== undefined ? body.approvalStatus : (existing as any).approvalStatus,
+        rejectionReason: body.rejectionReason !== undefined ? body.rejectionReason : (existing as any).rejectionReason,
         status,
         reviewReasons,
         isEdited: true,

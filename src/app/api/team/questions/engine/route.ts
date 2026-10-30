@@ -10,6 +10,7 @@ import { generateQuestionId } from "@/lib/questions/id-generator";
 import { analyzeQuestionSimilarity } from "@/lib/questions/similarity";
 import { QuestionType, Difficulty } from "@prisma/client";
 import { testStartedReason } from "@/lib/tests/scheduled-publish";
+import { triggerQuestionVerification } from "@/lib/questions/verification-service";
 import { contentFingerprint, duplicateMessage, findInTest, testIdOfSection, withTestLock } from "@/lib/tests/test-question-guard";
 
 /** A test's questions stop changing once it has started (or someone has taken it). */
@@ -797,6 +798,8 @@ export async function PUT(request: NextRequest) {
         },
       },
     });
+
+    triggerQuestionVerification(questionId, { triggerSource: "MANUAL", forceReverify: true, userId: session.user.id }).catch((err) => console.error("[VerificationEngine] Re-verify failed:", err));
 
     return apiSuccess({ question: updated, sectionQuestion, dppQuestion });
   } catch (error) {

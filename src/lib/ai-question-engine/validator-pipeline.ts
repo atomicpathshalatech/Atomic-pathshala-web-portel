@@ -149,6 +149,7 @@ export async function runQuestionValidationPipeline({
   let highestSimScore = 0;
   let dupRisk: QuestionValidationReport["duplicateRisk"] = "NONE";
   let potentialDuplicateCode: string | undefined;
+  let computedSimReport: any = null;
 
   try {
     const simReport = await analyzeQuestionSimilarity(prisma, {
@@ -160,6 +161,7 @@ export async function runQuestionValidationPipeline({
       optionsEn: question.optionsEn,
       optionsHi: question.optionsHi,
     });
+    computedSimReport = simReport;
     highestSimScore = simReport.highestScore;
     dupRisk = simReport.duplicateRisk;
     if (simReport.highestMatch) {
@@ -268,6 +270,7 @@ export async function runQuestionValidationPipeline({
     aiValidated: Boolean(ai),
     topicRelevant: ai?.topicRelevant,
     qualityScore: ai?.qualityScore,
+    similarityReport: computedSimReport,
   };
 
   return { report, scores };

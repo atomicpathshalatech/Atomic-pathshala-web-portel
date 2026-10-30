@@ -1,3 +1,4 @@
+import { triggerQuestionVerification } from "@/lib/questions/verification-service";
 /**
  * DRAFT IMPORTER SERVICE
  *
@@ -187,6 +188,7 @@ export async function importVerifiedQuestionsToDraft(
     });
 
     draftQuestionIds.push(createdQuestion.id);
+    triggerQuestionVerification(createdQuestion.id, { triggerSource: "PDF_EXTRACTION", userId }).catch((err) => console.error("[DraftImporter] Trigger failed:", err));
   }
 
   // Update extraction job stats

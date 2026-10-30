@@ -18,7 +18,6 @@ import {
   ChevronUp,
   Cpu,
   KeyRound,
-  CreditCard,
   ExternalLink,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
@@ -29,6 +28,7 @@ interface Props {
   validationStatus: string;
   validationReport?: any;
   onFacultyOverride?: () => Promise<void>;
+  onAcceptAiSolution?: (answer: string[], solution: string) => Promise<void> | void;
 }
 
 export function MultiModelReviewDeck({
@@ -37,10 +37,12 @@ export function MultiModelReviewDeck({
   validationStatus,
   validationReport,
   onFacultyOverride,
+  onAcceptAiSolution,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"GEMINI" | "OPENAI" | "CLAUDE" | "CONSENSUS">("CONSENSUS");
   const [isOverriding, setIsOverriding] = useState(false);
+  const [acceptingProvider, setAcceptingProvider] = useState<string | null>(null);
 
   const qc = validationReport?.qcPayload;
   const gemini = qc?.geminiReview;
@@ -52,6 +54,11 @@ export function MultiModelReviewDeck({
 
   // Stored key formatted
   const storedStr = storedAnswer.join(", ").toUpperCase() || "A";
+
+  const isGeminiCorrect = Boolean(
+    gemini?.recommendApproval ||
+    (gemini?.solvedAnswer && gemini.solvedAnswer === storedStr && (!gemini?.scientificErrors || gemini.scientificErrors.length === 0))
+  );
 
   const isOpenAiApiError = Boolean(
     openai?.apiError?.isApiError ||
@@ -112,6 +119,16 @@ export function MultiModelReviewDeck({
     }
   };
 
+  const handleAcceptSolution = async (provider: string, answer?: string, solution?: string) => {
+    if (!onAcceptAiSolution || !answer) return;
+    setAcceptingProvider(provider);
+    try {
+      await onAcceptAiSolution([answer], solution || "");
+    } finally {
+      setAcceptingProvider(null);
+    }
+  };
+
   return (
     <div className="border-t border-slate-200 bg-slate-50/70">
       {/* Accordion Bar */}
@@ -131,9 +148,15 @@ export function MultiModelReviewDeck({
               <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
                 4-PANEL VERIFICATION
               </span>
+              {isGeminiCorrect && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                  <span>Gemini Recommended</span>
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-500">
-              Independent reviews by Gemini L1, OpenAI L2, Claude L3, KaTeX math &amp; chemical charge evaluation.
+              Independent reviews by Gemini L1, OpenAI L2, Groq L3, KaTeX math &amp; chemical charge evaluation.
             </p>
           </div>
         </div>
@@ -277,6 +300,32 @@ export function MultiModelReviewDeck({
                 {getStatusBadge(gemini?.decision, gemini?.scientificErrors?.length)}
               </div>
 
+              {/* Recommendation Banner if Gemini answer verified correct */}
+              {isGeminiCorrect && (
+                <div className="flex items-center justify-between gap-3 p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs text-emerald-950">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="font-bold">Gemini answer verified correct — Recommended for approval.</p>
+                      <p className="text-[11px] text-emerald-800">
+                        The solution follows the standard NCERT curriculum and leads definitively to Option ({gemini?.solvedAnswer || storedStr}).
+                      </p>
+                    </div>
+                  </div>
+                  {onAcceptAiSolution && gemini?.solvedAnswer && (
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptSolution("Gemini", gemini.solvedAnswer, gemini.stepByStepSolution || gemini.solutionCorrections || gemini.reasoning)}
+                      disabled={acceptingProvider === "Gemini"}
+                      className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-sm transition shrink-0 flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{acceptingProvider === "Gemini" ? "Applying..." : "Accept Gemini Solution"}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <p className="text-slate-500 font-bold text-[10px] uppercase">Independently Solved</p>
@@ -313,15 +362,55 @@ export function MultiModelReviewDeck({
                 </div>
               </div>
 
-              {/* Errors & Solution Corrections */}
-              {gemini?.scientificErrors && gemini.scientificErrors.length > 0 && (
+              {/* Gemini Step-by-Step Solution */}
+              {(gemini?.stepByStepSolution || gemini?.reasoning) && (
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Gemini Step-by-Step Solution:</span>
+                    </p>
+                    {onAcceptAiSolution && gemini?.solvedAnswer && (
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptSolution("Gemini", gemini.solvedAnswer, gemini.stepByStepSolution || gemini.reasoning)}
+                        disabled={acceptingProvider === "Gemini"}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-[11px] shadow-sm transition"
+                      >
+                        <Check className="w-3 h-3" />
+                        <span>{acceptingProvider === "Gemini" ? "Applying..." : "Accept Solution"}</span>
+                      </button>
+                    )}
+                  </div>
+                  <FormulaText
+                    text={gemini.stepByStepSolution || gemini.reasoning}
+                    className="block text-slate-800 leading-relaxed whitespace-pre-wrap"
+                  />
+                </div>
+              )}
+
+              {/* Errors & Identified Mistakes */}
+              {((gemini?.scientificErrors && gemini.scientificErrors.length > 0) || gemini?.identifiedMistakes) && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
-                  <p className="font-bold text-rose-800">Errors Detected by Gemini L1:</p>
-                  <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
-                    {gemini.scientificErrors.map((err: string, idx: number) => (
-                      <li key={idx}>{err}</li>
-                    ))}
-                  </ul>
+                  <p className="font-bold text-rose-800">Errors &amp; Identified Mistakes by Gemini:</p>
+                  {gemini?.scientificErrors && gemini.scientificErrors.length > 0 && (
+                    <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
+                      {gemini.scientificErrors.map((err: string, idx: number) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {gemini?.identifiedMistakes && (
+                    typeof gemini.identifiedMistakes === "string" ? (
+                      <p className="text-rose-700 text-[11px]">{gemini.identifiedMistakes}</p>
+                    ) : Array.isArray(gemini.identifiedMistakes) ? (
+                      <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
+                        {gemini.identifiedMistakes.map((m: string, idx: number) => (
+                          <li key={idx}>{m}</li>
+                        ))}
+                      </ul>
+                    ) : null
+                  )}
                 </div>
               )}
 
@@ -433,20 +522,71 @@ export function MultiModelReviewDeck({
                 </div>
               </div>
 
-              {!isOpenAiApiError && openai?.scientificErrors && openai.scientificErrors.length > 0 && (
+              {/* OpenAI Step-by-Step Solution */}
+              {!isOpenAiApiError && (openai?.stepByStepSolution || openai?.reasoning) && (
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>OpenAI Step-by-Step Solution:</span>
+                    </p>
+                    {onAcceptAiSolution && openai?.solvedAnswer && (
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptSolution("OpenAI", openai.solvedAnswer, openai.stepByStepSolution || openai.reasoning)}
+                        disabled={acceptingProvider === "OpenAI"}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold text-[11px] shadow-sm transition"
+                      >
+                        <Check className="w-3 h-3" />
+                        <span>{acceptingProvider === "OpenAI" ? "Applying..." : "Accept Solution"}</span>
+                      </button>
+                    )}
+                  </div>
+                  <FormulaText
+                    text={openai.stepByStepSolution || openai.reasoning}
+                    className="block text-slate-800 leading-relaxed whitespace-pre-wrap"
+                  />
+                </div>
+              )}
+
+              {/* Identified Mistakes & Corrections */}
+              {!isOpenAiApiError && ((openai?.scientificErrors && openai.scientificErrors.length > 0) || openai?.identifiedMistakes) && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
-                  <p className="font-bold text-rose-800">Errors Detected by OpenAI L2:</p>
-                  <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
-                    {openai.scientificErrors.map((err: string, idx: number) => (
-                      <li key={idx}>{err}</li>
-                    ))}
-                  </ul>
+                  <p className="font-bold text-rose-800">Errors &amp; Identified Mistakes by OpenAI:</p>
+                  {openai?.scientificErrors && openai.scientificErrors.length > 0 && (
+                    <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
+                      {openai.scientificErrors.map((err: string, idx: number) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {openai?.identifiedMistakes && (
+                    typeof openai.identifiedMistakes === "string" ? (
+                      <p className="text-rose-700 text-[11px]">{openai.identifiedMistakes}</p>
+                    ) : Array.isArray(openai.identifiedMistakes) ? (
+                      <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
+                        {openai.identifiedMistakes.map((m: string, idx: number) => (
+                          <li key={idx}>{m}</li>
+                        ))}
+                      </ul>
+                    ) : null
+                  )}
+                </div>
+              )}
+
+              {!isOpenAiApiError && openai?.solutionCorrections && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-1">
+                  <p className="font-bold text-amber-800">OpenAI Suggested Corrections:</p>
+                  <FormulaText
+                    text={openai.solutionCorrections}
+                    className="block text-[11px] text-amber-900 leading-relaxed"
+                  />
                 </div>
               )}
             </div>
           )}
 
-          {/* PANEL C: CLAUDE REVIEW */}
+          {/* PANEL C: CLAUDE / GROQ REVIEW */}
           {activeTab === "CLAUDE" && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-purple-50/60 rounded-2xl border border-purple-200">
@@ -542,14 +682,65 @@ export function MultiModelReviewDeck({
                 </div>
               </div>
 
-              {!isClaudeApiError && claude?.scientificErrors && claude.scientificErrors.length > 0 && (
+              {/* Groq Step-by-Step Solution */}
+              {!isClaudeApiError && (claude?.stepByStepSolution || claude?.reasoning) && (
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Groq Step-by-Step Solution:</span>
+                    </p>
+                    {onAcceptAiSolution && claude?.solvedAnswer && (
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptSolution("Groq", claude.solvedAnswer, claude.stepByStepSolution || claude.reasoning)}
+                        disabled={acceptingProvider === "Groq"}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-purple-700 hover:bg-purple-600 text-white rounded-lg font-bold text-[11px] shadow-sm transition"
+                      >
+                        <Check className="w-3 h-3" />
+                        <span>{acceptingProvider === "Groq" ? "Applying..." : "Accept Solution"}</span>
+                      </button>
+                    )}
+                  </div>
+                  <FormulaText
+                    text={claude.stepByStepSolution || claude.reasoning}
+                    className="block text-slate-800 leading-relaxed whitespace-pre-wrap"
+                  />
+                </div>
+              )}
+
+              {/* Identified Mistakes & Corrections */}
+              {!isClaudeApiError && ((claude?.scientificErrors && claude.scientificErrors.length > 0) || claude?.identifiedMistakes) && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-1">
-                  <p className="font-bold text-rose-800">Errors Detected by Claude L3:</p>
-                  <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
-                    {claude.scientificErrors.map((err: string, idx: number) => (
-                      <li key={idx}>{err}</li>
-                    ))}
-                  </ul>
+                  <p className="font-bold text-rose-800">Errors &amp; Identified Mistakes by Groq:</p>
+                  {claude?.scientificErrors && claude.scientificErrors.length > 0 && (
+                    <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
+                      {claude.scientificErrors.map((err: string, idx: number) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {claude?.identifiedMistakes && (
+                    typeof claude.identifiedMistakes === "string" ? (
+                      <p className="text-rose-700 text-[11px]">{claude.identifiedMistakes}</p>
+                    ) : Array.isArray(claude.identifiedMistakes) ? (
+                      <ul className="list-disc list-inside text-rose-700 text-[11px] space-y-0.5">
+                        {claude.identifiedMistakes.map((m: string, idx: number) => (
+                          <li key={idx}>{m}</li>
+                        ))}
+                      </ul>
+                    ) : null
+                  )}
+                </div>
+              )}
+
+              {!isClaudeApiError && claude?.solutionCorrections && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-1">
+                  <p className="font-bold text-amber-800">Groq Suggested Corrections:</p>
+                  <FormulaText
+                    text={claude.solutionCorrections}
+                    className="block text-[11px] text-amber-900 leading-relaxed"
+                  />
                 </div>
               )}
             </div>
@@ -588,29 +779,91 @@ export function MultiModelReviewDeck({
                 )}
               </div>
 
-              {/* Answers Matrix */}
+              {/* Recommendation Callout if Gemini passed */}
+              {isGeminiCorrect && (
+                <div className="flex items-center justify-between gap-2 p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-900">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span><strong>Recommendation:</strong> Gemini answer ({gemini?.solvedAnswer || storedStr}) verified against NCERT curriculum. Recommended for approval.</span>
+                  </div>
+                  {onAcceptAiSolution && gemini?.solvedAnswer && (
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptSolution("Gemini", gemini.solvedAnswer, gemini.stepByStepSolution || gemini.solutionCorrections || gemini.reasoning)}
+                      disabled={acceptingProvider === "Gemini"}
+                      className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold text-[11px] shadow-sm transition shrink-0"
+                    >
+                      {acceptingProvider === "Gemini" ? "Applying..." : "Accept Gemini Solution"}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Answers Matrix with 1-Click Accept */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase">Stored Key</p>
-                  <p className="font-mono text-lg font-black text-slate-800 mt-0.5">{storedStr}</p>
+                <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Stored Key</p>
+                    <p className="font-mono text-lg font-black text-slate-800 mt-0.5">{storedStr}</p>
+                  </div>
+                  <span className="text-[10px] text-slate-500 mt-1 font-semibold">Active Draft</span>
                 </div>
-                <div className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/40">
-                  <p className="text-[10px] font-bold text-blue-700 uppercase">Gemini L1</p>
-                  <p className="font-mono text-lg font-black text-blue-900 mt-0.5">
-                    {gemini?.solvedAnswer || "—"}
-                  </p>
+
+                <div className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/40 flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-blue-700 uppercase">Gemini L1</p>
+                    <p className="font-mono text-lg font-black text-blue-900 mt-0.5">
+                      {gemini?.solvedAnswer || "—"}
+                    </p>
+                  </div>
+                  {onAcceptAiSolution && gemini?.solvedAnswer && (
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptSolution("Gemini", gemini.solvedAnswer, gemini.stepByStepSolution || gemini.solutionCorrections || gemini.reasoning)}
+                      disabled={acceptingProvider === "Gemini"}
+                      className="mt-2 text-[10px] font-bold py-1 px-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition"
+                    >
+                      {acceptingProvider === "Gemini" ? "Applying..." : "Accept"}
+                    </button>
+                  )}
                 </div>
-                <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40">
-                  <p className="text-[10px] font-bold text-emerald-700 uppercase">OpenAI L2</p>
-                  <p className="font-mono text-lg font-black text-emerald-900 mt-0.5">
-                    {isOpenAiApiError ? "Offline" : openai?.solvedAnswer || "—"}
-                  </p>
+
+                <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-emerald-700 uppercase">OpenAI L2</p>
+                    <p className="font-mono text-lg font-black text-emerald-900 mt-0.5">
+                      {isOpenAiApiError ? "Offline" : openai?.solvedAnswer || "—"}
+                    </p>
+                  </div>
+                  {onAcceptAiSolution && !isOpenAiApiError && openai?.solvedAnswer && (
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptSolution("OpenAI", openai.solvedAnswer, openai.stepByStepSolution || openai.solutionCorrections || openai.reasoning)}
+                      disabled={acceptingProvider === "OpenAI"}
+                      className="mt-2 text-[10px] font-bold py-1 px-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg transition"
+                    >
+                      {acceptingProvider === "OpenAI" ? "Applying..." : "Accept"}
+                    </button>
+                  )}
                 </div>
-                <div className="p-2.5 rounded-xl border border-purple-200 bg-purple-50/40">
-                  <p className="text-[10px] font-bold text-purple-700 uppercase">{claude?.provider === "claude" ? "Claude L3" : "Groq L3"}</p>
-                  <p className="font-mono text-lg font-black text-purple-900 mt-0.5">
-                    {isClaudeApiError ? "Offline" : claude?.solvedAnswer || "—"}
-                  </p>
+
+                <div className="p-2.5 rounded-xl border border-purple-200 bg-purple-50/40 flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-purple-700 uppercase">{claude?.provider === "claude" ? "Claude L3" : "Groq L3"}</p>
+                    <p className="font-mono text-lg font-black text-purple-900 mt-0.5">
+                      {isClaudeApiError ? "Offline" : claude?.solvedAnswer || "—"}
+                    </p>
+                  </div>
+                  {onAcceptAiSolution && !isClaudeApiError && claude?.solvedAnswer && (
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptSolution("Groq", claude.solvedAnswer, claude.stepByStepSolution || claude.solutionCorrections || claude.reasoning)}
+                      disabled={acceptingProvider === "Groq"}
+                      className="mt-2 text-[10px] font-bold py-1 px-1.5 bg-purple-700 hover:bg-purple-600 text-white rounded-lg transition"
+                    >
+                      {acceptingProvider === "Groq" ? "Applying..." : "Accept"}
+                    </button>
+                  )}
                 </div>
               </div>
 

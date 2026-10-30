@@ -3,7 +3,7 @@
  * Shared Types & Interfaces
  */
 
-export type ModelProvider = "gemini" | "openai" | "claude" | "groq";
+export type ModelProvider = "gemini" | "openai" | "claude" | "grok" | "groq";
 
 export type QualityStatus =
   | "APPROVED_BY_ALL"
@@ -12,6 +12,7 @@ export type QualityStatus =
   | "REJECTED_BY_OPENAI"
   | "REJECTED_BY_CLAUDE"
   | "REJECTED_BY_GROQ"
+  | "REJECTED_BY_GROK"
   | "NCERT_MISMATCH"
   | "ANSWER_KEY_MISMATCH"
   | "SOLUTION_ERROR"
@@ -81,6 +82,9 @@ export interface SingleModelReview {
   provider: ModelProvider;
   model: string;
   solvedAnswer: string;            // The model's own independent answer
+  stepByStepSolution?: string | null; // The model's own independent step-by-step solution
+  identifiedMistakes?: string[];   // Explicit list of identified mistakes
+  recommendApproval?: boolean;     // Whether model recommends approving current question
   answerMatches: boolean;          // Does solvedAnswer match storedAnswer?
   isScientificallyCorrect: boolean;
   isMathematicallyCorrect: boolean;
@@ -115,6 +119,14 @@ export interface SingleModelReview {
     sanitizedDetails?: string;
   };
   rawOutput?: string;
+  fieldSuggestions?: Array<{
+    field: string;
+    language: string;
+    currentValue: string;
+    suggestedValue: string;
+    reason: string;
+    severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  }>;
 }
 
 export interface MathematicalValidationResult {
@@ -150,6 +162,7 @@ export interface FinalQualityDecision {
   openaiDecision: ReviewDecision;
   claudeDecision: ReviewDecision;
   groqDecision?: ReviewDecision;
+  grokDecision?: ReviewDecision;
   
   // Specialized validations
   ncertValidation: NcertAlignmentResult;
@@ -174,6 +187,7 @@ export interface CompleteReviewPayload {
   openaiReview: SingleModelReview;
   claudeReview: SingleModelReview;
   groqReview?: SingleModelReview;
+  grokReview?: SingleModelReview;
   mathValidation: MathematicalValidationResult;
   chemValidation: ChemicalValidationResult;
   finalDecision: FinalQualityDecision;

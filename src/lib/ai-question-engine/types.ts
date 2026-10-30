@@ -257,6 +257,7 @@ export interface QuestionValidationReport {
   duplicateScore: number;
   duplicateRisk: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "NONE";
   potentialDuplicateCode?: string;
+  similarityReport?: any;
   bilingualEquivalent: boolean;
   bilingualDiscrepancies?: string[];
   imageDependencyScore?: number;

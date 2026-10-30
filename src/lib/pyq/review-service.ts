@@ -1,3 +1,4 @@
+import { triggerQuestionVerification } from "@/lib/questions/verification-service";
 import "server-only";
 import { Prisma, type ExtractedQuestion } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -241,6 +242,7 @@ export async function approveExtracted(ids: string[], userId: string, publish: b
           })
         );
         questionId = created.id;
+        triggerQuestionVerification(created.id, { triggerSource: "PYQ_IMPORT", userId }).catch((err) => console.error("[PYQReviewService] Trigger failed:", err));
         if (eq.duplicateDecision === "KEEP_SEPARATE" && eq.duplicateOfQuestionId) {
           const [a, b] = [eq.duplicateOfQuestionId, questionId].sort();
           await prisma.questionDuplicateCandidate
