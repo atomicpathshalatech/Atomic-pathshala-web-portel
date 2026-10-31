@@ -433,6 +433,33 @@ export class StageCompositor {
   private warnedTaintedLayer = false;
   private readonly probe: CanvasRenderingContext2D | null;
   private cameraVideo: HTMLVideoElement | null = null;
+  /** Students on a video call (a remote WebRTC video track each), drawn as tiles. */
+  private callVideos = new Map<string, HTMLVideoElement>();
+  /** Whether a student's voice is in the stream right now (shows the "on call" tag). */
+  private callAudioCount = 0;
+
+  /** Shows a student's call video in the class video. */
+  addCallVideo(key: string, track: MediaStreamTrack) {
+    if (this.callVideos.has(key)) return;
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = new MediaStream([track]);
+    void video.play().catch(() => undefined);
+    this.callVideos.set(key, video);
+  }
+
+  removeCallVideo(key: string) {
+    const v = this.callVideos.get(key);
+    if (!v) return;
+    v.srcObject = null;
+    this.callVideos.delete(key);
+  }
+
+  /** How many call voices are mixed in (0 = no student on a call). */
+  setCallAudioCount(n: number) {
+    this.callAudioCount = Math.max(0, n);
+  }
   private logoImage: HTMLImageElement | null = null;
   private keyer: ChromaKeyer | null = null;
   private stopVoiceFilter: (() => Promise<void>) | null = null;
@@ -607,6 +634,8 @@ export class StageCompositor {
     this.output = null;
     if (this.cameraVideo) this.cameraVideo.srcObject = null;
     this.cameraVideo = null;
+    for (const key of Array.from(this.callVideos.keys())) this.removeCallVideo(key);
+    this.callAudioCount = 0;
   }
 
   /** Draws one frame. Public so tests/previews can render without starting media. */
@@ -699,8 +728,60 @@ export class StageCompositor {
 
   /** Everything drawn above the board and camera. */
   private drawOverlays() {
+    this.drawCallTiles();
     if (this.sources.poll) drawPollCard(this.ctx, this.sources.poll, this.width, this.height);
     this.drawChannelMark();
+  }
+
+  /**
+   * A student on a call: their video as a tile in the corner opposite the
+   * teacher's camera (one under another for more), or — voice only — a small
+   * "Student on call" tag, so viewers know whose voice they hear.
+   */
+  private drawCallTiles() {
+    const { ctx, width: W, height: H } = this;
+    const videos = Array.from(this.callVideos.values()).filter((v) => v.readyState >= 2 && v.videoWidth > 0);
+    if (videos.length === 0 && this.callAudioCount === 0) return;
+    const camLeft = (this.sources.cameraPosition || "").endsWith("LEFT");
+    const margin = Math.round(H * 0.035);
+    const tileW = Math.round(H * 0.3);
+    const tileH = Math.round((tileW * 3) / 4);
+    const x = camLeft ? W - margin - tileW : margin;
+    const label = (text: string, lx: number, ly: number) => {
+      ctx.save();
+      ctx.font = `700 ${Math.round(H * 0.018)}px system-ui, sans-serif`;
+      const w = ctx.measureText(text).width + H * 0.024;
+      const h = Math.round(H * 0.032);
+      ctx.fillStyle = "rgba(220, 38, 38, 0.92)";
+      ctx.beginPath();
+      ctx.roundRect(lx, ly, w, h, h / 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, lx + H * 0.012, ly + h / 2);
+      ctx.restore();
+    };
+    let y = H - margin - tileH;
+    for (const video of videos.slice(0, 2)) {
+      const crop = coverCrop(video.videoWidth, video.videoHeight, tileW, tileH);
+      ctx.save();
+      ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+      ctx.shadowBlur = Math.round(H * 0.02);
+      ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.roundRect(x, y, tileW, tileH, Math.round(H * 0.016));
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x, y, tileW, tileH, Math.round(H * 0.016));
+      ctx.clip();
+      ctx.drawImage(video, crop.x, crop.y, crop.w, crop.h, x, y, tileW, tileH);
+      ctx.restore();
+      label("● Student on call", x + H * 0.01, y + H * 0.01);
+      y -= tileH + Math.round(H * 0.015);
+    }
+    if (videos.length === 0) label("● Student on call (voice)", x, H - margin - Math.round(H * 0.032));
   }
 
   private warnedChroma = false;

@@ -120,12 +120,14 @@ export function DesktopStageStreamer({
         room = r;
         const isCaller = (identity: string) => identity !== teacherIdentityRef.current && !identity.startsWith("OBS:");
         r.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-          if (track.kind === Track.Kind.Audio && isCaller(participant.identity)) {
-            streamerRef.current?.addCallAudio(publication.trackSid, track.mediaStreamTrack);
-          }
+          if (!isCaller(participant.identity)) return;
+          if (track.kind === Track.Kind.Audio) streamerRef.current?.addCallAudio(publication.trackSid, track.mediaStreamTrack);
+          // A video doubt: the student's camera goes into the class video too.
+          else if (track.kind === Track.Kind.Video) streamerRef.current?.addCallVideo(publication.trackSid, track.mediaStreamTrack);
         });
         r.on(RoomEvent.TrackUnsubscribed, (_track, publication) => {
           streamerRef.current?.removeCallAudio(publication.trackSid);
+          streamerRef.current?.removeCallVideo(publication.trackSid);
         });
         await r.connect(json.data.url, json.data.token, { autoSubscribe: true });
         if (cancelled) await r.disconnect();
@@ -136,6 +138,9 @@ export function DesktopStageStreamer({
     return () => {
       cancelled = true;
       streamerRef.current?.clearCallAudio();
+      for (const p of room ? Array.from(room.remoteParticipants.values()) : []) {
+        for (const pub of Array.from(p.trackPublications.values())) streamerRef.current?.removeCallVideo(pub.trackSid);
+      }
       void room?.disconnect();
     };
   }, [callActive, callSessionId, stageToken]);

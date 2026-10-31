@@ -102,7 +102,17 @@ export class DesktopClassStreamer {
     const source = this.mixCtx.createMediaStreamSource(media);
     source.connect(this.mixDest);
     this.callAudio.set(key, { source, element });
+    this.compositor?.setCallAudioCount(this.callAudio.size);
     void this.mixCtx.resume().catch(() => undefined);
+  }
+
+  /** Shows a call participant's camera in the class video. */
+  addCallVideo(key: string, track: MediaStreamTrack) {
+    this.compositor?.addCallVideo(key, track);
+  }
+
+  removeCallVideo(key: string) {
+    this.compositor?.removeCallVideo(key);
   }
 
   removeCallAudio(key: string) {
@@ -111,6 +121,7 @@ export class DesktopClassStreamer {
     entry.source.disconnect();
     entry.element.srcObject = null;
     this.callAudio.delete(key);
+    this.compositor?.setCallAudioCount(this.callAudio.size);
   }
 
   clearCallAudio() {
