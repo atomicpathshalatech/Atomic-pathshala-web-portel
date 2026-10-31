@@ -19,6 +19,21 @@ const LOCAL_BROWSERS = [
   "/usr/bin/chromium",
 ].filter(Boolean) as string[];
 
+// @sparticuz/chromium decompresses its Chromium binary into /tmp the first
+// time executablePath() is called. When one job runs several vision chunks
+// concurrently in a single invocation, two calls race: one process spawns the
+// binary while the other is still writing it, which surfaces as
+// `spawn ETXTBSY` and silently kills that extraction chunk (observed on a
+// stuck job at 24%). Memoize the extraction so it runs exactly once per
+// process — concurrent launches await the same promise and never spawn a
+// half-written binary — and keep a one-shot retry as a safety net.
+let chromiumPathPromise: Promise<string> | undefined;
+
+function isTextFileBusy(err: unknown): boolean {
+  const s = err instanceof Error ? err.message : String(err);
+  return /ETXTBSY|text file busy/i.test(s);
+}
+
 export async function launchBrowser() {
   const puppeteer = (await import("puppeteer-core")).default;
   const local = process.platform !== "linux" || process.env.CHROME_PATH ? LOCAL_BROWSERS.find((p) => existsSync(p)) : undefined;
@@ -26,12 +41,30 @@ export async function launchBrowser() {
     return puppeteer.launch({ executablePath: local, headless: true, args: ["--no-sandbox", "--font-render-hinting=none"] });
   }
   const chromium = (await import("@sparticuz/chromium")).default;
-  return puppeteer.launch({
-    executablePath: await chromium.executablePath(),
-    args: [...chromium.args, "--font-render-hinting=none"],
-    headless: true,
-    defaultViewport: { width: 1240, height: 1754 },
-  });
+  const launch = async () => {
+    if (!chromiumPathPromise) {
+      chromiumPathPromise = chromium.executablePath().catch((e: unknown) => {
+        chromiumPathPromise = undefined; // allow a later retry to re-extract
+        throw e;
+      });
+    }
+    return puppeteer.launch({
+      executablePath: await chromiumPathPromise,
+      args: [...chromium.args, "--font-render-hinting=none"],
+      headless: true,
+      defaultViewport: { width: 1240, height: 1754 },
+    });
+  };
+  try {
+    return await launch();
+  } catch (err) {
+    if (!isTextFileBusy(err)) throw err;
+    // The binary was still being written by a concurrent extraction — let it
+    // settle and try once more.
+    chromiumPathPromise = undefined;
+    await new Promise((r) => setTimeout(r, 400));
+    return launch();
+  }
 }
 
 export async function renderBookletPdf(html: string, opts: { timeoutMs?: number } = {}): Promise<Buffer> {
