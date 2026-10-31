@@ -52,5 +52,23 @@ if (window.location.origin === trustedOrigin) {
         return () => ipcRenderer.removeListener("stage:control", handler);
       },
     },
+    /**
+     * The class's YouTube live chat in real time (about once a second), read
+     * from YouTube's own pop-out chat in a hidden window — no API quota.
+     */
+    youtubeChat: {
+      watch: (videoId) => ipcRenderer.invoke("ytchat:watch", videoId),
+      stop: () => ipcRenderer.invoke("ytchat:stop"),
+      onMessages: (listener) => {
+        const handler = (_event, messages) => listener(messages);
+        ipcRenderer.on("ytchat:messages", handler);
+        return () => ipcRenderer.removeListener("ytchat:messages", handler);
+      },
+      onStatus: (listener) => {
+        const handler = (_event, status) => listener(status);
+        ipcRenderer.on("ytchat:status", handler);
+        return () => ipcRenderer.removeListener("ytchat:status", handler);
+      },
+    },
   });
 }

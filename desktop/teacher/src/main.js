@@ -24,6 +24,7 @@ const path = require("node:path");
 const { appUrl, isTrustedUrl } = require("./config");
 const { registerEncoderIpc } = require("./encoder-ipc");
 const { registerStageIpc, closeStage } = require("./stage-window");
+const { registerYoutubeChatIpc, stopChat } = require("./youtube-chat");
 const { startSilentUpdates } = require("./updater");
 
 // Shown instead of Chromium's bare error page when the site cannot be
@@ -137,6 +138,7 @@ function createWindow() {
   mainWindow.on("closed", () => {
     mainWindow = null;
     closeStage(); // the offscreen stage never outlives the teacher's window
+    stopChat();
   });
   return mainWindow;
 }
@@ -158,6 +160,7 @@ function registerIpc() {
   });
   registerEncoderIpc({ ipcMain, trustedSender });
   registerStageIpc({ ipcMain, trustedSender, preloadPath: path.join(__dirname, "preload.js") });
+  registerYoutubeChatIpc({ ipcMain, trustedSender });
 }
 
 async function runSmoke() {

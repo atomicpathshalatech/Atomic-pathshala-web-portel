@@ -767,6 +767,11 @@ export function TeacherLiveClassRoom({
   const [loadingStreamKey, setLoadingStreamKey] = useState(false);
   const [copiedKeyField, setCopiedKeyField] = useState<string | null>(null);
   const [streamKeyVisible, setStreamKeyVisible] = useState(false);
+  // The teacher's own YouTube stream, entered during the class (see sendToOwnYoutube).
+  const [ownKey, setOwnKey] = useState("");
+  const [ownLink, setOwnLink] = useState("");
+  const [ownKeyBusy, setOwnKeyBusy] = useState(false);
+  const [ownKeyMessage, setOwnKeyMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
   const [manualObsYtLink, setManualObsYtLink] = useState("");
   const [savingManualObsYt, setSavingManualObsYt] = useState(false);
@@ -982,6 +987,41 @@ export function TeacherLiveClassRoom({
     await streamer?.stop().catch(() => undefined);
     setDesktopStream(null);
   }, []);
+
+  /** The teacher's own YouTube stream key (YouTube Studio), entered during the class: saved sealed, then the app sends to it. */
+  async function sendToOwnYoutube() {
+    if (!batchScheduleId || ownKeyBusy) return;
+    setOwnKeyBusy(true);
+    setOwnKeyMessage(null);
+    try {
+      const res = await fetch(`/api/team/live-class/${batchScheduleId}/stream-key`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ youtubeStreamKey: ownKey.trim(), youtubeUrlOrId: ownLink.trim() || undefined }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) throw new Error(typeof json.error === "string" ? json.error : "Could not save the stream key.");
+      setOwnKey("");
+      setOwnLink("");
+      setWbSession((prev) => (prev ? { ...prev, youtubeVideoId: json.data.youtubeVideoId } : prev));
+      if (getDesktopBridge()) {
+        // Restart the sender so it picks up this key.
+        await stopDesktopStreaming();
+        const sending = await startDesktopStreaming();
+        setOwnKeyMessage(
+          sending
+            ? { ok: true, text: "Sending the class to your YouTube stream. YouTube Studio shows it within a few seconds." }
+            : { ok: false, text: "Key saved, but the app could not start sending. Check the message in the header." }
+        );
+      } else {
+        setOwnKeyMessage({ ok: true, text: "Key saved. Open this class in the Atomic Pathshala Windows app to send it, or use it in OBS." });
+      }
+    } catch (err) {
+      setOwnKeyMessage({ ok: false, text: err instanceof Error ? err.message : "Could not save the stream key." });
+    } finally {
+      setOwnKeyBusy(false);
+    }
+  }
 
   // The teacher's screen goes straight to the class video (stage-link.ts):
   // the board the moment a stroke is finished or the slide changes, and the
@@ -1677,7 +1717,7 @@ export function TeacherLiveClassRoom({
       getJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`)
         .then((data) => {
           if (Array.isArray(data?.queue)) {
-            setHandRaiseQueue(data.queue);
+            setHandRaiseQueue((prev) => (JSON.stringify(prev) === JSON.stringify(data.queue) ? prev : data.queue));
           }
         })
         .catch(() => {});
@@ -2991,10 +3031,15 @@ export function TeacherLiveClassRoom({
   // ---- Hand raise actions: approve, reject, or clear ----------------------
   async function handleHandRaiseAction(id: string, action: "approve" | "reject" | "clear") {
     if (!wbSession) return;
+    const before = handRaiseQueue;
+    setHandRaiseQueue((prev) =>
+      action === "approve" ? prev.map((h) => (h.id === id ? { ...h, status: "APPROVED" } : h)) : prev.filter((h) => h.id !== id)
+    );
     try {
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise/${id}`, { action });
     } catch {
-      // queue re-syncs on the next Pusher push / manual refresh either way
+      // Not applied on the server: show the queue as it was (the next push / refresh confirms).
+      setHandRaiseQueue(before);
     }
   }
 
@@ -3007,10 +3052,13 @@ export function TeacherLiveClassRoom({
    * around as RESOLVED history. */
   async function handleDeleteHandRaise(id: string) {
     if (!wbSession) return;
+    const before = handRaiseQueue;
+    setHandRaiseQueue((prev) => prev.filter((h) => h.id !== id));
     try {
-      await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise/${id}`, { method: "DELETE" });
+      if (!res.ok) setHandRaiseQueue(before);
     } catch {
-      // queue re-syncs on the next Pusher push / manual refresh either way
+      setHandRaiseQueue(before);
     }
   }
 
@@ -3860,7 +3908,7 @@ export function TeacherLiveClassRoom({
             </button>
           )}
           {/* OBS Stream Key & Setup Button (shown whenever mode is YOUTUBE or BOTH) */}
-          {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && !desktopStream && (
+          {(isClassLive || wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && (
             <button
               type="button"
               onClick={() => {
@@ -3876,8 +3924,8 @@ export function TeacherLiveClassRoom({
               }`}
               title="Open OBS Studio Stream Key, RTMP URL & Browser Source URL"
             >
-              <span className="material-symbols-outlined text-sm text-red-400">sensors</span>
-              <span>OBS key</span>
+              <span className="material-symbols-outlined text-sm text-red-400">key</span>
+              <span>Stream key</span>
             </button>
           )}
 
@@ -5594,7 +5642,7 @@ export function TeacherLiveClassRoom({
 
       {/* OBS Studio Live Streaming Setup Modal */}
       {/* YouTube comments are read the whole time this room is open (not only while the Chat tab is showing). */}
-      <YoutubeChatPump whiteboardSessionId={wbSession.id} active={wbSession.livePhase === "LIVE" && Boolean(wbSession.youtubeVideoId)} />
+      <YoutubeChatPump whiteboardSessionId={wbSession.id} active={wbSession.livePhase === "LIVE" && Boolean(wbSession.youtubeVideoId)} youtubeVideoId={wbSession.youtubeVideoId} />
 
       {showObsStreamInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -5632,6 +5680,46 @@ export function TeacherLiveClassRoom({
 
             {/* Scrollable Body */}
             <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+              {/* Own YouTube stream (YouTube Studio key) — the app sends the class to it. */}
+              {isClassLive && (
+                <div className="p-3.5 rounded-xl bg-red-950/30 border border-red-800/50 space-y-2.5">
+                  <div className="flex items-center gap-1.5 font-bold text-red-200">
+                    <span className="material-symbols-outlined text-sm">smart_display</span>
+                    <span>Send to your own YouTube live stream</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-snug">
+                    In YouTube Studio → <b>Go live</b> → <b>Stream</b>, copy the <b>stream key</b> and the stream&apos;s link. The app sends the class
+                    (board, slides, camera, mic) straight to it — no OBS. Students in the app and the YouTube chat follow that stream.
+                  </p>
+                  <input
+                    type="text"
+                    value={ownLink}
+                    onChange={(e) => setOwnLink(e.target.value)}
+                    placeholder={wbSession?.youtubeVideoId ? `Current: youtu.be/${wbSession.youtubeVideoId} (leave empty to keep)` : "YouTube link: https://youtube.com/live/…"}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-[#0a0b12] border border-slate-700 text-slate-200 placeholder:text-slate-500"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={ownKey}
+                      onChange={(e) => setOwnKey(e.target.value)}
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="Stream key: xxxx-xxxx-xxxx-xxxx-xxxx"
+                      className="flex-1 min-w-0 px-3 py-2 text-xs font-mono rounded-xl bg-[#0a0b12] border border-slate-700 text-slate-200 placeholder:text-slate-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={ownKeyBusy || !ownKey.trim()}
+                      onClick={() => void sendToOwnYoutube()}
+                      className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold shrink-0"
+                    >
+                      {ownKeyBusy ? "Connecting…" : getDesktopBridge() ? "Send to YouTube" : "Save key"}
+                    </button>
+                  </div>
+                  {ownKeyMessage && <p className={`text-[11px] ${ownKeyMessage.ok ? "text-emerald-300" : "text-rose-300"}`}>{ownKeyMessage.text}</p>}
+                </div>
+              )}
               {/* Step Guide Banner */}
               <div className="p-3.5 rounded-xl bg-blue-950/40 border border-blue-800/50 space-y-2">
                 <div className="flex items-center gap-1.5 font-bold text-blue-300">
@@ -6649,8 +6737,8 @@ function PollModal({
   }, [pollModalTab, sessionId, leaderboardScope, activeQuiz?.status]);
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-[#12131c] w-full max-w-sm rounded-2xl shadow-2xl border border-[#2d2e3b] flex flex-col max-h-[90vh] text-white overflow-hidden">
+    <div className="fixed z-50 bottom-20 right-3 lg:right-[calc(var(--live-panel-w)+0.75rem)] pointer-events-none">
+      <div className="pointer-events-auto bg-[#12131c]/95 backdrop-blur-md w-[17rem] rounded-2xl shadow-2xl border border-[#2d2e3b] flex flex-col max-h-[min(60vh,30rem)] text-white overflow-hidden text-[13px]">
         {/* Header (Screenshot 1) */}
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#252836] bg-[#171924]">
           <div className="flex items-center gap-2">

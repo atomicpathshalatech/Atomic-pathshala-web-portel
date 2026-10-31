@@ -66,6 +66,36 @@ export async function syncYoutubeVotes(quizSessionId: string, opts: { force?: bo
   }
 }
 
+/**
+ * Poll answers from chat messages the Teacher app read itself (real time, no
+ * API): same rules as syncYoutubeVotes (first valid answer per account, only
+ * while the poll is open). Returns how many new answers were stored.
+ */
+export async function ingestYoutubeChatVotes(
+  quizSessionId: string,
+  messages: Array<{ id: string; authorName: string; authorChannelId: string | null; authorPhotoUrl: string | null; messageText: string; publishedAt: string }>
+): Promise<number> {
+  try {
+    const quiz = await prisma.quizSession.findUnique({
+      where: { id: quizSessionId },
+      select: { options: true, startedAt: true, timeLimitSec: true },
+    });
+    if (!quiz) return 0;
+    const votes = collectChatVotes(
+      messages
+        .filter((m) => m.authorChannelId)
+        .map((m) => ({ ...m, authorChannelId: m.authorChannelId as string })),
+      { options: quiz.options as unknown as PollOption[], startedAt: quiz.startedAt, timeLimitSec: quiz.timeLimitSec }
+    );
+    if (votes.length === 0) return 0;
+    const res = await prisma.quizYoutubeVote.createMany({ data: votes.map((v) => ({ ...v, quizSessionId })), skipDuplicates: true });
+    return res.count;
+  } catch (err) {
+    console.warn("[youtube_votes_ingest]", err instanceof Error ? err.message : err);
+    return 0;
+  }
+}
+
 /** Per-option counts of YouTube chat answers (empty if none / not available). */
 export async function youtubeVoteCounts(quizSessionId: string): Promise<{ counts: Record<string, number>; total: number }> {
   try {

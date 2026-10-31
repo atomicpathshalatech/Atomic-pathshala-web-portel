@@ -134,12 +134,14 @@ export function VideoPollOverlay({
       className={
         fixedLayer
           ? "fixed inset-x-0 bottom-0 z-[70] pointer-events-none flex justify-center px-2 pt-2 sm:px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-5"
-          : "absolute inset-0 z-40 pointer-events-none flex items-center justify-center p-3 sm:p-6 bg-black/40 backdrop-blur-[2px] transition-all"
+          : "absolute bottom-2 right-2 sm:bottom-3 sm:right-3 z-40 pointer-events-none flex justify-end transition-all"
       }
     >
       <div
-        className={`pointer-events-auto w-full max-w-md bg-[#0e111d]/95 text-white border-2 border-indigo-500/80 rounded-2xl shadow-2xl p-4 sm:p-5 flex flex-col gap-3.5 animate-in fade-in duration-200 backdrop-blur-xl ${
-          fixedLayer ? "max-h-[72dvh] overflow-y-auto slide-in-from-bottom-4" : "zoom-in-95"
+        className={`pointer-events-auto bg-[#0e111d]/90 text-white border border-indigo-500/70 rounded-xl shadow-2xl flex flex-col animate-in fade-in duration-200 backdrop-blur-xl ${
+          fixedLayer
+            ? "w-full max-w-sm p-3 gap-2.5 max-h-[60dvh] overflow-y-auto slide-in-from-bottom-4"
+            : "w-[min(15rem,46%)] p-2.5 gap-2 text-[12px] max-h-[90%] overflow-y-auto zoom-in-95"
         }`}
       >
         {/* Header */}

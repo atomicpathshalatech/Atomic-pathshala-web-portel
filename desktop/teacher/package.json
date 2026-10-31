@@ -1,7 +1,7 @@
 {
   "name": "atomic-teacher-desktop",
   "productName": "Atomic Pathshala",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Atomic Pathshala Windows app for students and the team: opens the portal of whoever signs in, plus the teachers' built-in YouTube encoder.",
   "main": "src/main.js",

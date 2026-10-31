@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
-import { apiSuccess, apiError } from "@/lib/api/response";
+import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import {
   fetchLiveChatMessages,
   getLiveChatIdForVideo,
@@ -172,5 +172,61 @@ export async function GET(
       quotaBlockedUntil = Date.now() + QUOTA_BACKOFF_MS;
     }
     return apiSuccess({ messages: [], active: false });
+  }
+}
+
+const MAX_INGEST = 200;
+
+/**
+ * Teacher-only. Chat messages the Teacher app read from YouTube's own live
+ * chat in real time (see desktop/teacher/src/youtube-chat.js): stored as class
+ * chat and pushed to the room like the API-read ones, and counted as poll
+ * answers while a poll is open — within about a second instead of 20 s, and
+ * without YouTube API quota.
+ */
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+    const access = await resolveWhiteboardAccess(session.user.id, params.id);
+    if (!access || access.role !== "TEACHER") throw new ForbiddenError();
+
+    const body = await request.json().catch(() => null);
+    const raw: unknown[] = Array.isArray(body?.messages) ? body.messages.slice(0, MAX_INGEST) : [];
+    const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+    const messages = raw
+      .map((m) => {
+        const o = (m && typeof m === "object" ? m : {}) as Record<string, unknown>;
+        const at = Date.parse(str(o.publishedAt, 40));
+        return {
+          id: str(o.id, 200),
+          authorName: str(o.authorName, 190) || "YouTube Viewer",
+          authorChannelId: str(o.authorChannelId, 100) || null,
+          authorPhotoUrl: /^https:\/\//.test(str(o.authorPhotoUrl, 500)) ? str(o.authorPhotoUrl, 500) : null,
+          messageText: str(o.messageText, 2000),
+          publishedAt: new Date(Number.isFinite(at) ? at : Date.now()).toISOString(),
+        };
+      })
+      .filter((m) => m.id && m.messageText);
+    if (messages.length === 0) return apiSuccess({ stored: 0, votes: 0 });
+
+    const { stored } = await saveYoutubeChat(params.id, messages);
+
+    let votes = 0;
+    const activeQuiz = await prisma.quizSession.findFirst({
+      where: { whiteboardSessionId: params.id, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (activeQuiz) {
+      const { ingestYoutubeChatVotes } = await import("@/lib/whiteboard/youtube-votes");
+      votes = await ingestYoutubeChatVotes(activeQuiz.id, messages);
+      if (votes > 0) {
+        const { pushQuizMetrics } = await import("@/lib/whiteboard/quiz");
+        await pushQuizMetrics(activeQuiz.id);
+      }
+    }
+    return apiSuccess({ stored, votes });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

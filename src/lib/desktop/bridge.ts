@@ -64,6 +64,26 @@ export interface AtomicDesktopBridge {
     /** Stage window: listen for those switches. */
     onControl?(listener: (state: StageControl) => void): () => void;
   };
+  /**
+   * The class's YouTube live chat in real time, read by the app from
+   * YouTube's own pop-out chat (no API quota). Absent in older app builds.
+   */
+  youtubeChat?: {
+    watch(videoId: string): Promise<{ watching: boolean; reused: boolean }>;
+    stop(): Promise<{ stopped: boolean }>;
+    onMessages(listener: (messages: DesktopChatMessage[]) => void): () => void;
+    onStatus(listener: (status: { state: "watching" | "error"; videoId: string; error?: string }) => void): () => void;
+  };
+}
+
+/** One YouTube chat message as the app reads it. */
+export interface DesktopChatMessage {
+  id: string;
+  authorName: string;
+  authorChannelId: string | null;
+  authorPhotoUrl: string | null;
+  messageText: string;
+  publishedAt: string;
 }
 
 export function getDesktopBridge(): AtomicDesktopBridge | null {

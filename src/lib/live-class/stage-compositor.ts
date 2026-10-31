@@ -113,9 +113,10 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number
  * Returns the card rect (tests check it stays inside the frame).
  */
 export function drawPollCard(ctx: CanvasRenderingContext2D, poll: StagePoll, W: number, H: number, now = Date.now()): Rect {
-  const s = H / 1080;
+  // Kept small so the board stays readable behind it.
+  const s = (H / 1080) * 0.78;
   const pad = 22 * s;
-  const w = Math.round(W * 0.3);
+  const w = Math.round(W * 0.22);
   const rowH = 46 * s;
   const gap = 8 * s;
   ctx.save();

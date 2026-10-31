@@ -1218,12 +1218,13 @@ export function StudentLiveClassRoom({
       // Lower hand directly
       if (!wbSession?.id || handRaiseBusy) return;
       setHandRaiseBusy(true);
+      setHandRaised(false);
+      setIsApprovedSpeaker(false);
       try {
-        await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { method: "DELETE" });
-        setHandRaised(false);
-        setIsApprovedSpeaker(false);
+        const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { method: "DELETE" });
+        if (!res.ok) setHandRaised(true);
       } catch {
-        // ignore
+        setHandRaised(true);
       } finally {
         setHandRaiseBusy(false);
       }
