@@ -74,6 +74,7 @@ export default async function BatchCoursePage({
                 user: { select: { name: true } },
               },
             },
+            chapter: { select: { id: true, title: true } },
             liveWhiteboardSession: true,
           },
         },

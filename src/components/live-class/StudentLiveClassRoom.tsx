@@ -551,6 +551,10 @@ export function StudentLiveClassRoom({
 
   // Quiz leaderboard published by the teacher (the popup closes itself).
   const [publishedLeaderboard, setPublishedLeaderboard] = useState<PublishedLeaderboard | null>(null);
+  // This student's own place on the published leaderboard (it shows only the top 10).
+  const [myLeaderboardRank, setMyLeaderboardRank] = useState<{ rank: number | null; correctCount: number; totalAttempted: number } | null>(null);
+  const wbSessionIdRef = useRef<string | null>(null);
+  wbSessionIdRef.current = wbSession?.id ?? null;
   const closeLeaderboard = useCallback(() => setPublishedLeaderboard(null), []);
 
   // Auto-dismiss quiz 5 seconds after results are revealed or closed
@@ -1120,7 +1124,18 @@ export function StudentLiveClassRoom({
     // session id, which a student who joined early may only know as the
     // schedule id.
     const handleLeaderboard = (data: unknown) => {
-      if (isPublishedLeaderboard(data)) setPublishedLeaderboard({ ...data });
+      if (!isPublishedLeaderboard(data)) return;
+      setPublishedLeaderboard({ ...data });
+      setMyLeaderboardRank(null);
+      const sid = wbSessionIdRef.current;
+      if (!sid) return;
+      const scope = data.scope === "chapter" ? "chapter" : "session";
+      fetch(`/api/whiteboard/sessions/${sid}/quiz/leaderboard?scope=${scope}&me=1`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((json) => {
+          if (json?.success && json.data?.me) setMyLeaderboardRank(json.data.me);
+        })
+        .catch(() => undefined);
     };
     channel.bind(WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, handleLeaderboard);
     secondaryChannel?.bind(WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, handleLeaderboard);
@@ -2047,7 +2062,7 @@ export function StudentLiveClassRoom({
 
       {/* Quiz leaderboard published by the teacher */}
       {publishedLeaderboard && (
-        <LeaderboardPopup leaderboard={publishedLeaderboard} onClose={closeLeaderboard} />
+        <LeaderboardPopup leaderboard={publishedLeaderboard} onClose={closeLeaderboard} me={myLeaderboardRank} />
       )}
     </div>
   );

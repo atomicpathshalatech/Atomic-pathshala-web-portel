@@ -1,15 +1,26 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { formatISTDate, formatISTTime } from "@/lib/date-utils";
 import { getEffectiveScheduleStatus, canStudentJoinClass } from "@/lib/schedule/access-rules";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 import { RecordedLecturesBlock } from "@/components/recorded-lectures/RecordedLecturesBlock";
+import { ClassDetailsPanel } from "./ClassDetailsPanel";
 
 export function ClassesSection({ course }: { course?: any }) {
-  const schedules = course?.schedules || [];
+  const allSchedules: any[] = course?.schedules || [];
   const [clientNow, setClientNow] = useState<Date>(new Date());
+  // "Class details" panel (duration, PDF, recording, poll results) for one finished class.
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
+  // Chapter-wise: pick a chapter to see only its classes / recordings.
+  const chapters = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const s of allSchedules) if (s.chapter?.id && !seen.has(s.chapter.id)) seen.set(s.chapter.id, s.chapter.title);
+    return Array.from(seen, ([id, title]) => ({ id, title }));
+  }, [allSchedules]);
+  const [chapterId, setChapterId] = useState<string>("all");
+  const schedules = chapterId === "all" ? allSchedules : allSchedules.filter((s) => s.chapter?.id === chapterId);
 
   useEffect(() => {
     setClientNow(new Date());
@@ -29,6 +40,27 @@ export function ClassesSection({ course }: { course?: any }) {
           Interactive classroom sessions scheduled for this batch.
         </p>
       </div>
+
+      {chapters.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" role="tablist" aria-label="Chapters">
+          {[{ id: "all", title: "All chapters" }, ...chapters].map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={chapterId === c.id}
+              onClick={() => setChapterId(c.id)}
+              className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold border transition ${
+                chapterId === c.id
+                  ? "bg-blue-600 border-blue-600 text-white"
+                  : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-400"
+              }`}
+            >
+              {c.title}
+            </button>
+          ))}
+        </div>
+      )}
 
       {schedules.length === 0 ? (
         <div className="p-8 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center text-slate-500 text-xs">
@@ -92,6 +124,12 @@ export function ClassesSection({ course }: { course?: any }) {
                       </span>
                     )}
 
+                    {cls.chapter?.title && chapterId === "all" && (
+                      <span className="px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 text-[10px] font-bold truncate max-w-[12rem]">
+                        {cls.chapter.title}
+                      </span>
+                    )}
+
                     {cls.teacher?.user?.name && (
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                         by {cls.teacher.user.name}
@@ -112,6 +150,15 @@ export function ClassesSection({ course }: { course?: any }) {
                 <div className="flex items-center gap-2 shrink-0 flex-wrap sm:self-center">
                   {isCompleted ? (
                     <>
+                      <button
+                        type="button"
+                        onClick={() => setDetailsFor(cls.id)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-900/60 font-bold text-xs transition active:scale-95"
+                        title="Duration, PDF, recording and poll results"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">emoji_events</span>
+                        <span>Class details</span>
+                      </button>
                       {hasRecording ? (
                         <Link
                           href={`/watch/${cls.id}`}
@@ -169,6 +216,7 @@ export function ClassesSection({ course }: { course?: any }) {
         </div>
       )}
     </section>
+    {detailsFor && <ClassDetailsPanel scheduleId={detailsFor} onClose={() => setDetailsFor(null)} />}
     {/* Recorded lectures of this batch (separate storage; enrolled students only). */}
     {course?.id && <RecordedLecturesBlock batchId={course.id} />}
     </div>

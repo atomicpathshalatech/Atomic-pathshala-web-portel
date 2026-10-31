@@ -53,9 +53,12 @@ const MEDALS = ["🥇", "🥈", "🥉"];
 export function LeaderboardPopup({
   leaderboard,
   onClose,
+  me,
 }: {
   leaderboard: PublishedLeaderboard;
   onClose: () => void;
+  /** Student view: this student's own place (null rank = did not answer → 0). */
+  me?: { rank: number | null; correctCount: number; totalAttempted: number } | null;
 }) {
   const duration = typeof leaderboard.durationSec === "number" && leaderboard.durationSec > 0 ? leaderboard.durationSec : 30;
   const [left, setLeft] = useState(duration);
@@ -126,6 +129,15 @@ export function LeaderboardPopup({
         </button>
       </div>
 
+      {me && (
+        <div className="mx-2.5 mt-2.5 px-3 py-2 rounded-xl border-2 border-blue-500/70 bg-blue-500/15 flex items-center justify-between gap-2 text-xs">
+          <span className="font-bold text-blue-200">Your rank</span>
+          <span className="font-black text-white">
+            {me.rank ? `#${me.rank}${leaderboard.stats ? ` of ${leaderboard.stats.totalParticipants}` : ""}` : "Not answered"} · {me.correctCount}/
+            {leaderboard.stats?.totalPolls ?? me.totalAttempted} marks
+          </span>
+        </div>
+      )}
       <div className="p-2.5 space-y-1.5 overflow-y-auto text-xs">
         {leaderboard.rankings.length === 0 && <p className="text-center text-slate-400 py-4">No answers yet.</p>}
         {top.map((student, i) => (

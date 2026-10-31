@@ -5,6 +5,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { buildQuizLeaderboard, type LeaderboardEntry } from "@/lib/whiteboard/quiz-leaderboard";
+import { prisma } from "@/lib/db";
 
 export type StudentLeaderboardEntry = LeaderboardEntry;
 
@@ -26,6 +27,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const scope = request.nextUrl.searchParams.get("scope") === "chapter" ? "chapter" : "session";
     const board = await buildQuizLeaderboard(params.id, scope);
     if (!board) return apiError("Whiteboard session not found", 404);
+    // ?me=1 — the calling student's own place (the published card shows only the top 10).
+    if (request.nextUrl.searchParams.get("me") === "1") {
+      const student = await prisma.student.findUnique({ where: { userId: session.user.id }, select: { id: true } });
+      const mine = student ? board.rankings.find((r) => r.studentId === student.id) : undefined;
+      return apiSuccess({
+        ...board,
+        me: student
+          ? { rank: mine?.rank ?? null, correctCount: mine?.correctCount ?? 0, totalAttempted: mine?.totalAttempted ?? 0 }
+          : null,
+      });
+    }
     return apiSuccess(board);
   } catch (error) {
     return handleApiError(error);
