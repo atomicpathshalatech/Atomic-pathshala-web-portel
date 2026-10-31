@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { defaultAiProvider, matchSelectedTopic } from "./gemini-provider";
 import { runQuestionValidationPipeline } from "./validator-pipeline";
 import { withNewQuestionCode, toDifficulty } from "@/lib/questions/create-with-code";
+import { createQuestion } from "@/lib/questions/question-management-service";
 import { bankTypeOf } from "./type-formats";
 import { attachFigure } from "./prepare-figure";
 import { runMultiModelAudit } from "@/lib/ai-provider/multi-model-hub";
@@ -406,29 +407,26 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
               solution: q.solutionHi || null,
             });
           }
-          const created = await withNewQuestionCode(q.subject, (questionCode) =>
-            prisma.question.create({
-              data: {
-                questionCode,
-                subject: q.subject,
-                chapter: q.chapter,
-                topic: q.topic,
-                subTopic: q.subTopic || null,
-                type: bankTypeOf(q.questionType),
-                difficulty: toDifficulty(q.difficulty),
-                category: `AI_GENERATED:${methodTag}`,
-                status: "DRAFT",
-                isPublished: false,
-                imageUrl: q.imageUrl || null,
-                solution: q.solutionEn || q.solutionHi || null,
-                tags: `AI_AUTO_DRAFT, METHOD_${methodTag}, BATCH_${batchId}, ${q.difficulty}, VALIDATION_${report.validationStatus}`,
-                createdById: params.userId,
-                translations: { create: translations },
-              },
-              select: { id: true },
-            })
+          const created = await createQuestion(
+            {
+              subject: q.subject,
+              chapter: q.chapter,
+              topic: q.topic,
+              subTopic: q.subTopic || null,
+              type: bankTypeOf(q.questionType),
+              difficulty: toDifficulty(q.difficulty),
+              category: `AI_GENERATED:${methodTag}`,
+              status: "DRAFT",
+              isPublished: false,
+              imageUrl: q.imageUrl || null,
+              solution: q.solutionEn || q.solutionHi || null,
+              tags: `AI_AUTO_DRAFT, METHOD_${methodTag}, BATCH_${batchId}, ${q.difficulty}, VALIDATION_${report.validationStatus}`,
+              createdById: params.userId,
+            },
+            translations,
+            { auditUserId: params.userId, sourceLabel: `AI_GENERATED:${methodTag}` }
           );
-          draftQuestionId = created.id;
+          draftQuestionId = created.question.id;
           draftedCount++;
         } catch (err) {
           console.error(`[JobRunner] Could not create the Question Bank draft (batch ${batchId}):`, err);

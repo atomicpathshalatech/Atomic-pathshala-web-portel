@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { generateQuestionId } from "@/lib/questions/id-generator";
+import { createQuestion } from "@/lib/questions/question-management-service";
 import { formatStructuredSolution, formatFullQuestionStatement, type QuizQuestion } from "@/lib/ai-chat/quiz";
 import { QuestionType, Difficulty } from "@prisma/client";
 import { awardXp, registerDailyActivity } from "@/lib/ai-chat/gamification";
@@ -226,8 +227,11 @@ export async function streamToQuestionBankDraft({
       const isHindi = language === "hindi";
       const fullStatement = formatFullQuestionStatement(q) || q.text;
 
-      await prisma.question.create({
-        data: {
+      // Centralized create: fingerprint + concurrency-safe code + exact-dup
+      // idempotency. `code` is honoured as the first attempt and reassigned on
+      // conflict (previously a same-instant collision silently dropped the row).
+      await createQuestion(
+        {
           questionCode: code,
           subject: q.subject,
           chapter: q.chapter || q.topic || "General",
@@ -239,17 +243,17 @@ export async function streamToQuestionBankDraft({
           solution: structured.solution,
           tags: `ATOMIC_GURU_GENERATED, SOURCE_${sourceModule}${generationJobId ? `, JOB_${generationJobId}` : ""}`,
           createdById: safeUserId,
-          translations: {
-            create: [
-              {
-                language: isHindi ? "HINDI" : "ENGLISH",
-                statement: fullStatement,
-                options: optionsMap,
-                correctOptionIds: [correctLetter],
-                solution: structured.solution,
-              },
-            ],
+        },
+        [
+          {
+            language: isHindi ? "HINDI" : "ENGLISH",
+            statement: fullStatement,
+            options: optionsMap,
+            correctOptionIds: [correctLetter],
+            solution: structured.solution,
           },
+        ],
+        {
           versions: {
             create: {
               versionNumber: 1,
@@ -270,8 +274,10 @@ export async function streamToQuestionBankDraft({
               },
             },
           },
-        },
-      });
+          auditUserId: safeUserId,
+          sourceLabel: `ATOMIC_GURU:${sourceModule}`,
+        }
+      );
 
       savedCount++;
     } catch (err) {
