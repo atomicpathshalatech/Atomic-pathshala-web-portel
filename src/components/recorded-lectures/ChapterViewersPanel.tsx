@@ -45,11 +45,13 @@ export function ChapterViewersPanel({ chapterId, batches }: { chapterId: string;
     void load();
   }, [load]);
 
+  // Saved students first (then by name), so who can watch is visible without
+  // scrolling. Ordered by what is SAVED, not by ticks: rows don't jump while ticking.
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return students;
-    return students.filter((s) => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q) || s.phone.includes(q));
-  }, [students, query]);
+    const list = q ? students.filter((s) => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q) || s.phone.includes(q)) : students;
+    return [...list].sort((a, b) => Number(saved.has(b.id)) - Number(saved.has(a.id)) || a.name.localeCompare(b.name));
+  }, [students, query, saved]);
 
   const toggle = (id: string, on: boolean) =>
     setChosen((cur) => {
@@ -139,6 +141,11 @@ export function ChapterViewersPanel({ chapterId, batches }: { chapterId: string;
                 <input type="checkbox" className="w-4 h-4" checked={chosen.has(s.id)} onChange={(e) => toggle(s.id, e.target.checked)} />
                 <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">{s.name}</span>
                 <span className="text-xs text-slate-500 truncate">{[s.code, s.phone].filter(Boolean).join(" · ")}</span>
+                {saved.has(s.id) && (
+                  <span className="ml-auto shrink-0 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5">
+                    Can watch
+                  </span>
+                )}
               </label>
             </li>
           ))}

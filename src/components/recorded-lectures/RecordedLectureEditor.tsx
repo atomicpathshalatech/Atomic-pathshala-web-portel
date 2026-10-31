@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { AboutSummaryPanel } from "./AboutSummaryPanel";
 import { LectureAiPanel } from "./LectureAiPanel";
+import { LectureWatchersPanel } from "./LectureWatchersPanel";
 import { StorageBanner } from "./RecordedLecturesManager";
 import { VideoUploadPanel, formatBytes } from "./VideoUploadPanel";
 import { uploadThumbnail } from "./RecordedLectureCreateForm";
@@ -220,6 +221,12 @@ export function RecordedLectureEditor({ lectureId }: { lectureId: string }) {
       {canManage && !m.archivedAt && <LectureSchedulePanel lectureId={lectureId} ready={ready} onChanged={load} />}
 
       {canManage && <DetailsForm lecture={lecture} onSaved={setLecture} />}
+
+      {m.uploadStatus === "READY" && (
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+          <LectureWatchersPanel lectureId={lectureId} />
+        </section>
+      )}
 
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
         <LectureAiPanel lectureId={lectureId} canStart={canManage} videoReady={m.uploadStatus === "READY"} onTranscriptReady={setTranscriptReady} />

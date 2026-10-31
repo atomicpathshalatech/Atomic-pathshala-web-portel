@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clampToLive, livePositionSec } from "@/lib/recorded-lectures/premiere";
+import { useWatchHeartbeat } from "@/lib/video/use-watch-heartbeat";
 
 /** This browser's id for the one-device rule (kept across visits). */
 function deviceId(): string {
@@ -75,6 +76,22 @@ export function RecordedLecturePlayer({
   const device = useRef<string>("");
   // Covered and paused: the window lost focus / Print Screen (see the comment above).
   const [shielded, setShielded] = useState(false);
+
+  // How much of the lecture this student really watched (team analytics: who watched, what %).
+  const [playPos, setPlayPos] = useState(0);
+  const [playDur, setPlayDur] = useState(0);
+  useWatchHeartbeat(`lecture:${lectureId}`, playPos, playDur);
+
+  // Playback speed (the phone's own controls often have none). 1x only in a live slot.
+  const [rate, setRate] = useState(1);
+  const [rateMenu, setRateMenu] = useState(false);
+
+  // Full screen. Phones: the whole player (watermark included) in landscape.
+  // Where a page can't go full screen (iPhone Safari), the player fills the
+  // window and turns sideways itself.
+  const [isFull, setIsFull] = useState(false);
+  const [fakeFull, setFakeFull] = useState(false);
+  const [portrait, setPortrait] = useState(false);
 
   // Subtitles of what the teacher says (from the lecture's AI pass), when there are any.
   const [hasSubtitles, setHasSubtitles] = useState(false);
@@ -281,6 +298,8 @@ export function RecordedLecturePlayer({
     const v = videoRef.current;
     if (!v || !v.duration) return;
     holdToLive();
+    if (Math.abs(v.currentTime - playPos) >= 1) setPlayPos(v.currentTime);
+    if (v.duration !== playDur) setPlayDur(v.duration);
     try {
       if (Math.floor(v.currentTime) % 5 === 0) localStorage.setItem(resumeKey, String(Math.floor(v.currentTime)));
     } catch {
@@ -304,21 +323,91 @@ export function RecordedLecturePlayer({
     }
   };
 
-  const fullscreen = async () => {
+  const enterFull = useCallback(async () => {
     const box = boxRef.current;
     if (!box) return;
     try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await box.requestFullscreen();
+      await box.requestFullscreen();
+      // Turn a phone sideways for a bigger picture (Android; ignored where not allowed).
+      await (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })?.lock?.("landscape").catch(() => undefined);
     } catch {
-      // not supported here (some phones): the inline player stays
+      // No full screen for a page here (iPhone): fill the window, turned sideways if held upright.
+      setFakeFull(true);
     }
+  }, []);
+
+  const exitFull = useCallback(async () => {
+    setFakeFull(false);
+    try {
+      screen.orientation?.unlock?.();
+    } catch {
+      // not locked
+    }
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => undefined);
+  }, []);
+
+  const fullscreen = async () => {
+    if (document.fullscreenElement || fakeFull) await exitFull();
+    else await enterFull();
   };
+
+  useEffect(() => {
+    const onChange = () => {
+      const full = Boolean(document.fullscreenElement);
+      setIsFull(full);
+      if (!full) {
+        try {
+          screen.orientation?.unlock?.();
+        } catch {
+          // not locked
+        }
+      }
+    };
+    const onResize = () => setPortrait(window.innerHeight > window.innerWidth);
+    // A phone turned sideways while the lecture plays goes full screen by itself (like YouTube).
+    const onTurn = () => {
+      onResize();
+      const touch = window.matchMedia("(pointer: coarse)").matches;
+      const landscape = window.innerWidth > window.innerHeight;
+      const playing = videoRef.current && !videoRef.current.paused;
+      if (touch && landscape && playing && !document.fullscreenElement) void enterFull();
+    };
+    onResize();
+    document.addEventListener("fullscreenchange", onChange);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onTurn);
+    screen.orientation?.addEventListener?.("change", onTurn);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onTurn);
+      screen.orientation?.removeEventListener?.("change", onTurn);
+    };
+  }, [enterFull]);
+
+  // Speed: applied to the video; a live slot plays at 1x (no getting ahead of the class).
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v) v.playbackRate = live ? 1 : rate;
+  }, [rate, live, src]);
 
   return (
     <div
       ref={boxRef}
-      className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden select-none [-webkit-touch-callout:none]"
+      className={`bg-black overflow-hidden select-none [-webkit-touch-callout:none] ${
+        fakeFull
+          ? "fixed z-[200] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          : isFull
+          ? "relative w-full h-full"
+          : "relative w-full aspect-video rounded-2xl"
+      }`}
+      style={
+        fakeFull
+          ? portrait
+            ? { width: "100dvh", height: "100vw", transform: "translate(-50%, -50%) rotate(90deg)" }
+            : { width: "100vw", height: "100dvh" }
+          : undefined
+      }
       onContextMenu={(e) => e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
     >
@@ -331,7 +420,12 @@ export function RecordedLecturePlayer({
           preload="metadata"
           controlsList="nodownload nofullscreen noremoteplayback"
           disablePictureInPicture
-          onLoadedMetadata={onLoaded}
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget;
+            v.playbackRate = live ? 1 : rate;
+            setPlayDur(v.duration || 0);
+            onLoaded();
+          }}
           onWaiting={() => setLoading(true)}
           onPlaying={() => setLoading(false)}
           onCanPlay={() => setLoading(false)}
@@ -431,13 +525,43 @@ export function RecordedLecturePlayer({
         </div>
       )}
 
+      {!live && src && (
+        <div className={`absolute top-2 ${hasSubtitles ? "right-[10.5rem]" : "right-12"} z-10`}>
+          <button
+            type="button"
+            onClick={() => setRateMenu((o) => !o)}
+            aria-label="Playback speed"
+            className="rounded-lg bg-black/60 hover:bg-black/70 text-white text-[11px] sm:text-xs font-bold px-2 py-1"
+          >
+            {rate}x
+          </button>
+          {rateMenu && (
+            <div className="absolute right-0 mt-1 rounded-lg bg-black/90 text-white text-xs font-bold overflow-hidden shadow-xl">
+              {[0.75, 1, 1.25, 1.5, 1.75, 2].map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => {
+                    setRate(r);
+                    setRateMenu(false);
+                  }}
+                  className={`block w-full text-left px-3 py-1.5 hover:bg-white/15 ${r === rate ? "text-blue-300" : ""}`}
+                >
+                  {r}x
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <button
         type="button"
         onClick={fullscreen}
-        aria-label="Full screen"
+        aria-label={isFull || fakeFull ? "Exit full screen" : "Full screen"}
         className="absolute top-2 right-2 rounded-lg bg-black/50 hover:bg-black/70 text-white p-1.5"
       >
-        <span className="material-symbols-outlined text-lg">fullscreen</span>
+        <span className="material-symbols-outlined text-lg">{isFull || fakeFull ? "fullscreen_exit" : "fullscreen"}</span>
       </button>
     </div>
   );
