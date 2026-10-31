@@ -3016,6 +3016,11 @@ export function TeacherLiveClassRoom({
     if (!wbSession) return;
     setEnding(true);
     try {
+      // Every stroke saved before the class ends: the class PDF and the
+      // students' notes are made from the saved slides, and the last few
+      // strokes (still in the save queue) used to be missing from them.
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      await flushAutosave().catch(() => undefined);
       await postJson(`/api/whiteboard/sessions/${wbSession.id}/end`);
       await stopDesktopStreaming();
       setWbSession((prev) => (prev ? { ...prev, status: "ENDED", livePhase: "ENDED" } : prev));
