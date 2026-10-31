@@ -22,16 +22,16 @@ export default async function StudentPerformancePage({ params }: { params: { id:
 
   const data = await studentPerformanceDetail(params.id);
   if (!data) notFound();
-  const { student, totals, practice, liveClasses, recorded } = data;
+  const { student, totals, practice, liveClasses, missedClasses, teachers, recorded, guruQuizzes } = data;
+  const pct = (n: number | null) => (n === null ? "—" : `${n}%`);
 
   const cards = [
-    { label: "DPPs attempted", value: totals.dpps },
-    { label: "Tests attempted", value: totals.tests },
-    { label: "Questions answered", value: totals.questionsAnswered },
-    { label: "Questions left", value: totals.questionsLeft },
-    { label: "Correct / wrong", value: `${totals.correct} / ${totals.wrong}` },
-    { label: "Live classes", value: `${totals.liveClasses} · ${formatTeachingTime(totals.liveMinutes)}` },
-    { label: "Recorded watched", value: formatTeachingTime(totals.recordedMinutes) },
+    { label: "Live classes attended", value: `${totals.classesAttended} / ${totals.classesHeld}`, sub: `${pct(totals.attendancePercent)} attended · ${totals.classesMissed} missed` },
+    { label: "Avg. of each class watched", value: pct(totals.avgPresentPercent), sub: formatTeachingTime(totals.liveMinutes) + " in class" },
+    { label: "Recorded lectures", value: `${totals.recordedWatched} / ${totals.recordedAvailable}`, sub: `${totals.recordedCompleted} completed · ${formatTeachingTime(totals.recordedMinutes)}` },
+    { label: "DPPs / tests", value: `${totals.dpps} / ${totals.tests}`, sub: `${totals.questionsAnswered} questions answered` },
+    { label: "Correct / wrong", value: `${totals.correct} / ${totals.wrong}`, sub: `${totals.questionsLeft} left unanswered` },
+    { label: "Atomic Guru quizzes", value: totals.guruQuizzes, sub: totals.guruAccuracy !== null ? `${totals.guruAccuracy}% avg accuracy` : "none yet" },
   ];
 
   return (
@@ -46,14 +46,44 @@ export default async function StudentPerformancePage({ params }: { params: { id:
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {cards.map((c) => (
           <div key={c.label} className="glass-card rounded-xl border border-outline-variant/30 p-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">{c.label}</p>
             <p className="text-lg font-black text-on-surface tabular-nums mt-1">{c.value}</p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">{c.sub}</p>
           </div>
         ))}
       </div>
+
+      <Section title="Classes by teacher" empty={teachers.length === 0 ? "No class of any teacher yet." : null}>
+        <table className="min-w-full">
+          <thead className="bg-surface-container-high/40">
+            <tr>
+              <th className={th}>Teacher</th>
+              <th className={th}>Live classes held</th>
+              <th className={th}>Attended</th>
+              <th className={th}>Attendance</th>
+              <th className={th}>Avg. of class watched</th>
+              <th className={th}>Recorded watched</th>
+              <th className={th}>Recorded time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-outline-variant/15">
+            {teachers.map((t) => (
+              <tr key={t.teacher}>
+                <td className={`${td} font-semibold`}>{t.teacher}</td>
+                <td className={td}>{t.held}</td>
+                <td className={`${td} font-bold`}>{t.attended}</td>
+                <td className={td}>{pct(t.attendancePercent)}</td>
+                <td className={td}>{pct(t.avgPresentPercent)}</td>
+                <td className={td}>{t.recordedCount}</td>
+                <td className={td}>{formatTeachingTime(t.recordedMinutes)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Section>
 
       <Section title="DPPs & tests" empty={practice.length === 0 ? "No DPP or test attempted yet." : null}>
         <table className="min-w-full">
@@ -70,6 +100,7 @@ export default async function StudentPerformancePage({ params }: { params: { id:
               <th className={th}>Score</th>
               <th className={th}>Time spent</th>
               <th className={th}>When</th>
+              <th className={th}></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/15">
@@ -89,6 +120,11 @@ export default async function StudentPerformancePage({ params }: { params: { id:
                 <td className={td}>{p.score ?? "—"}</td>
                 <td className={td}>{formatTeachingTime(Math.round(p.timeSec / 60))}</td>
                 <td className={td}>{dt(p.submittedAt ?? p.startedAt)}</td>
+                <td className={td}>
+                  <Link href={`/team/performance/students/${student.id}/review/attempt/${p.attemptId}`} className="text-primary font-bold">
+                    View →
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -100,10 +136,12 @@ export default async function StudentPerformancePage({ params }: { params: { id:
           <thead className="bg-surface-container-high/40">
             <tr>
               <th className={th}>Class</th>
+              <th className={th}>Teacher</th>
               <th className={th}>Subject</th>
               <th className={th}>Date</th>
               <th className={th}>Time present</th>
               <th className={th}>Class length</th>
+              <th className={th}>% watched</th>
               <th className={th}>Interactions</th>
             </tr>
           </thead>
@@ -111,11 +149,36 @@ export default async function StudentPerformancePage({ params }: { params: { id:
             {liveClasses.map((l, i) => (
               <tr key={i}>
                 <td className={`${td} font-semibold`}>{l.title}</td>
+                <td className={td}>{l.teacher}</td>
                 <td className={td}>{l.subject ?? "—"}</td>
                 <td className={td}>{dt(l.date)}</td>
                 <td className={`${td} font-bold`}>{formatTeachingTime(l.minutesPresent)}</td>
                 <td className={td}>{l.classMinutes !== null ? formatTeachingTime(l.classMinutes) : "—"}</td>
+                <td className={td}>{pct(l.percent)}</td>
                 <td className={td}>{l.interactions}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Section>
+
+      <Section title={`Live classes missed (${missedClasses.length})`} empty={missedClasses.length === 0 ? "No class missed." : null}>
+        <table className="min-w-full">
+          <thead className="bg-surface-container-high/40">
+            <tr>
+              <th className={th}>Class</th>
+              <th className={th}>Teacher</th>
+              <th className={th}>Subject</th>
+              <th className={th}>Date</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-outline-variant/15">
+            {missedClasses.map((m, i) => (
+              <tr key={i}>
+                <td className={`${td} font-semibold`}>{m.title}</td>
+                <td className={td}>{m.teacher}</td>
+                <td className={td}>{m.subject ?? "—"}</td>
+                <td className={td}>{dt(m.date)}</td>
               </tr>
             ))}
           </tbody>
@@ -127,6 +190,7 @@ export default async function StudentPerformancePage({ params }: { params: { id:
           <thead className="bg-surface-container-high/40">
             <tr>
               <th className={th}>Class</th>
+              <th className={th}>Teacher</th>
               <th className={th}>Subject · chapter</th>
               <th className={th}>Watched</th>
               <th className={th}>Video length</th>
@@ -139,12 +203,56 @@ export default async function StudentPerformancePage({ params }: { params: { id:
             {recorded.map((r, i) => (
               <tr key={i}>
                 <td className={`${td} font-semibold`}>{r.title}</td>
+                <td className={td}>{r.teacher ?? "—"}</td>
                 <td className={td}>{[r.subject, r.chapter].filter(Boolean).join(" · ") || "—"}</td>
                 <td className={`${td} font-bold`}>{formatTeachingTime(r.minutesWatched)}</td>
                 <td className={td}>{r.videoMinutes !== null ? formatTeachingTime(r.videoMinutes) : "—"}</td>
                 <td className={td}>{r.percent !== null ? `${r.percent}%` : "—"}</td>
                 <td className={td}>{dt(r.firstWatchedAt)}</td>
                 <td className={td}>{dt(r.lastWatchedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Section>
+
+      <Section title={`Atomic Guru quizzes (${guruQuizzes.length})`} empty={guruQuizzes.length === 0 ? "No Atomic Guru quiz taken yet." : null}>
+        <table className="min-w-full">
+          <thead className="bg-surface-container-high/40">
+            <tr>
+              <th className={th}>Quiz</th>
+              <th className={th}>Subject · chapter · topic</th>
+              <th className={th}>Questions</th>
+              <th className={th}>Correct</th>
+              <th className={th}>Wrong</th>
+              <th className={th}>Left</th>
+              <th className={th}>Accuracy</th>
+              <th className={th}>Time</th>
+              <th className={th}>When</th>
+              <th className={th}></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-outline-variant/15">
+            {guruQuizzes.map((q) => (
+              <tr key={q.id}>
+                <td className={td}>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary mr-1.5">{(q.source ?? "QUIZ").replace(/_/g, " ")}</span>
+                  <span className="font-semibold">{q.code ?? "—"}</span>
+                  {q.difficulty && <span className="ml-1.5 text-on-surface-variant">{q.difficulty}</span>}
+                </td>
+                <td className={td}>{[q.subject, q.chapter, q.topic].filter(Boolean).join(" · ") || "—"}</td>
+                <td className={td}>{q.totalQuestions}</td>
+                <td className={`${td} text-emerald-600 font-bold`}>{q.correct}</td>
+                <td className={`${td} text-rose-600`}>{q.wrong}</td>
+                <td className={td}>{q.unattempted}</td>
+                <td className={`${td} font-bold`}>{q.accuracy}%</td>
+                <td className={td}>{q.timeSec ? formatTeachingTime(Math.round(q.timeSec / 60)) : "—"}</td>
+                <td className={td}>{dt(q.date)}</td>
+                <td className={td}>
+                  <Link href={`/team/performance/students/${student.id}/review/guru/${q.id}`} className="text-primary font-bold">
+                    View →
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>

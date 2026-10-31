@@ -20,6 +20,15 @@ export function StudentProfileHeaderActions({ student }: { student: any }) {
         <span>Edit Profile</span>
       </button>
 
+      {/* Classes watched (per teacher, %), DPPs / tests / Atomic Guru quizzes question by question. Super Admin. */}
+      <Link
+        href={`/team/performance/students/${student.id}`}
+        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 transition shadow-xs"
+      >
+        <span className="material-symbols-outlined text-sm text-emerald-600">insights</span>
+        <span>Full analytics</span>
+      </Link>
+
       <Link
         href={`/team/subscriptions/${student.id}`}
         className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition shadow-xs"
