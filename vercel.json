@@ -5,6 +5,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/extraction/reclaim",
+      "schedule": "5 2 * * *"
+    },
+    {
       "path": "/api/cron/birthday",
       "schedule": "30 3 * * *"
     },
