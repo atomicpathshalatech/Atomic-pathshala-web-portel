@@ -14,7 +14,6 @@ import {
   legacyTagsToString,
   resolveSubjectChapterNames,
 } from "@/lib/questions/legacy";
-import { triggerQuestionVerification } from "@/lib/questions/verification-service";
 
 export async function GET(request: NextRequest) {
   try {
@@ -124,14 +123,6 @@ export async function POST(request: NextRequest) {
         entityType: "Question",
         entityId: question.id,
       },
-    });
-
-    // Automatically trigger non-blocking Multi-AI Verification across all 4 providers
-    triggerQuestionVerification(question.id, {
-      triggerSource: "MANUAL",
-      userId: session.user.id,
-    }).catch((err) => {
-      console.error(`[MultiAiVerification] Background trigger failed for ${question.id}:`, err);
     });
 
     return apiSuccess({ question }, 201);

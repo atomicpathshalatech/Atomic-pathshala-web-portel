@@ -8,7 +8,6 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { bilingualQuestionSchema } from "@/lib/validation/question-v2";
 import { resolveSubjectChapterNames, legacyTagsToString } from "@/lib/questions/legacy";
-import { triggerQuestionVerification } from "@/lib/questions/verification-service";
 
 function toOptionsJson(t: { optionA?: string; optionB?: string; optionC?: string; optionD?: string }) {
   const options: Record<string, string> = {};
@@ -77,14 +76,6 @@ export async function POST(request: NextRequest) {
         entityType: "Question",
         entityId: question.id,
       },
-    });
-
-    // Automatically trigger non-blocking Multi-AI Verification across all 4 providers
-    triggerQuestionVerification(question.id, {
-      triggerSource: "MANUAL",
-      userId: session.user.id,
-    }).catch((err) => {
-      console.error(`[MultiAiVerification] Background trigger failed for bilingual question ${question.id}:`, err);
     });
 
     return apiSuccess({ question }, 201);
