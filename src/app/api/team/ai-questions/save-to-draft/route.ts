@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { QuestionType, Difficulty } from "@prisma/client";
 import { withNewQuestionCode } from "@/lib/questions/create-with-code";
+import { createQuestion } from "@/lib/questions/question-management-service";
 import { TYPE_FORMATS, bankTypeOf } from "@/lib/ai-question-engine/type-formats";
 
 function mapQuestionTypeToPrisma(typeStr: string): QuestionType {
@@ -118,9 +119,8 @@ export async function POST(request: NextRequest) {
       ].join(", ");
 
       // Create canonical Question row in Question Bank
-      const createdQuestion = await withNewQuestionCode(aiQ.subject, (questionCode) => prisma.question.create({
-        data: {
-          questionCode,
+      const createdQuestion = (await createQuestion(
+        {
           subject: aiQ.subject,
           chapter: aiQ.chapter,
           topic: aiQ.topic,
@@ -136,9 +136,9 @@ export async function POST(request: NextRequest) {
           review1Status,
           isPublished: false, // Never auto-published
           createdById: session.user.id,
-          translations: {
-            create: translations,
-          },
+        },
+        translations,
+        {
           versions: {
             create: {
               versionNumber: 1,
@@ -153,8 +153,10 @@ export async function POST(request: NextRequest) {
               },
             },
           },
-        },
-      }));
+          auditUserId: session.user.id,
+          sourceLabel: category,
+        }
+      )).question;
 
       // Update AI generated question pointer
       await prisma.aiGeneratedQuestion.update({
