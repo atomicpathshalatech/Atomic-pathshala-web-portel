@@ -9,7 +9,7 @@ import { RecordedLecturesBlock } from "@/components/recorded-lectures/RecordedLe
 import { ClassDetailsPanel } from "./ClassDetailsPanel";
 
 export function ClassesSection({ course }: { course?: any }) {
-  const allSchedules: any[] = course?.schedules || [];
+  const allSchedules: any[] = useMemo(() => course?.schedules || [], [course?.schedules]);
   const [clientNow, setClientNow] = useState<Date>(new Date());
   // "Class details" panel (duration, PDF, recording, poll results) for one finished class.
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
