@@ -10,6 +10,7 @@ import {
 import { generatePageQuestions, type CandidateNcertQuestion } from "./ai-generator";
 import { validateNcertQuestion } from "./question-validator";
 import { generateQuestionId } from "@/lib/questions/id-generator";
+import { createQuestion } from "@/lib/questions/question-management-service";
 import { waitUntil } from "@vercel/functions";
 
 async function resolveSafeUserId(userId?: string | null): Promise<string | null> {
@@ -232,8 +233,9 @@ export async function streamNcertQuestionsToQuestionBank({
       else if (typeStr.includes("STATEMENT")) pType = QuestionType.STATEMENT_BASED;
       else if (typeStr.includes("MATCH")) pType = QuestionType.MATCH_COLUMN;
 
-      await prisma.question.create({
-        data: {
+      // Centralized create: fingerprint + concurrency-safe code + exact-dup idempotency.
+      await createQuestion(
+        {
           questionCode: code,
           subject: subjectName,
           chapter: chapterTitle,
@@ -249,17 +251,17 @@ export async function streamNcertQuestionsToQuestionBank({
           ncertChapter: chapterTitle,
           ncertPage: String(pageNumber),
           createdById: safeUserId,
-          translations: {
-            create: [
-              {
-                language: isHindi ? "HINDI" : "ENGLISH",
-                statement: rawQuestionText,
-                options: optionsMap,
-                correctOptionIds: [correctLetter],
-                solution: structuredSolution,
-              },
-            ],
+        },
+        [
+          {
+            language: isHindi ? "HINDI" : "ENGLISH",
+            statement: rawQuestionText,
+            options: optionsMap,
+            correctOptionIds: [correctLetter],
+            solution: structuredSolution,
           },
+        ],
+        {
           versions: {
             create: {
               versionNumber: 1,
@@ -288,8 +290,10 @@ export async function streamNcertQuestionsToQuestionBank({
               },
             },
           },
-        },
-      });
+          auditUserId: safeUserId,
+          sourceLabel: "NCERT_HUB",
+        }
+      );
 
       savedCount++;
     } catch (err) {
