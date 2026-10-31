@@ -15,7 +15,19 @@ export type StageLinkMessage =
   | { t: "hello" }
   | { t: "ping" }
   | { t: "board"; objects: unknown[]; background: string | null }
-  | { t: "camera"; position: string; shape: "SQUARE" | "CIRCULAR" };
+  | { t: "camera"; position: string; shape: "SQUARE" | "CIRCULAR" }
+  /** The teacher's zoom: the video shows the same part of the slide. */
+  | { t: "view"; zoom: number; panX: number; panY: number };
+
+/** Zoom / pan of the board content (see CanvasEngine.setView). */
+export type BoardView = { zoom: number; panX: number; panY: number };
+
+/** A view from the network or the link, made safe to apply. */
+export function cleanBoardView(v: unknown): BoardView {
+  const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const num = (x: unknown, lo: number, hi: number, d: number) => (typeof x === "number" && Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d);
+  return { zoom: num(o.zoom, 1, 8, 1), panX: num(o.panX, -4, 4, 0), panY: num(o.panY, -4, 4, 0) };
+}
 
 export function stageLinkName(whiteboardSessionId: string): string {
   return `atomic-stage-link:${whiteboardSessionId}`;

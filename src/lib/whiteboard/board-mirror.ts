@@ -58,6 +58,15 @@ export async function pushLaserPointer(
   }
 }
 
+/** Broadcasts the teacher's zoom / pan (WB_EVENTS.BOARD_VIEW). Not stored. */
+export async function pushBoardView(whiteboardSessionId: string, view: { zoom: number; panX: number; panY: number }) {
+  try {
+    await pusherServer.trigger(sessionChannel(whiteboardSessionId), WB_EVENTS.BOARD_VIEW, view);
+  } catch (err) {
+    console.error("[pusher_trigger_error]", err);
+  }
+}
+
 /**
  * Nudges anyone sitting in the pre-class lobby the instant the teacher hits
  * Start Class, so they don't have to wait out the by-schedule poll interval

@@ -14,11 +14,13 @@
  * - No React state touches this per pointer event. React only re-renders
  *   when a stroke is *committed* (via the onCommit callback), which is at
  *   most once per pen-up, not per pixel of movement.
- * - Zoom/pan are deliberately NOT handled here — they're a CSS transform on
- *   the wrapping element in the React layer. Coordinates are read via
- *   getBoundingClientRect() ratios, which stay correct under any CSS
- *   transform or devicePixelRatio without this class needing to know about
- *   either.
+ * - Zoom/pan are a view transform applied here (setView), not a CSS scale of
+ *   the board: the board's frame keeps its size, only its content zooms, and
+ *   every stroke is redrawn as vectors at the zoomed size, so ink stays sharp
+ *   at any zoom (a CSS-scaled canvas bitmap went blurry). Stored geometry is
+ *   always in unzoomed virtual coordinates; getPoint() maps the pointer back
+ *   through the view, and new ink is stored at size / zoom so the pen draws
+ *   the same width on screen whatever the zoom.
  * - `StrokeObject` is a discriminated union: freehand ink (`type: "stroke"`,
  *   the original shape) plus `type: "shape"` for every shape-tool id in the
  *   authoritative registry (see ./shapes/registry.ts — line/rectangle/
@@ -701,6 +703,62 @@ export class CanvasEngine {
   /** Active eraser brush radius in virtual px (default = "M"). */
   public eraserRadius = 26;
 
+  // ---- View (zoom / pan) -------------------------------------------------
+  /** Zoom factor of the content (1 = whole slide). */
+  private viewZoom = 1;
+  /** Translation in virtual px after zooming: screen = v * zoom + t. */
+  private viewTx = 0;
+  private viewTy = 0;
+  /** Backing-store px per virtual px (CSS size * devicePixelRatio / VIRTUAL). */
+  private dprScale = { x: 1, y: 1 };
+
+  /**
+   * Zooms the content around the slide centre. `panX`/`panY` are the
+   * screen-space shift as a fraction of the board's width/height (0 = centred).
+   * The same three numbers drive the slide image in the React layer, the
+   * broadcast mirror and the stream, so all of them show the same view.
+   */
+  public setView(zoom: number, panX = 0, panY = 0): void {
+    const z = Math.min(8, Math.max(0.25, Number.isFinite(zoom) ? zoom : 1));
+    const tx = (VIRTUAL_WIDTH / 2) * (1 - z) + panX * VIRTUAL_WIDTH;
+    const ty = (VIRTUAL_HEIGHT / 2) * (1 - z) + panY * VIRTUAL_HEIGHT;
+    if (z === this.viewZoom && tx === this.viewTx && ty === this.viewTy) return;
+    this.viewZoom = z;
+    this.viewTx = tx;
+    this.viewTy = ty;
+    this.applyTransforms();
+    this.renderBase();
+    this.renderActiveStroke();
+  }
+
+  public getZoom(): number {
+    return this.viewZoom;
+  }
+
+  private applyTransforms(): void {
+    const { x: sx, y: sy } = this.dprScale;
+    const z = this.viewZoom;
+    for (const ctx of [this.baseCtx, this.activeCtx]) {
+      ctx.setTransform(sx * z, 0, 0, sy * z, sx * this.viewTx, sy * this.viewTy);
+    }
+  }
+
+  /** Clears the whole layer, whatever the view (a zoomed-out or panned view leaves area outside the slide). */
+  private clearLayer(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.restore();
+  }
+
+  /** Width new ink is stored at: the pen keeps its on-screen size when zoomed. */
+  private inkSize(): number {
+    return this.currentSize / this.viewZoom;
+  }
+
+  /** Points the browser predicts just ahead of the nib — drawn, never stored, so the line keeps up with the pen. */
+  private predictedPoints: StrokePoint[] = [];
+
   /** Set by the host component. Fired instead of starting a drag when the
    * "text" tool is active on pointerdown — the engine has no DOM to render
    * a text-entry overlay itself, so it hands the click point back to React,
@@ -858,10 +916,8 @@ export class CanvasEngine {
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
     }
-    const scaleX = (width * dpr) / VIRTUAL_WIDTH;
-    const scaleY = (height * dpr) / VIRTUAL_HEIGHT;
-    this.baseCtx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
-    this.activeCtx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+    this.dprScale = { x: (width * dpr) / VIRTUAL_WIDTH, y: (height * dpr) / VIRTUAL_HEIGHT };
+    this.applyTransforms();
     this.renderBase();
   }
 
@@ -873,9 +929,10 @@ export class CanvasEngine {
     const rect = (this.isPointerDown && this.strokeRect) || this.activeCanvas.getBoundingClientRect();
     const relX = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
     const relY = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
+    // Screen position on the board -> slide coordinates through the zoom/pan view.
     return {
-      x: relX * VIRTUAL_WIDTH,
-      y: relY * VIRTUAL_HEIGHT,
+      x: (relX * VIRTUAL_WIDTH - this.viewTx) / this.viewZoom,
+      y: (relY * VIRTUAL_HEIGHT - this.viewTy) / this.viewZoom,
       pressure: e.pressure && e.pressure > 0 ? e.pressure : 0.5,
     };
   }
@@ -1102,6 +1159,19 @@ export class CanvasEngine {
       }
     }
 
+    if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
+      const predicted: PointerEvent[] =
+        typeof (e as any).getPredictedEvents === "function" ? (e as any).getPredictedEvents() : [];
+      // At most a couple of predicted points, and only a short way ahead.
+      this.predictedPoints = predicted
+        .slice(0, 2)
+        .map((evt) => this.getPoint(evt))
+        .filter((pt) => {
+          const last = this.activePoints[this.activePoints.length - 1];
+          return last ? Math.hypot(pt.x - last.x, pt.y - last.y) < 40 / this.viewZoom : false;
+        });
+    }
+
     if (
       this.currentTool === "pen" ||
       this.currentTool === "highlighter" ||
@@ -1132,6 +1202,7 @@ export class CanvasEngine {
     this.isPointerDown = false;
     this.activePointerId = null;
     this.activePointerType = null;
+    this.predictedPoints = [];
     try {
       this.activeCanvas.releasePointerCapture(e.pointerId);
     } catch {
@@ -1164,7 +1235,7 @@ export class CanvasEngine {
           type: "stroke",
           tool: storedTool,
           color: this.currentColor,
-          size: this.currentSize,
+          size: this.inkSize(),
           points: [pt, { ...pt, x: pt.x + 0.1 }],
           penStyle: this.currentPenStyle,
           fadeExpiresAt,
@@ -1180,7 +1251,7 @@ export class CanvasEngine {
           type: "stroke",
           tool: storedTool,
           color: this.currentColor,
-          size: this.currentSize,
+          size: this.inkSize(),
           points: this.activePoints,
           penStyle: this.currentPenStyle,
           fadeExpiresAt,
@@ -1200,7 +1271,7 @@ export class CanvasEngine {
           type: "shape",
           shape: this.currentTool,
           color: this.currentColor,
-          size: this.currentSize,
+          size: this.inkSize(),
           start: this.shapeStart,
           end: this.shapeEnd,
         };
@@ -1213,7 +1284,7 @@ export class CanvasEngine {
     if (this.currentTool === "select" && this.lassoPath) {
       const poly = this.lassoPath;
       this.lassoPath = null;
-      this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+      this.clearLayer(this.activeCtx);
       if (poly.length >= 3) {
         const ids = this.objects
           .filter((o) => representativePoints(o).some((p) => pointInPolygon(p, poly)))
@@ -1256,7 +1327,7 @@ export class CanvasEngine {
     this.resizeInitialBBox = null;
     this.shapeStart = null;
     this.shapeEnd = null;
-    this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    this.clearLayer(this.activeCtx);
   }
 
   private scheduleActiveRender(): void {
@@ -1291,14 +1362,14 @@ export class CanvasEngine {
   }
 
   private renderActiveStroke(): void {
-    this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    this.clearLayer(this.activeCtx);
 
     if (isShapeTool(this.currentTool)) {
       if (this.shapeStart && this.shapeEnd) {
         drawShape(this.activeCtx, {
           shape: this.currentTool,
           color: this.currentColor,
-          size: this.currentSize,
+          size: this.inkSize(),
           start: this.shapeStart,
           end: this.shapeEnd,
         });
@@ -1308,7 +1379,8 @@ export class CanvasEngine {
 
     if (this.activePoints.length < 2) return;
     const isHighlighter = this.currentTool === "highlighter" || this.currentTool === "highlighter-fade";
-    this.strokePath(this.activeCtx, this.activePoints, this.currentColor, this.currentSize, isHighlighter, this.currentPenStyle);
+    const pts = this.predictedPoints.length ? this.activePoints.concat(this.predictedPoints) : this.activePoints;
+    this.strokePath(this.activeCtx, pts, this.currentColor, this.inkSize(), isHighlighter, this.currentPenStyle);
   }
 
   private strokePath(
@@ -1499,14 +1571,14 @@ export class CanvasEngine {
       // hand the active layer back.
       if (this.laserStrokes.length === 0 && !this.laserActive) {
         if (this.activePoints.length === 0) {
-          this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+          this.clearLayer(this.activeCtx);
         }
         this.laserRaf = 0;
         return;
       }
 
       if (this.activePoints.length === 0) {
-        this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        this.clearLayer(this.activeCtx);
       }
       for (const s of this.laserStrokes) {
         const age = now - s.born;
@@ -1646,7 +1718,7 @@ export class CanvasEngine {
   }
 
   public renderBase(): void {
-    this.baseCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    this.clearLayer(this.baseCtx);
     const now = Date.now();
     for (const obj of this.objects) {
       this.drawObject(obj, now);
@@ -1891,10 +1963,13 @@ export class CanvasEngine {
     const transform = this.baseCtx.getTransform();
     const scaleX = transform.a || 1;
     const scaleY = transform.d || 1;
+    // The view transform adds a translation (zoom/pan) on top of the scale.
+    const offX = transform.e;
+    const offY = transform.f;
     const bufferW = this.baseCanvas.width;
     const bufferH = this.baseCanvas.height;
     const imageData = this.baseCtx.getImageData(0, 0, bufferW, bufferH);
-    const physPt = { x: pt.x * scaleX, y: pt.y * scaleY };
+    const physPt = { x: pt.x * scaleX + offX, y: pt.y * scaleY + offY };
     const bounds = floodFillImageData(imageData, physPt.x, physPt.y, hexToRgba(this.currentColor));
     if (!bounds) {
       this.onNotice?.("This area isn't fully closed — bucket fill needs a closed boundary.");
@@ -1926,8 +2001,8 @@ export class CanvasEngine {
       id: uid(),
       type: "raster",
       dataUrl: patchCanvas.toDataURL("image/png"),
-      x: bounds.minX / scaleX,
-      y: bounds.minY / scaleY,
+      x: (bounds.minX - offX) / scaleX,
+      y: (bounds.minY - offY) / scaleY,
       width: w / scaleX,
       height: h / scaleY,
     };
@@ -1949,7 +2024,7 @@ export class CanvasEngine {
 
     for (const obj of this.objects) {
       if (obj.type === "shape" || obj.type === "text" || obj.type === "raster") {
-        if (representativePoints(obj).some((p) => distance(p, pt) < this.eraserRadius)) {
+        if (representativePoints(obj).some((p) => distance(p, pt) < this.eraserRadius / this.viewZoom)) {
           changed = true;
           continue;
         }
@@ -1959,7 +2034,7 @@ export class CanvasEngine {
 
       const segments: StrokePoint[][] = [[]];
       for (const p of obj.points) {
-        if (distance(p, pt) < this.eraserRadius) {
+        if (distance(p, pt) < this.eraserRadius / this.viewZoom) {
           changed = true;
           // Non-null: segments starts as [[]] and only ever grows via
           // push([]), so the last element always exists.
@@ -2071,7 +2146,7 @@ export class CanvasEngine {
   private drawLasso(): void {
     if (!this.lassoPath || this.lassoPath.length < 2) return;
     const ctx = this.activeCtx;
-    ctx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    this.clearLayer(ctx);
     ctx.save();
     ctx.setLineDash([10, 8]);
     ctx.lineWidth = 2;

@@ -12,7 +12,7 @@ import {
   ERASER_SIZES,
 } from "@/lib/canvas/canvas-engine";
 import { BoardSaveQueue } from "@/lib/whiteboard/board-save-queue";
-import { openStageLink, STAGE_LINK_PING_MS, type StageLinkMessage } from "@/lib/live-class/stage-link";
+import { openStageLink, STAGE_LINK_PING_MS, type BoardView, type StageLinkMessage } from "@/lib/live-class/stage-link";
 import {
   SHAPE_DEFS,
   CHEM_SUBCATEGORY_LABELS,
@@ -138,8 +138,8 @@ type SlideTheme =
 // `id: "circle"`) — clicking one drew whichever of the 5 generic
 // primitives that id happened to alias, not the shape the label promised.
 
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 2;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.1;
 
 // Reference list shown in the Shortcuts tab — kept as one array so the
@@ -448,13 +448,11 @@ export function TeacherLiveClassRoom({
   } | null>(null);
   const [undoRedoTick, setUndoRedoTick] = useState(0);
   const [zoom, setZoom] = useState(1);
-  // Panning was never implemented — zoom was a pure CSS scale() on a fixed,
-  // overflow-hidden, centered card with no translate state and no drag
-  // handler, so zooming in always revealed the same center region with no
-  // way to move around it. panOffset is in the stage's own pre-scale px
-  // (applied as `translate(x,y) scale(zoom)`, translate-before-scale, so a
-  // screen-space drag delta is divided by zoom to get a 1:1 visual pan
-  // regardless of zoom level — see panBy() below).
+  // Zoom enlarges only what is on the slide (its image + the ink), inside a
+  // board frame that keeps its size: the ink through the canvas engine's view
+  // (redrawn sharp at every zoom, the pen keeping its on-screen width) and the
+  // slide image through the same transform in CSS. panOffset is the
+  // screen-space shift in board px (a drag moves the content 1:1).
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [panModeActive, setPanModeActive] = useState(false);
   const panDragRef = useRef<{ x: number; y: number } | null>(null);
@@ -472,9 +470,10 @@ export function TeacherLiveClassRoom({
       if (!el) return;
       const { clientWidth, clientHeight } = el;
       if (clientWidth <= 0 || clientHeight <= 0) return;
-      // 16:9 rectangle with comfortable padding so the whiteboard card looks sleek, compact and professional
-      const availW = Math.max(200, clientWidth - 28);
-      const availH = Math.max(150, clientHeight - 28);
+      // 16:9 board using nearly all of the area (a thin margin only): the
+      // writing area was noticeably smaller than the space it had.
+      const availW = Math.max(200, clientWidth - 8);
+      const availH = Math.max(150, clientHeight - 8);
       let w = availW;
       let h = Math.round(w * (9 / 16));
       if (h > availH) {
@@ -924,6 +923,7 @@ export function TeacherLiveClassRoom({
       cameraPosition: stageInfoRef.current.cameraPosition || "UPPER_RIGHT",
       showCamera: true,
       poll: stagePollRef.current,
+      view: stageViewRef.current,
     };
   }, []);
 
@@ -988,6 +988,7 @@ export function TeacherLiveClassRoom({
   // camera exactly where it sits on this board.
   const stageLinkRef = useRef<BroadcastChannel | null>(null);
   const stageCameraRef = useRef<{ position: string; shape: "SQUARE" | "CIRCULAR" } | null>(null);
+  const stageViewRef = useRef<BoardView>({ zoom: 1, panX: 0, panY: 0 });
   const postToStage = useCallback((message: StageLinkMessage) => {
     try {
       stageLinkRef.current?.postMessage(message);
@@ -1011,6 +1012,7 @@ export function TeacherLiveClassRoom({
     const sendAll = () => {
       postBoardToStageRef.current();
       if (stageCameraRef.current) postToStage({ t: "camera", ...stageCameraRef.current });
+      postToStage({ t: "view", ...stageViewRef.current });
     };
     link.onmessage = (event: MessageEvent<StageLinkMessage>) => {
       if (event.data?.t === "hello") sendAll();
@@ -1711,18 +1713,11 @@ export function TeacherLiveClassRoom({
   }, [wbSession?.id]);
 
   // ---- Page navigation -----------------------------------------------------
-  /** Clamps panOffset (pre-scale px) so the scaled stage can never be
-   * dragged fully off-screen — bounded by how much bigger the scaled stage
-   * is than the visible container in each axis. Returns {0,0} once zoom is
-   * back to a level where the stage fits entirely (nothing to pan to). */
+  /** Clamps panOffset (board px) so the zoomed slide always covers the
+   * board frame: at most half of the extra size in each direction. */
   function clampPan(x: number, y: number, currentZoom: number): { x: number; y: number } {
-    const containerRect = mainCanvasContainerRef.current?.getBoundingClientRect();
-    const containerW = containerRect?.width ?? stageDimensions.width * currentZoom;
-    const containerH = containerRect?.height ?? stageDimensions.height * currentZoom;
-    const scaledW = stageDimensions.width * currentZoom;
-    const scaledH = stageDimensions.height * currentZoom;
-    const maxPanX = Math.max(0, (scaledW - containerW) / 2) / currentZoom;
-    const maxPanY = Math.max(0, (scaledH - containerH) / 2) / currentZoom;
+    const maxPanX = Math.max(0, (stageDimensions.width * (currentZoom - 1)) / 2);
+    const maxPanY = Math.max(0, (stageDimensions.height * (currentZoom - 1)) / 2);
     return {
       x: Math.min(maxPanX, Math.max(-maxPanX, x)),
       y: Math.min(maxPanY, Math.max(-maxPanY, y)),
@@ -1730,8 +1725,59 @@ export function TeacherLiveClassRoom({
   }
 
   function panBy(dxScreenPx: number, dyScreenPx: number) {
-    setPanOffset((prev) => clampPan(prev.x + dxScreenPx / zoom, prev.y + dyScreenPx / zoom, zoom));
+    setPanOffset((prev) => clampPan(prev.x + dxScreenPx, prev.y + dyScreenPx, zoom));
   }
+
+  // The ink follows the same view as the slide image (see panOffset above).
+  const viewPan = {
+    x: stageDimensions.width > 0 ? panOffset.x / stageDimensions.width : 0,
+    y: stageDimensions.height > 0 ? panOffset.y / stageDimensions.height : 0,
+  };
+  useEffect(() => {
+    engineRef.current?.setView(zoom, viewPan.x, viewPan.y);
+  }, [zoom, viewPan.x, viewPan.y, currentPage?.id]);
+
+  // The stream (the app's stage window / OBS page) shows the same zoom, so
+  // students see what the teacher zoomed into. Sent at most ~6 times a second,
+  // and repeated every 8 s while zoomed in case one message was missed.
+  const viewSendRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; last: string }>({ timer: null, last: "" });
+  useEffect(() => {
+    if (!wbSession?.id || wbSession.livePhase !== "LIVE") return;
+    const payload = { zoom: Math.round(zoom * 100) / 100, panX: Math.round(viewPan.x * 1000) / 1000, panY: Math.round(viewPan.y * 1000) / 1000 };
+    // Desktop app: straight to the stage window, at once.
+    stageViewRef.current = payload;
+    postToStage({ t: "view", ...payload });
+    const key = JSON.stringify(payload);
+    const send = () => {
+      viewSendRef.current.last = key;
+      void fetch(`/api/whiteboard/sessions/${wbSession.id}/view`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: key,
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    if (viewSendRef.current.timer) clearTimeout(viewSendRef.current.timer);
+    if (key !== viewSendRef.current.last) viewSendRef.current.timer = setTimeout(send, 150);
+    const repeat = zoom > 1 ? window.setInterval(send, 8000) : null;
+    return () => {
+      if (repeat) window.clearInterval(repeat);
+    };
+  }, [zoom, viewPan.x, viewPan.y, wbSession?.id, wbSession?.livePhase, postToStage]);
+
+  // Ctrl + wheel (or a touchpad pinch) zooms the slide, like PowerPoint. A
+  // native non-passive listener: React's onWheel cannot stop the page zoom.
+  useEffect(() => {
+    const el = stageContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((z + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)) * 10) / 10)));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [wbSession?.id]);
 
   // Re-clamp (or fully reset) pan whenever zoom changes, so zooming back
   // out never leaves the stage stuck off-center with nothing to actually
@@ -4109,17 +4155,32 @@ export function TeacherLiveClassRoom({
 
         <div
           ref={stageContainerRef}
-          className={`relative rounded-xl shadow-2xl overflow-hidden border border-slate-700/60 shrink-0 select-none ${
-            panDragRef.current ? "" : "transition-transform duration-75"
-          }`}
+          className="relative rounded-xl shadow-2xl overflow-hidden border border-slate-700/60 shrink-0 select-none"
           style={{
             width: `${stageDimensions.width}px`,
             height: `${stageDimensions.height}px`,
-            transform: zoom === 1 ? undefined : `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
-            transformOrigin: "center center",
-            ...(isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)),
           }}
         >
+          {/* The slide itself (theme / image / axes) — the only part that zooms, with the ink. */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              transform: zoom === 1 ? undefined : `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
+              transformOrigin: "center center",
+              ...(isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)),
+            }}
+          >
+            {isBackgroundImageUrl(currentPage?.background) && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={currentPage!.background} alt="" className="absolute inset-0 w-full h-full object-contain" />
+            )}
+            {currentPage?.background === "coordinate" && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-full h-[2px] bg-blue-500/70" />
+                <div className="absolute h-full w-[2px] bg-blue-500/70" />
+              </div>
+            )}
+          </div>
           {/* Atomic Pathshala brand band — only on the Atomic slides; plain
               templates (blank, white, black, lines, grid, dots) stay clean. */}
           {!isBackgroundImageUrl(currentPage?.background) && isBrandedTemplate(currentPage?.background) && (
@@ -4143,20 +4204,6 @@ export function TeacherLiveClassRoom({
             </div>
           )}
 
-          {isBackgroundImageUrl(currentPage?.background) && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={currentPage!.background}
-              alt=""
-              className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-            />
-          )}
-          {currentPage?.background === "coordinate" && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-full h-[2px] bg-blue-500/70" />
-              <div className="absolute h-full w-[2px] bg-blue-500/70" />
-            </div>
-          )}
           {/* Continuous Full-Size Canvas — covers 100% of visible card */}
           <div className="absolute inset-0 w-full h-full">
             <canvas ref={baseCanvasRef} className="absolute inset-0 w-full h-full select-none pointer-events-none" />
@@ -4191,8 +4238,8 @@ export function TeacherLiveClassRoom({
               <div
                 className="absolute z-30"
                 style={{
-                  left: `${(textEditor.x / VIRTUAL_WIDTH) * 100}%`,
-                  top: `${(textEditor.y / VIRTUAL_HEIGHT) * 100}%`,
+                  left: `${(((textEditor.x / VIRTUAL_WIDTH - 0.5) * zoom + 0.5) * 100) + viewPan.x * 100}%`,
+                  top: `${(((textEditor.y / VIRTUAL_HEIGHT - 0.5) * zoom + 0.5) * 100) + viewPan.y * 100}%`,
                 }}
               >
                 <textarea
@@ -5021,7 +5068,7 @@ export function TeacherLiveClassRoom({
                 it never resizes or moves the board. Each slide can be opened,
                 duplicated or deleted from here. */}
             {openPopup === "pages" && (
-              <div className="fixed right-3 top-16 bottom-24 z-50 w-[230px] bg-[#1a1b23]/95 backdrop-blur-md border border-[#2d2e3b] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+              <div className="fixed right-3 lg:right-[calc(var(--live-panel-w)+0.75rem)] top-16 bottom-24 z-50 w-[230px] bg-[#1a1b23]/95 backdrop-blur-md border border-[#2d2e3b] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
                 <div className="px-3.5 py-2.5 border-b border-[#2d2e3b] flex items-center justify-between gap-1 bg-[#14151e]/80">
                   <div className="flex items-center gap-1.5">
                     <span className="material-symbols-outlined text-blue-400 text-sm">view_carousel</span>
@@ -5324,8 +5371,8 @@ export function TeacherLiveClassRoom({
                   style={{
                     width: `${Math.min(100, (100 / zoom))}%`,
                     height: `${Math.min(100, (100 / zoom))}%`,
-                    left: `${50 - (100 / zoom) / 2 - (panOffset.x / stageDimensions.width) * 100}%`,
-                    top: `${50 - (100 / zoom) / 2 - (panOffset.y / stageDimensions.height) * 100}%`,
+                    left: `${50 - (100 / zoom) / 2 - (viewPan.x / zoom) * 100}%`,
+                    top: `${50 - (100 / zoom) / 2 - (viewPan.y / zoom) * 100}%`,
                   }}
                 />
               </div>

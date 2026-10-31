@@ -11,6 +11,8 @@ type StageLook = {
   cameraPosition?: string | null;
   /** The open poll, drawn into the video (YouTube viewers answer in the chat). */
   poll?: StagePoll | null;
+  /** The teacher's zoom on the slide. */
+  view?: { zoom: number; panX: number; panY: number } | null;
 };
 
 /**
@@ -63,6 +65,7 @@ export function DesktopStageStreamer({
         cameraPosition: lookRef.current.cameraPosition || "UPPER_RIGHT",
         showCamera: true,
         poll: lookRef.current.poll ?? null,
+        view: lookRef.current.view ?? null,
       };
     };
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import PusherClient from "pusher-js";
-import { openStageLink, STAGE_LINK_STALE_MS, type StageLinkMessage } from "@/lib/live-class/stage-link";
+import { cleanBoardView, openStageLink, STAGE_LINK_STALE_MS, type BoardView, type StageLinkMessage } from "@/lib/live-class/stage-link";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { BroadcastQuizCanvasOverlay, type BroadcastQuizData } from "@/components/live-class/BroadcastQuizCanvasOverlay";
@@ -302,8 +302,10 @@ const BoardMirror = forwardRef<
     background: string | null;
     classroomTheme?: string | null;
     onDimensionsChange?: (dim: { width: number; height: number }) => void;
+    /** The teacher's zoom on the slide (the stream shows the same part). */
+    view?: BoardView;
   }
->(function BoardMirror({ objects, background, classroomTheme, onDimensionsChange }, ref) {
+>(function BoardMirror({ objects, background, classroomTheme, onDimensionsChange, view }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef<HTMLCanvasElement | null>(null);
@@ -364,6 +366,14 @@ const BoardMirror = forwardRef<
     }
   }, [dim, objects]);
 
+  const zoom = view?.zoom ?? 1;
+  const panX = view?.panX ?? 0;
+  const panY = view?.panY ?? 0;
+  useEffect(() => {
+    engineRef.current?.setView(zoom, panX, panY);
+  }, [zoom, panX, panY]);
+  const zoomTransform = zoom === 1 && panX === 0 && panY === 0 ? undefined : `translate(${panX * 100}%, ${panY * 100}%) scale(${zoom})`;
+
   const bgStyle = isBackgroundImageUrl(background)
     ? undefined
     : slideBackgroundStyle(background || (classroomTheme === "DARK" ? "atomic_dark" : "atomic_white"));
@@ -375,9 +385,11 @@ const BoardMirror = forwardRef<
       style={{
         width: dim.width,
         height: dim.height,
-        ...bgStyle,
+        ...(zoomTransform ? undefined : bgStyle),
       }}
     >
+      {/* The slide zoomed like the teacher's (the ink zooms in the engine). */}
+      {zoomTransform && <div className="absolute inset-0 pointer-events-none" style={{ ...bgStyle, transform: zoomTransform, transformOrigin: "center center" }} />}
       {/* Atomic Pathshala Sleek Brand Header on canvas */}
       {!isBackgroundImageUrl(background) && isBrandedTemplate(background) && (
         <div className="absolute top-1.5 left-3 right-3 z-10 flex items-center justify-between pointer-events-none select-none opacity-90">
@@ -398,6 +410,7 @@ const BoardMirror = forwardRef<
           alt=""
           crossOrigin="anonymous"
           className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+          style={zoomTransform ? { transform: zoomTransform, transformOrigin: "center center" } : undefined}
         />
       )}
 
@@ -432,6 +445,7 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
   // that link is alive it wins over the server copy below.
   const [liveBoard, setLiveBoard] = useState<{ objects: StrokeObject[]; background: string | null } | null>(null);
   const [liveCamera, setLiveCamera] = useState<{ position: string; shape: "SQUARE" | "CIRCULAR" } | null>(null);
+  const [boardView, setBoardView] = useState<BoardView>({ zoom: 1, panX: 0, panY: 0 });
   const linkSessionId = data?.sessionId ?? null;
   useEffect(() => {
     if (!isDesktopStage || !linkSessionId) return;
@@ -446,6 +460,8 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
         setLiveBoard({ objects: m.objects as StrokeObject[], background: typeof m.background === "string" ? m.background : null });
       } else if (m.t === "camera" && typeof m.position === "string") {
         setLiveCamera({ position: m.position, shape: m.shape === "CIRCULAR" ? "CIRCULAR" : "SQUARE" });
+      } else if (m.t === "view") {
+        setBoardView(cleanBoardView(m));
       }
     };
     const hello = () => {
@@ -527,6 +543,11 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
         }
       }
     );
+
+    // The teacher's zoom (OBS page / when the desktop link is down).
+    channel.bind(WB_EVENTS.BOARD_VIEW, (payload: unknown) => {
+      setBoardView(cleanBoardView(payload));
+    });
 
     // Instant Board Updates in OBS
     channel.bind(WB_EVENTS.BOARD_UPDATED, (payload?: { objects?: StrokeObject[]; background?: string }) => {
@@ -622,6 +643,7 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
         background={(liveBoard ? liveBoard.background : data.page?.background) ?? "blank"}
         classroomTheme={data.classroomTheme}
         onDimensionsChange={setStageDimensions}
+        view={boardView}
       />
 
       {/* Broadcast Quiz / MCQ Overlay on Stage */}
@@ -675,6 +697,7 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
             cameraShape: liveCamera?.shape ?? data.cameraShape,
             cameraPosition: liveCamera?.position ?? data.cameraPosition,
             poll: toStagePoll(data.activeQuiz, data.quizMetrics),
+            view: boardView,
           }}
           call={
             data.sessionId

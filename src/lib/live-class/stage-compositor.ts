@@ -42,6 +42,12 @@ export interface StageSources {
   chroma?: ChromaSettings | null;
   /** The open poll — drawn into the video so YouTube viewers can answer in the chat. */
   poll?: StagePoll | null;
+  /**
+   * The teacher's zoom on the slide. The board layers already come zoomed
+   * (the board engine draws them through the same view); the slide image and
+   * template are zoomed here so they stay under the ink.
+   */
+  view?: { zoom: number; panX: number; panY: number } | null;
 }
 
 export interface StagePoll {
@@ -607,6 +613,18 @@ export class StageCompositor {
     const { ctx, width: W, height: H } = this;
     const stage: Rect = { x: 0, y: 0, w: W, h: H };
 
+    const view = this.sources.view;
+    const zoomed = Boolean(view && (view.zoom !== 1 || view.panX !== 0 || view.panY !== 0));
+    if (zoomed) {
+      // Same transform as CanvasEngine.setView / the CSS on the teacher's slide.
+      ctx.fillStyle = this.sources.backgroundColor || "#ffffff";
+      ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      ctx.translate(W / 2 + view!.panX * W, H / 2 + view!.panY * H);
+      ctx.scale(view!.zoom, view!.zoom);
+      ctx.translate(-W / 2, -H / 2);
+    }
+
     if (this.sources.backgroundTemplate !== undefined && !(this.bgImage && this.bgImageReady)) {
       drawSlideTemplate(ctx, this.sources.backgroundTemplate, W, H, this.brandLogo());
     } else {
@@ -618,6 +636,7 @@ export class StageCompositor {
       const r = containRect(this.bgImage.naturalWidth, this.bgImage.naturalHeight, stage);
       ctx.drawImage(this.bgImage, r.x, r.y, r.w, r.h);
     }
+    if (zoomed) ctx.restore();
 
     for (const layer of this.sources.boardLayers) {
       if (!layer.width || !layer.height || !this.isLayerSafe(layer)) continue;

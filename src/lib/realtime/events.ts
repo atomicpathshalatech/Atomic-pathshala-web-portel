@@ -61,6 +61,10 @@ export const WB_EVENTS = {
   // so a student's read-only board mirror can render the same fading
   // laser trail the teacher sees, without persisting anything.
   LASER_POINTER: "laser-pointer",
+  // The teacher zoomed / moved the zoomed slide: { zoom, panX, panY } (see
+  // CanvasEngine.setView). Not stored — the broadcast page applies it so the
+  // class video shows what the teacher zoomed into.
+  BOARD_VIEW: "board-view",
   // Live chat. Unlike board/hand-raise events this one DOES carry the actual
   // payload (the message itself) rather than a "go re-fetch" signal — chat
   // history is small, append-only, and doesn't need a full re-fetch per
