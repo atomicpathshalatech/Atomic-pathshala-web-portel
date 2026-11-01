@@ -9,6 +9,7 @@ import { syncLiveSessionOnStart } from "@/lib/live-session/service";
 import { announceClassLive } from "@/lib/live-session/announce";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { checkYouTubeEmbeddable } from "@/lib/youtube/video-link";
 import { canTeacherStartClass } from "@/lib/schedule/access-rules";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { issueStageToken, stageUrl } from "@/lib/live-class/stage-session";
@@ -507,6 +508,20 @@ export async function POST(
     if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") {
       const stageToken = await issueStageToken({ batchScheduleId: schedule.id, issuedToUserId: session.user.id });
       if (stageToken) obsBroadcastUrl = stageUrl(YOUTUBE_OAUTH_PRODUCTION_URL, schedule.id, stageToken);
+    }
+
+    // Students watch inside the app: a video whose owner turned embedding off
+    // plays only on YouTube (player error 101/150), and a Private one not at
+    // all — tell the teacher now, not after students report it.
+    if (wbSession.youtubeVideoId && !youtubeSimulcastWarning) {
+      const embed = await checkYouTubeEmbeddable(wbSession.youtubeVideoId);
+      if (embed === "not_embeddable") {
+        youtubeSimulcastWarning =
+          "YouTube does not allow this stream to play inside the app — students will only see “Watch on YouTube”. In YouTube Studio → the stream → Edit → Allow embedding, turn it on.";
+      } else if (embed === "not_found") {
+        youtubeSimulcastWarning =
+          "YouTube says this video ID does not exist or is Private. Students can't watch a Private stream — check the ID and set the stream to Unlisted or Public in YouTube Studio.";
+      }
     }
 
     // Stream credentials never travel in this response (see the stream-key route).

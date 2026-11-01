@@ -2,6 +2,19 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
+/** Player errors a live stream also throws for a few seconds (not started yet, encoder reconnecting). */
+const TRANSIENT_ERRORS = new Set([5, 100]);
+const AUTO_RETRY_DELAYS_MS = [4000, 8000, 15000, 30000];
+
+/** What a player error means, in words a student / teacher can act on. */
+function embedErrorText(code: number | null): string {
+  if (code === 101 || code === 150) return "The class video's owner has not allowed it to play inside other apps, so it plays only on YouTube.";
+  if (code === 153) return "YouTube couldn't confirm which website is playing the video.";
+  if (code === 100) return "YouTube can't find this stream right now — it may not be live yet, may have ended, or may be Private.";
+  if (code === 2) return "The class's YouTube video ID is not valid.";
+  return "YouTube couldn't play this stream inside the app.";
+}
+
 export type YouTubeLivePlayerProps = {
   youtubeVideoId: string | null;
   title: string;
@@ -54,6 +67,14 @@ export function YouTubeLivePlayer({
   const playerRef = useRef<any>(null);
 
   const [hasEmbedError, setHasEmbedError] = useState(false);
+  // The YouTube player's own error code (shown small, for support) and our silent retries.
+  const [embedErrorCode, setEmbedErrorCode] = useState<number | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+  const autoRetries = useRef(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+  }, []);
   // The embed autoplays muted (browsers only allow muted autoplay); this
   // mirrors the player so the "tap for sound" button shows only when needed.
   const [isMuted, setIsMuted] = useState(true);
@@ -128,11 +149,28 @@ export function YouTubeLivePlayer({
             },
             onStateChange: (e: any) => {
               const YT = (window as any).YT;
-              if (e.data === YT.PlayerState.PLAYING) setHasEmbedError(false);
+              if (e.data === YT.PlayerState.PLAYING) {
+                setHasEmbedError(false);
+                setReconnecting(false);
+                autoRetries.current = 0;
+              }
             },
             onError: (e: any) => {
-              console.warn("[YouTubeLivePlayer] Player error code:", e.data);
-              if (e.data === 150 || e.data === 101 || e.data === 100 || e.data === 5) {
+              const code = Number(e.data);
+              console.warn("[YouTubeLivePlayer] Player error code:", code, "video:", youtubeVideoId);
+              setEmbedErrorCode(code);
+              // 5 (player error) and 100 (not found / not live right now) also
+              // happen for a few seconds on a live stream — before it starts,
+              // and when the teacher's encoder reconnects. Try again by
+              // ourselves before telling the student it can't play.
+              if (TRANSIENT_ERRORS.has(code) && autoRetries.current < AUTO_RETRY_DELAYS_MS.length) {
+                const delay = AUTO_RETRY_DELAYS_MS[autoRetries.current++];
+                setReconnecting(true);
+                retryTimer.current = setTimeout(() => setRetryKey((k) => k + 1), delay);
+                return;
+              }
+              if (code === 150 || code === 101 || code === 153 || code === 2 || TRANSIENT_ERRORS.has(code)) {
+                setReconnecting(false);
                 setHasEmbedError(true);
               }
             },
@@ -177,7 +215,7 @@ export function YouTubeLivePlayer({
         // no-op
       }
     };
-  }, [playerKey, isLive, ytPlayerElementId]);
+  }, [playerKey, isLive, ytPlayerElementId, youtubeVideoId]);
 
   const unmuteNow = useCallback(() => {
     try {
@@ -325,9 +363,8 @@ export function YouTubeLivePlayer({
           <div className="absolute inset-0 bg-[#0a0c16] flex flex-col items-center justify-center p-6 text-center gap-3">
             <span className="material-symbols-outlined text-3xl text-rose-400">live_tv</span>
             <h3 className="text-sm sm:text-base font-bold text-white line-clamp-2">{title}</h3>
-            <p className="text-xs text-slate-400 max-w-sm">
-              YouTube couldn&apos;t play this stream inside the app. You can watch it on YouTube.
-            </p>
+            <p className="text-xs text-slate-400 max-w-sm">{embedErrorText(embedErrorCode)} You can watch it on YouTube.</p>
+            {embedErrorCode !== null && <p className="text-[10px] text-slate-500">YouTube player error {embedErrorCode}</p>}
             <div className="flex flex-wrap items-center justify-center gap-2">
               <a
                 href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
@@ -342,6 +379,7 @@ export function YouTubeLivePlayer({
                 type="button"
                 onClick={() => {
                   setHasEmbedError(false);
+                  autoRetries.current = 0;
                   setRetryKey((k) => k + 1);
                 }}
                 className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 cursor-pointer"
@@ -383,7 +421,9 @@ export function YouTubeLivePlayer({
             Stream muted during your call
           </span>
         )}
-        <span className="flex-1 min-w-0 truncate text-slate-400">{shareNote}</span>
+        <span className="flex-1 min-w-0 truncate text-slate-400">
+          {reconnecting && !hasEmbedError ? "Connecting to the class stream…" : shareNote}
+        </span>
         {shareUrl && (
           <button
             type="button"
