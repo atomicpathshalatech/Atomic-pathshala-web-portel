@@ -72,6 +72,9 @@ import {
 const inputClass =
   "w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest py-2.5 px-3.5 text-body-sm outline-none focus:ring-2 focus:ring-primary/30";
 
+/** Stored end of a live class: a nominal calendar slot only — classes have no fixed duration. */
+const LIVE_CLASS_NOMINAL_MINUTES = 60;
+
 export function BatchScheduleManager({
   batchId,
   schedules,
@@ -98,7 +101,6 @@ export function BatchScheduleManager({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [teachingModel, setTeachingModel] = useState<"MODEL_1_APP" | "MODEL_2_DUAL" | "PURE_LIVEKIT">("MODEL_1_APP");
 
   const [form, setForm] = useState({
     title: "",
@@ -115,10 +117,13 @@ export function BatchScheduleManager({
     notes: "",
   });
 
-  // Calculate End Time automatically: End Time = Start Time + Duration
+  // Calculate End Time automatically: End Time = Start Time + Duration.
+  // A live class has NO duration (it runs until the teacher presses End):
+  // its stored end is only a nominal slot for calendars, never enforced.
+  const isLiveClass = form.type === "LIVE_CLASS";
   const calculatedEndTime = useMemo(() => {
     if (!form.startsAt) return null;
-    const duration = form.isCustomDuration ? form.customDuration : form.durationMinutes;
+    const duration = isLiveClass ? LIVE_CLASS_NOMINAL_MINUTES : form.isCustomDuration ? form.customDuration : form.durationMinutes;
     if (!duration || duration <= 0) return null;
     try {
       const startsAtDate = parseISTDateTimeInput(form.startsAt);
@@ -126,7 +131,7 @@ export function BatchScheduleManager({
     } catch {
       return null;
     }
-  }, [form.startsAt, form.durationMinutes, form.isCustomDuration, form.customDuration]);
+  }, [form.startsAt, form.durationMinutes, form.isCustomDuration, form.customDuration, isLiveClass]);
 
   function resetForm() {
     setForm({
@@ -143,7 +148,6 @@ export function BatchScheduleManager({
       customDuration: 60,
       notes: "",
     });
-    setTeachingModel("MODEL_1_APP");
     setEditingId(null);
     setShowForm(false);
     setError(null);
@@ -161,18 +165,6 @@ export function BatchScheduleManager({
     const sessionVideo = entry.liveWhiteboardSession?.youtubeVideoId;
     const ownBroadcast = Boolean(entry.liveWhiteboardSession?.youtubeBroadcastId);
     const ytId = (sessionVideo && !ownBroadcast ? sessionVideo : "") || entry.lectureYoutubeId || "";
-
-    if (entry.classMode === "APP_AND_YOUTUBE") {
-      setTeachingModel("MODEL_2_DUAL");
-    } else if (entry.classMode === "APP_ONLY") {
-      setTeachingModel("MODEL_1_APP");
-    } else if (ytId) {
-      setTeachingModel("MODEL_2_DUAL");
-    } else if (isYt) {
-      setTeachingModel("MODEL_1_APP");
-    } else {
-      setTeachingModel("PURE_LIVEKIT");
-    }
 
     setForm({
       title: entry.title,
@@ -201,7 +193,7 @@ export function BatchScheduleManager({
       setError("Start date and time are required.");
       return;
     }
-    const duration = form.isCustomDuration ? form.customDuration : form.durationMinutes;
+    const duration = form.type === "LIVE_CLASS" ? LIVE_CLASS_NOMINAL_MINUTES : form.isCustomDuration ? form.customDuration : form.durationMinutes;
     if (!duration || duration <= 0) {
       setError("Duration must be a positive number of minutes.");
       return;
@@ -227,22 +219,11 @@ export function BatchScheduleManager({
         type: form.type,
         ...(editingId ? { status: form.status } : {}),
         teacherId: form.teacherId || undefined,
-        classMode:
-          form.type === "LIVE_CLASS" ? (teachingModel === "MODEL_2_DUAL" ? "APP_AND_YOUTUBE" : "APP_ONLY") : undefined,
-        videoTransport:
-          form.type === "LIVE_CLASS"
-            ? teachingModel === "PURE_LIVEKIT"
-              ? "LIVEKIT"
-              : "YOUTUBE"
-            : "LIVEKIT",
-        youtubeVideoId:
-          form.type === "LIVE_CLASS" && teachingModel === "MODEL_2_DUAL"
-            ? form.youtubeVideoId.trim() || undefined
-            : undefined,
-        // Sent as typed; the server reads the video id from any YouTube link
-        // form (with or without https://, shorts, youtu.be, a bare id…),
-        // checks YouTube will play it in the app, and stores a clean link.
-        youtubeUrl: form.youtubeVideoId?.trim() || undefined,
+        // One class model for every live class: the teacher enters the
+        // YouTube Video ID + Stream key at Start Class (no delivery model to
+        // pick here; an old one is cleared).
+        classMode: form.type === "LIVE_CLASS" ? null : undefined,
+        videoTransport: form.type === "LIVE_CLASS" ? "YOUTUBE" : "LIVEKIT",
         durationMinutes: duration,
         startsAt: startsAtDate.toISOString(),
         endsAt: endsAtDate.toISOString(),
@@ -365,7 +346,7 @@ export function BatchScheduleManager({
                           <span className="material-symbols-outlined text-xs">
                             {s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH" ? "smart_display" : "draw"}
                           </span>
-                          {s.classMode === "APP_AND_YOUTUBE" ? "App + Public YouTube" : s.classMode === "APP_ONLY" ? "App Only (unlisted)" : s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH" ? "YouTube Live" : "App Class"}
+                          Live Class
                         </span>
 
                         {isCompleted ? (
@@ -531,104 +512,6 @@ export function BatchScheduleManager({
               </select>
             </div>
 
-            {/* Teaching Mode Selector for LIVE_CLASS */}
-            {form.type === "LIVE_CLASS" && (
-              <div className="md:col-span-2 space-y-4 p-4 sm:p-5 rounded-2xl bg-surface-container border border-outline-variant/30">
-                <div>
-                  <label className="text-xs font-bold text-on-surface flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-primary text-base">broadcast_on_home</span>
-                    Live Class Delivery Model *
-                  </label>
-                  <p className="text-[11px] text-on-surface-variant mt-0.5">
-                    Select how this class will be broadcasted.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Option 1: App Class */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTeachingModel("MODEL_1_APP");
-                      setForm({ ...form, videoTransport: "YOUTUBE", youtubeVideoId: "" });
-                    }}
-                    className={`text-left p-3 rounded-xl border-2 transition-all flex flex-col gap-1.5 cursor-pointer relative ${
-                      teachingModel === "MODEL_1_APP"
-                        ? "bg-primary/10 border-primary text-on-surface shadow-sm"
-                        : "bg-surface-container-lowest border-outline-variant/30 hover:border-outline-variant text-on-surface-variant"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                          teachingModel === "MODEL_1_APP" ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant"
-                        }`}>
-                          <span className="material-symbols-outlined text-base">app_registration</span>
-                        </div>
-                        <span className="font-bold text-xs text-on-surface">App Class</span>
-                      </div>
-                      {teachingModel === "MODEL_1_APP" && (
-                        <span className="text-[10px] font-bold text-primary">✓ Selected</span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-on-surface-variant line-clamp-2">
-                      Private unlisted class for app students with live chat, quiz and doubts.
-                    </p>
-                  </button>
-
-                  {/* Option 2: YouTube + App Class */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTeachingModel("MODEL_2_DUAL");
-                      setForm({ ...form, videoTransport: "YOUTUBE" });
-                    }}
-                    className={`text-left p-3 rounded-xl border-2 transition-all flex flex-col gap-1.5 cursor-pointer relative ${
-                      teachingModel === "MODEL_2_DUAL"
-                        ? "bg-red-500/10 border-red-500 text-on-surface shadow-sm"
-                        : "bg-surface-container-lowest border-outline-variant/30 hover:border-outline-variant text-on-surface-variant"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                          teachingModel === "MODEL_2_DUAL" ? "bg-red-600 text-white" : "bg-surface-container text-on-surface-variant"
-                        }`}>
-                          <span className="material-symbols-outlined text-base">smart_display</span>
-                        </div>
-                        <span className="font-bold text-xs text-on-surface">YouTube + App Class</span>
-                      </div>
-                      {teachingModel === "MODEL_2_DUAL" && (
-                        <span className="text-[10px] font-bold text-red-500">✓ Selected</span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-on-surface-variant line-clamp-2">
-                      Stream on main YouTube channel + live interactive sync in Atomic Pathshala.
-                    </p>
-                  </button>
-                </div>
-
-                {/* If Model 2: Compact YouTube URL input */}
-                {teachingModel === "MODEL_2_DUAL" && (
-                  <div className="space-y-1 pt-1">
-                    <label className="text-xs font-bold text-on-surface flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-red-500 text-sm">link</span>
-                      Scheduled YouTube Stream Link or Video ID
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="Paste YouTube Live Link (e.g. https://youtu.be/... or Video ID)"
-                      value={form.youtubeVideoId}
-                      onChange={(e) => setForm({ ...form, youtubeVideoId: e.target.value })}
-                    />
-                    {editingId && form.youtubeVideoId && form.youtubeVideoId === schedules.find((x) => x.id === editingId)?.lectureYoutubeId && (
-                      <p className="text-[11px] text-emerald-600 font-semibold">Link already added on the chapter&apos;s lecture — nothing to paste.</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Start Date & Time */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-on-surface">Start Date &amp; Time (IST) *</label>
@@ -640,7 +523,8 @@ export function BatchScheduleManager({
               />
             </div>
 
-            {/* Auto-Calculated End Time Display */}
+            {/* Auto-Calculated End Time Display (not for a live class: no duration) */}
+            {!isLiveClass && (
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-on-surface">Calculated End Time (Automatic IST)</label>
               <div className="w-full rounded-xl border border-primary/30 bg-primary/5 py-2.5 px-3.5 text-xs text-primary font-bold flex items-center justify-between">
@@ -652,9 +536,11 @@ export function BatchScheduleManager({
                 <span className="material-symbols-outlined text-sm text-primary">schedule</span>
               </div>
             </div>
+            )}
           </div>
 
-          {/* Flexible Duration Options */}
+          {/* Flexible Duration Options (not for a live class: it runs until the teacher ends it) */}
+          {!isLiveClass && (
           <div className="space-y-2 pt-1">
             <label className="text-xs font-bold text-on-surface flex items-center justify-between">
               <span>Lecture Duration (Required) *</span>
@@ -705,6 +591,12 @@ export function BatchScheduleManager({
               </div>
             )}
           </div>
+          )}
+          {isLiveClass && (
+            <p className="text-[11px] text-on-surface-variant">
+              No duration: the class starts when the teacher presses Start Class (any time) and ends when they press End.
+            </p>
+          )}
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-on-surface">Notes / Instructions (optional)</label>

@@ -1,7 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { isPastGracePeriod, effectiveClassEnd, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
-import { authoritativeEndFor } from "@/lib/live-session/service";
+import { isLeftOpen, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
 
 export { resolveTeacherForSchedule, resolveStudentForSchedule } from "@/lib/batch/access";
 
@@ -93,11 +92,9 @@ export async function resolveWhiteboardAccess(
   // chat/quiz/pusher-auth request); only a class that already looks past
   // its end asks the LiveSession row for the authoritative end, which an
   // extension may have pushed later.
-  if (
-    wbSession.status === "ACTIVE" &&
-    isPastGracePeriod(effectiveClassEnd(wbSession.batchSchedule.endsAt, wbSession.scheduledEnd)) &&
-    isPastGracePeriod(await authoritativeEndFor(wbSession))
-  ) {
+  // No fixed duration (a class runs until the teacher ends it): only a class
+  // left open / never started is closed here — see isLeftOpen.
+  if (wbSession.status === "ACTIVE" && isLeftOpen(wbSession)) {
     await endWhiteboardSession(wbSession.id, { endedByUserId: null, reason: "auto_grace_expired" });
     wbSession.status = "ENDED";
     wbSession.livePhase = "ENDED";

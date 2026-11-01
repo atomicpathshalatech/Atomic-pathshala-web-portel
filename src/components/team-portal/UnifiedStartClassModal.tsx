@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -10,7 +10,6 @@ import {
   Calendar,
   Clock,
 } from "lucide-react";
-import { extractYouTubeVideoId } from "@/lib/live-class/youtube-url";
 
 export interface UnifiedStartClassModalProps {
   isOpen: boolean;
@@ -37,45 +36,13 @@ export function UnifiedStartClassModal({
   dateStr,
   timeStr,
   isLive = false,
-  initialTransport = "LIVEKIT",
-  initialYoutubeId = "",
   onSuccess,
 }: UnifiedStartClassModalProps) {
   const router = useRouter();
 
-  // "APP" = App class: this class's own unlisted YouTube stream, played
-  // inside the app. Falls back to the interactive LiveKit room only while
-  // App YouTube isn't set up on this server (appYoutube === false).
-  // "YOUTUBE" = the class is also live on a YouTube channel: paste its link.
-  const [deliveryMode, setDeliveryModeState] = useState<"APP" | "YOUTUBE">(
-    initialTransport === "YOUTUBE" && initialYoutubeId ? "YOUTUBE" : "APP"
-  );
-  const pickedByUser = useRef(false);
-  const setDeliveryMode = (mode: "APP" | "YOUTUBE") => {
-    pickedByUser.current = true;
-    setDeliveryModeState(mode);
-  };
-  const [appYoutube, setAppYoutube] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    let cancelled = false;
-    fetch("/api/team/live-class/delivery-options")
-      .then((r) => r.json())
-      .then((json) => {
-        if (cancelled) return;
-        const available = json?.data?.appYoutube === true;
-        setAppYoutube(available);
-        // Without App YouTube, a stored YouTube choice with no link keeps
-        // meaning "YouTube via OBS" rather than the LiveKit room.
-        if (!pickedByUser.current && !available && initialTransport === "YOUTUBE") setDeliveryModeState("YOUTUBE");
-      })
-      .catch(() => !cancelled && setAppYoutube(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, initialTransport]);
-  const [youtubeUrl, setYoutubeUrl] = useState<string>(initialYoutubeId || "");
+  // One class model: the teacher enters the YouTube Video ID + Stream key in
+  // the classroom and presses Start Class (or leaves them empty for the
+  // class's own stream). This window only opens the classroom.
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,34 +52,13 @@ export function UnifiedStartClassModal({
     setSubmitting(true);
     setError(null);
 
-    let parsedYtId: string | null = null;
-    if (deliveryMode === "YOUTUBE") {
-      const trimmed = youtubeUrl.trim();
-      if (!trimmed && appYoutube) {
-        setError("Paste the YouTube Live link of the channel stream. For a class only inside the app, choose App Class.");
-        setSubmitting(false);
-        return;
-      }
-      if (trimmed) {
-        parsedYtId = extractYouTubeVideoId(trimmed);
-        if (!parsedYtId && trimmed.length > 0) {
-          setError("Please enter a valid YouTube Live URL or 11-character Video ID, or leave it blank to connect OBS inside studio.");
-          setSubmitting(false);
-          return;
-        }
-      }
-    }
-
     try {
       // Call preflight to persist the chosen delivery mode
       const res = await fetch(`/api/team/live-class/${scheduleId}/preflight`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // The server makes the final call (LIVEKIT only as a fallback).
-          videoTransport: deliveryMode === "YOUTUBE" || appYoutube ? "YOUTUBE" : "LIVEKIT",
-          youtubeVideoId: deliveryMode === "YOUTUBE" ? parsedYtId || null : null,
-        }),
+        // The class's stream is chosen at Start Class in the room; nothing to set here.
+        body: JSON.stringify({ videoTransport: "YOUTUBE" }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -209,107 +155,10 @@ export function UnifiedStartClassModal({
             </div>
           )}
 
-          {/* Delivery Mode Selection - EXACT 2 OPTIONS */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-              Select Class Delivery Mode
-            </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Option 1: App Class */}
-              <div
-                onClick={() => setDeliveryMode("APP")}
-                className={`relative flex flex-col p-3.5 rounded-xl border-2 cursor-pointer transition text-left ${
-                  deliveryMode === "APP"
-                    ? "border-blue-600 dark:border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 shadow-sm"
-                    : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300">
-                    <span className="material-symbols-outlined text-base">draw</span>
-                    1. App Class
-                  </span>
-                  <span
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      deliveryMode === "APP"
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-slate-300 dark:border-slate-600"
-                    }`}
-                  >
-                    {deliveryMode === "APP" && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
-                  {appYoutube === false
-                    ? "Interactive in-app room with whiteboard, chat, doubts and polls. (App YouTube streaming isn't set up on this server yet.)"
-                    : "Private in-app class with whiteboard, chat, doubts and polls — streamed through its own unlisted YouTube link, recorded automatically."}
-                </p>
-                <div className="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
-                  <span className="material-symbols-outlined text-xs">shield_lock</span>
-                  <span>{appYoutube === false ? "Interactive room (fallback)" : "Unlisted & Private"}</span>
-                </div>
-              </div>
-
-              {/* Option 2: YouTube + App Class */}
-              <div
-                onClick={() => setDeliveryMode("YOUTUBE")}
-                className={`relative flex flex-col p-3.5 rounded-xl border-2 cursor-pointer transition text-left ${
-                  deliveryMode === "YOUTUBE"
-                    ? "border-red-600 dark:border-red-500 bg-red-50/50 dark:bg-red-950/30 shadow-sm"
-                    : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 dark:text-red-400">
-                    <span className="material-symbols-outlined text-base">smart_display</span>
-                    2. YouTube + App Class
-                  </span>
-                  <span
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      deliveryMode === "YOUTUBE"
-                        ? "border-red-600 bg-red-600 text-white"
-                        : "border-slate-300 dark:border-slate-600"
-                    }`}
-                  >
-                    {deliveryMode === "YOUTUBE" && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
-                  Broadcast live on YouTube channel with synced chat and interactive features in Atomic Pathshala app.
-                </p>
-                <div className="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400 font-semibold">
-                  <span className="material-symbols-outlined text-xs">sensors</span>
-                  <span>Dual Public + App Stream</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Conditional YouTube Link Input */}
-          {deliveryMode === "YOUTUBE" && (
-            <div className="p-3.5 rounded-xl bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 space-y-2 animate-in fade-in duration-200">
-              <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
-                YouTube Live Stream Link or Video ID{" "}
-                {appYoutube ? null : <span className="text-slate-400 font-normal">(optional)</span>}
-              </label>
-              <input
-                type="text"
-                value={youtubeUrl}
-                onChange={(e) => {
-                  setYoutubeUrl(e.target.value);
-                  setError(null);
-                }}
-                placeholder="https://youtube.com/live/xxxx or Video ID"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500"
-              />
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-                {appYoutube
-                  ? "Paste the channel's scheduled YouTube live link — students watch it inside the app."
-                  : "Paste scheduled YouTube live link or leave empty to connect via OBS stream key inside the studio."}
-              </p>
-            </div>
-          )}
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            In the classroom, enter the stream&apos;s <b>YouTube Video ID</b> and <b>Stream key</b> and press <b>Start Class</b> — any time.
+            The class has no fixed duration: it ends when you press End.
+          </p>
 
           {error && (
             <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs text-rose-600 dark:text-rose-400">
@@ -332,11 +181,7 @@ export function UnifiedStartClassModal({
             type="button"
             onClick={handleLaunch}
             disabled={submitting}
-            className={`px-5 py-2 text-xs font-bold rounded-xl text-white shadow-md transition active:scale-95 flex items-center gap-1.5 ${
-              deliveryMode === "YOUTUBE"
-                ? "bg-red-600 hover:bg-red-500 shadow-red-600/20"
-                : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/20"
-            }`}
+            className="px-5 py-2 text-xs font-bold rounded-xl text-white shadow-md transition active:scale-95 flex items-center gap-1.5 bg-red-600 hover:bg-red-500 shadow-red-600/20"
           >
             <Play className="w-3.5 h-3.5 fill-white" />
             <span>

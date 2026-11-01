@@ -76,20 +76,12 @@ export async function POST(
     // id used to put students of a re-run class onto the old, finished
     // broadcast.)
     const bodyYouTubeId = body?.youtubeVideoId ? extractYouTubeVideoId(String(body.youtubeVideoId)) : null;
-    // The delivery mode chosen when the class was scheduled (null: teacher's choice).
-    const classMode = (schedule as { classMode?: string | null }).classMode ?? null;
     // The YouTube stream saved on the schedule before class (by whoever
     // manages the schedule; or on another batch's class of the same lecture)
     // — the teacher only presses Start and is not asked for the link again.
     const { scheduledLiveYouTubeId } = await import("@/lib/live-class/class-youtube-link");
     const scheduledYouTubeId = await scheduledLiveYouTubeId(schedule);
     const requestedYouTubeId = bodyYouTubeId ?? scheduledYouTubeId ?? (isNewOccurrence ? null : existingSession?.youtubeVideoId ?? null);
-    if (classMode === "APP_ONLY" && bodyYouTubeId) {
-      return apiError("This class is scheduled as an App-only class (its own unlisted stream); a public YouTube link cannot be used. Change the class to App + public YouTube in the schedule first.", 400, { code: "CLASS_MODE_APP_ONLY" });
-    }
-    if (classMode === "APP_AND_YOUTUBE" && !requestedYouTubeId) {
-      return apiError("This class has no YouTube link on its schedule — ask whoever manages the schedule to add it (chapter page → the lecture → YouTube live link), or enter it here.", 400, { code: "CLASS_MODE_NEEDS_LINK" });
-    }
 
     // Public class: the stream the team scheduled on YouTube themselves. Its
     // stream key (from YouTube Studio) lets the Teacher app send the class to

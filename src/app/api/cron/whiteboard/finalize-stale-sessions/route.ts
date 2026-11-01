@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { isPastGracePeriod, effectiveClassEnd, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
-import { authoritativeEndFor } from "@/lib/live-session/service";
+import { isLeftOpen, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,16 +56,14 @@ export async function GET(req: NextRequest) {
   try {
     const staleActive = await prisma.whiteboardSession.findMany({
       where: { status: "ACTIVE" },
-      include: { batchSchedule: { select: { id: true, endsAt: true } } },
+      include: { batchSchedule: { select: { id: true, startsAt: true } } },
       take: 50,
     });
 
     let autoEnded = 0;
     for (const s of staleActive) {
-      if (
-        isPastGracePeriod(effectiveClassEnd(s.batchSchedule.endsAt, s.scheduledEnd)) &&
-        isPastGracePeriod(await authoritativeEndFor(s))
-      ) {
+      // No fixed duration: only classes left open / never started (isLeftOpen).
+      if (isLeftOpen(s)) {
         await endWhiteboardSession(s.id, { endedByUserId: null, reason: "auto_grace_expired" });
         autoEnded++;
       }

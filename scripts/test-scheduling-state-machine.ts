@@ -2,7 +2,7 @@
  * PRODUCTION LIVE CLASS SCHEDULING STATE MACHINE TEST SUITE
  * 
  * Verifies all 14 mandatory test cases:
- * 1. Start class 30 minutes early -> MUST FAIL (START_TOO_EARLY)
+ * 1. Start class 30 minutes early -> ALLOWED (no start window: start any time)
  * 2. Start class 16 minutes early -> MUST FAIL (START_TOO_EARLY)
  * 3. Start class 6 minutes early -> MUST FAIL (START_TOO_EARLY)
  * 4. Start class exactly T-5 -> MUST WORK (READY)
@@ -57,7 +57,7 @@ async function runTests() {
   };
 
   // ---------------------------------------------------------------------------
-  // TEST 1: Start class 30 minutes early (T-30: 09:30 UTC) -> MUST FAIL
+  // TEST 1: Start class 30 minutes early (T-30: 09:30 UTC) -> ALLOWED (start any time)
   // ---------------------------------------------------------------------------
   {
     const serverNow = new Date("2026-09-08T09:30:00.000Z"); // T-30
@@ -66,13 +66,13 @@ async function runTests() {
     const status = getEffectiveScheduleStatus(mockSchedule, serverNow);
 
     assert(
-      !evalStart.allowed && evalStart.code === "START_TOO_EARLY",
-      "Test 1: Start class 30 minutes early -> MUST FAIL",
+      evalStart.allowed && evalStart.code === "OK",
+      "Test 1: Start class 30 minutes early -> ALLOWED (start any time)",
       `Expected allowed=false & code=START_TOO_EARLY, got allowed=${evalStart.allowed}, code=${evalStart.code}`
     );
     assert(
-      !evalEnter.allowed && evalEnter.code === "ENTRY_TOO_EARLY",
-      "Test 1b: Teacher entry 30 minutes early -> MUST FAIL (ENTRY_TOO_EARLY)",
+      evalEnter.allowed && evalEnter.code === "OK",
+      "Test 1b: Teacher entry 30 minutes early -> ALLOWED",
       `got code=${evalEnter.code}`
     );
     assert(
@@ -83,7 +83,7 @@ async function runTests() {
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 2: Start class 16 minutes early (T-16: 09:44 UTC) -> MUST FAIL
+  // TEST 2: Start class 16 minutes early (T-16: 09:44 UTC) -> ALLOWED
   // ---------------------------------------------------------------------------
   {
     const serverNow = new Date("2026-09-08T09:44:00.000Z"); // T-16
@@ -91,19 +91,19 @@ async function runTests() {
     const evalEnter = canTeacherEnterClass(mockSchedule, serverNow);
 
     assert(
-      !evalStart.allowed && evalStart.code === "START_TOO_EARLY",
-      "Test 2: Start class 16 minutes early -> MUST FAIL",
+      evalStart.allowed && evalStart.code === "OK",
+      "Test 2: Start class 16 minutes early -> ALLOWED",
       `Expected allowed=false & code=START_TOO_EARLY, got allowed=${evalStart.allowed}, code=${evalStart.code}`
     );
     assert(
-      !evalEnter.allowed && evalEnter.code === "ENTRY_TOO_EARLY",
-      "Test 2b: Teacher entry 16 minutes early -> MUST FAIL",
+      evalEnter.allowed && evalEnter.code === "OK",
+      "Test 2b: Teacher entry 16 minutes early -> ALLOWED",
       `got code=${evalEnter.code}`
     );
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 3: Start class 6 minutes early (T-6: 09:54 UTC) -> MUST FAIL
+  // TEST 3: Start class 6 minutes early (T-6: 09:54 UTC) -> ALLOWED
   // ---------------------------------------------------------------------------
   {
     const serverNow = new Date("2026-09-08T09:54:00.000Z"); // T-6 (Inside teacher entry window T-15, but BEFORE T-5 start window)
@@ -112,8 +112,8 @@ async function runTests() {
     const status = getEffectiveScheduleStatus(mockSchedule, serverNow);
 
     assert(
-      !evalStart.allowed && evalStart.code === "START_TOO_EARLY",
-      "Test 3: Start class 6 minutes early -> MUST FAIL (T-5 boundary enforced)",
+      evalStart.allowed && evalStart.code === "OK",
+      "Test 3: Start class 6 minutes early -> ALLOWED (no T-5 boundary)",
       `Expected allowed=false & code=START_TOO_EARLY, got allowed=${evalStart.allowed}, code=${evalStart.code}`
     );
     assert(
@@ -344,19 +344,15 @@ async function runTests() {
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 14: Browser clock manipulated -> backend server authority remains unaffected
+  // TEST 14: Never started: still startable hours late, given up after 12 h (server time)
   // ---------------------------------------------------------------------------
   {
-    const authoritativeServerTime = new Date("2026-09-08T09:40:00.000Z"); // T-20 on server
-    const manipulatedClientTime = new Date("2026-09-08T10:05:00.000Z");   // Manipulated to T+5 on client
-
-    // Client requests start, but backend evaluates ONLY against authoritativeServerTime
-    const backendEval = canTeacherStartClass(mockSchedule, authoritativeServerTime);
-
+    const late = canTeacherStartClass(mockSchedule, new Date("2026-09-08T15:00:00.000Z")); // T+5h
+    const tooLate = canTeacherStartClass(mockSchedule, new Date("2026-09-08T22:30:00.000Z")); // T+12.5h
     assert(
-      !backendEval.allowed && backendEval.code === "START_TOO_EARLY",
-      "Test 14: Browser clock manipulated -> backend rejects based on authoritative server time",
-      `Backend evaluated: allowed=${backendEval.allowed}, code=${backendEval.code}`
+      late.allowed && !tooLate.allowed && tooLate.status === "CANCELLED",
+      "Test 14: Unstarted class: startable 5 h late, cancelled after 12 h",
+      `late=${late.allowed}/${late.code}, tooLate=${tooLate.allowed}/${tooLate.status}`
     );
   }
 

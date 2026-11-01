@@ -2,11 +2,29 @@ import "server-only";
 import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/db";
 import { pusherServer, sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
-import { GRACE_PERIOD_MINUTES } from "@/lib/whiteboard/constants";
+import { GRACE_PERIOD_MINUTES, MAX_OPEN_HOURS, UNSTARTED_EXPIRY_HOURS } from "@/lib/whiteboard/constants";
 
 /** True once `now` is past this class's scheduled end plus the grace window. */
 export function isPastGracePeriod(endsAt: Date, now: Date = new Date()): boolean {
   return now.getTime() > endsAt.getTime() + GRACE_PERIOD_MINUTES * 60_000;
+}
+
+/**
+ * Classes have no fixed duration: one runs until the teacher presses End,
+ * however long that is. Auto-end only cleans up a class left behind:
+ *   - started but never ended (tab closed, power cut): after MAX_OPEN_HOURS
+ *     from its actual start;
+ *   - scheduled but never started: after UNSTARTED_EXPIRY_HOURS from its
+ *     scheduled time (then it is CANCELLED, see endWhiteboardSession).
+ */
+
+export function isLeftOpen(
+  s: { actualStartedAt: Date | null; batchSchedule: { startsAt: Date } },
+  now: Date = new Date()
+): boolean {
+  const from = s.actualStartedAt ?? s.batchSchedule.startsAt;
+  const hours = s.actualStartedAt ? MAX_OPEN_HOURS : UNSTARTED_EXPIRY_HOURS;
+  return now.getTime() > from.getTime() + hours * 3_600_000;
 }
 
 /**

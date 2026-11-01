@@ -18,3 +18,9 @@ export const END_WARNING_MINUTES = 5;
 // keeps a 500-student class at ~8 heartbeat requests/second in total.
 export const STUDENT_HEARTBEAT_MS = 60_000;
 export const ONLINE_WINDOW_MS = 150_000;
+
+// Classes have no fixed duration (one runs until the teacher presses End).
+// Only a class left behind is closed automatically: started but not ended
+// after MAX_OPEN_HOURS, or never started UNSTARTED_EXPIRY_HOURS after its time.
+export const MAX_OPEN_HOURS = 10;
+export const UNSTARTED_EXPIRY_HOURS = 12;

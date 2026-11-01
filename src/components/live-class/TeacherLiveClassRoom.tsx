@@ -37,7 +37,6 @@ import { CanvasCursor, type CanvasCursorHandle } from "@/components/live-class/C
 import { backupBaseKey, getHydratedObjects } from "@/lib/whiteboard/board-backup";
 import { BoardHistory, type BoardHistoryOps, type BoardStep, type SlideSnapshot as BoardSlideSnapshot } from "@/lib/whiteboard/board-history";
 import { PageThumbnail } from "@/components/live-class/PageThumbnail";
-import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube-url";
 import { StagePreview } from "@/components/live-class/StagePreview";
@@ -1130,8 +1129,6 @@ export function TeacherLiveClassRoom({
 
   // Pre-flight & Authoritative System State
   const [showPreFlightWizard, setShowPreFlightWizard] = useState(false);
-  const [extendingTime, setExtendingTime] = useState(false);
-  const [extensionMenuOpen, setExtensionMenuOpen] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const serverTimeOffsetRef = useRef<number>(0);
 
@@ -2870,17 +2867,6 @@ export function TeacherLiveClassRoom({
       return;
     }
 
-    // The delivery mode chosen when the class was scheduled.
-    if (classMode === "APP_AND_YOUTUBE" && !ytId) {
-      setYoutubeInputError("This class has no YouTube link on its schedule — ask whoever manages the schedule to add it (chapter page → the lecture → YouTube live link), or enter it here.");
-      setStartingClass(false);
-      return;
-    }
-    if (classMode === "APP_ONLY" && typedLink) {
-      setYoutubeInputError("This class is scheduled as an App-only class (its own unlisted stream). Clear the YouTube link, or change the class to App + public YouTube in the schedule.");
-      setStartingClass(false);
-      return;
-    }
 
     try {
       const data = await postJson(`/api/team/live-class/${batchScheduleId}/start`, {
@@ -2924,27 +2910,7 @@ export function TeacherLiveClassRoom({
     }
   }
 
-  // ---- Extend class (+5, +10, +15, +30, +60 minutes) -------------------
-  async function extendClass(minutes: number) {
-    if (!wbSession || extendingTime) return;
-    setExtendingTime(true);
-    try {
-      const data = await postJson(`/api/team/live-class/${batchScheduleId}/extend`, { addedMinutes: minutes });
-      if (data.whiteboardSession) {
-        setWbSession((prev) =>
-          prev ? { ...prev, ...data.whiteboardSession } : data.whiteboardSession
-        );
-      }
-      setExtensionMenuOpen(false);
-    } catch (err: any) {
-      alert(err instanceof Error ? err.message : "Could not extend the class.");
-    } finally {
-      setExtendingTime(false);
-    }
-  }
-
   // ---- Authoritative Countdown, Grace Period & Timer State --------------
-  const autoEndTriggeredRef = useRef(false);
 
   // Fetch server time on mount to sync clock skew
   useEffect(() => {
@@ -2979,37 +2945,19 @@ export function TeacherLiveClassRoom({
 
 
   const scheduledStartMs = wbSession?.scheduledStart ? new Date(wbSession.scheduledStart).getTime() : 0;
-  const scheduledEndMs = wbSession?.scheduledEnd
-    ? new Date(wbSession.scheduledEnd).getTime()
-    : new Date(endsAt).getTime();
   const actualStartedAtMs = wbSession?.actualStartedAt
     ? new Date(wbSession.actualStartedAt).getTime()
     : wbSession?.startedAt
     ? new Date(wbSession.startedAt).getTime()
     : null;
 
-  // Waiting mode timing (Authoritative T-5 Rule: Start Class unlocks at T-5)
+  // No start window and no fixed duration: the class starts whenever the
+  // teacher presses Start and runs until they press End.
   const secondsUntilStart = scheduledStartMs > 0 ? Math.floor((scheduledStartMs - currentTimeMs) / 1000) : 0;
-  const isStartWindowOpen = scheduledStartMs === 0 || currentTimeMs >= scheduledStartMs - 5 * 60 * 1000;
-  const canStartClass = isStartWindowOpen && wbSession?.livePhase !== "LIVE";
+  const canStartClass = wbSession?.livePhase !== "LIVE";
 
   // Live mode timing
   const elapsedSeconds = actualStartedAtMs ? Math.max(0, Math.floor((currentTimeMs - actualStartedAtMs) / 1000)) : 0;
-  const remainingSeconds = Math.floor((scheduledEndMs - currentTimeMs) / 1000);
-  const isInGracePeriod = remainingSeconds <= 0 && remainingSeconds > -GRACE_PERIOD_MINUTES * 60;
-  const graceSecondsLeft = Math.max(0, GRACE_PERIOD_MINUTES * 60 + remainingSeconds);
-  const minutesRemaining = Math.ceil(remainingSeconds / 60);
-
-  // Auto-end trigger when grace period fully expires
-  useEffect(() => {
-    const gracePeriodExpired = currentTimeMs > scheduledEndMs + GRACE_PERIOD_MINUTES * 60_000;
-    if (gracePeriodExpired && !autoEndTriggeredRef.current && wbSession?.status === "ACTIVE" && !ending && wbSession.livePhase === "LIVE") {
-      autoEndTriggeredRef.current = true;
-      endClass();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTimeMs, scheduledEndMs, wbSession?.status, wbSession?.livePhase]);
-
   // ---- End class -------------------------------------------------------------
   async function endClass() {
     if (!wbSession) return;
@@ -3515,91 +3463,6 @@ export function TeacherLiveClassRoom({
                 {formatHms(elapsedSeconds)}
               </span>
 
-              {/* Remaining / Grace Period Timer */}
-              {isInGracePeriod ? (
-                <div className="relative flex items-center gap-1.5">
-                  <span
-                    className="flex items-center gap-1 text-xs font-mono font-bold text-rose-300 bg-rose-950/80 border border-rose-500/60 px-2.5 py-1 rounded-md animate-pulse"
-                    title="Scheduled class duration completed. Grace period active before auto-close."
-                  >
-                    <span className="material-symbols-outlined text-xs text-rose-400">warning</span>
-                    Grace Period: {formatHms(graceSecondsLeft)}
-                  </span>
-                  {/* Quick Add Time Button */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setExtensionMenuOpen((o) => !o)}
-                      className="flex items-center gap-1 text-xs font-bold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 px-2.5 py-1 rounded-md transition shadow-md"
-                    >
-                      <span className="material-symbols-outlined text-xs">add</span> Add Time
-                    </button>
-                    {extensionMenuOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-36 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1">
-                        <span className="text-[10px] text-slate-400 px-2 py-0.5 uppercase tracking-wider font-bold">
-                          Extend Class
-                        </span>
-                        {[5, 10, 15, 30, 60].map((mins) => (
-                          <button
-                            key={mins}
-                            type="button"
-                            disabled={extendingTime}
-                            onClick={() => extendClass(mins)}
-                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 hover:bg-blue-600 hover:text-white transition disabled:opacity-50"
-                          >
-                            +{mins} Minutes
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : remainingSeconds > 0 ? (
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`flex items-center gap-1 text-xs font-mono font-semibold px-2.5 py-1 rounded-md border ${
-                      remainingSeconds <= 300
-                        ? "text-amber-300 bg-amber-950/60 border-amber-500/50 animate-pulse"
-                        : "text-gray-300 bg-black/40 border-gray-700/60"
-                    }`}
-                    title={`Time left until scheduled end (${new Date(scheduledEndMs).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })})`}
-                  >
-                    <span className="material-symbols-outlined text-xs">timer</span>
-                    {formatHms(remainingSeconds)} left
-                  </span>
-                  {/* Add Time Menu Button */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setExtensionMenuOpen((o) => !o)}
-                      className="flex items-center gap-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 rounded-md transition"
-                      title="Extend Class Duration"
-                    >
-                      <span className="material-symbols-outlined text-xs">more_time</span>
-                      <span className="hidden sm:inline">+Time</span>
-                    </button>
-                    {extensionMenuOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-36 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1">
-                        <span className="text-[10px] text-slate-400 px-2 py-0.5 uppercase tracking-wider font-bold">
-                          Add Time
-                        </span>
-                        {[5, 10, 15, 30, 60].map((mins) => (
-                          <button
-                            key={mins}
-                            type="button"
-                            disabled={extendingTime}
-                            onClick={() => extendClass(mins)}
-                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 hover:bg-blue-600 hover:text-white transition disabled:opacity-50"
-                          >
-                            +{mins} Minutes
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
               {/* YouTube Live Stream Indicator when running on YouTube (or simulcasting alongside the interactive room) */}
               {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && wbSession?.youtubeVideoId && !youtubeGateActive && (
                 <a
@@ -3695,10 +3558,10 @@ export function TeacherLiveClassRoom({
                     ? "text-white bg-red-600 hover:bg-red-500 shadow-red-600/30 ring-2 ring-red-400/40 animate-pulse cursor-pointer"
                     : "text-gray-400 bg-gray-800 border border-gray-700 cursor-not-allowed opacity-60"
                 }`}
-                title={canStartClass ? "Start Live Teaching for all students" : "Class start unlocks 5 minutes before scheduled start time"}
+                title="Start the class for all students — any time"
               >
                 <span className="material-symbols-outlined text-base">sensors</span>
-                {startingClass ? "Starting…" : canStartClass ? "Start Class" : "Scheduled Time Locked"}
+                {startingClass ? "Starting…" : "Start Class"}
               </button>
               {youtubeInputError && (
                 <span className="text-xs text-rose-300 max-w-md line-clamp-2" title={youtubeInputError}>

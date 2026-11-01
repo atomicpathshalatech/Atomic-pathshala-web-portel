@@ -26,7 +26,10 @@ export const TEACHER_START_WINDOW_MS = TEACHER_START_WINDOW_MINUTES * 60 * 1000;
 export const STUDENT_JOIN_WINDOW_MINUTES = 15;
 export const STUDENT_JOIN_WINDOW_MS = STUDENT_JOIN_WINDOW_MINUTES * 60 * 1000;
 
-export const SCHEDULE_EXPIRY_MINUTES = 30;
+// A class has no fixed duration and the teacher may start it at any time:
+// one never started is given up on 12 h after its scheduled time (the same
+// window the server's auto-end uses, UNSTARTED_EXPIRY_HOURS).
+export const SCHEDULE_EXPIRY_MINUTES = 12 * 60;
 export const SCHEDULE_EXPIRY_MS = SCHEDULE_EXPIRY_MINUTES * 60 * 1000;
 
 // Backward-compatibility aliases
@@ -256,13 +259,12 @@ export function canTeacherEnterClass(
     };
   }
 
-  // Check if before T-15 entry window
+  // Any time before the class: the teacher may enter (and start) whenever ready.
   if (nowMs < opensAt.getTime()) {
     return {
-      allowed: false,
+      allowed: true,
       status: "SCHEDULED",
-      code: "ENTRY_TOO_EARLY",
-      reason: "Pre-class room entry is not open yet. Teacher entry opens 15 minutes before scheduled start time.",
+      code: "OK",
       opensAt,
       startOpensAt,
       startsAt,
@@ -270,9 +272,9 @@ export function canTeacherEnterClass(
       isLive: false,
       isCompleted: false,
       isCancelled: false,
-      isWindowOpen: false,
-      secondsUntilWindowOpens,
-      secondsUntilStartOpens,
+      isWindowOpen: true,
+      secondsUntilWindowOpens: 0,
+      secondsUntilStartOpens: 0,
       secondsUntilStartsAt,
     };
   }
@@ -509,29 +511,8 @@ export function canTeacherStartClass(
     };
   }
 
-  // Not before T-5 (the documented Teacher Start Window): the Start button
-  // used to show for classes days away.
-  if (nowMs < startOpensAt.getTime()) {
-    return {
-      allowed: false,
-      status: nowMs < opensAt.getTime() ? "SCHEDULED" : "TEACHER_ENTRY_OPEN",
-      code: "START_TOO_EARLY",
-      reason: `Class can be started from ${TEACHER_START_WINDOW_MINUTES} minutes before its scheduled time.`,
-      opensAt,
-      startOpensAt,
-      startsAt,
-      endsAt,
-      isLive: false,
-      isCompleted: false,
-      isCancelled: false,
-      isWindowOpen: false,
-      secondsUntilWindowOpens,
-      secondsUntilStartOpens,
-      secondsUntilStartsAt,
-    };
-  }
-
-  // Start Class is allowed whenever educator is ready (or starting stream)
+  // Start Class any time — before or after the scheduled time (no start
+  // window, no fixed duration).
   return {
     allowed: true,
     status: "READY",
@@ -733,12 +714,13 @@ export function getEffectiveScheduleStatus(
     return isRecordingNotYetDue(schedule, serverNow) ? "SCHEDULED" : "COMPLETED";
   }
 
-  const { startsAt, endsAt, opensAt, startOpensAt, expiresAt } = getScheduleWindowDates(schedule);
+  const { opensAt, startOpensAt, expiresAt } = getScheduleWindowDates(schedule);
   const nowMs = serverNow.getTime();
 
   // Authoritative check: Truly live only if teacher has started the session
   const isLive = isScheduleGenuinelyLive(schedule);
-  if (isLive && nowMs <= endsAt.getTime() + 4 * 60 * 60 * 1000) {
+  // Live until the teacher ends it (no fixed duration).
+  if (isLive) {
     return "LIVE";
   }
 

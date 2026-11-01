@@ -3,6 +3,7 @@ import type { StreamLease, YoutubeIngestStream } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { openSecret, sealSecret } from "@/lib/crypto/secret-box";
 import { createPoolIngestStream, deleteIngestStream } from "@/lib/youtube/live-broadcast";
+import { MAX_OPEN_HOURS } from "@/lib/whiteboard/constants";
 
 /**
  * The APP channel's ingest stream pool. Replaces the old single "master"
@@ -102,7 +103,9 @@ export async function acquireStreamLease(liveSessionId: string, classEndsAt: Dat
 
     await tx.youtubeIngestStream.update({ where: { id: streamId }, data: { status: "LEASED" } });
     return tx.streamLease.create({
-      data: { streamId, liveSessionId, state: "RESERVED", expiresAt: new Date(classEndsAt.getTime() + LEASE_GRACE_MS) },
+      // Classes have no fixed duration: hold the slot at least as long as a
+      // class may stay open (MAX_OPEN_HOURS), not just until its nominal end.
+      data: { streamId, liveSessionId, state: "RESERVED", expiresAt: new Date(Math.max(classEndsAt.getTime() + LEASE_GRACE_MS, Date.now() + MAX_OPEN_HOURS * 3_600_000)) },
       include: { stream: true },
     });
   });
