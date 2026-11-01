@@ -3,7 +3,9 @@ import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import { prisma } from "@/lib/db";
 import { canStudentJoinClass, getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 import { areResultsReleased } from "@/lib/tests/schedule-rules";
-import { withoutUnchosenRecordedSlots } from "@/lib/recorded-lectures/viewers";
+import type { Prisma } from "@prisma/client";
+import { allowedChapterIds, allowedChapters, withoutUnchosenRecordedSlots } from "@/lib/recorded-lectures/viewers";
+import { WATCHABLE_MEDIA } from "@/lib/recorded-lectures/access";
 
 const IST = "Asia/Kolkata";
 const dayKey = (d: string | Date) => new Date(d).toLocaleDateString("en-CA", { timeZone: IST });
@@ -273,6 +275,18 @@ export async function loadStudentBatchHome(
   const teacherIds = batch.teachers.map((t) => t.teacher.id);
   const testSeriesIds = (batch.testSeries || []).map((ts) => ts.testSeriesId);
 
+  // Lectures listed in the batch's chapters: every published ordinary lecture,
+  // and a chapter's recorded lectures only for students ticked for that
+  // chapter in this batch (published, video ready, not archived).
+  const chosenChapterIds = allowedChapterIds(await allowedChapters(studentId, [batchId]), batchId);
+  const listedLectures: Prisma.LectureWhereInput = {
+    status: "PUBLISHED",
+    OR: [
+      { NOT: { videoUrl: { startsWith: "/recorded-lectures/" } } },
+      ...(chosenChapterIds.length ? [{ chapterId: { in: chosenChapterIds }, recordedMedia: { is: WATCHABLE_MEDIA } }] : []),
+    ],
+  };
+
   // 2. Fetch Assigned Chapters, Course Chapters, & Batch Schedules in parallel
   const [assignedChapters, courseChapters, allSchedules, dppSchedules] = await Promise.all([
     prisma.batchChapter.findMany({
@@ -282,8 +296,7 @@ export async function loadStudentBatchHome(
           include: {
             subject: { select: { id: true, title: true } },
             lectures: {
-              // Recorded lectures are listed only for chosen students (Classes → Recorded), never here.
-              where: { status: "PUBLISHED", NOT: { videoUrl: { startsWith: "/recorded-lectures/" } } },
+              where: listedLectures,
               orderBy: { order: "asc" },
               select: {
                 id: true,
@@ -305,8 +318,7 @@ export async function loadStudentBatchHome(
           include: {
             subject: { select: { id: true, title: true } },
             lectures: {
-              // Recorded lectures are listed only for chosen students (Classes → Recorded), never here.
-              where: { status: "PUBLISHED", NOT: { videoUrl: { startsWith: "/recorded-lectures/" } } },
+              where: listedLectures,
               orderBy: { order: "asc" },
               select: {
                 id: true,
@@ -439,7 +451,7 @@ export async function loadStudentBatchHome(
     include: {
       subject: { select: { id: true, title: true } },
       lectures: {
-        where: { status: "PUBLISHED" },
+        where: listedLectures,
         orderBy: { order: "asc" },
         select: {
           id: true,
