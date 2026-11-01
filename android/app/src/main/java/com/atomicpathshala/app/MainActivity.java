@@ -9,7 +9,9 @@ import android.view.ViewGroup;
 import android.webkit.WebChromeClient;
 import android.widget.FrameLayout;
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.graphics.Insets;
 import androidx.core.splashscreen.SplashScreen;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -44,6 +46,7 @@ public class MainActivity extends BridgeActivity {
         SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> SystemClock.uptimeMillis() - start < SPLASH_MIN_MS);
         super.onCreate(savedInstanceState);
         getOnBackPressedDispatcher().addCallback(this, exitFullscreenOnBack);
+        keepPageClearOfSystemBars();
         bridge.getWebView().setWebChromeClient(new BridgeWebChromeClient(bridge) {
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
@@ -55,6 +58,25 @@ public class MainActivity extends BridgeActivity {
                 exitFullscreen();
             }
         });
+    }
+
+    /**
+     * Android 15+ draws apps edge to edge: the page went under the status bar
+     * and the phone's bottom navigation bar (the live-class chat box sat
+     * behind it and could not be tapped), and the keyboard covered inputs.
+     * The page area is kept clear of the bars, the screen cutout and the
+     * keyboard here, natively, so no web page has to handle it. Full-screen
+     * video is added above all this and still uses the whole screen.
+     */
+    private void keepPageClearOfSystemBars() {
+        View page = (View) bridge.getWebView().getParent();
+        ViewCompat.setOnApplyWindowInsetsListener(page, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
+            return WindowInsetsCompat.CONSUMED;
+        });
+        ViewCompat.requestApplyInsets(page);
     }
 
     private void enterFullscreen(View view, WebChromeClient.CustomViewCallback callback) {

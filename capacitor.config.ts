@@ -71,6 +71,11 @@ const config: CapacitorConfig = {
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
     },
+    // Insets are handled natively (MainActivity keeps the page clear of the
+    // system bars and keyboard); no CSS safe-area variables needed.
+    SystemBars: {
+      insetsHandling: 'disable',
+    },
     StatusBar: {
       style: 'DARK',
       backgroundColor: '#090D16',
