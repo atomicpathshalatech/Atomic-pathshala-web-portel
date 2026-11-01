@@ -381,20 +381,11 @@ export function BatchScheduleManager({
                         ) : teacherStartEval.allowed ? (
                           <Link
                             href={`/team/live-class/${s.id}`}
-                            className={`flex items-center gap-1 font-bold hover:underline ${
-                              s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH"
-                                ? "text-red-600 dark:text-red-400"
-                                : "text-primary"
-                            }`}
+                            className="flex items-center gap-1 font-bold hover:underline text-red-600 dark:text-red-400"
                           >
                             <span className="material-symbols-outlined text-base">sensors</span>
-                            {s.classMode === "APP_AND_YOUTUBE"
-                              ? "Start Public YouTube Class"
-                              : s.classMode === "APP_ONLY"
-                                ? "Start App Class"
-                                : s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH"
-                                  ? "Start YouTube Class"
-                                  : "Start App Class"}
+                            {/* One Start Class for every class (stream key + video ID are entered in the room). */}
+                            Start Class
                           </Link>
                         ) : (
                           <span className="flex items-center gap-1 text-on-surface-variant/50 font-medium text-[11px] select-none">

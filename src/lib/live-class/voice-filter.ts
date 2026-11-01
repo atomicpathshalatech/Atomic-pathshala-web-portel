@@ -1,9 +1,9 @@
 /**
  * Teacher voice filter for the class audio (what students hear):
  *
- *   mic (browser noise suppression + echo cancel + voice isolation where
- *   available) → RNNoise (AI noise suppression: keyboard, fans, traffic,
- *   people nearby) → high-pass 90 Hz (fans, AC hum, traffic rumble) → low-pass
+ *   mic (echo cancel + auto gain; the browser's noise suppression only when
+ *   RNNoise can't run — never both) → RNNoise (AI noise suppression:
+ *   keyboard, fans, traffic, people nearby) → high-pass 90 Hz (fans, AC hum, traffic rumble) → low-pass
  *   9 kHz (hiss) → CLOSE-TALK NOISE GATE → compressor (even voice level)
  *
  * The gate is what keeps a room quiet between sentences: speech right at
@@ -137,6 +137,10 @@ export async function createVoiceFilter(
         if (cleaned && cleaned.readyState === "live") {
           source = cleaned;
           denoiser = proc;
+          // One noise suppressor, not two: with RNNoise running, the browser's
+          // own suppression on top of it over-cleans the voice (muffled,
+          // "underwater", word ends cut). Echo cancellation and auto gain stay.
+          await mic.applyConstraints({ ...mic.getConstraints(), noiseSuppression: false }).catch(() => undefined);
         } else {
           proc.stopProcessing();
           ACTIVE_AUDIO_RESOURCES.delete(monoSrc);

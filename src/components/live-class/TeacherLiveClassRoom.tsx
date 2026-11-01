@@ -1125,7 +1125,6 @@ export function TeacherLiveClassRoom({
   const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
   // Public class: the stream the team scheduled on YouTube themselves — its
   // link and stream key are entered here, before Start.
-  const [publicSetupOpen, setPublicSetupOpen] = useState(false);
   const [streamKeyInput, setStreamKeyInput] = useState("");
   const [streamKeyInputVisible, setStreamKeyInputVisible] = useState(false);
 
@@ -2849,9 +2848,13 @@ export function TeacherLiveClassRoom({
           wbSession?.youtubeVideoId ||
           extractYouTubeVideoId(manualObsYtLink);
     const streamKey = streamKeyInput.trim();
+    if (streamKey && !/^[A-Za-z0-9_-]{8,200}$/.test(streamKey)) {
+      setYoutubeInputError("That doesn't look like a YouTube stream key. Copy it from YouTube Studio → Go live → Stream key.");
+      setStartingClass(false);
+      return;
+    }
     if (streamKey && !ytId) {
-      setYoutubeInputError("Enter the YouTube link of the stream this key belongs to.");
-      setPublicSetupOpen(true);
+      setYoutubeInputError("Enter the Video ID of the stream this key belongs to.");
       setStartingClass(false);
       return;
     }
@@ -2862,8 +2865,7 @@ export function TeacherLiveClassRoom({
     // submit if the teacher actually typed something that isn't a valid
     // YouTube URL/ID (a real mistake worth catching), not just an empty field.
     if (typedLink && !ytId) {
-      setYoutubeInputError("Please enter a valid YouTube Live URL or 11-character Video ID, or leave it blank for an App class.");
-      setPublicSetupOpen(true);
+      setYoutubeInputError("Enter a valid 11-character YouTube Video ID (or the stream's link), or leave it empty to use the class's own stream.");
       setStartingClass(false);
       return;
     }
@@ -2871,13 +2873,11 @@ export function TeacherLiveClassRoom({
     // The delivery mode chosen when the class was scheduled.
     if (classMode === "APP_AND_YOUTUBE" && !ytId) {
       setYoutubeInputError("This class has no YouTube link on its schedule — ask whoever manages the schedule to add it (chapter page → the lecture → YouTube live link), or enter it here.");
-      setPublicSetupOpen(true);
       setStartingClass(false);
       return;
     }
     if (classMode === "APP_ONLY" && typedLink) {
       setYoutubeInputError("This class is scheduled as an App-only class (its own unlisted stream). Clear the YouTube link, or change the class to App + public YouTube in the schedule.");
-      setPublicSetupOpen(true);
       setStartingClass(false);
       return;
     }
@@ -2889,7 +2889,6 @@ export function TeacherLiveClassRoom({
         youtubeStreamKey: streamKey || undefined,
       });
       setStreamKeyInput("");
-      setPublicSetupOpen(false);
       if (data.whiteboardSession) {
         setWbSession((prev) =>
           prev ? { ...prev, ...data.whiteboardSession, livePhase: "LIVE" } : data.whiteboardSession
@@ -3480,13 +3479,26 @@ export function TeacherLiveClassRoom({
           {/* Authoritative Live Status & Timers */}
           {isClassLive ? (
             <div className="flex items-center gap-2">
-              {youtubeGateActive ? (
+              {/* Class lifecycle as it really is: Starting until the encoder is sending (or YouTube confirms), then LIVE; a failed encoder says so. */}
+              {desktopStream?.state === "failed" ? (
+                <span
+                  className="flex items-center gap-1.5 text-xs font-bold text-rose-300 border border-rose-500/40 bg-rose-950/40 px-3 py-1 rounded-full"
+                  title={desktopStream.error || "The encoder stopped sending to YouTube"}
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-400" />
+                  Stream failed
+                </span>
+              ) : youtubeGateActive || desktopStream?.state === "starting" || desktopStream?.state === "reconnecting" ? (
                 <span
                   className="flex items-center gap-1.5 text-xs font-bold text-sky-300 border border-sky-500/40 bg-sky-950/40 px-3 py-1 rounded-full"
-                  title="Students will see the class once YouTube receives your OBS stream"
+                  title={
+                    desktopStream?.state === "reconnecting"
+                      ? "The connection to YouTube dropped — reconnecting by itself"
+                      : "Students will see the class once YouTube receives the stream"
+                  }
                 >
                   <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-                  Connecting…
+                  {desktopStream?.state === "reconnecting" ? "Reconnecting…" : "Starting…"}
                 </span>
               ) : (
                 <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
@@ -3629,84 +3641,50 @@ export function TeacherLiveClassRoom({
           {/* Authoritative Start Class Button */}
           {!isClassLive && (
             <div className="flex items-center gap-2">
-              {/* Class kind: App class (unlisted, automatic) or public YouTube class (link + stream key) */}
-              {(() => {
-                const isPublic = Boolean(wbSession?.youtubeVideoId || extractYouTubeVideoId(youtubeInputUrl.trim()));
-                return (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setPublicSetupOpen((o) => !o)}
-                      className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-md border ${
-                        isPublic ? "text-red-300 bg-red-950/60 border-red-500/50" : "text-blue-300 bg-blue-950/60 border-blue-500/50"
-                      }`}
-                      title={
-                        isPublic
-                          ? "Public YouTube class — click to enter its stream key"
-                          : "App class: an unlisted YouTube stream is created automatically. Click to make it a public YouTube class."
-                      }
-                    >
-                      <span className="material-symbols-outlined text-xs">{isPublic ? "smart_display" : "draw"}</span>
-                      <span>{isPublic ? (streamKeyInput.trim() ? "YouTube Live · key ✓" : "YouTube Live") : "App Class"}</span>
-                      <span className="material-symbols-outlined text-xs">key</span>
-                    </button>
-                    {publicSetupOpen && (
-                      <div className="absolute right-0 top-full mt-2 z-[60] w-80 rounded-2xl border border-[#2d2e3b] bg-[#12131c] p-3 shadow-2xl text-white space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black">YouTube stream</span>
-                          <button type="button" onClick={() => setPublicSetupOpen(false)} className="text-gray-400 hover:text-white">
-                            <span className="material-symbols-outlined text-base">close</span>
-                          </button>
-                        </div>
-                        <p className="text-[11px] text-gray-400 leading-snug">
-                          Leave both empty for an <b className="text-gray-200">App class</b> (unlisted, created automatically). For a{" "}
-                          <b className="text-gray-200">public class</b> scheduled on YouTube, enter its link and stream key — Start sends the class to it.
-                        </p>
-                        <label className="block text-[11px] font-bold text-gray-300">
-                          YouTube link
-                          <input
-                            type="text"
-                            value={youtubeInputUrl}
-                            onChange={(e) => {
-                              setYoutubeInputUrl(e.target.value);
-                              setYoutubeInputError(null);
-                            }}
-                            placeholder={wbSession?.youtubeVideoId ? `Set: youtu.be/${wbSession.youtubeVideoId}` : "https://youtube.com/live/…"}
-                            className="mt-1 w-full h-9 rounded-lg bg-[#1a1c27] border border-[#2d2e3b] px-2.5 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-red-500/60"
-                          />
-                        </label>
-                        <label className="block text-[11px] font-bold text-gray-300">
-                          Stream key (YouTube Studio → Go live → Stream key)
-                          <div className="mt-1 flex gap-1.5">
-                            <input
-                              type={streamKeyInputVisible ? "text" : "password"}
-                              value={streamKeyInput}
-                              onChange={(e) => {
-                                setStreamKeyInput(e.target.value);
-                                setYoutubeInputError(null);
-                              }}
-                              autoComplete="off"
-                              spellCheck={false}
-                              placeholder="xxxx-xxxx-xxxx-xxxx-xxxx"
-                              className="flex-1 min-w-0 h-9 rounded-lg bg-[#1a1c27] border border-[#2d2e3b] px-2.5 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-red-500/60"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setStreamKeyInputVisible((v) => !v)}
-                              className="h-9 w-9 shrink-0 rounded-lg border border-[#2d2e3b] text-gray-300 hover:text-white"
-                              title={streamKeyInputVisible ? "Hide key" : "Show key"}
-                            >
-                              <span className="material-symbols-outlined text-sm">{streamKeyInputVisible ? "visibility_off" : "visibility"}</span>
-                            </button>
-                          </div>
-                        </label>
-                        {youtubeInputError && <p className="text-[11px] text-rose-300">{youtubeInputError}</p>}
-                        <p className="text-[10px] text-gray-500 leading-snug">The key is sent once, kept encrypted for this class only, and never shown again.</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              {/* One way to start a class: the YouTube stream's Video ID + Stream key, then Start Class.
+                  Left empty, the class uses the stream already set up for it (on its schedule, or its own automatic one). */}
+              <input
+                type="text"
+                value={youtubeInputUrl}
+                onChange={(e) => {
+                  setYoutubeInputUrl(e.target.value);
+                  setYoutubeInputError(null);
+                }}
+                aria-label="YouTube Video ID"
+                placeholder={
+                  wbSession?.youtubeVideoId
+                    ? `Video ID: ${wbSession.youtubeVideoId}`
+                    : classMode !== "APP_ONLY" && scheduledYoutubeUrl && extractYouTubeVideoId(scheduledYoutubeUrl)
+                    ? `Video ID: ${extractYouTubeVideoId(scheduledYoutubeUrl)}`
+                    : "YouTube Video ID (or link)"
+                }
+                title="The Video ID of the live stream in YouTube Studio (the 11 characters after youtube.com/live/ or watch?v=). A full link works too. Public or Unlisted is chosen in YouTube Studio; Unlisted is not private — anyone with the link can watch on YouTube (only the app checks enrolment)."
+                className="w-44 h-8 rounded-lg bg-[#1a1c27] border border-[#2d2e3b] px-2.5 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-red-500/60"
+              />
+              <div className="flex">
+                <input
+                  type={streamKeyInputVisible ? "text" : "password"}
+                  value={streamKeyInput}
+                  onChange={(e) => {
+                    setStreamKeyInput(e.target.value);
+                    setYoutubeInputError(null);
+                  }}
+                  aria-label="YouTube Stream Key"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={wbSession?.youtubeStreamKey ? "Stream key saved ✓" : "Stream key"}
+                  title="YouTube Studio → Go live → Stream → Stream key. Sent once over HTTPS, kept encrypted for this class only, never shown again."
+                  className="w-40 h-8 rounded-l-lg bg-[#1a1c27] border border-[#2d2e3b] px-2.5 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-red-500/60"
+                />
+                <button
+                  type="button"
+                  onClick={() => setStreamKeyInputVisible((v) => !v)}
+                  className="h-8 w-8 shrink-0 rounded-r-lg border border-l-0 border-[#2d2e3b] text-gray-300 hover:text-white"
+                  title={streamKeyInputVisible ? "Hide key" : "Show key"}
+                >
+                  <span className="material-symbols-outlined text-sm">{streamKeyInputVisible ? "visibility_off" : "visibility"}</span>
+                </button>
+              </div>
 
               <button
                 type="button"
@@ -3714,22 +3692,19 @@ export function TeacherLiveClassRoom({
                 onClick={() => startClass()}
                 className={`flex items-center gap-1.5 text-xs font-bold px-4 py-1.5 rounded-lg shadow-md transition active:scale-95 ${
                   canStartClass
-                    ? wbSession?.youtubeVideoId || youtubeInputUrl.trim()
-                      ? "text-white bg-red-600 hover:bg-red-500 shadow-red-600/30 ring-2 ring-red-400/40 animate-pulse cursor-pointer"
-                      : "text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30 ring-2 ring-emerald-400/40 animate-pulse cursor-pointer"
+                    ? "text-white bg-red-600 hover:bg-red-500 shadow-red-600/30 ring-2 ring-red-400/40 animate-pulse cursor-pointer"
                     : "text-gray-400 bg-gray-800 border border-gray-700 cursor-not-allowed opacity-60"
                 }`}
                 title={canStartClass ? "Start Live Teaching for all students" : "Class start unlocks 5 minutes before scheduled start time"}
               >
                 <span className="material-symbols-outlined text-base">sensors</span>
-                {startingClass
-                  ? "Starting Live…"
-                  : canStartClass
-                  ? wbSession?.youtubeVideoId || youtubeInputUrl.trim()
-                    ? "Start YouTube Class"
-                    : "Start App Class"
-                  : "Scheduled Time Locked"}
+                {startingClass ? "Starting…" : canStartClass ? "Start Class" : "Scheduled Time Locked"}
               </button>
+              {youtubeInputError && (
+                <span className="text-xs text-rose-300 max-w-md line-clamp-2" title={youtubeInputError}>
+                  {youtubeInputError}
+                </span>
+              )}
               {startClassError && (
                 <span className="text-xs text-red-400 max-w-md line-clamp-2" title={startClassError}>
                   {startClassError}
