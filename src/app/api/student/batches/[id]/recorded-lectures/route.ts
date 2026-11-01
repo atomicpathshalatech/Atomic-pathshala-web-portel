@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { UnauthorizedError } from "@/lib/rbac/guard";
-import { activeEnrollment, recordedForBatchWhere } from "@/lib/recorded-lectures/access";
+import { activeEnrollment, recordedForChosenWhere } from "@/lib/recorded-lectures/access";
 import { allowedChapterIds, allowedChapters } from "@/lib/recorded-lectures/viewers";
 import { recordedWatchPath } from "@/lib/recorded-lectures/service";
 import { signedThumbnailUrl } from "@/lib/recorded-lectures/storage";
@@ -30,7 +30,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     // Only the chapters this student was chosen for (nobody else sees them).
     const chosen = allowedChapterIds(await allowedChapters(student.id, [enrolled.batch.id]), enrolled.batch.id);
     const lectures = await prisma.lecture.findMany({
-      where: { ...recordedForBatchWhere(enrolled.batch), chapterId: { in: chosen } },
+      where: recordedForChosenWhere(chosen),
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,

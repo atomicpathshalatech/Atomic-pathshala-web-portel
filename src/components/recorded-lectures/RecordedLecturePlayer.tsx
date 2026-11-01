@@ -205,6 +205,14 @@ export function RecordedLecturePlayer({
       videoRef.current?.pause();
       setShielded(true);
     };
+    // Going full screen / turning the phone can blur the window for a moment: not a reason to cover it.
+    let quietUntil = 0;
+    const onTurn = () => {
+      quietUntil = Date.now() + 2000;
+    };
+    const onBlur = () => {
+      if (Date.now() > quietUntil) shield();
+    };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") shield();
     };
@@ -220,12 +228,18 @@ export function RecordedLecturePlayer({
         }
       }
     };
-    window.addEventListener("blur", shield);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("orientationchange", onTurn);
+    window.addEventListener("resize", onTurn);
+    document.addEventListener("fullscreenchange", onTurn);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
     return () => {
-      window.removeEventListener("blur", shield);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("orientationchange", onTurn);
+      window.removeEventListener("resize", onTurn);
+      document.removeEventListener("fullscreenchange", onTurn);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKey);

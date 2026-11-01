@@ -32,22 +32,12 @@ export const WATCHABLE_MEDIA: Prisma.RecordedLectureMediaWhereInput = {
 };
 
 /**
- * Lectures a student of `batch` may see: published, file ready, not archived,
- * and either uploaded for this batch, or uploaded for no particular batch
- * and in a chapter this batch has (assigned to it, or part of its course).
+ * Lectures of the chapters a student was ticked for in a batch: published,
+ * file ready, not archived — whichever batch the video was uploaded under
+ * (the tick is the grant).
  */
-export function recordedForBatchWhere(batch: { id: string; courseId: string | null }): Prisma.LectureWhereInput {
-  const chapterInBatch: Prisma.ChapterWhereInput[] = [{ batchAssignments: { some: { batchId: batch.id } } }];
-  if (batch.courseId) chapterInBatch.push({ subject: { courseId: batch.courseId } });
-  return {
-    status: "PUBLISHED",
-    recordedMedia: {
-      is: {
-        ...WATCHABLE_MEDIA,
-        OR: [{ batchId: batch.id }, { batchId: null, lecture: { chapter: { OR: chapterInBatch } } }],
-      },
-    },
-  };
+export function recordedForChosenWhere(chapterIds: string[]): Prisma.LectureWhereInput {
+  return { status: "PUBLISHED", chapterId: { in: chapterIds }, recordedMedia: { is: WATCHABLE_MEDIA } };
 }
 
 export type StudentPremiere = { scheduleId: string; startsAt: Date; endsAt: Date; state: PremiereState };
@@ -81,7 +71,6 @@ export async function studentRecordedAccess(studentId: string, lectureId: string
     select: {
       status: true,
       chapterId: true,
-      chapter: { select: { subject: { select: { courseId: true } } } },
       recordedMedia: { select: { uploadStatus: true, archivedAt: true, batchId: true } },
     },
   });
@@ -89,22 +78,20 @@ export async function studentRecordedAccess(studentId: string, lectureId: string
   const media = lecture.recordedMedia;
   if (lecture.status !== "PUBLISHED" || media.uploadStatus !== "READY" || media.archivedAt) return { ok: false, reason: "NOT_PUBLISHED" };
 
-  const courseId = lecture.chapter.subject.courseId;
+  // Any batch the student is active in: being ticked for this chapter in that
+  // batch is the grant (the tick list only offers batches that have the
+  // chapter), whichever batch the video was uploaded under.
   const enrollments = await prisma.batchEnrollment.findMany({
-    where: {
-      studentId,
-      status: "ACTIVE",
-      batch: media.batchId
-        ? { id: media.batchId }
-        : { OR: [{ chapterAssignments: { some: { chapterId: lecture.chapterId } } }, { courseId }] },
-    },
+    where: { studentId, status: "ACTIVE" },
     select: { batchId: true },
     orderBy: { enrolledAt: "desc" },
   });
   if (!enrollments.length) return { ok: false, reason: "NOT_ENROLLED" };
   // Only students chosen for this chapter in their batch.
   const allowed = await allowedChapters(studentId, enrollments.map((e) => e.batchId));
-  const enrollment = enrollments.find((e) => isAllowed(allowed, e.batchId, lecture.chapterId));
+  const enrollment =
+    enrollments.find((e) => e.batchId === media.batchId && isAllowed(allowed, e.batchId, lecture.chapterId)) ??
+    enrollments.find((e) => isAllowed(allowed, e.batchId, lecture.chapterId));
   if (!enrollment) return { ok: false, reason: "NOT_SELECTED" };
   return { ok: true, batchId: enrollment.batchId, premiere: await premiereForBatch(lectureId, enrollment.batchId) };
 }
