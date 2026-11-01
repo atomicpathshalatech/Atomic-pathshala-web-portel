@@ -25,7 +25,8 @@ const VERIFY_URL = "https://control.msg91.com/api/v5/widget/verifyAccessToken";
 
 export async function POST(request: NextRequest) {
   try {
-    const authkey = process.env.MSG91_WIDGET_AUTHKEY?.trim() || "551795AH8z6SWmJk6a5ba844P1";
+    const authkey = process.env.MSG91_WIDGET_AUTHKEY?.trim();
+    if (!authkey) return apiError("OTP verification isn't available right now.", 503, { code: "MSG91_NOT_CONFIGURED" });
 
     const { phone: rawPhone, accessToken, purpose } = schema.parse(await request.json());
     const phone = normalisePhone(rawPhone);
@@ -58,6 +59,14 @@ export async function POST(request: NextRequest) {
 
     if ((mResp.type ?? "").toLowerCase() !== "success") {
       return apiError(mResp.message || "OTP verification failed. Please retry.", 400, { code: "WIDGET_REJECTED" });
+    }
+
+    // The token must be for THIS number: MSG91 returns the verified identifier
+    // (e.g. 919812345670). Without this, someone could verify their own number
+    // and send another student's — and get a password-reset token for them.
+    const verifiedDigits = String(mResp.message ?? "").replace(/\D/g, "");
+    if (verifiedDigits.length < 10 || !verifiedDigits.endsWith(phone)) {
+      return apiError("This code was not for this mobile number.", 400, { code: "WIDGET_NUMBER_MISMATCH" });
     }
 
     // Verified — issue the register/reset token the same way /otp/verify does.

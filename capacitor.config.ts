@@ -49,7 +49,8 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: debugBuild,
-    captureInput: true,
+    // Off: Capacitor's input capture is known to make typing lag / jump on some keyboards.
+    captureInput: false,
     webContentsDebuggingEnabled: debugBuild,
     backgroundColor: '#090D16',
   },

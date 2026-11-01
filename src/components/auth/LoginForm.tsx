@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { loginSchema, type LoginInput } from "@/lib/validation/auth";
+import { loginSchema, normaliseLoginIdentifier, type LoginInput } from "@/lib/validation/auth";
+import { sendMsg91Otp, verifyMsg91Otp } from "@/lib/msg91-widget";
 import { detectDeviceMeta } from "@/lib/security/device-client";
 
 interface ConflictingSession {
@@ -23,10 +24,25 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Log in by OTP (default) or by password.
+  const [method, setMethod] = useState<"otp" | "password">("otp");
+  const [otpIdentifier, setOtpIdentifier] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpStage, setOtpStage] = useState<"enter" | "code">("enter");
+  const [otpNote, setOtpNote] = useState<string | null>(null);
+  const [smsSent, setSmsSent] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((v) => v - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
   // Device replacement prompt modal state
   const [replacementModal, setReplacementModal] = useState<{
     conflictingSession: ConflictingSession;
-    values: LoginInput;
+    provider: "credentials" | "otp";
+    fields: Record<string, string>;
   } | null>(null);
   const [replacingDevice, setReplacingDevice] = useState(false);
 
@@ -48,12 +64,12 @@ export function LoginForm() {
     router.refresh();
   }
 
-  async function executeSignIn(values: LoginInput, replaceSessionId?: string) {
+  /** Returns true when signed in. */
+  async function executeSignIn(provider: "credentials" | "otp", fields: Record<string, string>, replaceSessionId?: string): Promise<boolean> {
     const deviceMeta = detectDeviceMeta();
 
-    const result = await signIn("credentials", {
-      email: values.email,
-      password: values.password,
+    const result = await signIn(provider, {
+      ...fields,
       deviceId: deviceMeta.deviceId,
       deviceName: deviceMeta.deviceName,
       deviceCategory: deviceMeta.deviceCategory,
@@ -70,38 +86,104 @@ export function LoginForm() {
           if (payload.code === "CATEGORY_LIMIT_REACHED" && payload.conflictingSession) {
             setReplacementModal({
               conflictingSession: payload.conflictingSession,
-              values,
+              provider,
+              fields,
             });
-            return;
+            return false;
           }
           if (payload.code === "CATEGORY_NOT_ALLOWED") {
             toast.error(payload.message || "This device category is not permitted for your account.");
-            return;
+            return false;
           }
           if (payload.code === "DEVICE_BLOCKED") {
             toast.error("This device has been blocked by an administrator. Please contact support.");
-            return;
+            return false;
           }
           if (payload.code === "TOTAL_LIMIT_REACHED") {
             toast.error(payload.message || "Active device limit reached. Please sign out from another device.");
-            return;
+            return false;
           }
         } catch {
           // fallback to generic toast below
         }
       }
 
-      toast.error("Wrong mobile number / email or password. Please try again.");
-      return;
+      toast.error(provider === "otp" ? "That code is not right, or it has expired. Please try again." : "Wrong mobile number / email or password. Please try again.");
+      return false;
     }
 
     await handleLoginSuccess();
+    return true;
+  }
+
+  // ---- Log in by OTP ---------------------------------------------------------
+  // A mobile number gets an SMS code (MSG91, as at sign-up) AND an email code
+  // when the account has an email; either code works. "Resend" goes to email.
+  async function sendOtp(resend = false) {
+    const raw = otpIdentifier.trim();
+    if (!raw) {
+      toast.error("Enter your mobile number or email.");
+      return;
+    }
+    const id = normaliseLoginIdentifier(raw);
+    setSubmitting(true);
+    setOtpNote(null);
+    try {
+      let sms = smsSent;
+      if (!resend && id.kind === "phone") {
+        sms = await sendMsg91Otp(`91${id.value}`).then(
+          () => true,
+          (err: Error) => {
+            console.warn("[login] SMS code not sent:", err.message);
+            return false;
+          }
+        );
+        setSmsSent(sms);
+      }
+      const res = await fetch("/api/auth/otp/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: raw }),
+      });
+      const json = await res.json().catch(() => ({}));
+      const emailTo: string | null = res.ok ? json?.data?.emailSentTo ?? null : null;
+      if (!res.ok && !sms) {
+        toast.error(typeof json?.error === "string" ? json.error : "Could not send the code. Please try again.");
+        return;
+      }
+      const where = [sms && !resend ? "your mobile (SMS)" : null, emailTo ? `your email ${emailTo}` : null].filter(Boolean).join(" and ");
+      setOtpNote(where ? `Code sent to ${where}. Enter any one of them.` : "If this account exists, a code has been sent. Check your SMS and email.");
+      setOtpStage("code");
+      setOtpCode("");
+      setResendIn(45);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function verifyOtp() {
+    const code = otpCode.trim();
+    if (!/^\d{4,8}$/.test(code)) {
+      toast.error("Enter the code you received.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // The SMS code first (MSG91 checks it), else it is taken as the email code.
+      let smsToken = "";
+      if (smsSent) smsToken = await verifyMsg91Otp(code).catch(() => "");
+      await executeSignIn("otp", { identifier: otpIdentifier.trim(), ...(smsToken ? { smsToken } : { code }) });
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function onSubmit(values: LoginInput) {
     setSubmitting(true);
     try {
-      await executeSignIn(values);
+      await executeSignIn("credentials", { email: values.email, password: values.password });
     } catch {
       toast.error("Something went wrong. Please try again.");
     } finally {
@@ -113,7 +195,7 @@ export function LoginForm() {
     if (!replacementModal) return;
     setReplacingDevice(true);
     try {
-      await executeSignIn(replacementModal.values, replacementModal.conflictingSession.id);
+      await executeSignIn(replacementModal.provider, replacementModal.fields, replacementModal.conflictingSession.id);
       setReplacementModal(null);
     } catch {
       toast.error("Failed to replace device. Please try again.");
@@ -141,6 +223,91 @@ export function LoginForm() {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-container-low p-1" role="tablist" aria-label="How to log in">
+          {(["otp", "password"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={method === m}
+              onClick={() => setMethod(m)}
+              className={`rounded-lg py-2 text-sm font-bold transition ${method === m ? "bg-white text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}
+            >
+              {m === "otp" ? "Login by OTP" : "Login by Password"}
+            </button>
+          ))}
+        </div>
+
+        {method === "otp" ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void (otpStage === "enter" ? sendOtp() : verifyOtp());
+            }}
+            className="space-y-5"
+            noValidate
+          >
+            <div className="space-y-1.5">
+              <label htmlFor="otp-identifier" className="font-label-md text-label-md text-on-surface">
+                Mobile number or email
+              </label>
+              <input
+                id="otp-identifier"
+                type="text"
+                autoComplete="username"
+                value={otpIdentifier}
+                onChange={(e) => {
+                  setOtpIdentifier(e.target.value);
+                  if (otpStage === "code") {
+                    setOtpStage("enter");
+                    setSmsSent(false);
+                    setOtpNote(null);
+                  }
+                }}
+                className="w-full rounded-xl border border-outline-variant/40 bg-surface px-4 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="98XXXXXXXX or you@example.com"
+              />
+            </div>
+
+            {otpStage === "code" && (
+              <div className="space-y-1.5">
+                <label htmlFor="otp-code" className="font-label-md text-label-md text-on-surface">
+                  Enter OTP
+                </label>
+                <input
+                  id="otp-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={8}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  className="w-full rounded-xl border border-outline-variant/40 bg-surface px-4 py-3 font-body-md text-body-md text-on-surface tracking-[0.4em] text-center focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="••••••"
+                />
+                {otpNote && <p className="text-label-sm font-label-sm text-on-surface-variant">{otpNote}</p>}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    disabled={resendIn > 0 || submitting}
+                    onClick={() => void sendOtp(true)}
+                    className="font-label-sm text-label-sm text-primary hover:underline disabled:text-on-surface-variant disabled:no-underline"
+                  >
+                    {resendIn > 0 ? `Resend to email in ${resendIn}s` : "Resend OTP to email"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-primary text-on-primary font-label-md text-label-md px-8 py-3.5 rounded-xl hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {submitting ? "Please wait…" : otpStage === "enter" ? "Send OTP" : "Verify & Log In"}
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
           <div className="space-y-1.5">
             <label htmlFor="email" className="font-label-md text-label-md text-on-surface">
@@ -203,6 +370,7 @@ export function LoginForm() {
             {submitting ? "Logging in..." : "Log In"}
           </button>
         </form>
+        )}
 
         <p className="text-center font-label-sm text-label-sm text-on-surface-variant">
           New to Atomic Pathshala?{" "}

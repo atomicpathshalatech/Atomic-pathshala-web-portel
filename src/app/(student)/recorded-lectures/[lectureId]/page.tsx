@@ -7,7 +7,6 @@ import { studentRecordedAccess } from "@/lib/recorded-lectures/access";
 import { watermarkLabel } from "@/lib/recorded-lectures/files";
 import { RecordedLecturePlayer } from "@/components/recorded-lectures/RecordedLecturePlayer";
 import { SummaryLanguageTabs } from "@/components/recorded-lectures/SummaryLanguageTabs";
-import { StudentSummaryPanel } from "@/components/recorded-lectures/StudentSummaryPanel";
 import { PremiereCountdown } from "@/components/recorded-lectures/PremiereCountdown";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +48,6 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
 
   // One published summary / notes per language; the lecture's own language first.
   const ownFirst = (list: typeof lecture.summaries) => [...list].sort((a, b) => Number(b.language === lecture.language) - Number(a.language === lecture.language));
-  const summaries = ownFirst(lecture.summaries.filter((s) => s.kind !== "NOTES"));
   const notes = ownFirst(lecture.summaries.filter((s) => s.kind === "NOTES"));
   const teacher = lecture.teacher.displayName || lecture.teacher.user.name;
   const watermark = watermarkLabel(student.user.name, student.studentIdCode ?? student.enrollmentNumber);
@@ -67,7 +65,14 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
       {upcoming ? (
         <PremiereCountdown startsAt={access.premiere!.startsAt.toISOString()} />
       ) : (
-        <RecordedLecturePlayer lectureId={lecture.id} watermark={watermark} initiallyCompleted={lecture.progress.length > 0} />
+        <RecordedLecturePlayer
+          lectureId={lecture.id}
+          watermark={watermark}
+          initiallyCompleted={lecture.progress.length > 0}
+          title={lecture.title}
+          subjectTitle={lecture.chapter.subject.title}
+          educatorName={teacher}
+        />
       )}
 
       <header className="space-y-1">
@@ -95,7 +100,6 @@ export default async function RecordedLectureWatchPage({ params }: { params: { l
         </section>
       )}
 
-      {upcoming ? null : <StudentSummaryPanel lectureId={lecture.id} published={summaries} hasPublishedNotes={notes.length > 0} />}
     </div>
   );
 }

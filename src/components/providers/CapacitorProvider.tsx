@@ -11,6 +11,7 @@ import { registerPushNotifications } from '@/lib/platform/notifications';
 import { hasInAppHistory } from '@/lib/navigation/useBackNavigation';
 import { parentPathFor, isRootRoute } from '@/lib/navigation/hierarchy';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { AppWelcome } from './AppWelcome';
 
 export function CapacitorProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -34,6 +35,9 @@ export function CapacitorProvider({ children }: { children: React.ReactNode }) {
   // back press would navigate twice, skipping a screen.
   useEffect(() => {
     if (!isNativeApp()) return;
+    // App-only styles (globals.css): no frosted-glass blur, no tap delay — the
+    // WebView repaints blur on every scroll and tap, which made the app lag.
+    document.documentElement.classList.add('native-app');
 
     if (isAndroid()) {
       StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
@@ -95,5 +99,10 @@ export function CapacitorProvider({ children }: { children: React.ReactNode }) {
     });
   }, [session]);
 
-  return <>{children}</>;
+  return (
+    <>
+      <AppWelcome />
+      {children}
+    </>
+  );
 }

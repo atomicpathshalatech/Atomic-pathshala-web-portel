@@ -32,6 +32,12 @@ export interface LectureVideoPlayerProps {
   onBookmarkAdd?: (timestamp: number) => void;
   isCompleted?: boolean;
   className?: string;
+  /** Recorded lectures: the same <video> element, for link renewal / live-slot / shield logic. */
+  videoElementRef?: React.MutableRefObject<HTMLVideoElement | null>;
+  /** Drawn above everything (incl. controls) — e.g. the recorded lectures' shield, Live badge, errors. Kept in fullscreen. */
+  overlay?: React.ReactNode;
+  /** The direct video failed (e.g. its signed link expired). */
+  onVideoError?: () => void;
 }
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0] as const;
@@ -124,6 +130,9 @@ export function LectureVideoPlayer({
   onEnded,
   onProgressPercentage,
   className = "",
+  videoElementRef,
+  overlay,
+  onVideoError,
 }: LectureVideoPlayerProps) {
   const { data: session } = useSession();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -185,6 +194,14 @@ export function LectureVideoPlayer({
 
   const isLive = mode === "live";
   const expanded = isFullscreen || isPseudoFullscreen;
+  const [portraitWindow, setPortraitWindow] = useState(false);
+  useEffect(() => {
+    if (!isPseudoFullscreen) return;
+    const check = () => setPortraitWindow(window.innerHeight > window.innerWidth);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [isPseudoFullscreen]);
 
   const youtubeVideoId = useMemo(() => extractYouTubeVideoId(videoUrl), [videoUrl]);
   const isYouTube = Boolean(youtubeVideoId);
@@ -1046,9 +1063,17 @@ export function LectureVideoPlayer({
         isFullscreen
           ? "!aspect-auto !w-screen !h-screen !rounded-none"
           : isPseudoFullscreen
-          ? "!fixed !inset-0 !z-[200] !aspect-auto !w-screen !h-[100dvh] !rounded-none"
+          ? portraitWindow
+            ? "!fixed !z-[200] !aspect-auto !rounded-none"
+            : "!fixed !inset-0 !z-[200] !aspect-auto !w-screen !h-[100dvh] !rounded-none"
           : "rounded-2xl"
       } ${className}`}
+      style={
+        isPseudoFullscreen && portraitWindow
+          ? { top: 0, left: "100vw", width: "100dvh", height: "100vw", transform: "rotate(90deg)", transformOrigin: "top left" }
+          : undefined
+      }
+      onContextMenu={(e) => e.preventDefault()}
     >
       {/* 1. VIDEO LAYER */}
       {isYouTube ? (
@@ -1089,8 +1114,14 @@ export function LectureVideoPlayer({
         </div>
       ) : (
         <video
-          ref={videoRef}
+          ref={(el) => {
+            (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
+            if (videoElementRef) videoElementRef.current = el;
+          }}
           src={videoUrl}
+          disablePictureInPicture
+          controlsList="nodownload noremoteplayback"
+          onError={onVideoError}
           poster={posterUrl || undefined}
           playsInline
           preload="metadata"
@@ -1452,6 +1483,7 @@ export function LectureVideoPlayer({
           </div>
         </div>
       </div>
+      {overlay && <div className="absolute inset-0 z-[60] pointer-events-none [&>*]:pointer-events-auto">{overlay}</div>}
     </div>
   );
 }

@@ -516,3 +516,18 @@
 .formula-content .fx-table-wrap { max-width: 100%; overflow-x: auto; }
 .formula-content .fx-table { font-size: 0.95em; line-height: 1.4; }
 .formula-content .fx-table td, .formula-content .fx-table th { overflow-wrap: normal; }
+
+/* Android app (CapacitorProvider adds .native-app): the WebView repaints
+   backdrop blur on every scroll / tap, which made the app lag on ordinary
+   phones — drop the blur there (the translucent backgrounds stay), and make
+   taps immediate (no double-tap-zoom wait, no grey tap flash). */
+.native-app *,
+.native-app *::before,
+.native-app *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.native-app {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
