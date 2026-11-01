@@ -43,7 +43,42 @@ const has = (...seq) => args.join(" ").includes(seq.join(" "));
 assert(args.at(-1) === `rtmps://a.rtmps.youtube.com/live2/${KEY}`, "RTMP URL joined without a double slash");
 assert(has("-c:a", "aac") && has("-ar", "48000") && has("-ac", "2"), "AAC stereo 48 kHz (YouTube)");
 assert(has("-force_key_frames", "expr:gte(t,n_forced*2)") && has("-g", "60"), "Keyframe every 2 s");
-assert(has("-b:v", "4500k") && has("-maxrate", "4500k"), "Constant 4.5 Mbps at 1080p");
+assert(has("-b:v", "6000k") && has("-maxrate", "6000k"), "Constant 6 Mbps at 1080p (YouTube: 1080p30 H.264 ≈ 5–10 Mbps)");
+for (const e of ["h264_qsv", "h264_amf"]) {
+  assert(enc.buildFfmpegArgs({ encoder: e, serverUrl: "rtmp://x", streamKey: "k" }).join(" ").includes("-forced_idr 1"), `${e}: 2-second keyframes are IDR frames`);
+}
+assert(enc.buildFfmpegArgs({ encoder: "h264_nvenc", serverUrl: "rtmp://x", streamKey: "k" }).join(" ").includes("-forced-idr 1"), "h264_nvenc: 2-second keyframes are IDR frames");
+
+// ---- Quality ladder: only a real upload backlog lowers the quality --------------
+{
+  const mk = () => {
+    const r = new enc.EncoderRun({ runId: "l", ffmpegPath: "x", encoder: "libopenh264", serverUrl: "rtmp://x", streamKey: "k", fps: 30, profile: "1080p" });
+    r.procStartedAt = 0;
+    return r;
+  };
+  // Output falls 6 s behind and stays there for 20 s.
+  const behind = (r, backlog) => {
+    const t0 = 100_000;
+    r.checkNetwork(0, t0);
+    for (let i = 1; i <= 40; i++) {
+      if (backlog) r.backedUpAt = t0 + 6000 + i * 500;
+      r.checkNetwork(i * 500, t0 + 6000 + i * 500);
+    }
+  };
+  const starved = mk();
+  behind(starved, false);
+  assert(starved.profile === "1080p", "Picture arriving late (no upload backlog): quality kept at 1080p", starved.profile);
+  const slow = mk();
+  behind(slow, true);
+  assert(slow.profile === "720p", "Upload backlog for 8 s+: one step down to 720p", slow.profile);
+  const blip = mk();
+  blip.checkNetwork(0, 100_000);
+  blip.backedUpAt = 106_000;
+  blip.checkNetwork(500, 106_000);
+  blip.checkNetwork(6500, 107_000); // caught up again
+  blip.checkNetwork(30_000, 130_500);
+  assert(blip.profile === "1080p", "A one-second backlog blip does not lower the quality", blip.profile);
+}
 assert(has("-bf", "0"), "No B-frames");
 assert(enc.buildFfmpegArgs({ encoder: "libopenh264", serverUrl: "rtmp://x", streamKey: "k", profile: "720p" }).join(" ").includes("scale=1280:720"), "720p profile scales down");
 const prog = enc.parseProgressBlock("fps=29.97\nbitrate=4488.2kbits/s\ndrop_frames=3\nout_time_us=5000000\nprogress=continue\n");
@@ -115,15 +150,16 @@ function probe(file) {
   return JSON.parse(r.stdout || "{}");
 }
 function keyframeGaps(file) {
-  // Packet-level keyframe flags (the receiver is cut off mid-packet, which
-  // makes decoder-based counting unreliable at the tail).
-  const r = spawnSync(FFPROBE, ["-v", "quiet", "-select_streams", "v:0", "-show_entries", "packet=pts_time,flags", "-of", "csv=p=0", file], { encoding: "utf8" });
-  const t = r.stdout
-    .split(/\r?\n/)
-    .map((l) => l.split(","))
-    .filter(([, flags]) => flags && flags.includes("K"))
-    .map(([pts]) => Number(pts))
-    .filter((n) => Number.isFinite(n));
+  // Real IDR frames, as the decoder (and YouTube) sees them. FLV packet "K"
+  // flags are not enough: Intel QSV marks plain I-frames as keyframes there
+  // while only the first frame is an IDR — exactly what YouTube flagged.
+  // (The receiver is cut off mid-packet: decode errors at the tail are ignored.)
+  const r = spawnSync(FFMPEG, ["-hide_banner", "-i", file, "-map", "0:v:0", "-vf", "showinfo", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 28 });
+  const t = [];
+  for (const line of r.stderr.split(/\r?\n/)) {
+    const m = line.match(/pts_time:([\d.]+).*iskey:1/);
+    if (m) t.push(Number(m[1]));
+  }
   return t.slice(1).map((v, i) => v - t[i]);
 }
 

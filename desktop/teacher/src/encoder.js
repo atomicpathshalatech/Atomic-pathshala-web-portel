@@ -25,8 +25,9 @@ const { EventEmitter } = require("node:events");
 const ENCODER_PREFERENCE = ["h264_nvenc", "h264_qsv", "h264_amf", "h264_mf", "libopenh264"];
 
 const PROFILES = {
-  "1080p": { width: 1920, height: 1080, videoKbps: 4500 },
-  "720p": { width: 1280, height: 720, videoKbps: 2500 },
+  // YouTube's live encoder page (H.264, 30 fps): 1080p ≈ 5–10 Mbps, 720p lower.
+  "1080p": { width: 1920, height: 1080, videoKbps: 6000 },
+  "720p": { width: 1280, height: 720, videoKbps: 3500 },
   // Low-network steps (see QUALITY_LADDER): the board stays readable, the
   // class keeps moving instead of buffering.
   "720p-low": { width: 1280, height: 720, videoKbps: 1400, audioKbps: 96 },
@@ -41,8 +42,14 @@ const PROFILES = {
  * one step after a long steady stretch).
  */
 const QUALITY_LADDER = ["1080p", "720p", "720p-low", "480p", "360p"];
-/** Behind real time by this much for two checks in a row = the upload can't keep up. */
+/** Behind real time by this much … */
 const LAG_STEP_DOWN_MS = 4000;
+/** … for this long, while FFmpeg is not taking data as fast as it comes = the upload can't keep up. */
+const LAG_SUSTAIN_MS = 8000;
+/** FFmpeg's input queue above this = it is not keeping up (upload / encoder slow). */
+const BACKLOG_BYTES = 1_000_000;
+/** How recent that backlog must be to blame the upload. */
+const BACKLOG_RECENT_MS = 5000;
 /** Ignore the first seconds of a run: start-up always looks slow. */
 const WARMUP_MS = 12_000;
 /** Steady for this long → try one step up again. */
@@ -63,17 +70,25 @@ function probeEncoders(ffmpegPath, candidates = ENCODER_PREFERENCE) {
   return usable;
 }
 
+/**
+ * Rate control + GOP per encoder. Every 2 s must be an IDR frame (a clean
+ * restart point), not just an I-frame: hardware encoders turn the forced
+ * keyframes into plain I-frames unless told otherwise. Measured on Intel QSV:
+ * an I-frame every 2 s but only ONE IDR in the whole stream — YouTube then
+ * reports "keyframe frequency 13 s" and viewers buffer. The `forced idr`
+ * switches make those 2-second keyframes real IDRs (closed GOP; no B-frames).
+ */
 function rateControlArgs(encoder, kbps, fps) {
   const b = `${kbps}k`;
   const buf = `${kbps * 2}k`;
   const gop = String(fps * 2);
   switch (encoder) {
     case "h264_nvenc":
-      return ["-c:v", "h264_nvenc", "-preset", "p4", "-tune", "ll", "-rc", "cbr", "-b:v", b, "-maxrate", b, "-bufsize", buf, "-g", gop, "-bf", "0", "-profile:v", "high"];
+      return ["-c:v", "h264_nvenc", "-preset", "p4", "-tune", "ll", "-rc", "cbr", "-b:v", b, "-maxrate", b, "-bufsize", buf, "-g", gop, "-bf", "0", "-forced-idr", "1", "-profile:v", "high"];
     case "h264_qsv":
-      return ["-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", b, "-maxrate", b, "-bufsize", buf, "-g", gop, "-bf", "0", "-profile:v", "high"];
+      return ["-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", b, "-maxrate", b, "-bufsize", buf, "-g", gop, "-bf", "0", "-forced_idr", "1", "-profile:v", "high"];
     case "h264_amf":
-      return ["-c:v", "h264_amf", "-usage", "lowlatency", "-quality", "speed", "-rc", "cbr", "-b:v", b, "-maxrate", b, "-bufsize", buf, "-g", gop, "-bf", "0"];
+      return ["-c:v", "h264_amf", "-usage", "lowlatency", "-quality", "speed", "-rc", "cbr", "-b:v", b, "-maxrate", b, "-bufsize", buf, "-g", gop, "-bf", "0", "-forced_idr", "1"];
     case "h264_mf":
       return ["-c:v", "h264_mf", "-rate_control", "cbr", "-scenario", "live_streaming", "-b:v", b, "-g", gop];
     default:
@@ -161,7 +176,9 @@ class EncoderRun extends EventEmitter {
     this.ceiling = QUALITY_LADDER.indexOf(this.profile);
     this.startIndex = this.ceiling;
     this.networkLimited = false;
-    this.lagStrikes = 0;
+    this.lagSince = 0;
+    this.backedUpAt = 0;
+    this.starvedNoted = false;
     this.procStartedAt = 0;
     this.firstOutAt = 0;
     this.firstOutTimeMs = 0;
@@ -217,7 +234,8 @@ class EncoderRun extends EventEmitter {
     this.procStartedAt = Date.now();
     this.firstOutAt = 0;
     this.firstOutTimeMs = 0;
-    this.lagStrikes = 0;
+    this.lagSince = 0;
+    this.backedUpAt = 0;
     this.steadySince = 0;
     let progressBuf = "";
     proc.stdout.on("data", (d) => {
@@ -268,19 +286,36 @@ class EncoderRun extends EventEmitter {
   }
 
   /**
-   * Called on every progress report. Output falling behind real time means the
-   * upload can't carry this bitrate → one step down. A long steady stretch →
-   * one step back up (a step-up that fails lowers the ceiling for good).
+   * Called on every progress report. Output behind real time has two causes:
+   *   - the upload (or encoder) can't carry this bitrate: FFmpeg stops taking
+   *     data and its input queue grows → one step down helps;
+   *   - the page sends the picture late (busy / throttled window): FFmpeg's
+   *     queue stays empty → a lower quality would NOT help, it would only cost
+   *     a restart (a gap on YouTube) and a blurrier board. Not a step down.
+   * Measured on a class: it stepped 1080p → 720p → 720p-low (1.4 Mbps) in three
+   * minutes on 1-second blips, each restart leaving a gap on YouTube.
+   * A long steady stretch → one step back up (a step-up that fails lowers the
+   * ceiling for good).
    */
   checkNetwork(outTimeMs, now = Date.now()) {
     const lag = this.lagMs(outTimeMs, now);
     if (now - this.procStartedAt < WARMUP_MS) return;
     if (lag > LAG_STEP_DOWN_MS) {
       this.steadySince = 0;
-      if (++this.lagStrikes >= 2) this.changeQuality(+1, `upload ~${Math.round(lag / 1000)} s behind`);
+      if (now - this.backedUpAt > BACKLOG_RECENT_MS) {
+        // Input starved, not the upload.
+        this.lagSince = 0;
+        if (!this.starvedNoted) {
+          this.starvedNoted = true;
+          this.stderrTail.push(`picture arriving late (~${Math.round(lag / 1000)} s behind, upload keeping up) — quality kept`);
+        }
+        return;
+      }
+      if (!this.lagSince) this.lagSince = now;
+      if (now - this.lagSince >= LAG_SUSTAIN_MS) this.changeQuality(+1, `upload ~${Math.round(lag / 1000)} s behind`);
       return;
     }
-    this.lagStrikes = 0;
+    this.lagSince = 0;
     if (lag < 1500) {
       if (!this.steadySince) this.steadySince = now;
       const idx = QUALITY_LADDER.indexOf(this.profile);
@@ -366,7 +401,10 @@ class EncoderRun extends EventEmitter {
   write(generation, chunk) {
     if (generation !== this.generation || !this.proc || this.stopping) return false;
     try {
-      return this.proc.stdin.write(Buffer.from(chunk));
+      const ok = this.proc.stdin.write(Buffer.from(chunk));
+      // (write() is false past 16 KB — every chunk; only a real backlog counts.)
+      if (this.proc.stdin.writableLength > BACKLOG_BYTES) this.backedUpAt = Date.now();
+      return ok;
     } catch {
       return false;
     }
@@ -403,6 +441,7 @@ class EncoderRun extends EventEmitter {
 }
 
 module.exports = {
+  LAG_SUSTAIN_MS,
   ENCODER_PREFERENCE,
   PROFILES,
   QUALITY_LADDER,
