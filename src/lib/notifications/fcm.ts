@@ -9,9 +9,11 @@ let isFirebaseConfigured = false;
 function getFirebaseAdmin(): App | null {
   if (firebaseApp) return firebaseApp;
 
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  // Also accepted under the service-account JSON's own field names (how they
+  // were first added in Vercel: project_id / client_email / private_key).
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.project_id;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.client_email;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY || process.env.private_key;
 
   if (projectId && clientEmail && privateKey) {
     try {
