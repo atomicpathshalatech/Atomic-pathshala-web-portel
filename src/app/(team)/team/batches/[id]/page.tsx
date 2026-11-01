@@ -8,7 +8,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { BatchDetailClient } from "@/components/team-portal/BatchDetailClient";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { isSuperAdminUser } from "@/lib/rbac/guard";
-import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
+import { teamRecordedSlotFilter } from "@/lib/recorded-lectures/visibility";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,6 +22,7 @@ export default async function BatchDetailPage({ params }: { params: { id: string
   if (!session?.user?.id) redirect("/login");
 
   const canRead = await hasPermission(session.user.id, PERMISSIONS.BATCH_READ);
+  const recordedSlots = await teamRecordedSlotFilter(session.user.id);
   if (!canRead) redirect("/team");
 
   const [canUpdate, canManageEnrollment, canManageSchedule] = await Promise.all([
@@ -40,8 +41,8 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         orderBy: { enrolledAt: "desc" },
       },
       schedules: {
-        // Scheduled recorded lectures are private (Recorded Lectures page only).
-        where: NOT_RECORDED_SLOT,
+        // Scheduled recorded lectures: only the owner sees them on the team side.
+        where: recordedSlots,
         // The chapter rides along because the Content tab lists the chapters
         // imported into this batch, and a batch only knows its chapters
         // through the schedules that reference them — there is no direct

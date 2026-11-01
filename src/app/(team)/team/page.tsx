@@ -65,7 +65,7 @@ export default async function TeamHomePage() {
           where: {
             startsAt: { gte: now, lte: horizon },
             OR: [{ teacherId: teacherProfile.id }, { batch: { teachers: { some: { teacherId: teacherProfile.id } } } }],
-            AND: [NOT_RECORDED_SLOT],
+            AND: [superAdmin ? {} : NOT_RECORDED_SLOT],
           },
           include: { batch: { select: { name: true } } },
           orderBy: { startsAt: "asc" },

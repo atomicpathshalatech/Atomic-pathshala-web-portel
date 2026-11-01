@@ -7,19 +7,20 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { chapterSchema } from "@/lib/validation/chapter";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { assertChapterAccess } from "@/lib/chapters/access";
-import { NOT_RECORDED_LECTURE } from "@/lib/recorded-lectures/visibility";
+import { teamRecordedLectureFilter } from "@/lib/recorded-lectures/visibility";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     await requirePermission(session?.user?.id, PERMISSIONS.CHAPTER_READ);
     await assertChapterAccess(session?.user?.id ?? "", params.id, "read");
+    const recordedLectures = await teamRecordedLectureFilter(session?.user?.id);
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: params.id },
       include: {
         subject: { include: { course: true } },
-        lectures: { where: NOT_RECORDED_LECTURE, orderBy: { order: "asc" }, include: { teacher: { include: { user: { select: { name: true } } } } } },
+        lectures: { where: recordedLectures, orderBy: { order: "asc" }, include: { teacher: { include: { user: { select: { name: true } } } } } },
         dpps: { orderBy: { level: "asc" } },
         tests: { orderBy: { createdAt: "desc" } },
       },

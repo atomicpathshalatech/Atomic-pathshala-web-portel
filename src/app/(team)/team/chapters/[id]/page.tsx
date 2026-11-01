@@ -14,7 +14,7 @@ import { ChapterTeamViewWrapper } from "@/components/team-portal/ChapterTeamView
 import { ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
 import { RoadmapTopicGroup } from "@/components/chapter-detail/ChapterRoadmapTimeline";
 import { lecturesAsScheduled } from "@/lib/chapters/lecture-class-view";
-import { NOT_RECORDED_LECTURE } from "@/lib/recorded-lectures/visibility";
+import { teamRecordedLectureFilter } from "@/lib/recorded-lectures/visibility";
 
 export const metadata: Metadata = {
   title: "Chapter Detail",
@@ -25,6 +25,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   if (!session?.user?.id) redirect("/login");
 
   const canRead = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_READ);
+  const recordedLectures = await teamRecordedLectureFilter(session.user.id);
   if (!canRead) redirect("/team");
 
   // Another teacher's chapter can't be opened; editing needs it to be your own
@@ -57,7 +58,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
       include: { role: true },
     }),
     prisma.lecture.findMany({
-      where: { chapterId: chapter.id, ...NOT_RECORDED_LECTURE },
+      where: { chapterId: chapter.id, ...recordedLectures },
       include: { teacher: { include: { user: { select: { name: true, photoUrl: true, email: true } } } } },
       orderBy: { order: "asc" },
     }),

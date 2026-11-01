@@ -10,12 +10,13 @@ import { batchUpdateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { clearAttemptsForSchedules } from "@/lib/team/resource-delete";
 import { thumbnailFields } from "@/lib/creative/thumbnail";
-import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
+import { teamRecordedSlotFilter } from "@/lib/recorded-lectures/visibility";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     await requirePermission(session?.user?.id, PERMISSIONS.BATCH_READ);
+    const recordedSlots = await teamRecordedSlotFilter(session?.user?.id);
 
     const batch = await prisma.batch.findUnique({
       where: { id: params.id },
@@ -27,7 +28,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
           orderBy: { enrolledAt: "desc" },
         },
         schedules: {
-          where: NOT_RECORDED_SLOT,
+          where: recordedSlots,
           include: { teacher: { include: { user: true } } },
           orderBy: { startsAt: "asc" },
         },

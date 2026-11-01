@@ -6,7 +6,7 @@ import { requirePermission, hasPermission, UnauthorizedError, ForbiddenError } f
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { lectureCreateSchema } from "@/lib/validation/lecture";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { NOT_RECORDED_LECTURE } from "@/lib/recorded-lectures/visibility";
+import { teamRecordedLectureFilter } from "@/lib/recorded-lectures/visibility";
 
 /**
  * Lectures are scoped by ownership, not by batch: a non-admin teacher only
@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
 
     const chapterId = request.nextUrl.searchParams.get("chapterId") ?? undefined;
     const isAdmin = await hasPermission(session.user.id, PERMISSIONS.LECTURE_PUBLISH);
+    const recordedLectures = await teamRecordedLectureFilter(session.user.id);
 
     const chapterInclude = {
       chapter: { include: { subject: { include: { course: { select: { title: true } } } } } },
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     if (isAdmin) {
       const lectures = await prisma.lecture.findMany({
-        where: chapterId ? { chapterId, ...NOT_RECORDED_LECTURE } : NOT_RECORDED_LECTURE,
+        where: chapterId ? { chapterId, ...recordedLectures } : recordedLectures,
         include: chapterInclude,
         orderBy: [{ chapterId: "asc" }, { order: "asc" }],
       });
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
     if (!teacher) return apiSuccess({ lectures: [] });
 
     const lectures = await prisma.lecture.findMany({
-      where: { teacherId: teacher.id, ...(chapterId && { chapterId }), ...NOT_RECORDED_LECTURE },
+      where: { teacherId: teacher.id, ...(chapterId && { chapterId }), ...recordedLectures },
       include: chapterInclude,
       orderBy: [{ chapterId: "asc" }, { order: "asc" }],
     });
