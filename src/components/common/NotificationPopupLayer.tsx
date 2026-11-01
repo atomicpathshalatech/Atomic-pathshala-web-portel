@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
+import { getDesktopBridge } from "@/lib/desktop/bridge";
 
 export interface PopNotification {
   id: string;
@@ -107,8 +108,29 @@ export function NotificationPopupLayer() {
     [router, removeNotification, session?.user]
   );
 
+  // Windows app: Electron has no browser push, so while the app is open but
+  // not in front (minimised, behind another window) a new notification is
+  // also shown as a Windows notification; clicking it opens the app there.
+  const showDesktopToast = useCallback(
+    (notif: PopNotification) => {
+      if (!getDesktopBridge() || typeof window.Notification === "undefined" || window.Notification.permission === "denied") return;
+      if (document.visibilityState === "visible" && document.hasFocus()) return;
+      try {
+        const toast = new window.Notification(notif.title, { body: notif.body, icon: "/icons/icon-192.png", tag: notif.id });
+        toast.onclick = () => {
+          window.focus();
+          void handleActionClick(notif);
+        };
+      } catch {
+        // notifications unavailable here: the in-app popup still shows
+      }
+    },
+    [handleActionClick]
+  );
+
   const enqueueNotification = useCallback(
     (notif: PopNotification) => {
+      showDesktopToast(notif);
       setVisibleQueue((prev) => {
         // Prevent duplicate popup
         if (prev.some((p) => p.id === notif.id)) return prev;
@@ -134,7 +156,7 @@ export function NotificationPopupLayer() {
         removeNotification(notif.id);
       }, duration);
     },
-    [playNotificationSound, removeNotification]
+    [playNotificationSound, removeNotification, showDesktopToast]
   );
 
   // Subscribe to user private channel on Pusher

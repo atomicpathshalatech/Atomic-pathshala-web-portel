@@ -8,13 +8,16 @@
  *     — a stale HTML shell is never shown as if it were live.
  *   - only content-hashed static assets (/_next/static, /icons, /brand,
  *     fonts) get a stale-while-revalidate cache.
- *   - push / notificationclick are intentionally NOT handled here — Firebase
- *     Cloud Messaging's own worker (/firebase-messaging-sw.js) owns those.
+ *   - push / notificationclick ARE handled here (browser push, VAPID). A
+ *     site has ONE service worker per scope: a second worker at "/" (the old
+ *     /firebase-messaging-sw.js) replaced this one or was replaced by it on
+ *     the next page load, so pushes arrived with no handler. That file now
+ *     just loads this one.
  *
  * Bump SW_VERSION on every deploy that changes caching behaviour so old
  * caches are dropped on activate.
  */
-const SW_VERSION = "v1.0.0";
+const SW_VERSION = "v1.1.0";
 const RUNTIME_CACHE = `atomic-guru-runtime-${SW_VERSION}`;
 const PRECACHE = `atomic-guru-precache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline";
@@ -148,4 +151,42 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Everything else: plain network (no caching).
+});
+
+// ---- Browser push (VAPID, see src/lib/notifications/webPushServer.ts) -------
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { notification: { title: "Atomic Pathshala", body: event.data.text() } };
+  }
+  const n = payload.notification || {};
+  const data = payload.data || n.data || {};
+  const title = n.title || data.title || payload.title || "Atomic Pathshala";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: n.body || data.body || payload.body || "You have a new update.",
+      icon: n.icon || "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: data.notificationId || undefined,
+      data: { deepLink: data.deepLink || payload.deepLink || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.deepLink || "/", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      for (const client of windows) {
+        if (new URL(client.url).origin === self.location.origin && "focus" in client) {
+          return client.focus().then((c) => (c && "navigate" in c ? c.navigate(target) : c));
+        }
+      }
+      return self.clients.openWindow ? self.clients.openWindow(target) : undefined;
+    })
+  );
 });

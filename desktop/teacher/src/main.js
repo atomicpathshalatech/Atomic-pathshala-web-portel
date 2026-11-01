@@ -44,7 +44,8 @@ const SMOKE = process.argv.includes("--smoke") || process.argv.includes("--smoke
 // --smoke-untrusted: loads a page from another origin and passes only if the
 // desktop bridge is NOT exposed there.
 const SMOKE_UNTRUSTED = process.argv.includes("--smoke-untrusted");
-const ALLOWED_PERMISSIONS = new Set(["media", "fullscreen", "clipboard-sanitized-write"]);
+// notifications: class / test / notice alerts as Windows notifications (only the trusted Atomic origin, like the rest).
+const ALLOWED_PERMISSIONS = new Set(["media", "fullscreen", "clipboard-sanitized-write", "notifications"]);
 // Test hooks (used by scripts/test-desktop-e2e.mjs, never set in normal use):
 //   ATOMIC_START_PATH       page to open instead of /team
 //   ATOMIC_DENY_MEDIA=1     refuse camera/mic (tests must not switch on the real webcam)
@@ -66,6 +67,9 @@ app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion,In
 // The app was called "Atomic Pathshala Teacher" before it became one app for
 // everyone. Keep its old data folder so an updated install stays signed in.
 app.setPath("userData", path.join(app.getPath("appData"), "Atomic Pathshala Teacher"));
+
+// Windows shows an app's notifications under this id (the installer's shortcut carries the same appId).
+if (process.platform === "win32") app.setAppUserModelId("in.atomicpathshala.teacher");
 
 if (!SMOKE && !app.requestSingleInstanceLock()) {
   app.quit();

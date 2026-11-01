@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/student/LogoutButton";
 import { GoalSelectionModal } from "@/components/student/GoalSelectionModal";
 import { NotificationBell } from "@/components/student/NotificationBell";
 import { NotificationPopupLayer } from "@/components/common/NotificationPopupLayer";
+import { EnablePushPrompt } from "@/components/common/EnablePushPrompt";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { BackButton } from "@/components/layout/BackButton";
 import { isRootRoute } from "@/lib/navigation/hierarchy";
@@ -548,6 +549,7 @@ export function StudentShell({
                 <BackButton />
               </div>
             )}
+            <EnablePushPrompt />
             {pathname === "/dashboard" && <StudentUpcomingTestBanner />}
             {children}
           </div>
