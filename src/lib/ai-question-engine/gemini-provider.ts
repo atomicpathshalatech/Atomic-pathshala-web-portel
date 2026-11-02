@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { AIProvider } from "./provider-interface";
@@ -88,6 +89,101 @@ export function splitCounts(counts: Record<string, number>, chunkTotal: number, 
   return Object.fromEntries(Object.entries(out).filter(([, n]) => n > 0));
 }
 
+/**
+ * Writes one chunk of questions (JSON text). Gemini first; when it is
+ * overloaded ("503 high demand", per-minute quota on the free keys — seen for
+ * hours at a time) or slow, the chunk is written by OpenAI, else Groq, so a
+ * batch never stalls on one service. After a Gemini failure the next chunks
+ * go straight to the fallback for a while instead of waiting it out again.
+ */
+const GEMINI_CHUNK_MS = 60_000;
+const GEMINI_REST_MS = 120_000;
+let geminiRestUntil = 0;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} did not answer in ${ms / 1000} s`)), ms);
+    p.then(
+      (v) => (clearTimeout(timer), resolve(v)),
+      (e) => (clearTimeout(timer), reject(e))
+    );
+  });
+}
+
+function envKey(...names: string[]): string | null {
+  for (const n of names) {
+    const v = process.env[n]?.trim().replace(/^["']|["']$/g, "");
+    if (v) return v;
+  }
+  return null;
+}
+
+async function writeQuestionsJson(prompt: string): Promise<string> {
+  let geminiErr: unknown = null;
+  if (Date.now() >= geminiRestUntil) {
+    try {
+      return await withTimeout(
+        executeGeminiWithFailover(async (client, modelName) => {
+          const model = client.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.2,
+              // Bilingual questions with solutions are long — the default output
+              // limit cut the JSON off mid-question and the whole chunk was lost.
+              maxOutputTokens: 16384,
+            },
+          });
+          const response = await model.generateContent(prompt);
+          return response.response.text().trim();
+        }),
+        GEMINI_CHUNK_MS,
+        "Gemini"
+      );
+    } catch (err) {
+      geminiErr = err;
+      geminiRestUntil = Date.now() + GEMINI_REST_MS;
+      console.warn("[GeminiProvider] Gemini could not write this chunk, using the fallback:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  const fallbacks: Array<{ name: string; client: OpenAI; model: string; maxTokens: number }> = [];
+  const openAiKey = envKey("OPENAI_API_KEY", "OPEN_AI_API_KEY");
+  if (openAiKey) fallbacks.push({ name: "OpenAI", client: new OpenAI({ apiKey: openAiKey }), model: process.env.OPENAI_MODEL || "gpt-4o", maxTokens: 16000 });
+  const groqKey = envKey("GROQ_API_KEY");
+  if (groqKey) {
+    fallbacks.push({
+      name: "Groq",
+      client: new OpenAI({ apiKey: groqKey, baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1" }),
+      model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+      maxTokens: 16000,
+    });
+  }
+  let lastErr: unknown = geminiErr;
+  for (const f of fallbacks) {
+    try {
+      const res = await withTimeout(
+        f.client.chat.completions.create({
+          model: f.model,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          temperature: 0.2,
+          max_tokens: f.maxTokens,
+        }),
+        110_000,
+        f.name
+      );
+      const text = res.choices[0]?.message?.content?.trim();
+      if (text) return text;
+      lastErr = new Error(`${f.name} returned no text`);
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[GeminiProvider] ${f.name} could not write this chunk:`, err instanceof Error ? err.message : err);
+    }
+  }
+  throw lastErr ?? new Error("No AI service could write the questions");
+}
+
 export class GeminiProvider implements AIProvider {
   name = "Gemini";
 
@@ -154,20 +250,8 @@ export class GeminiProvider implements AIProvider {
   }): Promise<RawAiGeneratedQuestion[]> {
     const prompt = buildQuestionGenerationPrompt(params);
 
-    return executeGeminiWithFailover(async (client, modelName) => {
-      const model = client.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-          // Bilingual questions with solutions are long — the default output
-          // limit cut the JSON off mid-question and the whole chunk was lost.
-          maxOutputTokens: 16384,
-        },
-      });
-
-      const response = await model.generateContent(prompt);
-      const text = response.response.text().trim();
+    {
+      const text = await writeQuestionsJson(prompt);
       const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
 
       const parsed = parseAiJson(cleanJson);
@@ -229,7 +313,7 @@ export class GeminiProvider implements AIProvider {
           figure: item.figure && typeof item.figure === "object" ? item.figure : undefined,
         };
       });
-    });
+    }
   }
 
   async generateQuestions(params: {
@@ -253,7 +337,7 @@ export class GeminiProvider implements AIProvider {
     // once to stay inside the time budget. Difficulties are shared out over the
     // calls so the batch adds up to the plan.
     const CHUNK_SIZE = 5;
-    const PARALLEL = 4;
+    const PARALLEL = 6;
     type Job = { typeId: string; count: number; diff: Record<NeetDifficulty, number> };
     const diffLeft: Record<string, number> = { ...params.difficultyMix };
     const plan = (counts: Record<string, number>): Job[] => {

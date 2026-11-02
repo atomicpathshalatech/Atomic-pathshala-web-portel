@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GEMINI_TEXT_MODELS } from "@/lib/ai/gemini-models";
 
 function cleanKey(raw?: string): string | null {
   if (!raw) return null;
@@ -62,34 +63,37 @@ export async function GET(request: NextRequest) {
 
     // Test Gemini with automatic candidate fallback
     if (geminiKey) {
-      const geminiCandidateModels = [
-        process.env.GEMINI_MODEL,
-        "gemini-3.6-flash",
-        "gemini-flash-latest",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-      ].filter(Boolean) as string[];
+      // The models the app really uses (the 1.5 / 2.0 ones are retired — their
+      // "quota 0" error used to be the only one shown, hiding the real cause).
+      const geminiCandidateModels = Array.from(new Set([process.env.GEMINI_MODEL, ...GEMINI_TEXT_MODELS].filter(Boolean) as string[]));
 
       let geminiSuccess = false;
-      let lastGeminiErr = "";
+      const geminiErrs: string[] = [];
+      const short = (e: any) => {
+        const m = String(e?.message || e);
+        if (m.includes("503") || /high demand/i.test(m)) return "busy (503 high demand)";
+        if (m.includes("429")) return "per-minute quota used up (429)";
+        if (m.includes("404")) return "not available for this key (404)";
+        return m.replace(/^[GoogleGenerativeAI Error]:s*/, "").slice(0, 160);
+      };
 
       const genAi = new GoogleGenerativeAI(geminiKey);
       for (const m of geminiCandidateModels) {
         try {
-          const model = genAi.getGenerativeModel({ model: m });
+          const model = genAi.getGenerativeModel({ model: m }, { timeout: 12_000 });
           await model.generateContent("Respond with 'OK'");
           results.gemini.status = "CONNECTED";
           (results.gemini as any).activeModel = m;
           geminiSuccess = true;
           break;
         } catch (e: any) {
-          lastGeminiErr = e?.message || String(e);
+          geminiErrs.push(`${m}: ${short(e)}`);
         }
       }
 
       if (!geminiSuccess) {
         results.gemini.status = "ERROR";
-        results.gemini.error = lastGeminiErr;
+        results.gemini.error = `${geminiErrs.join(" · ")} — question writing uses OpenAI / Groq meanwhile.`;
       }
     } else {
       results.gemini.status = "MISSING_KEY";

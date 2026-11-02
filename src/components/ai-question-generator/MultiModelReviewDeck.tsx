@@ -269,7 +269,7 @@ export function MultiModelReviewDeck({
                       Gemini 1.5 Senior Content Auditor (Level 1 Review)
                     </p>
                     <p className="text-[10px] text-blue-700 font-mono">
-                      Model: {gemini?.model || "gemini-1.5-flash"} · Confidence:{" "}
+                      Model: {gemini?.model || "gemini"} · Confidence:{" "}
                       {Math.round((gemini?.confidenceScore || 0) * 100)}%
                     </p>
                   </div>

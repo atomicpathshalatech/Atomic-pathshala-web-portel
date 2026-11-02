@@ -12,7 +12,7 @@ import {
   QuestionSnapshot,
   SingleModelReview,
 } from "./types";
-import { generateQuestionWithGemini, reviewQuestionWithGemini } from "./gemini";
+import { generateQuestionWithGemini, restGeminiReviews, reviewQuestionWithGemini } from "./gemini";
 import { reviewQuestionWithOpenAI } from "./openai";
 import { reviewQuestionWithClaude } from "./claude";
 import { reviewQuestionWithGroq } from "./groq";
@@ -56,12 +56,13 @@ export async function runMultiModelAudit(
       : withReviewTimeout(reviewQuestionWithClaude(snapshot, sourceContext), 25_000, "Claude"),
   ]);
 
+  if (geminiResult.status === "rejected") restGeminiReviews();
   const geminiReview: SingleModelReview =
     geminiResult.status === "fulfilled"
       ? geminiResult.value
       : {
           provider: "gemini",
-          model: "gemini-1.5-flash",
+          model: "gemini",
           solvedAnswer: "",
           answerMatches: false,
           isScientificallyCorrect: false,

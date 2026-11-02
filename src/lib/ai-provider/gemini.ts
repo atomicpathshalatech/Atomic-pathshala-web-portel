@@ -93,6 +93,19 @@ Return a strictly formatted JSON object with no Markdown wrappers or surrounding
   });
 }
 
+/**
+ * When Gemini is overloaded ("503 high demand", per-minute quota on the free
+ * keys) every review waited out its full timeout — 25 s per question — before
+ * failing. After a failure it is skipped for a short while: the question is
+ * judged by the other two reviewers at once (decision-engine.ts).
+ */
+const GEMINI_REST_MS = 90_000;
+let geminiRestUntil = 0;
+/** A review that timed out (multi-model-hub.ts) rests Gemini too. */
+export function restGeminiReviews() {
+  geminiRestUntil = Math.max(geminiRestUntil, Date.now() + GEMINI_REST_MS);
+}
+
 export async function reviewQuestionWithGemini(
   snapshot: QuestionSnapshot,
   sourceContext?: string
@@ -147,6 +160,7 @@ Return ONLY a JSON object:
 
   const startTime = Date.now();
   try {
+    if (Date.now() < geminiRestUntil) throw new Error("Gemini is busy right now (high demand / quota) — skipped for this question");
     return await executeGeminiWithFailover(async (client, modelName) => {
       const model = client.getGenerativeModel({
         model: modelName,
@@ -199,10 +213,13 @@ Return ONLY a JSON object:
       };
     });
   } catch (err: any) {
-    console.error("[GeminiReview] Error:", err);
+    if (Date.now() >= geminiRestUntil) {
+      console.error("[GeminiReview] Error:", err);
+      geminiRestUntil = Date.now() + GEMINI_REST_MS;
+    }
     return {
       provider: "gemini",
-      model: "gemini-1.5-flash",
+      model: "gemini",
       solvedAnswer: "",
       answerMatches: false,
       isScientificallyCorrect: false,

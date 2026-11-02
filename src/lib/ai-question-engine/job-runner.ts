@@ -28,7 +28,7 @@ import { GEMINI_TEXT_MODELS } from "@/lib/ai/gemini-models";
  */
 const GENERATE_BUDGET_MS = 150_000;
 const WORK_BUDGET_MS = 265_000;
-const VALIDATION_CONCURRENCY = 3;
+const VALIDATION_CONCURRENCY = 6;
 /** A PROCESSING batch with no update for this long has been cut off (see recoverStaleBatch). */
 export const STALE_BATCH_MS = 6 * 60 * 1000;
 

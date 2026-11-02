@@ -34,7 +34,43 @@ export function evaluateFinalQualityDecision(
   const isOpenAiFailed = openaiReview.confidenceScore === 0 && (openaiReview.rawOutput?.includes("API_ERROR") || Boolean(openaiReview.apiError?.isApiError) || openaiReview.rejectionReasons?.some(r => r.includes("API_FAILURE") || r.includes("API_ERROR")));
   const isClaudeFailed = claudeReview.confidenceScore === 0 && (claudeReview.rawOutput?.includes("API_ERROR") || Boolean(claudeReview.apiError?.isApiError) || claudeReview.rejectionReasons?.some(r => r.includes("API_FAILURE") || r.includes("API_ERROR")));
 
-  if (isGeminiFailed || isOpenAiFailed || isClaudeFailed) {
+  // One reviewer down (most often Gemini: "503 high demand" / per-minute
+  // quota on the free keys) while the other two answered: it abstains and the
+  // question is judged by those two — every check below still applies to them.
+  // Before, one unavailable service sent every question to "API failure" and
+  // none reached the Question Bank.
+  const failedCount = [isGeminiFailed, isOpenAiFailed, isClaudeFailed].filter(Boolean).length;
+  let abstained: string | null = null;
+  if (failedCount === 1) {
+    const live = [geminiReview, openaiReview, claudeReview].filter((_, i) => ![isGeminiFailed, isOpenAiFailed, isClaudeFailed][i]);
+    const abstain = (r: SingleModelReview): SingleModelReview => ({
+      ...r,
+      solvedAnswer: "",
+      scientificErrors: [],
+      mathematicalErrors: [],
+      solutionCorrections: null,
+      suggestedQuestion: null,
+      suggestedOptions: null,
+      suggestedAnswer: null,
+      topicCorrections: null,
+      ncertAlignment: live[0]!.ncertAlignment,
+      ambiguityDetected: false,
+      multipleCorrectOptionsDetected: false,
+      decision: "APPROVE",
+      rejectionReasons: [],
+    });
+    if (isGeminiFailed) {
+      abstained = geminiReview.apiError?.message || "Gemini";
+      geminiReview = abstain(geminiReview);
+    } else if (isOpenAiFailed) {
+      abstained = openaiReview.apiError?.message || "OpenAI";
+      openaiReview = abstain(openaiReview);
+    } else {
+      abstained = claudeReview.provider === "groq" ? "Groq" : "Claude";
+      claudeReview = abstain(claudeReview);
+    }
+    reasons.push(`${abstained} was unavailable — checked by the other two AI reviewers.`);
+  } else if (failedCount > 1) {
     const failedProviders = [
       isGeminiFailed ? (geminiReview.apiError?.message || "Gemini API unavailable") : null,
       isOpenAiFailed ? (openaiReview.apiError?.message || "OpenAI API unavailable") : null,
@@ -163,8 +199,8 @@ export function evaluateFinalQualityDecision(
       mathValidation.valid &&
       chemValidation.valid
     ) {
-      // Unanimous approval
-      finalStatus = "APPROVED_BY_ALL";
+      // Unanimous approval (of the two that answered, when one abstained)
+      finalStatus = abstained ? "APPROVED_AFTER_VERIFICATION" : "APPROVED_BY_ALL";
       eligibleForApproval = true;
     } else {
       finalStatus = "MANUAL_REVIEW_REQUIRED";
