@@ -63,6 +63,11 @@ public class MainActivity extends BridgeActivity {
         });
         super.onCreate(savedInstanceState);
         getOnBackPressedDispatcher().addCallback(this, exitFullscreenOnBack);
+        // The page keeps its own text size: with the phone set to large text,
+        // Android scaled every font up and headers, bottom bars and buttons
+        // spilled off the screen. 90 %: a little smaller than designed, so
+        // everything fits on small phones too.
+        bridge.getWebView().getSettings().setTextZoom(90);
         keepPageClearOfSystemBars();
         handleDownloads();
         bridge.getWebView().setWebChromeClient(new BridgeWebChromeClient(bridge) {

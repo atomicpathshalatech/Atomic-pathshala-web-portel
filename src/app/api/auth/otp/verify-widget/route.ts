@@ -64,8 +64,12 @@ export async function POST(request: NextRequest) {
     // The token must be for THIS number: MSG91 returns the verified identifier
     // (e.g. 919812345670). Without this, someone could verify their own number
     // and send another student's — and get a password-reset token for them.
+    // Sign-up keeps working as before when MSG91's reply carries no number;
+    // a password reset must always prove the number.
     const verifiedDigits = String(mResp.message ?? "").replace(/\D/g, "");
-    if (verifiedDigits.length < 10 || !verifiedDigits.endsWith(phone)) {
+    const numberProven = verifiedDigits.length >= 10 && verifiedDigits.endsWith(phone);
+    const numberContradicted = verifiedDigits.length >= 10 && !verifiedDigits.endsWith(phone);
+    if (numberContradicted || (purpose === "PASSWORD_RESET" && !numberProven)) {
       return apiError("This code was not for this mobile number.", 400, { code: "WIDGET_NUMBER_MISMATCH" });
     }
 

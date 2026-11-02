@@ -29,8 +29,6 @@ export function msg91WidgetConfigured(): boolean {
 declare global {
   interface Window {
     initSendOTP?: (config: unknown) => void;
-    sendOtp?: (identifier: string, success?: (data: unknown) => void, failure?: (err: unknown) => void) => void;
-    verifyOtp?: (otp: string | number, success?: (data: unknown) => void, failure?: (err: unknown) => void, reqId?: string) => void;
   }
 }
 
@@ -150,60 +148,4 @@ export function verifyWithMsg91Widget(identifier: string): Promise<string> {
         });
       })
   );
-}
-
-// ---- Our own code box (log in by OTP) ------------------------------------
-// exposeMethods: the widget shows no popup; window.sendOtp / verifyOtp let
-// our page send the SMS and check the code the student types.
-let customReady: Promise<void> | null = null;
-
-function startCustomWidget(): Promise<void> {
-  if (customReady) return customReady;
-  customReady = loadMsg91Widget()
-    .then(() => {
-      if (!msg91WidgetConfigured()) throw new Msg91WidgetError("SMS codes aren't available right now.");
-      window.initSendOTP!({ widgetId: MSG91_WIDGET_ID, tokenAuth: MSG91_WIDGET_TOKEN, exposeMethods: true, success: () => undefined, failure: () => undefined });
-      return new Promise<void>((resolve, reject) => {
-        const start = Date.now();
-        const check = () => {
-          if (typeof window.sendOtp === "function" && typeof window.verifyOtp === "function") return resolve();
-          if (Date.now() - start > INIT_POLL_TIMEOUT_MS) return reject(new Msg91WidgetError("Could not start SMS codes. Please try again."));
-          setTimeout(check, INIT_POLL_INTERVAL_MS);
-        };
-        check();
-      });
-    })
-    .catch((err) => {
-      customReady = null;
-      throw err;
-    });
-  return customReady;
-}
-
-function errorText(err: unknown, fallback: string): string {
-  return (err as { message?: string })?.message || (typeof err === "string" ? err : fallback);
-}
-
-/** Texts an OTP to this number (with country code, e.g. "919812345670"). */
-export async function sendMsg91Otp(identifier: string): Promise<void> {
-  await startCustomWidget();
-  await new Promise<void>((resolve, reject) => {
-    window.sendOtp!(identifier, () => resolve(), (err) => reject(new Error(errorText(err, "Could not send the SMS code."))));
-  });
-}
-
-/** Checks the SMS code; resolves with MSG91's access token (our server confirms it and the number). */
-export async function verifyMsg91Otp(code: string): Promise<string> {
-  await startCustomWidget();
-  return new Promise<string>((resolve, reject) => {
-    window.verifyOtp!(
-      code,
-      (data) => {
-        const token = (typeof data === "string" && data) || (data as { message?: string })?.message || "";
-        if (token) resolve(token);
-        else reject(new Error("Could not check the SMS code."));
-      },
-      (err) => reject(new Error(errorText(err, "Incorrect code.")))
-    );
-  });
 }
