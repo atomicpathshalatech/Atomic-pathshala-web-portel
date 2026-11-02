@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
@@ -114,17 +114,44 @@ export function AtomicPracticeTestArena({
   const [chapterSearch, setChapterSearch] = useState("");
 
 
-  // Auto-navigate to test series if linked via URL query ?series=[id]
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const seriesParam = params.get("series");
-      if (seriesParam) {
-        setSelectedSeriesId(seriesParam);
-        setCurrentView("TEST_SERIES_DETAIL");
-      }
-    }
+  // The view is kept in the URL (?tv=chapters&ts=Chemistry), so the phone's
+  // Back key steps back through it (chapters → subjects → tests) instead of
+  // leaving the page. Tabs replace the entry; opening a level adds one.
+  type View = typeof currentView;
+  const readUrl = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    const seriesParam = params.get("series");
+    const tv = params.get("tv");
+    const ts = params.get("ts");
+    if (ts) setSelectedSubject(ts);
+    if (seriesParam) {
+      setSelectedSeriesId(seriesParam);
+      setCurrentView("TEST_SERIES_DETAIL");
+    } else if (tv === "chapters") setCurrentView("CHAPTERWISE_CHAPTERS");
+    else if (tv === "subjects") setCurrentView("CHAPTERWISE_SUBJECTS");
+    else setCurrentView("TEST_SERIES");
   }, []);
+  useEffect(() => {
+    readUrl();
+    window.addEventListener("popstate", readUrl);
+    return () => window.removeEventListener("popstate", readUrl);
+  }, [readUrl]);
+  const goView = (view: View, opts: { subject?: string; seriesId?: string; replace?: boolean } = {}) => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("series");
+    params.delete("tv");
+    params.delete("ts");
+    if (view === "CHAPTERWISE_SUBJECTS") params.set("tv", "subjects");
+    if (view === "CHAPTERWISE_CHAPTERS") {
+      params.set("tv", "chapters");
+      if (opts.subject) params.set("ts", opts.subject);
+    }
+    if (view === "TEST_SERIES_DETAIL" && opts.seriesId) params.set("series", opts.seriesId);
+    const url = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+    if (opts.replace) window.history.replaceState(window.history.state, "", url);
+    else window.history.pushState(window.history.state, "", url);
+    setCurrentView(view);
+  };
 
   const activeSubjectData = subjectTests.find((s) => s.name === selectedSubject) || subjectTests[0];
   // Chemistry / Biology are split into branches — offered in a dropdown, not a row of big pills.
@@ -161,7 +188,8 @@ export function AtomicPracticeTestArena({
   const totalSeriesTests = testSeriesBoxes.reduce((sum, box) => sum + box.tests.length, 0);
 
   // Filtered Chapterwise Chapters by Search and Sub-branch
-  const activeChaptersList = activeSubjectData?.chapters || [];
+  // Only chapters that already have a chapter test (not every chapter of the subject).
+  const activeChaptersList = (activeSubjectData?.chapters || []).filter((ch) => ch.tests.length > 0);
   const filteredChapters = activeChaptersList.filter((ch) => {
     const matchesSearch =
       ch.title.toLowerCase().includes(chapterSearch.toLowerCase()) ||
@@ -199,7 +227,7 @@ export function AtomicPracticeTestArena({
               <button
                 key={view}
                 type="button"
-                onClick={() => setCurrentView(view)}
+                onClick={() => goView(view, { replace: true })}
                 className={`relative py-3 flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold transition ${
                   active ? "text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                 }`}
@@ -247,7 +275,7 @@ export function AtomicPracticeTestArena({
                   type="button"
                   onClick={() => {
                     handleSubjectChange(subj.name);
-                    setCurrentView("CHAPTERWISE_CHAPTERS");
+                    goView("CHAPTERWISE_CHAPTERS", { subject: subj.name });
                   }}
                   className={`group relative flex min-h-[96px] flex-col justify-between rounded-2xl p-3.5 text-left transition-all duration-200 cursor-pointer border hover:shadow-md hover:scale-[1.01] ${subjTheme.cardBg} ${subjTheme.cardBorder}`}
                 >
@@ -299,23 +327,13 @@ export function AtomicPracticeTestArena({
       {/* ========================================================================= */}
       {currentView === "CHAPTERWISE_CHAPTERS" && (
         <div className="space-y-4">
-          {/* One slim toolbar: back · subject · branch · search */}
+          {/* One slim toolbar: subject and branch side by side, search after (Back = the phone's Back key) */}
           <div className="flex items-center gap-2 flex-wrap bg-white border border-slate-200/80 rounded-xl px-2 py-1.5 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setCurrentView("CHAPTERWISE_SUBJECTS")}
-              className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 cursor-pointer"
-              title="All subjects"
-              aria-label="Back to subjects"
-            >
-              <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-            </button>
-
             <CompactSelect
               label="Subject"
               value={selectedSubject}
               onChange={handleSubjectChange}
-              options={subjectTests.map((s) => ({ value: s.name, label: s.name, count: s.chapters.length }))}
+              options={subjectTests.map((s) => ({ value: s.name, label: s.name, count: s.chapters.filter((c) => c.tests.length > 0).length }))}
             />
 
             {branchOptions.length > 0 && (
@@ -328,8 +346,8 @@ export function AtomicPracticeTestArena({
                   label: b.label,
                   count:
                     b.id === "ALL"
-                      ? activeSubjectData?.chapters.length || 0
-                      : activeSubjectData?.chapters.filter((c) => c.branch === b.id).length || 0,
+                      ? activeChaptersList.length
+                      : activeChaptersList.filter((c) => c.branch === b.id).length,
                 }))}
               />
             )}
@@ -581,7 +599,7 @@ export function AtomicPracticeTestArena({
                     setSelectedSeriesId(box.id);
                     setSeriesTestSearch("");
                     setSeriesStatusFilter("ALL");
-                    setCurrentView("TEST_SERIES_DETAIL");
+                    goView("TEST_SERIES_DETAIL", { seriesId: box.id });
                   }}
                   className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-400 text-left transition"
                 >
@@ -606,10 +624,11 @@ export function AtomicPracticeTestArena({
       {currentView === "TEST_SERIES_DETAIL" && activeSeries && (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
+            {/* Back to the list: the phone's Back key in the app; this button elsewhere. */}
             <button
               type="button"
-              onClick={() => setCurrentView("TEST_SERIES")}
-              className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0"
+              onClick={() => window.history.back()}
+              className="native-hide w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0"
               aria-label="Back to test series"
             >
               <span className="material-symbols-outlined text-[20px]">arrow_back</span>

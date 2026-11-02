@@ -1,6 +1,13 @@
 package com.atomicpathshala.app;
 
+import android.app.DownloadManager;
+import android.content.Context;
 import android.content.pm.ActivityInfo;
+import android.net.Uri;
+import android.os.Environment;
+import android.webkit.CookieManager;
+import android.webkit.URLUtil;
+import android.widget.Toast;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -37,16 +44,27 @@ public class MainActivity extends BridgeActivity {
         }
     };
 
-    /** The launch splash stays this long, so the page has painted before it goes (no white / half-drawn flash). */
+    /**
+     * The launch splash stays until the first page has loaded (at least
+     * SPLASH_MIN_MS, at most SPLASH_MAX_MS): no white or half-drawn page
+     * flashes between the logo and the app.
+     */
     private static final long SPLASH_MIN_MS = 1200;
+    private static final long SPLASH_MAX_MS = 5000;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         final long start = SystemClock.uptimeMillis();
-        SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> SystemClock.uptimeMillis() - start < SPLASH_MIN_MS);
+        SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> {
+            long shown = SystemClock.uptimeMillis() - start;
+            if (shown < SPLASH_MIN_MS) return true;
+            if (shown > SPLASH_MAX_MS) return false;
+            return bridge == null || bridge.getWebView().getProgress() < 100;
+        });
         super.onCreate(savedInstanceState);
         getOnBackPressedDispatcher().addCallback(this, exitFullscreenOnBack);
         keepPageClearOfSystemBars();
+        handleDownloads();
         bridge.getWebView().setWebChromeClient(new BridgeWebChromeClient(bridge) {
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
@@ -77,6 +95,33 @@ public class MainActivity extends BridgeActivity {
             return WindowInsetsCompat.CONSUMED;
         });
         ViewCompat.requestApplyInsets(page);
+    }
+
+    /**
+     * File downloads (study PDFs, DPP / test PDFs, notes). A WebView ignores a
+     * download link unless the app handles it — "Save" did nothing. Android's
+     * DownloadManager saves the file to the phone's Downloads folder (with a
+     * notification), sending the student's login cookie so private files work.
+     */
+    private void handleDownloads() {
+        bridge.getWebView().setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            try {
+                String fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                String cookies = CookieManager.getInstance().getCookie(url);
+                if (cookies != null) request.addRequestHeader("Cookie", cookies);
+                request.addRequestHeader("User-Agent", userAgent);
+                request.setMimeType(mimeType);
+                request.setTitle(fileName);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                dm.enqueue(request);
+                Toast.makeText(this, "Downloading " + fileName, Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Could not download this file.", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void enterFullscreen(View view, WebChromeClient.CustomViewCallback callback) {

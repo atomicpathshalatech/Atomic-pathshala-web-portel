@@ -570,24 +570,6 @@ export default async function StudentTestsPage() {
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto pb-16 px-2 sm:px-4">
-      {/* Sleek Minimal Header with Back Button */}
-      <div className="flex items-center gap-2.5">
-        <Link
-          href="/dashboard"
-          className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition shrink-0"
-        >
-          <span className="material-symbols-outlined text-lg">arrow_back</span>
-        </Link>
-        <div>
-          <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-            Tests &amp; Assessments
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Batch Test Series &amp; Chapterwise Practice Tests
-          </p>
-        </div>
-      </div>
-
       {/* 2-Category Interactive Arena */}
       <AtomicPracticeTestArena
         subjectTests={subjectTestsList}

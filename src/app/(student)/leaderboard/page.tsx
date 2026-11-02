@@ -16,9 +16,6 @@ export default async function LeaderboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-headline-lg text-headline-lg text-on-surface">Leaderboard</h1>
-          <p className="text-on-surface-variant font-body-md mt-1">
-            Ranked by real XP — earned from live classes, tests, and DPPs.
-          </p>
         </div>
         <Link
           href="/rewards"

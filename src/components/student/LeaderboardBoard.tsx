@@ -36,6 +36,17 @@ function bellPath() {
 
 const BELL_PATH = bellPath();
 
+/**
+ * Atomic Pathshala student categories, by XP standing among all students
+ * (percentile), so they keep meaning something as everyone earns more:
+ * top 10% Champion, next 30% Achiever, the rest Rising Star.
+ */
+export function xpTier(percentile: number): { name: string; emoji: string; className: string } {
+  if (percentile >= 90) return { name: "Champion", emoji: "🥇", className: "bg-amber-100 text-amber-800" };
+  if (percentile >= 60) return { name: "Achiever", emoji: "🥈", className: "bg-slate-200 text-slate-800" };
+  return { name: "Rising Star", emoji: "🥉", className: "bg-orange-100 text-orange-800" };
+}
+
 function percentileToX(percentile: number) {
   const clamped = Math.min(100, Math.max(0, percentile));
   return 6 + (clamped / 100) * (VIEW_W - 12);
@@ -92,7 +103,11 @@ export function LeaderboardBoard() {
     return "xp" in entry ? `${entry.xp} XP` : `${entry.score} pts`;
   }
   function subLabel(entry: XpEntry | TestEntry) {
-    return "level" in entry ? `Level ${entry.level}` : "Test score total";
+    if ("level" in entry) {
+      const t = xpTier(entry.percentile);
+      return `${t.emoji} ${t.name} · Level ${entry.level}`;
+    }
+    return "Test score total";
   }
 
   return (

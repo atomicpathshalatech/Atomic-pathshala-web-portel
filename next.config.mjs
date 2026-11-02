@@ -45,6 +45,9 @@ const nextConfig = {
     // client bundles; per-icon / per-function import rewriting keeps route
     // chunks small.
     optimizePackageImports: ["lucide-react", "date-fns"],
+    // Back / forward re-fetches pages instead of showing a 30-second-old copy
+    // (a class that had ended still showed "Join", new items were missing).
+    staleTimes: { dynamic: 0, static: 60 },
     // Headless Chromium and pdf processing libraries:
     // kept out of the bundle and traced into serverless functions properly.
     serverComponentsExternalPackages: ["@sparticuz/chromium", "puppeteer-core", "pdf-lib", "@napi-rs/canvas", "openchemlib"],

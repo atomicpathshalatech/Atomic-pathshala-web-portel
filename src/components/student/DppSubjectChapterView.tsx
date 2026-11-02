@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
+import { useUrlParams } from "@/lib/navigation/use-url-params";
 
 export interface RealDPPItem {
   id: string;
@@ -49,8 +50,10 @@ const done = (list: RealDPPItem[]) => list.filter((d) => d.status === "COMPLETED
  */
 export function DppSubjectChapterView({ subjects = [] }: { subjects: RealSubjectGroup[] }) {
   const withDpps = subjects.filter((s) => s.chapters.some((c) => c.dpps.length > 0));
-  const [subjectId, setSubjectId] = useState<string | null>(null);
-  const [chapterId, setChapterId] = useState<string | null>(null);
+  // In the URL (?ds=…&dc=…): the phone's Back key goes chapter → subject → subjects.
+  const [step, setStep] = useUrlParams(["ds", "dc"] as const);
+  const subjectId = step.ds;
+  const chapterId = step.dc;
 
   const subject = withDpps.find((s) => s.id === subjectId) ?? null;
   const chapter = subject?.chapters.find((c) => c.id === chapterId) ?? null;
@@ -71,10 +74,7 @@ export function DppSubjectChapterView({ subjects = [] }: { subjects: RealSubject
       <nav className="flex flex-wrap items-center gap-1 text-sm">
         <button
           type="button"
-          onClick={() => {
-            setSubjectId(null);
-            setChapterId(null);
-          }}
+          onClick={() => setStep({ ds: null, dc: null })}
           className={`font-semibold ${subject ? "text-blue-700 hover:underline" : "text-slate-900 dark:text-white"}`}
         >
           Subjects
@@ -82,7 +82,7 @@ export function DppSubjectChapterView({ subjects = [] }: { subjects: RealSubject
         {subject && (
           <>
             <span className="material-symbols-outlined text-base text-slate-400">chevron_right</span>
-            <button type="button" onClick={() => setChapterId(null)} className={`font-semibold ${chapter ? "text-blue-700 hover:underline" : "text-slate-900 dark:text-white"}`}>
+            <button type="button" onClick={() => setStep({ dc: null })} className={`font-semibold ${chapter ? "text-blue-700 hover:underline" : "text-slate-900 dark:text-white"}`}>
               {subject.name}
             </button>
           </>
@@ -105,7 +105,7 @@ export function DppSubjectChapterView({ subjects = [] }: { subjects: RealSubject
               <button
                 key={s.id}
                 type="button"
-                onClick={() => setSubjectId(s.id)}
+                onClick={() => setStep({ ds: s.id, dc: null })}
                 className="flex flex-col items-start gap-1.5 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900"
               >
                 <span className={`material-symbols-outlined text-2xl ${s.color || "text-blue-600"}`}>{s.icon || "science"}</span>
@@ -131,7 +131,7 @@ export function DppSubjectChapterView({ subjects = [] }: { subjects: RealSubject
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setChapterId(c.id)}
+                onClick={() => setStep({ dc: c.id })}
                 className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left transition hover:border-blue-300 dark:border-slate-800 dark:bg-slate-900"
               >
                 <span className="material-symbols-outlined text-2xl text-amber-500">folder</span>

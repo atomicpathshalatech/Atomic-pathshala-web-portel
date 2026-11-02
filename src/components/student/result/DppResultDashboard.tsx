@@ -86,7 +86,7 @@ export function DppResultDashboard({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4">
         <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
           <Link href="/dpp" className="hover:text-blue-600 transition font-bold text-slate-600 dark:text-slate-400">
-            Daily Practice Problems (DPP)
+            DPP
           </Link>
           <span className="material-symbols-outlined text-xs">chevron_right</span>
           <span className="font-bold text-slate-900 dark:text-white truncate max-w-xs">
@@ -126,9 +126,6 @@ export function DppResultDashboard({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                DAILY PRACTICE PROBLEM
-              </span>
               <span className="text-xs text-slate-400">
                 · Submitted on {new Date(analysis.submittedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
               </span>

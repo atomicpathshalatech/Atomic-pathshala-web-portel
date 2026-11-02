@@ -304,31 +304,20 @@ export default async function DppPortalPage() {
   );
 
   return (
-    <div className="space-y-stack-lg max-w-6xl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-stack-md">
-        <div>
-          <p className="flex items-center gap-2 text-label-sm text-on-surface-variant mb-2">
-            <span>My Courses</span>
-            <span className="material-symbols-outlined text-sm">chevron_right</span>
-            <span className="text-primary">DPP Portal</span>
-          </p>
-          <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface mb-2">
-            Daily Practice Problems (DPP)
-          </h1>
-          <p className="text-on-surface-variant max-w-2xl font-body-lg">
-            Practice papers assigned by your batch faculty to reinforce topics covered in lectures.
-          </p>
-        </div>
-
-        <div className="w-full md:w-auto flex items-center gap-4 bg-primary-container/10 p-4 rounded-xl border border-primary/20">
-          <span className="material-symbols-outlined text-primary text-4xl shrink-0">history_edu</span>
-          <div>
-            <div className="text-primary font-bold">Your Progress</div>
-            <div className="text-on-surface-variant text-label-md">
-              {totalAssigned} Assigned • {totalCompleted} Completed
-            </div>
-          </div>
+    <div className="space-y-4 max-w-6xl">
+      {/* Header: where you are + a slim progress line (no long titles) */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-label-sm text-on-surface-variant">
+          <span>My Courses</span>
+          <span className="material-symbols-outlined text-sm">chevron_right</span>
+          <span className="text-primary">DPP Portal</span>
+        </p>
+        <div className="flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary-container/10 px-3 py-1 text-xs">
+          <span className="material-symbols-outlined text-primary text-base">history_edu</span>
+          <span className="font-bold text-primary">Your Progress</span>
+          <span className="text-on-surface-variant">
+            {totalAssigned} Assigned • {totalCompleted} Completed
+          </span>
         </div>
       </div>
 

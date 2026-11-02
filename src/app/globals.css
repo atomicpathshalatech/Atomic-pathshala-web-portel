@@ -531,3 +531,8 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* In-page Back arrows that duplicate the phone's Back key: hidden inside the Android app. */
+.native-app .native-hide {
+  display: none !important;
+}

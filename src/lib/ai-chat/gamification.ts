@@ -22,6 +22,17 @@ export async function awardXp(userId: string, amount: number) {
     where: { userId },
     data: { xp: { increment: Math.round(amount) } },
   });
+  // The leaderboard ranks the student XP (lib/gamification/xp) — Atomic
+  // Guru quizzes count there too, not only in this profile XP.
+  try {
+    const student = await prisma.student.findUnique({ where: { userId }, select: { id: true } });
+    if (student) {
+      const { awardXp: awardStudentXp } = await import("@/lib/gamification/xp");
+      await awardStudentXp(student.id, Math.round(amount), "QUIZ_CORRECT_ANSWER");
+    }
+  } catch (err) {
+    console.warn("[ai-chat] student XP not awarded:", err);
+  }
 }
 
 // Call once per meaningful activity (chat message, quiz submit). Awards the

@@ -33,7 +33,8 @@ const DOUBLE_PRESS_EXIT_WINDOW_MS = 2000;
  * safely register once and stay.
  */
 export function initAppListeners(options: {
-  onNavigateBack: () => void;
+  /** viaHistory: step back in the WebView's own history; otherwise go to the logical parent. */
+  onNavigateBack: (viaHistory: boolean) => void;
   canNavigateBack: () => boolean;
   showExitToast?: (message: string) => void;
 }) {
@@ -78,10 +79,18 @@ export function initAppListeners(options: {
       }
     }
 
-    // D. Normal navigation. `canNavigateBack()` reflects this app's own
-    //    history; `canGoBack` is the WebView's view of the same stack.
-    if (options.canNavigateBack() || canGoBack) {
-      options.onNavigateBack();
+    // D. Normal navigation. The WebView's history is exactly this app's
+    //    screens (it starts empty), so one press = one real step back —
+    //    including in-page steps (subject → chapter). Before, the app's own
+    //    estimate of "is there history" often said no and jumped to a parent
+    //    page or home. Without history: the logical parent, unless this is a
+    //    main screen.
+    if (canGoBack) {
+      options.onNavigateBack(true);
+      return;
+    }
+    if (options.canNavigateBack()) {
+      options.onNavigateBack(false);
       return;
     }
 

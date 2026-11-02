@@ -31,7 +31,7 @@ const SIDEBAR_ITEMS: StudentNavItem[] = [
   { href: "/store", label: "Store", icon: "storefront" },
   { href: "/tests", label: "My Test", icon: "assignment_turned_in" },
   { href: "/dpp", label: "My DPP", icon: "fact_check" },
-  { href: "/schedule", label: "Live Classes", icon: "sensors" },
+  { href: "/schedule", label: "My Schedule", icon: "calendar_month" },
   { href: "/guru", label: "AI Doubt Solver", icon: "psychology_alt" },
   { href: "/book-session", label: "Book a Session", icon: "event_available" },
   { href: "/predictor", label: "Rank Predictor", icon: "insights" },
@@ -43,7 +43,7 @@ const SIDEBAR_ITEMS: StudentNavItem[] = [
 const DOCK_ITEMS: StudentNavItem[] = [
   { href: "/dashboard", label: "Home", icon: "home" },
   { href: "/courses", label: "Batches", icon: "school" },
-  { href: "/schedule", label: "Live", icon: "sensors" },
+  { href: "/schedule", label: "My Schedule", icon: "calendar_month" },
   { href: "/tests", label: "Tests", icon: "assignment_turned_in" },
   { href: "/store", label: "Store", icon: "storefront" },
 ];

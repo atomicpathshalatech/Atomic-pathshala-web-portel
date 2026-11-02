@@ -1,6 +1,7 @@
 "use client";
 
 import { useBackNavigation } from "@/lib/navigation/useBackNavigation";
+import { useIsNativeApp } from "@/lib/platform/use-native-app";
 
 /**
  * The app's Back control. One component for the student portal, the team
@@ -29,6 +30,8 @@ export function BackButton({
   className?: string;
 }) {
   const { goBack } = useBackNavigation({ fallbackHref });
+  // The Android app has the phone's Back key; the button only took space there.
+  const native = useIsNativeApp();
 
   const base =
     "group inline-flex items-center justify-center gap-1.5 rounded-xl border border-outline-variant/50 dark:border-slate-700/80 bg-surface dark:bg-slate-900/90 hover:bg-surface-container-high dark:hover:bg-slate-800 text-on-surface dark:text-slate-200 hover:text-primary dark:hover:text-primary font-semibold shadow-sm transition-all duration-150 active:scale-95 cursor-pointer select-none";
@@ -38,6 +41,8 @@ export function BackButton({
     variant === "compact"
       ? "min-w-11 min-h-11 px-2 text-xs"
       : "min-h-11 px-3.5 py-1.5 text-xs md:text-sm";
+
+  if (native) return null;
 
   return (
     <button

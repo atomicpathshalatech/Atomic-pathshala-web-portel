@@ -23,13 +23,18 @@ const serverUrl =
 // release app shipped with WebView debugging and plain-http traffic allowed.)
 const debugBuild = process.env.CAPACITOR_DEBUG === '1' || /^http:\/\//.test(serverUrl);
 
+// The app opens straight on the dashboard (logged-out students are sent to
+// /login by the middleware, server-side). Opening "/" painted the website's
+// home page for a moment before AppEntryGate moved the student on.
+const appStartUrl = `${serverUrl.replace(/\/+$/, '')}/dashboard`;
+
 const config: CapacitorConfig = {
   appId: 'com.atomicpathshala.app',
   appName: 'Atomic Pathshala',
   webDir: 'public',
   server: {
     // When packaging for native with dynamic SSR/NextAuth, point to the live server
-    url: serverUrl,
+    url: appStartUrl,
     cleartext: debugBuild, // plain http only for local testing (emulator 10.0.2.2 / LAN)
     allowNavigation: [
       'ap.atomicpathshala.in',

@@ -123,6 +123,24 @@ export async function finalizeAttempt(attemptId: string, isLate: boolean) {
     }),
   ]);
 
+  // XP for the leaderboard: finishing a test / DPP and each right answer.
+  // Before, only lectures and live classes gave XP, so tests and DPPs —
+  // most of what students do — never moved anyone up the leaderboard.
+  // finalizeAttempt runs once per attempt (it returns early unless the
+  // attempt is still IN_PROGRESS), so this can't be counted twice.
+  try {
+    const correct = answerUpdates.length > 0 ? (await prisma.attemptAnswer.count({ where: { attemptId, isCorrect: true } })) : 0;
+    const isDpp = attempt.test.testType === "DPP" || String(attempt.test.code ?? "").toUpperCase().startsWith("DPP");
+    const { awardXp } = await import("@/lib/gamification/xp");
+    await awardXp(attempt.studentId, Math.min(200, 20 + correct * 4), isDpp ? "DPP_COMPLETED" : "TEST_COMPLETED", {
+      attemptId,
+      testId: attempt.test.id,
+      correct,
+    });
+  } catch (err) {
+    console.error("Failed to award XP on submission:", err);
+  }
+
   // Compute and persist full deterministic test analysis
   try {
     const { calculateAndStoreTestAnalysis } = await import("./analysis-engine");

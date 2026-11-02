@@ -8,10 +8,10 @@ import { isNativeApp, isAndroid } from '@/lib/platform';
 import { initAppListeners } from '@/lib/platform/app-listener';
 import { initDeepLinks } from '@/lib/platform/deep-links';
 import { registerPushNotifications } from '@/lib/platform/notifications';
-import { hasInAppHistory } from '@/lib/navigation/useBackNavigation';
 import { parentPathFor, isRootRoute } from '@/lib/navigation/hierarchy';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { AppWelcome } from './AppWelcome';
+import { PullToRefresh } from './PullToRefresh';
 
 export function CapacitorProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -50,15 +50,14 @@ export function CapacitorProvider({ children }: { children: React.ReactNode }) {
       // history this app actually created in this tab, not the raw
       // history.length (which counts pages from before the app was opened
       // and would send the user out of the app on a deep link).
-      canNavigateBack: () => !isRootRoute(pathnameRef.current) && hasInAppHistory(),
-      onNavigateBack: () => {
-        const current = pathnameRef.current;
-        if (hasInAppHistory()) {
-          routerRef.current.back();
+      canNavigateBack: () => !isRootRoute(pathnameRef.current),
+      onNavigateBack: (viaHistory) => {
+        if (viaHistory) {
+          window.history.back();
         } else {
           // Cold start on a deep link: no history, but the user still needs
           // a way up the hierarchy instead of being dropped out of the app.
-          routerRef.current.push(parentPathFor(current));
+          routerRef.current.push(parentPathFor(pathnameRef.current));
         }
       },
       showExitToast: (message) => {
@@ -70,9 +69,24 @@ export function CapacitorProvider({ children }: { children: React.ReactNode }) {
       routerRef.current.push(path);
     });
 
+    // Back in the app after a while: show what changed meanwhile (a class
+    // that ended, a new test) instead of the screen as it was.
+    let hiddenAt = 0;
+    const onBackground = () => {
+      hiddenAt = Date.now();
+    };
+    const onForeground = () => {
+      if (hiddenAt && Date.now() - hiddenAt > 30_000) routerRef.current.refresh();
+      hiddenAt = 0;
+    };
+    window.addEventListener('app:background', onBackground);
+    window.addEventListener('app:foreground', onForeground);
+
     return () => {
       cleanupBack();
       cleanupDeepLinks();
+      window.removeEventListener('app:background', onBackground);
+      window.removeEventListener('app:foreground', onForeground);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -102,6 +116,7 @@ export function CapacitorProvider({ children }: { children: React.ReactNode }) {
   return (
     <>
       <AppWelcome />
+      <PullToRefresh />
       {children}
     </>
   );
