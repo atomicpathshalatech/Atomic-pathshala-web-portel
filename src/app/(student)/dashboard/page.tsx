@@ -13,6 +13,7 @@ import { PromoCard } from "@/components/student/home/PromoCard";
 import { StudentBannerCarousel, type StudentBanner } from "@/components/student/home/StudentBannerCarousel";
 import { EducatorsShowcase, type EducatorItem } from "@/components/student/home/EducatorsShowcase";
 import { StudentFeedbackSection, type StudentFeedbackItem } from "@/components/student/home/StudentFeedbackSection";
+import { SocialLinksStrip } from "@/components/student/home/SocialLinksStrip";
 import { UpcomingTestCard, type UpcomingTestItem } from "@/components/student/home/UpcomingTestCard";
 import { isDppTest, testWindowEnd } from "@/lib/tests/schedule-rules";
 
@@ -407,7 +408,7 @@ export default async function StudentDashboardPage() {
           items={[
             { label: "NCERT Practice", icon: "menu_book", href: "/practice/ncert", accent: "emerald", badge: "NEW" },
             { label: "Topic-wise Question Practice", icon: "edit_note", href: "/practice", accent: "violet", badge: null },
-            { label: "PYQ Practice", icon: "history_edu", href: "/tests", accent: "blue", badge: null },
+            { label: "PYQ Practice", icon: "history_edu", href: "/pyq", accent: "blue", badge: null },
             { label: "Daily DPP", icon: "assignment", href: "/dpp", accent: "rose", badge: dppCount ? `${dppCount}` : null },
             { label: "Downloads", icon: "download", href: "/downloads", accent: "indigo", badge: downloadsCount ? `${downloadsCount}` : null },
           ]}
@@ -419,6 +420,8 @@ export default async function StudentDashboardPage() {
 
       {/* 6. Our Student Feedback Carousel */}
       <StudentFeedbackSection initialFeedbacks={feedbacks} studentName={student.user.name || "Student"} />
+      {/* Our social pages (links from Team → Website → Footer) */}
+      <SocialLinksStrip />
 
       {/* Recommended Courses if any */}
       {recommended.length > 0 && (

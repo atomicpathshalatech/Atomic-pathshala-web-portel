@@ -105,9 +105,24 @@ export async function publishTestNow(testId: string, actorUserId: string | null)
  * ids). A test that cannot be published (no questions) stays a draft and is
  * not opened for students. Never throws: callers are page loads.
  */
+// The general sweep (no testIds / chapterId) ran on every batch / schedule
+// page open, and a due draft that can't publish (e.g. no questions yet) was
+// retried — with a heavy query — on every one of them, one after another:
+// that made the batch page slow. Now: the sweep at most once a minute per
+// server, and a test that failed is left alone for 10 minutes.
+const SWEEP_EVERY_MS = 60_000;
+const RETRY_FAILED_AFTER_MS = 10 * 60_000;
+let lastSweepAt = 0;
+const failedAt = new Map<string, number>();
+
 export async function publishDueTests(opts: { testIds?: string[]; chapterId?: string; now?: Date } = {}): Promise<number> {
   try {
     const now = opts.now ?? new Date();
+    const sweep = !opts.testIds && !opts.chapterId;
+    if (sweep) {
+      if (Date.now() - lastSweepAt < SWEEP_EVERY_MS) return 0;
+      lastSweepAt = Date.now();
+    }
     const due = await prisma.test.findMany({
       where: {
         status: "DRAFT",
@@ -121,8 +136,15 @@ export async function publishDueTests(opts: { testIds?: string[]; chapterId?: st
     });
     let published = 0;
     for (const t of due) {
+      const failed = failedAt.get(t.id);
+      if (failed && Date.now() - failed < RETRY_FAILED_AFTER_MS) continue;
       const r = await publishTestNow(t.id, null);
-      if (r.ok) published++;
+      if (r.ok) {
+        published++;
+        failedAt.delete(t.id);
+      } else {
+        failedAt.set(t.id, Date.now());
+      }
     }
     return published;
   } catch (err) {

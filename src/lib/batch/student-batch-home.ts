@@ -242,6 +242,9 @@ export async function loadStudentBatchHome(
   const now = new Date();
 
   // 1. Fetch Batch with Course, Teachers, TestSeries, and Schedules
+  // Started now, used below: not one more round-trip after the batch query.
+  const chosenPromise = allowedChapters(studentId, [batchId]);
+  chosenPromise.catch(() => undefined); // awaited below; no unhandled rejection when the batch is missing
   const batch = await prisma.batch.findUnique({
     where: { id: batchId },
     select: {
@@ -278,7 +281,7 @@ export async function loadStudentBatchHome(
   // Lectures listed in the batch's chapters: every published ordinary lecture,
   // and a chapter's recorded lectures only for students ticked for that
   // chapter in this batch (published, video ready, not archived).
-  const chosenChapterIds = allowedChapterIds(await allowedChapters(studentId, [batchId]), batchId);
+  const chosenChapterIds = allowedChapterIds(await chosenPromise, batchId);
   const listedLectures: Prisma.LectureWhereInput = {
     status: "PUBLISHED",
     OR: [

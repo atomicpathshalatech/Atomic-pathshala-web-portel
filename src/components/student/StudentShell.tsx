@@ -8,6 +8,7 @@ import { GoalSelectionModal } from "@/components/student/GoalSelectionModal";
 import { NotificationBell } from "@/components/student/NotificationBell";
 import { NotificationPopupLayer } from "@/components/common/NotificationPopupLayer";
 import { EnablePushPrompt } from "@/components/common/EnablePushPrompt";
+import { RateAppPrompt } from "@/components/student/RateAppPrompt";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { BackButton } from "@/components/layout/BackButton";
 import { isRootRoute } from "@/lib/navigation/hierarchy";
@@ -597,6 +598,7 @@ export function StudentShell({
 
       {/* Global In-App Notification Pop-up Queue */}
       <NotificationPopupLayer />
+      <RateAppPrompt />
 
       <DownloadAppsModal isOpen={downloadAppOpen} onClose={() => setDownloadAppOpen(false)} />
     </div>

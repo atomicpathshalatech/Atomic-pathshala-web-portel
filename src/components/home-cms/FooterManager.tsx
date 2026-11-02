@@ -116,16 +116,31 @@ export function FooterManager({ initialSettings, initialColumns }: { initialSett
           <input value={settings.contactEmail ?? ""} onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })} placeholder="Email" className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md" />
           <input value={settings.address ?? ""} onChange={(e) => setSettings({ ...settings, address: e.target.value })} placeholder="Address" className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md" />
         </div>
-        <input
-          value={settings.socialLinks.youtube ?? ""}
-          onChange={(e) => {
-            const url = e.target.value.trim();
-            const { youtube: _old, ...rest } = settings.socialLinks;
-            setSettings({ ...settings, socialLinks: url ? { ...rest, youtube: url } : rest });
-          }}
-          placeholder="YouTube channel URL (e.g. https://www.youtube.com/@atomicpathshala)"
-          className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md"
-        />
+        {/* Social pages — shown with their logos on the website footer and at the bottom of the students' home (app too). Empty = hidden. */}
+        <p className="font-label-md text-label-md text-on-surface pt-1">Social pages</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {(
+            [
+              ["youtube", "YouTube channel URL (https://www.youtube.com/@…)"],
+              ["instagram", "Instagram page URL (https://instagram.com/…)"],
+              ["telegram", "Telegram channel URL (https://t.me/…)"],
+              ["facebook", "Facebook page URL (https://facebook.com/…)"],
+              ["whatsapp", "WhatsApp channel / group URL (https://whatsapp.com/channel/…)"],
+            ] as const
+          ).map(([platform, placeholder]) => (
+            <input
+              key={platform}
+              value={settings.socialLinks[platform] ?? ""}
+              onChange={(e) => {
+                const url = e.target.value.trim();
+                const { [platform]: _old, ...rest } = settings.socialLinks;
+                setSettings({ ...settings, socialLinks: url ? { ...rest, [platform]: url } : rest });
+              }}
+              placeholder={placeholder}
+              className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md"
+            />
+          ))}
+        </div>
         <input value={settings.copyrightText ?? ""} onChange={(e) => setSettings({ ...settings, copyrightText: e.target.value })} placeholder="Copyright text" className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md" />
         <button type="submit" disabled={savingSettings} className="bg-primary text-on-primary px-5 py-2.5 rounded-xl text-label-md disabled:opacity-60">
           {savingSettings ? "Saving…" : "Save Settings"}
