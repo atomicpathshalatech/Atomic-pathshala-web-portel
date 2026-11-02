@@ -68,3 +68,30 @@ export function idCardEmail(opts: {
     text,
   };
 }
+
+/**
+ * The WhatsApp version. `params` fill an approved template's body
+ * ({{1}} first name, {{2}} link); `text` is the plain message used when no
+ * template is set up (WhatsApp only delivers that inside a 24-hour chat).
+ */
+export function idCardWhatsApp(opts: {
+  mode: IdCardEmailMode;
+  kind: "STUDENT" | "TEAM";
+  name: string;
+  baseUrl: string;
+}): { text: string; params: Record<string, string> } {
+  const who = opts.kind === "TEAM" ? "Team" : "Student";
+  const first = opts.name.trim().split(/\s+/)[0] || "there";
+  if (opts.mode === "card") {
+    const link = `${opts.baseUrl}${idCardPagePath(opts.kind)}`;
+    return {
+      text: `Dear ${first}, your official Atomic Pathshala ${who} ID Card is attached. Print it at actual size or keep it on your phone.\nView your ID card: ${link}`,
+      params: { "1": first, "2": link },
+    };
+  }
+  const link = `${opts.baseUrl}${idCardPagePath(opts.kind, true)}`;
+  return {
+    text: `Dear ${first}, your photo is missing. Kindly upload your photo and re-download your ID card.\nUpload your photo: ${link}\nYour ID card updates automatically as soon as the photo is uploaded. — Atomic Pathshala`,
+    params: { "1": first, "2": link },
+  };
+}

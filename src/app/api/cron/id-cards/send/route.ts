@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendIdCardEmails } from "@/lib/id-card/mailer";
+import { idCardWhatsAppTemplates, sendIdCardEmails, sendIdCards } from "@/lib/id-card/mailer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,8 +24,23 @@ export async function GET(req: NextRequest) {
   try {
     const registeredBefore = new Date(Date.now() - 20 * 3_600_000);
     const team = await sendIdCardEmails("TEAM", { limit: 10, deadlineMs: 15_000, registeredBefore });
-    const students = await sendIdCardEmails("STUDENT", { limit: 40, deadlineMs: 35_000, registeredBefore });
-    return NextResponse.json({ success: true, team: { ...team, skipped: team.skipped.length }, students: { ...students, skipped: students.skipped.length } });
+    const students = await sendIdCardEmails("STUDENT", { limit: 40, deadlineMs: 28_000, registeredBefore });
+    // WhatsApp too, but only with approved templates (plain messages don't reach people outside a 24-hour chat).
+    const t = idCardWhatsAppTemplates();
+    const wa =
+      t.card && t.nophoto
+        ? {
+            team: await sendIdCards("TEAM", "whatsapp", { limit: 5, deadlineMs: 5_000, registeredBefore }),
+            students: await sendIdCards("STUDENT", "whatsapp", { limit: 10, deadlineMs: 5_000, registeredBefore }),
+          }
+        : null;
+    const brief = (r: { skipped: string[] }) => ({ ...r, skipped: r.skipped.length });
+    return NextResponse.json({
+      success: true,
+      team: brief(team),
+      students: brief(students),
+      whatsapp: wa ? { team: brief(wa.team), students: brief(wa.students) } : "templates not set up",
+    });
   } catch (error) {
     console.error("[cron/id-cards/send] failed:", error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Internal Error" }, { status: 500 });

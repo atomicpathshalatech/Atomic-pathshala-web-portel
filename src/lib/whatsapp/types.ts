@@ -7,6 +7,8 @@ export interface WhatsAppSendParams {
   templateParams?: Record<string, string | number>;
   bodyText: string;
   mediaUrl?: string;
+  /** A file sent with the message (template DOCUMENT header, or a plain document message). */
+  document?: { url: string; filename: string };
   idempotencyKey: string;
   metadata?: Record<string, any>;
 }

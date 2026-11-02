@@ -260,7 +260,12 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
         </p>
       </header>
 
-      {cardsReady && <SendIdCardsButton key={tab} kind={tab === "team" ? "TEAM" : "STUDENT"} />}
+      {cardsReady && (
+        <div className="flex flex-wrap items-start gap-3">
+          <SendIdCardsButton key={`${tab}-email`} kind={tab === "team" ? "TEAM" : "STUDENT"} channel="email" />
+          <SendIdCardsButton key={`${tab}-wa`} kind={tab === "team" ? "TEAM" : "STUDENT"} channel="whatsapp" />
+        </div>
+      )}
 
       {!cardsReady && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 text-amber-900 p-3 text-sm">

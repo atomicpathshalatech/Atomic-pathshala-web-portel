@@ -18,7 +18,7 @@ import { escapeHtml, renderIdCardHtml, type IdCardModel } from "../src/lib/id-ca
 import { qrSvg } from "../src/lib/id-card/qr";
 import { formatEnrollmentNumber, generateEnrollmentNumber, legacyEnrollmentSpelling } from "../src/lib/utils/id-generator";
 import { planNormalization } from "./normalize-enrollment-numbers";
-import { idCardEmail, idCardPagePath } from "../src/lib/id-card/email";
+import { idCardEmail, idCardPagePath, idCardWhatsApp } from "../src/lib/id-card/email";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -195,6 +195,15 @@ test("names are escaped in emails; page paths per kind", () => {
   assert.ok(!m.html.includes("<b>x</b>"));
   assert.equal(idCardPagePath("STUDENT", true), "/id-card#photo");
   assert.equal(idCardPagePath("TEAM"), "/team/id-card");
+});
+
+test("WhatsApp: card and photo-missing texts + template params", () => {
+  const c = idCardWhatsApp({ mode: "card", kind: "STUDENT", name: "Aman Kumar", baseUrl: "https://ap.atomicpathshala.in" });
+  assert.ok(c.text.startsWith("Dear Aman,") && c.text.includes("https://ap.atomicpathshala.in/id-card"));
+  assert.deepEqual(c.params, { "1": "Aman", "2": "https://ap.atomicpathshala.in/id-card" });
+  const n = idCardWhatsApp({ mode: "nophoto", kind: "TEAM", name: "Nigar Rao", baseUrl: "https://ap.atomicpathshala.in" });
+  assert.ok(n.text.includes("your photo is missing. Kindly upload your photo and re-download your ID card."));
+  assert.equal(n.params["2"], "https://ap.atomicpathshala.in/team/id-card#photo");
 });
 
 console.log(`\n${passed} passed`);

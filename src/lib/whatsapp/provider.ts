@@ -93,12 +93,17 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
       };
 
       if (params.templateName) {
+        const headerUrl = params.document?.url ?? params.mediaUrl;
         payload.template = {
           name: params.templateName,
-          languageCode: "en",
-          headerValues: params.mediaUrl ? [params.mediaUrl] : undefined,
+          languageCode: process.env.WHATSAPP_TEMPLATE_LANG || "en",
+          headerValues: headerUrl ? [headerUrl] : undefined,
+          ...(params.document ? { fileName: params.document.filename } : {}),
           bodyValues: params.templateParams ? Object.values(params.templateParams).map(String) : [],
         };
+      } else if (params.document) {
+        payload.type = "Document";
+        payload.data = { message: params.bodyText, mediaUrl: params.document.url, fileName: params.document.filename };
       } else {
         payload.data = {
           message: params.bodyText,
@@ -171,18 +176,26 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
         payload.template = {
           name: params.templateName,
           language: { code: process.env.WHATSAPP_TEMPLATE_LANG || "en" },
-          components: params.templateParams
-            ? [
-                {
-                  type: "body",
-                  parameters: Object.values(params.templateParams).map((val) => ({
-                    type: "text",
-                    text: String(val),
-                  })),
-                },
-              ]
-            : [],
+          components: [
+            ...(params.document
+              ? [{ type: "header", parameters: [{ type: "document", document: { link: params.document.url, filename: params.document.filename } }] }]
+              : []),
+            ...(params.templateParams
+              ? [
+                  {
+                    type: "body",
+                    parameters: Object.values(params.templateParams).map((val) => ({
+                      type: "text",
+                      text: String(val),
+                    })),
+                  },
+                ]
+              : []),
+          ],
         };
+      } else if (params.document) {
+        payload.type = "document";
+        payload.document = { link: params.document.url, filename: params.document.filename, caption: params.bodyText };
       } else {
         payload.type = "text";
         payload.text = {
