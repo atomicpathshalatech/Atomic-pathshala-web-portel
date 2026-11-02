@@ -72,7 +72,7 @@ function icon(name: IdCardIcon, cls = "ic") {
 }
 
 const FONTS_HREF =
-  "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Great+Vibes&display=block";
+  "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Mrs+Saint+Delafield&display=block";
 
 export function renderIdCardHtml(card: IdCardModel, opts: RenderOptions): string {
   const isStudent = card.kind === "STUDENT";
@@ -113,7 +113,7 @@ export function renderIdCardHtml(card: IdCardModel, opts: RenderOptions): string
 
   const signature = opts.signatureSrc
     ? `<img class="sig-img" src="${escapeHtml(opts.signatureSrc)}" alt="" />`
-    : `<div class="sig-script">${escapeHtml(signatory)}</div>`;
+    : `<div class="sig-script"><span>${escapeHtml(signatory)}</span><svg class="sig-flourish" viewBox="0 0 120 16" aria-hidden="true"><path d="M4 11 C 30 4, 62 15, 88 8 S 112 3, 117 6" fill="none" stroke="#13235c" stroke-width="1.3" stroke-linecap="round"/></svg></div>`;
 
   const pdf = opts.mode === "pdf";
 
@@ -174,11 +174,12 @@ ${pdf ? `html, body { width: 2.125in; height: 3.37in; overflow: hidden; backgrou
 .qr .q svg { width: 100%; height: 100%; display: block; }
 .qr p { margin-top: 4px; font-size: 7.6px; font-weight: 600; color: #0b1f4d; text-align: center; line-height: 1.2; }
 .sig { width: 132px; flex: none; text-align: center; color: #0a1f5c; }
-.sig-script { font-family: "Great Vibes", "Segoe Script", cursive; font-size: 27px; line-height: 1; height: 30px; color: #0a1f5c; }
+.sig-script { position: relative; height: 34px; }
+.sig-script span { position: absolute; left: 50%; top: 0; transform: translateX(-50%) rotate(-5deg); font-family: "Mrs Saint Delafield", "Segoe Script", cursive; font-size: 34px; line-height: 1; white-space: nowrap; color: #13235c; letter-spacing: .2px; }
+.sig-flourish { position: absolute; left: 14px; right: 6px; bottom: 0; width: calc(100% - 20px); height: 12px; }
 .sig-img { height: 34px; max-width: 128px; object-fit: contain; display: block; margin: -4px auto 0; }
 .sig .line { height: 1.2px; background: #0a2463; margin: 2px 4px 3px; }
 .sig .t1 { font-size: 8px; font-weight: 500; }
-.sig .t2 { font-size: 8px; font-weight: 600; }
 .foot { left: 0; bottom: 0; width: ${CARD_W}px; height: 96px; }
 .mark { right: 16px; bottom: 13px; width: 38px; height: 38px; border-radius: 10px; background: #fff; padding: 2px; box-shadow: 0 2px 6px rgba(2,6,23,.3); }
 .mark img { width: 34px; height: 34px; display: block; }
@@ -205,7 +206,7 @@ ${pdf ? `html, body { width: 2.125in; height: 3.37in; overflow: hidden; backgrou
   <div class="abs who"><div class="name" style="font-size:${nameFs}px">${escapeHtml(card.name)}</div><div class="bar"></div>${identity}</div>
   <div class="abs lower">
     <div class="info"><div class="rows">${rows}</div><div class="qr"><div class="q">${card.qrSvg}</div><p>Scan to Verify<br/>Profile</p></div></div>
-    <div class="sig">${signature}<div class="line"></div><div class="t1">Authorised Signatory</div><div class="t2">${escapeHtml(signatory)}</div></div>
+    <div class="sig">${signature}<div class="line"></div><div class="t1">Authorised Signatory</div></div>
   </div>
   <svg class="abs foot" viewBox="0 0 ${CARD_W} 96" preserveAspectRatio="none" aria-hidden="true">
     <defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1650d0"/><stop offset="1" stop-color="#0a2463"/></linearGradient></defs>
