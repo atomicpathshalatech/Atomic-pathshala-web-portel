@@ -5,8 +5,24 @@ import { prisma } from "@/lib/db";
 import { UnauthorizedError } from "@/lib/rbac/guard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { uploadFile, deleteFile, keyFromPublicUrl, StorageNotConfiguredError } from "@/lib/storage";
+import { photoProblem, sniffImage } from "@/lib/id-card/image-sniff";
 
-const MAX_BYTES = 3 * 1024 * 1024; // 3MB
+/** Full decode with the server image library — catches truncated / corrupt files a header check can't. */
+async function decodes(buffer: Buffer): Promise<boolean> {
+  let loadImage: typeof import("@napi-rs/canvas").loadImage;
+  try {
+    ({ loadImage } = await import("@napi-rs/canvas"));
+  } catch {
+    return true; // decoder unavailable on this host — the signature + size checks above still ran
+  }
+  try {
+    const img = await loadImage(buffer);
+    return img.width > 0 && img.height > 0;
+  } catch {
+    return false;
+  }
+}
+
 const ALLOWED_TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -50,10 +66,17 @@ export async function POST(request: NextRequest) {
 
     const extension = ALLOWED_TYPES[file.type];
     if (!extension) return apiError("Please upload a JPG, PNG or WEBP image.", 400);
-    if (file.size > MAX_BYTES) return apiError("Image is too large — please keep it under 3MB.", 400);
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const key = `profile-images/${session.user.id}/avatar.${extension}`;
+    // The real type and size come from the bytes, not the browser-sent MIME type.
+    const sniffed = sniffImage(buffer);
+    const problem = photoProblem(sniffed, buffer.length);
+    if (problem) return apiError(problem, 400);
+    if (sniffed!.type !== file.type) return apiError("The file type does not match its contents. Please upload a real JPG, PNG or WEBP photo.", 400);
+    if (!(await decodes(buffer))) return apiError("This image could not be read. Please try another photo.", 400);
+
+    // A new key per upload, so the new photo shows at once instead of a cached old one.
+    const key = `profile-images/${session.user.id}/avatar-${Date.now()}.${extension}`;
     const photoUrl = await uploadFile({ key, body: buffer, contentType: file.type });
 
     const previous = await prisma.user.findUnique({ where: { id: session.user.id }, select: { photoUrl: true } });
@@ -86,7 +109,10 @@ export async function POST(request: NextRequest) {
 
     if (previous?.photoUrl && previous.photoUrl !== photoUrl) {
       const oldKey = keyFromPublicUrl(previous.photoUrl);
-      if (oldKey && oldKey !== key) deleteFile(oldKey).catch(() => undefined);
+      if (oldKey && oldKey !== key) {
+        deleteFile(oldKey).catch(() => undefined);
+        prisma.fileAsset.updateMany({ where: { storageKey: oldKey }, data: { status: "DELETED" } }).catch(() => undefined);
+      }
     }
 
     await prisma.auditLog.create({

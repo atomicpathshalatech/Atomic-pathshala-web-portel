@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
+import { formatEnrollmentNumber } from "@/lib/utils/id-generator";
+import { PhotoPendingNotice } from "@/components/id-card/PhotoPendingNotice";
 import { formatDate } from "@/lib/utils/date";
 import { prisma } from "@/lib/db";
 
@@ -27,6 +29,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-stack-lg">
+      {!user.photoUrl && <PhotoPendingNotice />}
       {/* Profile header */}
       <section className="glass-card rounded-xl p-8 md:p-12">
         <div className="flex flex-col md:flex-row items-center gap-stack-lg md:gap-12">
@@ -109,7 +112,7 @@ export default async function ProfilePage() {
             <Field label="School / Institution" value={student.school || "—"} full />
             <Field label="Class" value={student.class ? `Class ${student.class}` : "—"} />
             <Field label="Target Exam" value={student.targetExam || "NEET"} />
-            <Field label="Enrollment Number" value={student.enrollmentNumber || "—"} />
+            <Field label="Enrollment Number" value={formatEnrollmentNumber(student.enrollmentNumber) || "—"} />
             <Field label="Student ID" value={student.studentIdCode || "—"} />
           </InfoCard>
 

@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getUserPermissionCodes } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
+import { generateUniqueEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
 import { isTeamStudentView } from "@/lib/auth/student-view";
 
 /**
@@ -52,7 +52,7 @@ export const requireStudentSession = cache(async function requireStudentSession(
       student = await prisma.student.create({
         data: {
           userId: session.user.id,
-          enrollmentNumber: generateEnrollmentNumber(),
+          enrollmentNumber: await generateUniqueEnrollmentNumber(prisma),
           studentIdCode: await generateUniqueStudentIdCode(prisma),
           fatherName: "Parent",
           motherName: "Parent",

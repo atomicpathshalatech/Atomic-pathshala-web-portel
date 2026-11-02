@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
+import { generateUniqueEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
 import { generateTempPassword, sendCredentialsEmail } from "@/lib/email/credentials";
 import { getLoginUrl } from "@/lib/email/app-url";
 import { notifyEnrollment } from "@/lib/email/enrollment";
@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
     }
 
     const hashedPassword = await bcrypt.hash(effectivePassword, 10);
-    const enrollmentNumber = generateEnrollmentNumber();
+    const enrollmentNumber = await generateUniqueEnrollmentNumber(prisma);
     const studentIdCode = await generateUniqueStudentIdCode(prisma);
 
     const result = await prisma.$transaction(async (tx) => {

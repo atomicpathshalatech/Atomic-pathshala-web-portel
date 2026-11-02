@@ -16,6 +16,7 @@ import { StudentFeedbackSection, type StudentFeedbackItem } from "@/components/s
 import { SocialLinksStrip } from "@/components/student/home/SocialLinksStrip";
 import { UpcomingTestCard, type UpcomingTestItem } from "@/components/student/home/UpcomingTestCard";
 import { isDppTest, testWindowEnd } from "@/lib/tests/schedule-rules";
+import { PhotoPendingNotice } from "@/components/id-card/PhotoPendingNotice";
 
 export const metadata: Metadata = {
   title: "Home — Atomic Pathshala",
@@ -374,6 +375,9 @@ export default async function StudentDashboardPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 pb-6 lg:max-w-5xl">
+      {/* ID card needs a profile photo — a quiet, persistent reminder (no popup). */}
+      {!student.user.photoUrl && <PhotoPendingNotice />}
+
       {/* 1. Top 16:9 Clickable Banner Carousel */}
       <StudentBannerCarousel banners={banners} />
 

@@ -95,6 +95,7 @@ model User {
   platformResourcesDeleted PlatformResource[] @relation("PlatformResourceDeletedBy")
   resourceAuditLogs        ResourceAuditLog[]
   student                Student?
+  idCards                IdCard[]
   teacher                Teacher?
   role                   Role?          @relation(fields: [roleId], references: [id])
   teacherApplicationsReviewed TeacherApplication[] @relation("TeacherApplicationReviewer")
@@ -3177,6 +3178,46 @@ model OtpChallenge {
   @@index([phone, purpose, createdAt])
   @@index([ipHash, createdAt])
   @@map("otp_challenges")
+}
+
+// Official ID card of a student or a team member (one per person per kind).
+// Holds only what no other table has: the random token the card QR opens
+// (/verify/<publicToken>), the card status (an admin can revoke it), whether
+// the photo may be shown on the public verify page, and an employee ID for
+// staff without a Teacher row (Teacher.employeeCode wins when it exists).
+// Name, photo, batch, rank etc. are always read live from their own tables.
+model IdCard {
+  id                String       @id @default(cuid())
+  userId            String
+  kind              IdCardKind
+  publicToken       String       @unique
+  status            IdCardStatus @default(ACTIVE)
+  showPhotoPublicly Boolean      @default(false)
+  employeeCode      String?      @unique
+  issuedAt          DateTime     @default(now())
+  reissuedAt        DateTime?
+  revokedAt         DateTime?
+  revokedById       String?
+  revokeReason      String?
+  lastDownloadedAt  DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind])
+  @@index([kind, status])
+  @@map("id_cards")
+}
+
+enum IdCardKind {
+  STUDENT
+  TEAM
+}
+
+enum IdCardStatus {
+  ACTIVE
+  REVOKED
 }
 
 model AuditLog {

@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { studentRegistrationSchema } from "@/lib/validation/student";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
+import { generateUniqueEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
 import { verifyLeadInviteToken } from "@/lib/integrations/lead-invite";
 import { notifyOutreachConversion } from "@/lib/integrations/outreach-webhook";
 import { PHONE_RE, normalisePhone, consumeVerifyToken } from "@/lib/otp";
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     // automatic enrollment and a team member can enroll them manually.
     const invitePayload = input.inviteToken ? verifyLeadInviteToken(input.inviteToken) : null;
 
-    const enrollmentNumber = generateEnrollmentNumber();
+    const enrollmentNumber = await generateUniqueEnrollmentNumber(prisma);
     const studentIdCode = await generateUniqueStudentIdCode(prisma);
 
     const created = await prisma.$transaction(async (tx) => {
@@ -217,7 +217,7 @@ async function registerViaOtp(input: z.infer<typeof otpRegisterSchema>) {
   if (!studentRole) throw new Error("STUDENT role is not seeded. Run `npm run db:seed` first.");
 
   const passwordHash = await bcrypt.hash(input.password, 12);
-  const enrollmentNumber = generateEnrollmentNumber();
+  const enrollmentNumber = await generateUniqueEnrollmentNumber(prisma);
   const studentIdCode = await generateUniqueStudentIdCode(prisma);
 
   const created = await prisma.$transaction(async (tx) => {

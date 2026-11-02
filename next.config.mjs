@@ -91,8 +91,11 @@ const nextConfig = {
     // every route that transitively imports branding.ts (finalization,
     // export-pdf, the cron safety net, pptx export, …).
     outputFileTracingIncludes: {
-      "*": ["public/brand/logo.png", "public/atomic-logo.png"],
+      "*": ["public/brand/logo.png", "public/atomic-logo.png", "public/brand/signature.*"],
       "/api/tests/[id]/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
+      // ID cards are printed to PDF by headless Chromium.
+      "/api/id-card/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/team/id-cards/[userId]/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
       // Whiteboard PDFs draw their ink with the board engine in headless Chromium.
       "/api/whiteboard/sessions/[id]/export-pdf": ["node_modules/@sparticuz/chromium/bin/**"],
       "/api/whiteboard/sessions/[id]/slides": ["node_modules/@sparticuz/chromium/bin/**"],

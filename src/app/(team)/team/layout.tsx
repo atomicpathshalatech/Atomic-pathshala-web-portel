@@ -80,6 +80,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     items: [
       { href: "/team/students", label: "Student Management", icon: "school", permission: PERMISSIONS.STUDENT_READ_ANY },
       { href: "/team/users", label: "Team & Staff Management", icon: "badge", permission: PERMISSIONS.USER_READ },
+      { href: "/team/id-cards", label: "ID Cards", icon: "id_card", permission: PERMISSIONS.USER_STATUS_MANAGE },
       { href: "/team/invitations", label: "Staff Invitations", icon: "mail", permission: PERMISSIONS.STAFF_INVITE },
       { href: "/team/roles", label: "Roles & Permissions", icon: "security", permission: PERMISSIONS.ROLE_MANAGE },
       { href: "/team/devices", label: "Login Devices", icon: "devices", permission: PERMISSIONS.SECURITY_DEVICE_MANAGE },
@@ -121,6 +122,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
   {
     title: "My Account",
     items: [
+      { href: "/team/id-card", label: "My ID Card", icon: "id_card", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
       { href: "/team/documents", label: "My Documents", icon: "badge", permission: PERMISSIONS.DOCUMENT_UPLOAD_SELF },
       { href: "/team/compliance", label: "Compliance", icon: "gavel", permission: PERMISSIONS.PENALTY_READ_SELF },
     ],
