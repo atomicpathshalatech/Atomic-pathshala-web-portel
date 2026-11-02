@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn, getSession } from "next-auth/react";
@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { loginSchema, normaliseLoginIdentifier, type LoginInput } from "@/lib/validation/auth";
-import { sendMsg91Otp, verifyMsg91Otp } from "@/lib/msg91-widget";
+import { verifyWithMsg91Widget } from "@/lib/msg91-widget";
 import { detectDeviceMeta } from "@/lib/security/device-client";
 
 interface ConflictingSession {
@@ -27,15 +27,6 @@ export function LoginForm() {
   // Log in by OTP (default) or by password.
   const [method, setMethod] = useState<"otp" | "password">("otp");
   const [otpIdentifier, setOtpIdentifier] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [otpStage, setOtpStage] = useState<"enter" | "code">("enter");
-  const [otpNote, setOtpNote] = useState<string | null>(null);
-  const [resendIn, setResendIn] = useState(0);
-  useEffect(() => {
-    if (resendIn <= 0) return;
-    const t = setTimeout(() => setResendIn((v) => v - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendIn]);
 
   // Device replacement prompt modal state
   const [replacementModal, setReplacementModal] = useState<{
@@ -116,43 +107,26 @@ export function LoginForm() {
   }
 
   // ---- Log in by OTP ---------------------------------------------------------
-  // The code goes to the student's MOBILE NUMBER by SMS (MSG91, the same as at
-  // sign-up) — first send and resend alike. Not every student can open email.
-  async function sendOtp(resend = false) {
+  // Exactly the sign-up OTP: MSG91's own OTP window texts the code to the
+  // student's MOBILE NUMBER, handles its captcha, the code entry and "resend",
+  // and returns a token; our server confirms the token belongs to this number.
+  // Same on the website, iPhone, the Windows app and the Android app.
+  // (A custom code box needed MSG91's captcha set up separately — it failed
+  // with "invalid captcha" in the app.)
+  async function loginWithOtp() {
     const id = normaliseLoginIdentifier(otpIdentifier.trim());
     if (id.kind !== "phone") {
       toast.error("Enter your 10-digit mobile number.");
       return;
     }
     setSubmitting(true);
-    setOtpNote(null);
     try {
-      await sendMsg91Otp(`91${id.value}`);
-      setOtpNote(`OTP ${resend ? "sent again" : "sent"} to +91 ${id.value.slice(0, 2)}******${id.value.slice(-2)} by SMS.`);
-      setOtpStage("code");
-      setOtpCode("");
-      setResendIn(45);
-    } catch (err) {
-      toast.error((err as Error).message || "Could not send the OTP. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function verifyOtp() {
-    const code = otpCode.trim();
-    if (!/^\d{4,8}$/.test(code)) {
-      toast.error("Enter the OTP you received.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const smsToken = await verifyMsg91Otp(code).catch((err: Error) => {
-        toast.error(err.message || "That OTP is not right. Please try again.");
+      const smsToken = await verifyWithMsg91Widget(`91${id.value}`).catch((err: Error) => {
+        toast.error(err.message || "OTP verification was cancelled or failed.");
         return "";
       });
       if (!smsToken) return;
-      await executeSignIn("otp", { identifier: otpIdentifier.trim(), smsToken });
+      await executeSignIn("otp", { identifier: id.value, smsToken });
     } catch {
       toast.error("Something went wrong. Please try again.");
     } finally {
@@ -222,7 +196,7 @@ export function LoginForm() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              void (otpStage === "enter" ? sendOtp() : verifyOtp());
+              void loginWithOtp();
             }}
             className="space-y-5"
             noValidate
@@ -236,55 +210,21 @@ export function LoginForm() {
                 type="text"
                 autoComplete="username"
                 value={otpIdentifier}
-                onChange={(e) => {
-                  setOtpIdentifier(e.target.value);
-                  if (otpStage === "code") {
-                    setOtpStage("enter");
-                    setOtpNote(null);
-                  }
-                }}
+                onChange={(e) => setOtpIdentifier(e.target.value)}
                 className="w-full rounded-xl border border-outline-variant/40 bg-surface px-4 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
                 inputMode="numeric"
                 placeholder="98XXXXXXXX"
               />
             </div>
 
-            {otpStage === "code" && (
-              <div className="space-y-1.5">
-                <label htmlFor="otp-code" className="font-label-md text-label-md text-on-surface">
-                  Enter OTP
-                </label>
-                <input
-                  id="otp-code"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={8}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                  className="w-full rounded-xl border border-outline-variant/40 bg-surface px-4 py-3 font-body-md text-body-md text-on-surface tracking-[0.4em] text-center focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="••••••"
-                />
-                {otpNote && <p className="text-label-sm font-label-sm text-on-surface-variant">{otpNote}</p>}
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    disabled={resendIn > 0 || submitting}
-                    onClick={() => void sendOtp(true)}
-                    className="font-label-sm text-label-sm text-primary hover:underline disabled:text-on-surface-variant disabled:no-underline"
-                  >
-                    {resendIn > 0 ? `Resend OTP in ${resendIn}s` : "Resend OTP"}
-                  </button>
-                </div>
-              </div>
-            )}
+            <p className="text-label-sm font-label-sm text-on-surface-variant">The OTP comes to this number by SMS.</p>
 
             <button
               type="submit"
               disabled={submitting}
               className="w-full bg-primary text-on-primary font-label-md text-label-md px-8 py-3.5 rounded-xl hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {submitting ? "Please wait…" : otpStage === "enter" ? "Send OTP" : "Verify & Log In"}
+              {submitting ? "Please wait…" : "Get OTP & Log In"}
             </button>
           </form>
         ) : (
