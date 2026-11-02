@@ -101,7 +101,13 @@ function joinRtmpUrl(serverUrl, streamKey) {
 }
 
 /** FFmpeg arguments for one run. Pure — unit tested. */
-function buildFfmpegArgs({ encoder, serverUrl, streamKey, fps = 30, profile = "1080p", audioKbps = 128 }) {
+/**
+ * recordPath: also keep this run's class video in a local file (the same
+ * encoded stream, no second encode) — the class recording, uploaded after the
+ * class so it plays in Atomic's own player. Written with the tee muxer; the
+ * file side may fail without stopping the stream (onfail=ignore).
+ */
+function buildFfmpegArgs({ encoder, serverUrl, streamKey, fps = 30, profile = "1080p", audioKbps = 128, recordPath = null }) {
   const p = PROFILES[profile] || PROFILES["1080p"];
   if (p.fps) fps = Math.min(fps, p.fps);
   if (p.audioKbps) audioKbps = p.audioKbps;
@@ -126,9 +132,31 @@ function buildFfmpegArgs({ encoder, serverUrl, streamKey, fps = 30, profile = "1
     ...rateControlArgs(encoder, p.videoKbps, fps),
     "-force_key_frames", "expr:gte(t,n_forced*2)",
     "-c:a", "aac", "-b:a", `${audioKbps}k`, "-ar", "48000", "-ac", "2",
-    "-f", "flv",
-    "-flvflags", "no_duration_filesize",
-    joinRtmpUrl(serverUrl, streamKey),
+    ...(recordPath
+      ? [
+          "-flags", "+global_header",
+          "-f", "tee",
+          `[f=flv:flvflags=no_duration_filesize]${joinRtmpUrl(serverUrl, streamKey)}|[f=matroska:onfail=ignore]${String(recordPath).replace(/\\/g, "/")}`,
+        ]
+      : ["-f", "flv", "-flvflags", "no_duration_filesize", joinRtmpUrl(serverUrl, streamKey)]),
+  ];
+}
+
+/**
+ * The class recording's upload copy: 720p, ~1.5 Mbps, AAC 96k, fast start
+ * (plays while downloading), a keyframe every 2 s — ~0.7 GB per hour instead
+ * of ~2.7 GB at the live 1080p bitrate. Same hardware encoder as the stream.
+ */
+function buildArchiveArgs({ encoder }) {
+  const pix = encoder === "libopenh264" || encoder === "h264_nvenc" ? "yuv420p" : "nv12";
+  return [
+    "-map", "0:v:0",
+    "-map", "0:a:0?",
+    "-vf", `scale=-2:720:flags=bicubic,format=${pix}`,
+    ...rateControlArgs(encoder, 1500, 30),
+    "-force_key_frames", "expr:gte(t,n_forced*2)",
+    "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-ac", "2",
+    "-movflags", "+faststart",
   ];
 }
 
@@ -163,7 +191,7 @@ const STALL_MS = 20_000;
  *   { state: "starting" | "streaming" | "reconnecting" | "stopped" | "failed", generation, encoder, fps, bitrateKbps, droppedFrames, error }
  */
 class EncoderRun extends EventEmitter {
-  constructor({ runId, ffmpegPath, encoder, serverUrl, streamKey, fps, profile, spawnImpl = spawn }) {
+  constructor({ runId, ffmpegPath, encoder, serverUrl, streamKey, fps, profile, recordDir = null, spawnImpl = spawn }) {
     super();
     this.runId = runId;
     this.ffmpegPath = ffmpegPath;
@@ -186,6 +214,8 @@ class EncoderRun extends EventEmitter {
     this.lastStepUpAt = 0;
     this.recentExits = [];
     this.spawnImpl = spawnImpl;
+    // Local copy of the class (one part file per FFmpeg run: a reconnect starts a fresh one).
+    this.recordDir = recordDir;
     this.generation = 0;
     this.state = "starting";
     this.proc = null;
@@ -227,7 +257,8 @@ class EncoderRun extends EventEmitter {
   }
 
   spawnProcess() {
-    const args = buildFfmpegArgs({ encoder: this.encoder, serverUrl: this.serverUrl, streamKey: this.streamKey, fps: this.fps, profile: this.profile });
+    const recordPath = this.recordDir ? require("node:path").join(this.recordDir, `part-${String(this.generation).padStart(3, "0")}.mkv`) : null;
+    const args = buildFfmpegArgs({ encoder: this.encoder, serverUrl: this.serverUrl, streamKey: this.streamKey, fps: this.fps, profile: this.profile, recordPath });
     const proc = this.spawnImpl(this.ffmpegPath, args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     this.proc = proc;
     this.lastProgressAt = Date.now();
@@ -447,6 +478,7 @@ module.exports = {
   QUALITY_LADDER,
   probeEncoders,
   buildFfmpegArgs,
+  buildArchiveArgs,
   parseProgressBlock,
   joinRtmpUrl,
   redact,

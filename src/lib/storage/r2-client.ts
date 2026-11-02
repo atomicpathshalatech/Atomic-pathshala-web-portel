@@ -55,7 +55,7 @@ export class R2StorageNotConfiguredError extends Error {
   }
 }
 
-function getR2Credentials() {
+export function getR2Credentials() {
   // Deliberately R2_* / CLOUDFLARE_ACCOUNT_ID ONLY — no STORAGE_* fallback and
   // no STORAGE_ENDPOINT override. This file exists specifically to talk to
   // Cloudflare R2 (the presigned-URL direct-upload flow); the generic

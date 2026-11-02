@@ -145,4 +145,10 @@ function registerStageIpc({ ipcMain, trustedSender, preloadPath }) {
   });
 }
 
-module.exports = { registerStageIpc, closeStage };
+/** The class the stage is sending (from its /obs-stage/<scheduleId> path), for the class recording. */
+function currentStageScheduleId() {
+  const m = stage?.stagePath?.match(/^\/obs-stage\/([^/?#]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+module.exports = { registerStageIpc, closeStage, currentStageScheduleId };

@@ -21,6 +21,8 @@ const { existsSync } = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { EncoderRun, probeEncoders } = require("./encoder");
+const { newRecordingDir, queueRecording, initRecordingUploads } = require("./recording-upload");
+const { currentStageScheduleId } = require("./stage-window");
 
 function ffmpegPath() {
   if (process.env.ATOMIC_FFMPEG_PATH) return process.env.ATOMIC_FFMPEG_PATH;
@@ -72,6 +74,9 @@ function registerEncoderIpc({ ipcMain, trustedSender }) {
     if (!trustedSender(event)) throw new Error("untrusted sender");
   };
 
+  // Unfinished recording uploads carry on (e.g. the app was closed mid-upload).
+  initRecordingUploads({ ffmpegPath: ffmpegPath() });
+
   ipcMain.handle("encoder:probe", (event) => {
     guard(event);
     return probe();
@@ -87,8 +92,21 @@ function registerEncoderIpc({ ipcMain, trustedSender }) {
     if (!/^rtmps?:\/\//i.test(opts.serverUrl)) throw new Error("serverUrl must be rtmp(s)://");
     if (current) await stopCurrent();
 
+    // The class recording: a local copy of what is streamed, uploaded to the
+    // class after it (recording-upload.js). Which class: the page says, or the
+    // stage window's own /obs-stage/<scheduleId>.
+    const runId = randomUUID();
+    const scheduleId = (typeof opts.scheduleId === "string" && /^[a-zA-Z0-9_-]{6,64}$/.test(opts.scheduleId) && opts.scheduleId) || currentStageScheduleId();
+    let recordDir = null;
+    try {
+      recordDir = scheduleId ? newRecordingDir(scheduleId, runId) : null;
+    } catch (err) {
+      encoderLog(`recording folder not created: ${err.message}`);
+    }
+
     const run = new EncoderRun({
-      runId: randomUUID(),
+      runId,
+      recordDir,
       ffmpegPath: ffmpegPath(),
       encoder: p.chosen,
       serverUrl: opts.serverUrl,
@@ -116,7 +134,7 @@ function registerEncoderIpc({ ipcMain, trustedSender }) {
       }
     });
     const blockerId = powerSaveBlocker.start("prevent-app-suspension");
-    current = { run, sender, blockerId };
+    current = { run, sender, blockerId, scheduleId, recordDir, encoder: p.chosen };
     // Stop streaming if the page that owns the run goes away.
     sender.once("destroyed", () => {
       if (current && current.run === run) stopCurrent();
@@ -157,6 +175,8 @@ async function stopCurrent() {
     await c.run.stop();
   } finally {
     if (powerSaveBlocker.isStarted(c.blockerId)) powerSaveBlocker.stop(c.blockerId);
+    // The class is over (or the stream stopped): join + upload its recording.
+    if (c.recordDir) queueRecording({ scheduleId: c.scheduleId, dir: c.recordDir, encoder: c.encoder });
   }
 }
 

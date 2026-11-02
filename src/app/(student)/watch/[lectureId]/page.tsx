@@ -193,22 +193,10 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
         }
       }
 
-      // Prefer the archived YouTube (unlisted) video once it's fully
-      // uploaded — the student plays it right here via AtomicVideoPlayer's
-      // existing YouTube-embed auto-detection (native speed control etc.,
-      // no redirect to youtube.com). Falls back to direct YouTube live video ID
-      // or direct R2 recording whenever the archive isn't done yet.
-      if (
-        schedule.liveWhiteboardSession?.youtubeArchiveStatus === "COMPLETED" &&
-        schedule.liveWhiteboardSession.youtubeArchiveVideoUrl
-      ) {
-        resolvedRecUrl = schedule.liveWhiteboardSession.youtubeArchiveVideoUrl;
-      } else if (schedule.liveWhiteboardSession?.youtubeVideoId) {
-        resolvedRecUrl = `https://www.youtube.com/watch?v=${schedule.liveWhiteboardSession.youtubeVideoId}`;
-      } else if (
-        schedule.liveWhiteboardSession?.recordingStorageKey &&
-        schedule.liveWhiteboardSession.recordingStatus === "READY"
-      ) {
+      // Atomic's own recording first (uploaded by the Teacher app after the
+      // class): it plays in our own player — no YouTube branding or links.
+      // YouTube (archive, then the live video) only while that isn't there.
+      if (schedule.liveWhiteboardSession?.recordingStorageKey && schedule.liveWhiteboardSession.recordingStatus === "READY") {
         try {
           resolvedRecUrl = await createPresignedDownloadUrl({
             key: schedule.liveWhiteboardSession.recordingStorageKey,
@@ -217,6 +205,11 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
         } catch (e) {
           console.error("Failed to create presigned download URL for recording", e);
         }
+      }
+      if (!resolvedRecUrl && schedule.liveWhiteboardSession?.youtubeArchiveStatus === "COMPLETED" && schedule.liveWhiteboardSession.youtubeArchiveVideoUrl) {
+        resolvedRecUrl = schedule.liveWhiteboardSession.youtubeArchiveVideoUrl;
+      } else if (!resolvedRecUrl && schedule.liveWhiteboardSession?.youtubeVideoId) {
+        resolvedRecUrl = `https://www.youtube.com/watch?v=${schedule.liveWhiteboardSession.youtubeVideoId}`;
       }
 
       // A real class was matched, but there is no playable recording yet -
