@@ -10,6 +10,7 @@ import { formatCardDate } from "@/lib/id-card/format";
 import { formatEnrollmentNumber } from "@/lib/utils/id-generator";
 import { AdminIdCardActions } from "@/components/id-card/AdminIdCardActions";
 import { TeamCardDetailsEditor } from "@/components/id-card/TeamCardDetailsEditor";
+import { SendIdCardsButton } from "@/components/id-card/SendIdCardsButton";
 
 /** A stored date as yyyy-mm-dd in IST, for a date input. */
 const istYmd = (d: Date | null | undefined) => (d ? new Date(d.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10) : "");
@@ -253,7 +254,13 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
       <header>
         <h1 className="font-headline-lg text-headline-lg text-on-surface font-black">ID Cards</h1>
         <p className="text-sm text-on-surface-variant">Who has a card, whose photo is missing, and revoke / reissue / print any card.</p>
+        <p className="text-xs text-on-surface-variant mt-1">
+          New students and team members get their card by email automatically the day after they join (or an &quot;upload your photo&quot; note
+          until they add one; the card follows the day after the photo).
+        </p>
       </header>
+
+      {cardsReady && <SendIdCardsButton key={tab} kind={tab === "team" ? "TEAM" : "STUDENT"} />}
 
       {!cardsReady && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 text-amber-900 p-3 text-sm">

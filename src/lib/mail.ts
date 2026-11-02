@@ -6,11 +6,15 @@ import "server-only";
  * returns `{ delivered: false }` so the caller can fall back to showing the
  * link in the admin UI. No new npm package, no SMTP client.
  */
+export type MailAttachment = { filename: string; content: Buffer };
+
 export async function sendMail(opts: {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  /** Files attached to the email (e.g. an ID card PDF). */
+  attachments?: MailAttachment[];
 }): Promise<{ delivered: boolean; reason?: string }> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.MAIL_FROM || "Atomic Pathshala <noreply@atomicpathshala.in>";
@@ -36,6 +40,9 @@ export async function sendMail(opts: {
         subject: opts.subject,
         html: opts.html,
         text: opts.text,
+        ...(opts.attachments?.length
+          ? { attachments: opts.attachments.map((a) => ({ filename: a.filename, content: a.content.toString("base64") })) }
+          : {}),
       }),
     });
     if (!res.ok) {

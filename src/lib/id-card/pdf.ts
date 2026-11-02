@@ -7,10 +7,27 @@ import { launchBrowser } from "@/lib/pdf/html-to-pdf";
  * vector; only the photo and logo are images.
  */
 export async function renderCardPdf(html: string, opts: { timeoutMs?: number } = {}): Promise<Buffer> {
+  const printer = await openCardPrinter(opts);
+  try {
+    return await printer.render(html);
+  } finally {
+    await printer.close();
+  }
+}
+
+/** One browser for many cards (bulk email): render() per card, close() once. */
+export async function openCardPrinter(opts: { timeoutMs?: number } = {}) {
   const timeout = opts.timeoutMs ?? 45_000;
   const browser = await launchBrowser();
+  return {
+    render: (html: string) => printOne(browser, html, timeout),
+    close: () => browser.close().catch(() => undefined),
+  };
+}
+
+async function printOne(browser: Awaited<ReturnType<typeof launchBrowser>>, html: string, timeout: number): Promise<Buffer> {
+  const page = await browser.newPage();
   try {
-    const page = await browser.newPage();
     await page.emulateMediaType("print");
     await page.setContent(html, { waitUntil: "networkidle0", timeout });
     await page.evaluate(() => document.fonts.ready);
@@ -24,7 +41,7 @@ export async function renderCardPdf(html: string, opts: { timeoutMs?: number } =
     const pdf = await page.pdf({ width: "2.125in", height: "3.37in", printBackground: true, pageRanges: "1", timeout });
     return Buffer.from(pdf);
   } finally {
-    await browser.close().catch(() => undefined);
+    await page.close().catch(() => undefined);
   }
 }
 

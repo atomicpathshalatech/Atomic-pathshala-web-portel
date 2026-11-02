@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { sendMail } from "@/lib/mail";
+import { sendMail, type MailAttachment } from "@/lib/mail";
 import type { EmailCategory, RecipientType } from "@prisma/client";
 
 export type DispatchEmailInput = {
@@ -27,6 +27,7 @@ export type DispatchEmailInput = {
   text?: string;
   templateId?: string | null;
   campaignId?: string | null;
+  attachments?: MailAttachment[];
 };
 
 export type DispatchEmailResult =
@@ -78,7 +79,7 @@ export async function dispatchEmail(input: DispatchEmailInput): Promise<Dispatch
       const reclaimedId = await reclaimFailedLog(input.idempotencyKey);
       if (reclaimedId) {
         console.info(`[email] retrying previously-failed send for idempotency key: ${input.idempotencyKey}`);
-        return sendAndFinalize(reclaimedId, input.to, input.subject, input.html, input.text);
+        return sendAndFinalize(reclaimedId, input.to, input.subject, input.html, input.text, input.attachments);
       }
       console.info(`[email] duplicate suppressed for idempotency key: ${input.idempotencyKey}`);
       const existing = await prisma.emailLog
@@ -90,7 +91,7 @@ export async function dispatchEmail(input: DispatchEmailInput): Promise<Dispatch
     return { outcome: "failed", logId: null, reason: "LOG_CREATE_ERROR" };
   }
 
-  return sendAndFinalize(logId, input.to, input.subject, input.html, input.text);
+  return sendAndFinalize(logId, input.to, input.subject, input.html, input.text, input.attachments);
 }
 
 async function sendAndFinalize(
@@ -98,10 +99,11 @@ async function sendAndFinalize(
   to: string,
   subject: string,
   html: string,
-  text?: string
+  text?: string,
+  attachments?: MailAttachment[]
 ): Promise<DispatchEmailResult> {
   try {
-    const result = await sendMail({ to, subject, html, text });
+    const result = await sendMail({ to, subject, html, text, attachments });
     if (result.delivered) {
       await prisma.emailLog
         .update({ where: { id: logId }, data: { status: "SENT", sentAt: new Date() } })

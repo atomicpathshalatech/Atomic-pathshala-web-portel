@@ -96,6 +96,8 @@ const nextConfig = {
       // ID cards are printed to PDF by headless Chromium.
       "/api/id-card/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
       "/api/team/id-cards/[userId]/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/team/id-cards/send": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/cron/id-cards/send": ["node_modules/@sparticuz/chromium/bin/**"],
       // Whiteboard PDFs draw their ink with the board engine in headless Chromium.
       "/api/whiteboard/sessions/[id]/export-pdf": ["node_modules/@sparticuz/chromium/bin/**"],
       "/api/whiteboard/sessions/[id]/slides": ["node_modules/@sparticuz/chromium/bin/**"],

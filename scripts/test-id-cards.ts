@@ -18,6 +18,7 @@ import { escapeHtml, renderIdCardHtml, type IdCardModel } from "../src/lib/id-ca
 import { qrSvg } from "../src/lib/id-card/qr";
 import { formatEnrollmentNumber, generateEnrollmentNumber, legacyEnrollmentSpelling } from "../src/lib/utils/id-generator";
 import { planNormalization } from "./normalize-enrollment-numbers";
+import { idCardEmail, idCardPagePath } from "../src/lib/id-card/email";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -173,6 +174,27 @@ test("QR svg encodes exactly the verify URL's modules, filled (no strokes)", () 
     for (let i = 0; i < run; i++) grid[y * n + x + i] = 1;
   }
   assert.deepEqual(grid, Array.from(qr.modules.data, (v) => (v ? 1 : 0)));
+});
+
+console.log("emails");
+test("card email: attachment wording + card page link", () => {
+  const m = idCardEmail({ mode: "card", kind: "STUDENT", name: "Aman Kumar", baseUrl: "https://ap.atomicpathshala.in" });
+  assert.match(m.subject, /Student ID Card/);
+  assert.ok(m.html.includes('https://ap.atomicpathshala.in/id-card"') && m.html.includes("attached"));
+  assert.ok(m.html.includes("Dear Aman,"));
+  assert.ok(!m.html.includes("photo is missing"));
+});
+test("photo-missing email: exact message + direct upload link", () => {
+  const m = idCardEmail({ mode: "nophoto", kind: "TEAM", name: "Nigar Rao", baseUrl: "https://ap.atomicpathshala.in" });
+  assert.ok(m.html.includes("Your photo is missing. Kindly upload your photo and re-download your ID card."));
+  assert.ok(m.html.includes("https://ap.atomicpathshala.in/team/id-card#photo"));
+  assert.ok(m.text.includes("/team/id-card#photo"));
+});
+test("names are escaped in emails; page paths per kind", () => {
+  const m = idCardEmail({ mode: "card", kind: "STUDENT", name: "<b>x</b>", baseUrl: "https://a.in" });
+  assert.ok(!m.html.includes("<b>x</b>"));
+  assert.equal(idCardPagePath("STUDENT", true), "/id-card#photo");
+  assert.equal(idCardPagePath("TEAM"), "/team/id-card");
 });
 
 console.log(`\n${passed} passed`);
