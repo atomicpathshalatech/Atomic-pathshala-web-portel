@@ -1058,6 +1058,7 @@ export function UnifiedChapterScheduleTimeline({
                         <button
                           type="button"
                           onClick={() => setStartClassTarget(item.lectureData!)}
+                          title={item.lectureData.timetableOnly ? "Class from the batch timetable" : undefined}
                           className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-500/20 transition cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5 fill-white" />
@@ -1076,7 +1077,7 @@ export function UnifiedChapterScheduleTimeline({
                           <FileText className="w-3.5 h-3.5 text-blue-600" />
                           <span>Notes</span>
                         </a>
-                      ) : (
+                      ) : item.lectureData.timetableOnly ? null : (
                         <button
                           type="button"
                           onClick={() => {
@@ -1124,8 +1125,8 @@ export function UnifiedChapterScheduleTimeline({
                     </Link>
                   )}
 
-                  {/* Three Dot Action Dropdown */}
-                  {canEdit && (
+                  {/* Three Dot Action Dropdown (a timetable-only class is edited in the batch schedule) */}
+                  {canEdit && !item.lectureData?.timetableOnly && (
                     <div className="relative">
                       <button
                         type="button"
@@ -2054,7 +2055,7 @@ export function UnifiedChapterScheduleTimeline({
         <UnifiedStartClassModal
           isOpen={!!startClassTarget}
           onClose={() => setStartClassTarget(null)}
-          scheduleId={startClassTarget.id}
+          scheduleId={startClassTarget.scheduleId || startClassTarget.id}
           title={startClassTarget.title}
           subjectName={chapterTitle}
           assignedBatches={assignedBatches}

@@ -9,6 +9,10 @@ import { isMissingTable, teamDesignation } from "@/lib/id-card/data";
 import { formatCardDate } from "@/lib/id-card/format";
 import { formatEnrollmentNumber } from "@/lib/utils/id-generator";
 import { AdminIdCardActions } from "@/components/id-card/AdminIdCardActions";
+import { TeamCardDetailsEditor } from "@/components/id-card/TeamCardDetailsEditor";
+
+/** A stored date as yyyy-mm-dd in IST, for a date input. */
+const istYmd = (d: Date | null | undefined) => (d ? new Date(d.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10) : "");
 
 export const metadata: Metadata = { title: "ID Cards" };
 export const dynamic = "force-dynamic";
@@ -75,7 +79,7 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
             department: true,
             contractStart: true,
             role: { select: { label: true } },
-            teacher: { select: { employeeCode: true, subjects: true, department: true } },
+            teacher: { select: { employeeCode: true, subjects: true, department: true, dob: true } },
             ...(cards ? { idCards: { where: { kind: "TEAM" as const }, ...cardSelect } } : {}),
           },
         }),
@@ -117,7 +121,10 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
             </div>
           </td>
           <td className={td}>{empId ?? "—"}</td>
-          <td className={td}>{designation ?? "—"}</td>
+          <td className={td}>
+            {designation ?? "—"}
+            <p className="text-on-surface-variant mt-0.5">Joined {u.contractStart ? formatCardDate(u.contractStart) : <span className="text-amber-700 font-semibold">not set</span>}</p>
+          </td>
           <td className={td}>{active ? "Active" : <span className="text-rose-700 font-semibold">{u.status}</span>}</td>
           <td className={td}>
             {!cardsReady ? "—" : card ? <span className={card.status === "REVOKED" ? "text-rose-700 font-bold" : "text-emerald-700 font-bold"}>{card.status === "REVOKED" ? "Revoked" : "Active"}</span> : "Not issued"}
@@ -126,15 +133,25 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
           </td>
           <td className={td}>{missing.length ? <span className="text-amber-700 font-semibold">{missing.join(", ")}</span> : <span className="text-emerald-700">Complete</span>}</td>
           <td className={td}>
-            {cardsReady && active && (
-              <AdminIdCardActions
+            <div className="space-y-1.5">
+              <TeamCardDetailsEditor
                 userId={u.id}
-                kind="TEAM"
-                status={card?.status ?? null}
-                printable={missing.length === 0}
-                canAssignEmployeeId={!empId}
+                name={u.name}
+                joiningDate={istYmd(u.contractStart)}
+                designation={u.position ?? ""}
+                dob={istYmd(u.teacher?.dob)}
+                hasTeacherProfile={Boolean(u.teacher)}
               />
-            )}
+              {cardsReady && active && (
+                <AdminIdCardActions
+                  userId={u.id}
+                  kind="TEAM"
+                  status={card?.status ?? null}
+                  printable={missing.length === 0}
+                  canAssignEmployeeId={!empId}
+                />
+              )}
+            </div>
           </td>
         </tr>
       );

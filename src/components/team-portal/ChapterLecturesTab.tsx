@@ -23,6 +23,10 @@ export interface LectureItem {
   language: string;
   order: number;
   status: string;
+  /** The batch class this lecture runs as — Start Class opens exactly this one. */
+  scheduleId?: string | null;
+  /** A class added straight to the batch timetable (no lecture): id is the class id; lecture actions don't apply. */
+  timetableOnly?: boolean;
   createdAt: string | Date;
   teacher?: {
     user?: {

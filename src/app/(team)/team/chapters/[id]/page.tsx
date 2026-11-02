@@ -102,8 +102,8 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
 
   // Date, time and state of each lecture come from its class in the batch
   // timetable, so this page and My Schedule always agree.
-  const scheduled = await lecturesAsScheduled(lectures, scheduledInBatches.map((b) => b.id));
-  const asScheduled = (l: (typeof lectures)[number]) => scheduled.get(l.id)!;
+  const scheduled = await lecturesAsScheduled(lectures, scheduledInBatches.map((b) => b.id), new Date(), chapter.id);
+  const asScheduled = (l: (typeof lectures)[number]) => scheduled.byLecture.get(l.id)!;
   // Each lecture's YouTube live link saved on its classes (shown to whoever manages the schedule).
   const liveLinks = canManageSchedule ? await lectureLiveLinks(lectures.map((l) => l.id)) : new Map<string, string>();
 
@@ -220,7 +220,8 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
         courseTitle={chapter.subject.course?.title}
         teacherName={teacherName}
         teacherPhoto={teacherPhoto}
-        initialLectures={lectures.map((l) => ({
+        initialLectures={[
+          ...lectures.map((l) => ({
           id: l.id,
           title: l.title,
           videoUrl: l.videoUrl,
@@ -232,7 +233,22 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           order: l.order,
           createdAt: l.createdAt,
           teacher: l.teacher,
-        }))}
+          })),
+          // Classes added straight to the batch timetable for this chapter (no lecture of their own).
+          ...scheduled.timetableOnly.map((c, i) => ({
+            ...c,
+            id: c.scheduleId,
+            videoUrl: "",
+            liveYoutubeUrl: null,
+            educatorVideoUrl: null,
+            slidesUrl: null,
+            language: "",
+            order: lectures.length + i + 1,
+            createdAt: c.scheduledDate ?? new Date(),
+            teacher: null,
+            timetableOnly: true,
+          })),
+        ]}
         initialDpps={dpps.map((d) => ({
           id: d.id,
           code: d.code,

@@ -12,7 +12,19 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reinstate"), kind: z.enum(["STUDENT", "TEAM"]) }),
   z.object({ action: z.literal("reissue"), kind: z.enum(["STUDENT", "TEAM"]) }),
   z.object({ action: z.literal("assignEmployeeId"), kind: z.literal("TEAM") }),
+  z.object({
+    action: z.literal("setDetails"),
+    kind: z.literal("TEAM"),
+    joiningDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    designation: z.string().trim().max(120).nullable().optional(),
+    dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  }),
 ]);
+
+/** "2025-04-01" → that day at 00:00 IST (stored as UTC). */
+function istDay(v: string): Date {
+  return new Date(`${v}T00:00:00+05:30`);
+}
 
 /**
  * POST /api/team/id-cards/:userId — admin card actions.
@@ -34,6 +46,30 @@ export async function POST(request: NextRequest, { params }: { params: { userId:
     });
     if (!owner) return apiError("Person not found.", 404);
     if (input.kind === "STUDENT" && !owner.student) return apiError("This person has no student profile.", 400);
+
+    // Card details HR fills in: joining date (Member Since), designation, date of birth.
+    if (input.action === "setDetails") {
+      const userData: { contractStart?: Date | null; position?: string | null } = {};
+      if (input.joiningDate !== undefined) userData.contractStart = input.joiningDate ? istDay(input.joiningDate) : null;
+      if (input.designation !== undefined) userData.position = input.designation || null;
+      if (input.dob !== undefined && !owner.teacher) return apiError("Date of birth is kept on the teacher profile; this person has none.", 400);
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: owner.id }, data: userData }),
+        ...(input.dob !== undefined && owner.teacher
+          ? [prisma.teacher.update({ where: { userId: owner.id }, data: { dob: input.dob ? istDay(input.dob) : null } })]
+          : []),
+        prisma.auditLog.create({
+          data: {
+            userId: session.user.id,
+            action: "ID_CARD_DETAILS_UPDATED",
+            entityType: "User",
+            entityId: owner.id,
+            metadata: { joiningDate: input.joiningDate, designation: input.designation, dob: input.dob === undefined ? undefined : input.dob ? "set" : "cleared" },
+          },
+        }),
+      ]);
+      return apiSuccess({ ok: true });
+    }
 
     const card = await getOrCreateIdCard(owner.id, input.kind);
     if (!card) return apiError("ID cards are not set up yet — the database migration has not been applied.", 503);
