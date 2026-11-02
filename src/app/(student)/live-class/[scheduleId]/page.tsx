@@ -220,6 +220,7 @@ export default async function StudentLiveClassPage({
       scheduleTitle={schedule.title}
       batchName={schedule.batch?.name || "Live Classroom"}
       teacherName={schedule.teacher?.user?.name ?? null}
+      teacherPhotoUrl={schedule.teacher?.creativePngUrl || schedule.teacher?.user?.photoUrl || null}
       subject={schedule.subject ?? null}
       chapterTitle={schedule.chapter?.title ?? null}
       currentUserId={student.userId}

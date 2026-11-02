@@ -50,12 +50,22 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         take: CATCH_UP_LIMIT,
       });
     } else {
-      const latest = await prisma.whiteboardMessage.findMany({
-        where: { whiteboardSessionId: params.id, deletedAt: null },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: HISTORY_LIMIT,
-      });
-      messages = latest.reverse();
+      // The last HISTORY_LIMIT real messages plus the latest join lines on
+      // their own: in a big class "X joined" used to fill the whole history
+      // and push the actual chat out of it.
+      const [chat, joins] = await Promise.all([
+        prisma.whiteboardMessage.findMany({
+          where: { whiteboardSessionId: params.id, deletedAt: null, isSystemMessage: false },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: HISTORY_LIMIT,
+        }),
+        prisma.whiteboardMessage.findMany({
+          where: { whiteboardSessionId: params.id, deletedAt: null, isSystemMessage: true },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 40,
+        }),
+      ]);
+      messages = [...chat, ...joins].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
     }
 
     const userIds = Array.from(new Set(messages.map((m) => m.authorUserId)));

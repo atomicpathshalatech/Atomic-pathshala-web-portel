@@ -510,6 +510,7 @@ export function StudentLiveClassRoom({
   subject = null,
   chapterTitle = null,
   currentUserId,
+  teacherPhotoUrl = null,
 }: {
   batchScheduleId: string;
   scheduleTitle: string;
@@ -518,6 +519,8 @@ export function StudentLiveClassRoom({
   subject?: string | null;
   chapterTitle?: string | null;
   currentUserId: string;
+  /** The teacher's cut-out photo (or profile photo) for the waiting screen. */
+  teacherPhotoUrl?: string | null;
 }) {
   const [phase, setPhase] = useState<"waiting" | "lobby" | "live" | "ended">("waiting");
   const [wbSession, setWbSession] = useState<WhiteboardSessionData | null>(null);
@@ -1468,65 +1471,63 @@ export function StudentLiveClassRoom({
     const seconds = Math.max(0, secondsUntilStart) % 60;
 
     const pad = (n: number) => String(n).padStart(2, "0");
+    // Like a YouTube premiere: the class's waiting screen on top (teacher's
+    // picture, title, live countdown), the chat right under it — open and
+    // with its whole history, so students can talk before the class starts.
     return (
-      <div className="min-h-screen-safe w-full bg-slate-50 text-slate-900 flex flex-col select-none">
-        {/* Slim header */}
-        <header className="h-12 px-3 sm:px-4 shrink-0 flex items-center gap-2.5 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
-          <Link href="/schedule" className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0" title="Back to Schedule">
+      <div className="min-h-screen-safe w-full bg-[#0b0d14] text-white flex flex-col select-none">
+        <div className="relative w-full aspect-video max-h-[45vh] overflow-hidden bg-gradient-to-br from-[#0b1f4a] via-[#14306e] to-[#f97316]/70">
+          <Link href="/schedule" className="native-hide absolute left-2 top-2 z-10 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center" title="Back to Schedule">
             <span className="material-symbols-outlined text-[20px]">arrow_back</span>
           </Link>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-7 h-7 object-contain shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold text-slate-500 truncate leading-tight">{batchName}</p>
-            <h1 className="text-xs font-bold truncate leading-tight">{scheduleTitle}</h1>
-          </div>
-        </header>
-
-        <main className="flex-1 w-full max-w-md mx-auto p-3 sm:p-4 flex flex-col gap-3 justify-center">
-          {/* Class card */}
-          <div className="bg-white rounded-2xl p-4 shadow-[0_2px_12px_rgba(15,23,42,0.06)] space-y-3">
-            <div className="space-y-0.5">
-              <h2 className="text-base font-bold leading-snug">{scheduleTitle}</h2>
-              <p className="text-[11px] text-slate-500">
-                {[subject, chapterTitle, teacherName].filter(Boolean).join(" · ")}
-              </p>
-            </div>
-
+          {teacherPhotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- teacher photo from storage
+            <img src={teacherPhotoUrl} alt="" className="absolute bottom-0 right-2 h-[92%] max-w-[55%] object-contain object-bottom drop-shadow-2xl" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element -- static brand asset
+            <img src="/brand/logo.png" alt="" className="absolute right-4 top-1/2 -translate-y-1/2 h-1/2 object-contain opacity-90" />
+          )}
+          <div className="absolute inset-y-0 left-0 flex w-[62%] flex-col justify-center gap-1.5 bg-gradient-to-r from-black/55 via-black/30 to-transparent p-3 sm:p-6">
+            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+              <span className="material-symbols-outlined text-[13px]">sensors</span>
+              {secondsUntilStart > 0 ? "Upcoming live class" : "Starting soon"}
+            </span>
+            <h1 className="line-clamp-2 text-sm font-black leading-snug sm:text-xl">{scheduleTitle}</h1>
+            <p className="truncate text-[11px] text-white/80">{[teacherName, subject, chapterTitle].filter(Boolean).join(" · ")}</p>
             {secondsUntilStart > 0 ? (
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                <span className="text-[11px] font-semibold text-slate-500">Class starts in</span>
-                <span className="font-mono text-lg font-bold text-slate-900">
-                  {pad(hours)}:{pad(minutes)}:<span className="text-blue-600">{pad(seconds)}</span>
-                </span>
+              <div className="mt-1">
+                <p className="text-[10px] font-semibold text-white/70">Class starts in</p>
+                <p className="font-mono text-xl font-black tabular-nums sm:text-3xl">
+                  {hours > 0 ? `${pad(hours)}:` : ""}
+                  {pad(minutes)}:{pad(seconds)}
+                </p>
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                <span className="text-[11px] font-semibold text-emerald-700">Starting soon — you will join automatically</span>
-              </div>
+              <p className="mt-1 flex items-center gap-1.5 text-xs font-bold">
+                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500" />
+                Waiting for {teacherName || "the teacher"} — you will join automatically
+              </p>
             )}
           </div>
+        </div>
 
-          {/* Pre-class chat, when the teacher has it on */}
-          {wbSession?.id && wbSession?.chatEnabled && (
-            <div className="h-72 flex flex-col bg-white rounded-2xl overflow-hidden shadow-[0_2px_12px_rgba(15,23,42,0.06)]">
-              <div className="px-3 py-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 shrink-0">
-                <span className="material-symbols-outlined text-[16px] text-blue-600">chat</span>
-                Chat
-              </div>
-              <div className="flex-1 min-h-0">
-                <MessagesPanel
-                  whiteboardSessionId={wbSession.id}
-                  currentUserId={currentUserId}
-                  role="STUDENT"
-                  theme="light"
-                  showOwnToggle={false}
-                />
-              </div>
-            </div>
-          )}
-        </main>
+        {/* Chat under the waiting screen — open before the class, history kept */}
+        <div className="flex min-h-0 flex-1 flex-col bg-white text-slate-900">
+          <div className="flex shrink-0 items-center justify-between px-3 py-2 text-[11px] font-semibold text-slate-600">
+            <span className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[16px] text-blue-600">chat</span>
+              Live chat
+            </span>
+            <span className="truncate pl-2 text-slate-400">{batchName}</span>
+          </div>
+          <div className="min-h-0 flex-1">
+            {wbSession?.id ? (
+              <MessagesPanel whiteboardSessionId={wbSession.id} currentUserId={currentUserId} role="STUDENT" theme="light" showOwnToggle={false} />
+            ) : (
+              <p className="mt-8 text-center text-sm text-slate-400">Chat opens as soon as the class room is ready.</p>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
