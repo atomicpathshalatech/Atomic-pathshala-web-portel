@@ -30,7 +30,6 @@ export function LoginForm() {
   const [otpCode, setOtpCode] = useState("");
   const [otpStage, setOtpStage] = useState<"enter" | "code">("enter");
   const [otpNote, setOtpNote] = useState<string | null>(null);
-  const [smsSent, setSmsSent] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -117,45 +116,24 @@ export function LoginForm() {
   }
 
   // ---- Log in by OTP ---------------------------------------------------------
-  // A mobile number gets an SMS code (MSG91, as at sign-up) AND an email code
-  // when the account has an email; either code works. "Resend" goes to email.
+  // The code goes to the student's MOBILE NUMBER by SMS (MSG91, the same as at
+  // sign-up) — first send and resend alike. Not every student can open email.
   async function sendOtp(resend = false) {
-    const raw = otpIdentifier.trim();
-    if (!raw) {
-      toast.error("Enter your mobile number or email.");
+    const id = normaliseLoginIdentifier(otpIdentifier.trim());
+    if (id.kind !== "phone") {
+      toast.error("Enter your 10-digit mobile number.");
       return;
     }
-    const id = normaliseLoginIdentifier(raw);
     setSubmitting(true);
     setOtpNote(null);
     try {
-      let sms = smsSent;
-      if (!resend && id.kind === "phone") {
-        sms = await sendMsg91Otp(`91${id.value}`).then(
-          () => true,
-          (err: Error) => {
-            console.warn("[login] SMS code not sent:", err.message);
-            return false;
-          }
-        );
-        setSmsSent(sms);
-      }
-      const res = await fetch("/api/auth/otp/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: raw }),
-      });
-      const json = await res.json().catch(() => ({}));
-      const emailTo: string | null = res.ok ? json?.data?.emailSentTo ?? null : null;
-      if (!res.ok && !sms) {
-        toast.error(typeof json?.error === "string" ? json.error : "Could not send the code. Please try again.");
-        return;
-      }
-      const where = [sms && !resend ? "your mobile (SMS)" : null, emailTo ? `your email ${emailTo}` : null].filter(Boolean).join(" and ");
-      setOtpNote(where ? `Code sent to ${where}. Enter any one of them.` : "If this account exists, a code has been sent. Check your SMS and email.");
+      await sendMsg91Otp(`91${id.value}`);
+      setOtpNote(`OTP ${resend ? "sent again" : "sent"} to +91 ${id.value.slice(0, 2)}******${id.value.slice(-2)} by SMS.`);
       setOtpStage("code");
       setOtpCode("");
       setResendIn(45);
+    } catch (err) {
+      toast.error((err as Error).message || "Could not send the OTP. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -164,15 +142,17 @@ export function LoginForm() {
   async function verifyOtp() {
     const code = otpCode.trim();
     if (!/^\d{4,8}$/.test(code)) {
-      toast.error("Enter the code you received.");
+      toast.error("Enter the OTP you received.");
       return;
     }
     setSubmitting(true);
     try {
-      // The SMS code first (MSG91 checks it), else it is taken as the email code.
-      let smsToken = "";
-      if (smsSent) smsToken = await verifyMsg91Otp(code).catch(() => "");
-      await executeSignIn("otp", { identifier: otpIdentifier.trim(), ...(smsToken ? { smsToken } : { code }) });
+      const smsToken = await verifyMsg91Otp(code).catch((err: Error) => {
+        toast.error(err.message || "That OTP is not right. Please try again.");
+        return "";
+      });
+      if (!smsToken) return;
+      await executeSignIn("otp", { identifier: otpIdentifier.trim(), smsToken });
     } catch {
       toast.error("Something went wrong. Please try again.");
     } finally {
@@ -249,7 +229,7 @@ export function LoginForm() {
           >
             <div className="space-y-1.5">
               <label htmlFor="otp-identifier" className="font-label-md text-label-md text-on-surface">
-                Mobile number or email
+                Mobile number
               </label>
               <input
                 id="otp-identifier"
@@ -260,12 +240,12 @@ export function LoginForm() {
                   setOtpIdentifier(e.target.value);
                   if (otpStage === "code") {
                     setOtpStage("enter");
-                    setSmsSent(false);
                     setOtpNote(null);
                   }
                 }}
                 className="w-full rounded-xl border border-outline-variant/40 bg-surface px-4 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="98XXXXXXXX or you@example.com"
+                inputMode="numeric"
+                placeholder="98XXXXXXXX"
               />
             </div>
 
@@ -293,7 +273,7 @@ export function LoginForm() {
                     onClick={() => void sendOtp(true)}
                     className="font-label-sm text-label-sm text-primary hover:underline disabled:text-on-surface-variant disabled:no-underline"
                   >
-                    {resendIn > 0 ? `Resend to email in ${resendIn}s` : "Resend OTP to email"}
+                    {resendIn > 0 ? `Resend OTP in ${resendIn}s` : "Resend OTP"}
                   </button>
                 </div>
               </div>
