@@ -12,6 +12,7 @@ import { parentPathFor, isRootRoute } from '@/lib/navigation/hierarchy';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { AppWelcome } from './AppWelcome';
 import { PullToRefresh } from './PullToRefresh';
+import { AppUpdatePrompt } from './AppUpdatePrompt';
 
 export function CapacitorProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -117,6 +118,7 @@ export function CapacitorProvider({ children }: { children: React.ReactNode }) {
     <>
       <AppWelcome />
       <PullToRefresh />
+      <AppUpdatePrompt />
       {children}
     </>
   );

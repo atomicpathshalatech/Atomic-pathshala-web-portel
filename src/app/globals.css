@@ -536,3 +536,11 @@
 .native-app .native-hide {
   display: none !important;
 }
+
+/* Older app builds (≤ 1.0.1) passed the status / navigation bar sizes only as
+   CSS variables, so pages ran under the bars. Leave that space; newer builds
+   keep the page clear natively and set none of these (0 here). */
+.native-app body {
+  padding-top: var(--safe-area-inset-top, 0px);
+  padding-bottom: var(--safe-area-inset-bottom, 0px);
+}
