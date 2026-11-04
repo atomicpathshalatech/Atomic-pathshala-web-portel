@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { getHierarchyTopics } from "@/lib/academic/academic-hierarchy-service";
+import { STANDARD_EXERCISES, sortChapterExercises } from "@/lib/exercises/standard-exercises";
 
 export interface ParseIdsResult {
   cleanedIds: string[];
@@ -694,6 +695,11 @@ export async function createExercise(data: CreateExerciseDto) {
         },
       ];
     }
+  } else if (exType === "NCERT") {
+    initialSections = [
+      { title: "NCERT", topic: null, subTopic: null, order: 0 },
+      { title: "NCERT Exemplar", topic: null, subTopic: null, order: 1 },
+    ];
   } else if (exType === "ADVANCED") {
     initialSections = [
       {
@@ -924,7 +930,45 @@ export async function getExercisesForChapter(subject: string, chapter: string) {
       },
     },
     orderBy: { createdAt: "asc" },
+  }).then(sortChapterExercises);
+}
+
+/**
+ * Creates the standard exercises a chapter does not have yet (matched by
+ * name: "Exercise 1" also matches an older "Exercise 1 — Topic-wise
+ * Questions"). Returns the chapter's exercises, in order.
+ */
+export async function ensureChapterModule(subject: string, chapter: string, userId: string) {
+  const existing = await prisma.exercise.findMany({
+    where: { subject: { equals: subject, mode: "insensitive" }, chapter: { equals: chapter, mode: "insensitive" } },
+    select: { id: true, title: true, exerciseType: true, createdAt: true },
   });
+  const has = (title: string) =>
+    existing.some((e) => {
+      const t = e.title.trim().toLowerCase();
+      const want = title.toLowerCase();
+      if (want.startsWith("exercise ")) return t === want || new RegExp(`^${want}\\b(?!\\d)`).test(t);
+      return t === want || (want.includes("ncert") && e.exerciseType === "NCERT");
+    });
+
+  const created: string[] = [];
+  for (const std of STANDARD_EXERCISES) {
+    if (has(std.title)) continue;
+    const ex = await createExercise({
+      title: std.title,
+      subject,
+      chapter,
+      exerciseType: std.exerciseType,
+      createdById: userId,
+    });
+    created.push(ex.id);
+  }
+
+  const all = await prisma.exercise.findMany({
+    where: { subject: { equals: subject, mode: "insensitive" }, chapter: { equals: chapter, mode: "insensitive" } },
+    select: { id: true, title: true, exerciseType: true, createdAt: true },
+  });
+  return { created: created.length, exercises: sortChapterExercises(all) };
 }
 
 /**
@@ -950,6 +994,7 @@ export async function getChapterModulesDirectory(subject?: string, search?: stri
         select: {
           questions: true,
           sections: true,
+          attempts: true,
         },
       },
     },
@@ -981,7 +1026,7 @@ export async function getChapterModulesDirectory(subject?: string, search?: stri
     entry.totalQuestions += ex._count.questions;
   }
 
-  return Array.from(chapterMap.values());
+  return Array.from(chapterMap.values()).map((m) => ({ ...m, exercises: sortChapterExercises(m.exercises) }));
 }
 
 /**

@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   HelpCircle,
   FileText,
+  FileUp,
+  MoreHorizontal,
   FileCheck,
   RefreshCw,
   Clock,
@@ -31,6 +33,8 @@ import {
 import { ExerciseImportModal } from "@/components/exercises/ExerciseImportModal";
 import { ExercisePdfExportModal } from "@/components/exercises/ExercisePdfExportModal";
 import { ExerciseQuestionCard } from "@/components/exercises/ExerciseQuestionCard";
+import { ExercisePdfUploadModal } from "@/components/exercises/ExercisePdfUploadModal";
+import { STANDARD_EXERCISES } from "@/lib/exercises/standard-exercises";
 
 interface ExerciseDetail {
   id: string;
@@ -117,11 +121,8 @@ export default function ExerciseBuilderWorkspacePage() {
   const [isLaunchingTest, setIsLaunchingTest] = useState(false);
   const [isExportingChapterPdf, setIsExportingChapterPdf] = useState(false);
 
-  // New Sibling Modal State
-  const [showAddSiblingModal, setShowAddSiblingModal] = useState(false);
-  const [newSiblingTitle, setNewSiblingTitle] = useState("Exercise 2 — Advanced Practice");
-  const [newSiblingType, setNewSiblingType] = useState("ADVANCED");
-  const [isCreatingSibling, setIsCreatingSibling] = useState(false);
+  // "Upload PDF": the whole PDF is extracted into this exercise (optionally one part)
+  const [pdfUploadSection, setPdfUploadSection] = useState<string | null>(null);
 
   // Section collapse states
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -450,43 +451,6 @@ export default function ExerciseBuilderWorkspacePage() {
     }
   };
 
-  // Create new sibling exercise in same chapter
-  const handleCreateSibling = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!exercise || !newSiblingTitle.trim()) return;
-
-    setIsCreatingSibling(true);
-    try {
-      const res = await fetch("/api/team/exercises", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: newSiblingTitle.trim(),
-          subject: exercise.subject,
-          chapter: exercise.chapter,
-          exerciseType: newSiblingType,
-          organizationMode: newSiblingType.includes("PYQ") ? "YEAR_WISE" : "TOPIC_WISE",
-          languageMode: exercise.languageMode,
-          defaultMarks: exercise.defaultMarks,
-          defaultNegativeMarks: exercise.defaultNegativeMarks,
-        }),
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Failed to create exercise.");
-      }
-
-      setSuccessToast(`Created ${newSiblingTitle}! Opening workspace...`);
-      setShowAddSiblingModal(false);
-      router.push(`/team/exercises/${json.data.id}`);
-    } catch (err: any) {
-      alert(err.message || "Failed to create exercise.");
-    } finally {
-      setIsCreatingSibling(false);
-    }
-  };
-
   // Export Complete Chapter Module PDF
   const handleExportChapterPdf = async () => {
     if (!exercise) return;
@@ -644,97 +608,6 @@ export default function ExerciseBuilderWorkspacePage() {
         </div>
       )}
 
-      {/* CHAPTER EXERCISES HUB & SIBLING NAVIGATION */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-xs shrink-0">
-              <BookOpen className="h-4 w-4" />
-            </span>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Chapter Practice Module &bull; {exercise.subject}
-              </span>
-              <h2 className="text-base font-black text-slate-900 dark:text-white">
-                {exercise.chapter}
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={isExportingChapterPdf}
-              onClick={handleExportChapterPdf}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 transition shadow-2xs cursor-pointer disabled:opacity-50"
-              title="Download consolidated PDF of all exercises in this chapter"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>{isExportingChapterPdf ? "Generating Chapter PDF..." : "Export Full Chapter Module PDF"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                const count = siblingExercises.length;
-                if (count === 1) {
-                  setNewSiblingTitle("Exercise 2 — Advanced / Multi-Concept Questions");
-                  setNewSiblingType("ADVANCED");
-                } else if (count === 2) {
-                  setNewSiblingTitle("Exercise 3 — NEET Past Year Questions (PYQs)");
-                  setNewSiblingType("NEET_PYQ");
-                } else if (count === 3) {
-                  setNewSiblingTitle("Exercise 4 — JEE Main Past Year Questions (PYQs)");
-                  setNewSiblingType("JEE_PYQ");
-                } else {
-                  setNewSiblingTitle(`Exercise ${count + 1} — Additional Practice`);
-                  setNewSiblingType("TOPIC_WISE");
-                }
-                setShowAddSiblingModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-500 transition cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Add Exercise to this Chapter</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Exercises Switcher Tabs */}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="text-xs font-bold text-slate-400 mr-1">Exercises in Chapter:</span>
-          {siblingExercises.length === 0 ? (
-            <span className="text-xs text-slate-400">Loading exercises...</span>
-          ) : (
-            siblingExercises.map((sib, sIdx) => {
-              const isCurrent = sib.id === exercise.id;
-              return (
-                <Link
-                  key={sib.id}
-                  href={`/team/exercises/${sib.id}`}
-                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
-                    isCurrent
-                      ? "bg-slate-900 text-white shadow-xs dark:bg-white dark:text-slate-900 ring-2 ring-blue-500/30"
-                      : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
-                  }`}
-                >
-                  <span>{sib.title}</span>
-                  <span
-                    className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
-                      isCurrent
-                        ? "bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900"
-                        : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-                    }`}
-                  >
-                    {sib._count?.questions ?? 0} Qs
-                  </span>
-                </Link>
-              );
-            })
-          )}
-        </div>
-      </div>
-
       {/* Top Breadcrumb & Status */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-4 dark:border-slate-800">
         <div>
@@ -746,6 +619,20 @@ export default function ExerciseBuilderWorkspacePage() {
             <span className="font-semibold text-slate-600 dark:text-slate-300">{exercise.subject}</span>
             <span>/</span>
             <span>{exercise.chapter}</span>
+            {siblingExercises.length > 1 && (
+              <select
+                value={exercise.id}
+                onChange={(e) => router.push(`/team/exercises/${e.target.value}`)}
+                className="ml-1 h-7 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-700 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                title="Open another exercise of this chapter"
+              >
+                {siblingExercises.map((sib) => (
+                  <option key={sib.id} value={sib.id}>
+                    {sib.title} ({sib._count?.questions ?? 0} Qs)
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -825,74 +712,89 @@ export default function ExerciseBuilderWorkspacePage() {
       {/* Primary Actions Ribbon */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Add Section / Topic Button */}
-          <button
-            type="button"
-            onClick={() => {
-              const defaultNum = (exercise?.sections.length || 0) + 1;
-              setNewSectionTitle(`Part ${defaultNum}: Topic Practice`);
-              setNewSectionTopic(``);
-              setNewSectionDescription(``);
-              setShowAddSectionModal(true);
-            }}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-500 transition cursor-pointer"
+          <Link
+            href={`/team/exercises/${exercise.id}/author`}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-500 transition"
           >
             <Plus className="h-4 w-4" />
-            <span>+ Add Section / Topic</span>
-          </button>
+            <span>Add New Question</span>
+          </Link>
 
-          {/* Edit Exercise Name */}
           <button
             type="button"
-            onClick={openEditExerciseModal}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
-            title="Edit Exercise Name, Subtitle & Type"
+            onClick={() => setPdfUploadSection("")}
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-amber-500 transition"
           >
-            <Pencil className="h-3.5 w-3.5 text-blue-600" />
-            <span>Edit Exercise Name</span>
+            <FileUp className="h-4 w-4" />
+            <span>Upload PDF</span>
           </button>
 
-          {/* Import Questions CTA */}
           <button
             type="button"
             onClick={() => {
               setImportTargetSection(null);
               setShowImportModal(true);
             }}
-            className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-amber-500 transition"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition"
           >
-            <Upload className="h-4 w-4" />
-            <span>Import Questions by ID</span>
+            <Upload className="h-4 w-4 text-amber-600" />
+            <span>Import by ID</span>
           </button>
 
-          {/* Auto-Populate Topics / Generate Year Sections */}
-          <button
-            type="button"
-            disabled={isSyncingTopics}
-            onClick={handleSyncTopics}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300 disabled:opacity-50 transition cursor-pointer"
-            title="Automatically populate all topics/years for this chapter into this exercise"
-          >
-            <Sparkles className="h-4 w-4 text-blue-600" />
-            <span>
-              {isSyncingTopics
-                ? "Syncing Syllabus..."
-                : exercise.exerciseType?.includes("PYQ") || exercise.organizationMode === "YEAR_WISE"
-                ? "Auto-Generate Exam Years"
-                : "Auto-Populate Chapter Topics"}
-            </span>
-          </button>
-
-          {/* Regroup by Topic CTA */}
-          <button
-            type="button"
-            disabled={isRegrouping || exercise.audit.totalQuestions === 0}
-            onClick={handleRegroup}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300 disabled:opacity-50"
-          >
-            <Layers className="h-4 w-4 text-amber-600" />
-            <span>{isRegrouping ? "Regrouping..." : "Auto-Regroup by Topic"}</span>
-          </button>
+          {/* Less-used tools */}
+          <details className="relative">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <MoreHorizontal className="h-4 w-4" />
+              <span>More</span>
+            </summary>
+            <div className="absolute left-0 z-20 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+              {[
+                {
+                  label: "Add Section / Topic",
+                  onClick: () => {
+                    const defaultNum = (exercise?.sections.length || 0) + 1;
+                    setNewSectionTitle(`Part ${defaultNum}: Topic Practice`);
+                    setNewSectionTopic("");
+                    setNewSectionDescription("");
+                    setShowAddSectionModal(true);
+                  },
+                  disabled: false,
+                },
+                {
+                  label: isSyncingTopics
+                    ? "Syncing Syllabus..."
+                    : exercise.exerciseType?.includes("PYQ") || exercise.organizationMode === "YEAR_WISE"
+                    ? "Auto-Generate Exam Years"
+                    : "Auto-Populate Chapter Topics",
+                  onClick: handleSyncTopics,
+                  disabled: isSyncingTopics,
+                },
+                {
+                  label: isRegrouping ? "Regrouping..." : "Auto-Regroup by Topic",
+                  onClick: handleRegroup,
+                  disabled: isRegrouping || exercise.audit.totalQuestions === 0,
+                },
+                {
+                  label: isExportingChapterPdf ? "Generating Chapter PDF..." : "Export Full Chapter PDF",
+                  onClick: handleExportChapterPdf,
+                  disabled: isExportingChapterPdf,
+                },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  disabled={item.disabled}
+                  onClick={(e) => {
+                    (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                    item.onClick();
+                  }}
+                  className="block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </details>
         </div>
 
         {/* Filter questions toggle */}
@@ -913,59 +815,6 @@ export default function ExerciseBuilderWorkspacePage() {
 
           <span className="text-slate-400">
             {exercise.audit.totalQuestions} questions in {exercise.audit.totalSections} sections
-          </span>
-        </div>
-      </div>
-
-      {/* Preflight Quality & Audit Bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 text-center dark:border-slate-800 dark:bg-slate-900/50">
-        <div>
-          <span className="block text-xs text-slate-400">Total Questions</span>
-          <span className="text-sm font-bold text-slate-900 dark:text-white">
-            {exercise.audit.totalQuestions}
-          </span>
-        </div>
-
-        <div>
-          <span className="block text-xs text-slate-400">Sections</span>
-          <span className="text-sm font-bold text-slate-900 dark:text-white">
-            {exercise.audit.totalSections}
-          </span>
-        </div>
-
-        <div>
-          <span className="block text-xs text-slate-400">Hindi Coverage</span>
-          <span
-            className={`text-sm font-bold ${
-              exercise.audit.missingHindiCount === 0 ? "text-emerald-600" : "text-amber-600"
-            }`}
-          >
-            {exercise.audit.totalQuestions - exercise.audit.missingHindiCount} / {exercise.audit.totalQuestions}
-          </span>
-        </div>
-
-        <div>
-          <span className="block text-xs text-slate-400">English Coverage</span>
-          <span
-            className={`text-sm font-bold ${
-              exercise.audit.missingEnglishCount === 0 ? "text-emerald-600" : "text-amber-600"
-            }`}
-          >
-            {exercise.audit.totalQuestions - exercise.audit.missingEnglishCount} / {exercise.audit.totalQuestions}
-          </span>
-        </div>
-
-        <div>
-          <span className="block text-xs text-slate-400">PYQ Questions</span>
-          <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
-            {exercise.audit.pyqCount}
-          </span>
-        </div>
-
-        <div>
-          <span className="block text-xs text-slate-400">Total Marks</span>
-          <span className="text-sm font-bold text-slate-900 dark:text-white">
-            {exercise.audit.totalQuestions * exercise.defaultMarks}
           </span>
         </div>
       </div>
@@ -1031,42 +880,31 @@ export default function ExerciseBuilderWorkspacePage() {
             No sections in this exercise yet
           </h3>
           <p className="mt-1 text-sm text-slate-500 max-w-md mx-auto">
-            Populate all chapter topics from syllabus or import questions directly by ID.
+            Add questions one by one, upload a whole PDF, or set up the chapter&apos;s topics first.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setNewSectionTitle("Part 1: Topic Practice");
-                setNewSectionTopic("");
-                setNewSectionDescription("");
-                setShowAddSectionModal(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-500 cursor-pointer"
+            <Link
+              href={`/team/exercises/${exercise.id}/author`}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-500"
             >
               <Plus className="h-4 w-4" />
-              <span>+ Add Section / Topic</span>
+              <span>Add New Question</span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => setPdfUploadSection("")}
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-amber-500"
+            >
+              <FileUp className="h-4 w-4" />
+              <span>Upload PDF</span>
             </button>
-
             <button
               type="button"
               onClick={handleSyncTopics}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-500"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
-              <Sparkles className="h-4 w-4" />
+              <Sparkles className="h-4 w-4 text-blue-600" />
               <span>Auto-Populate Chapter Topics</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setImportTargetSection(null);
-                setShowImportModal(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-amber-500"
-            >
-              <Upload className="h-4 w-4" />
-              <span>Import Question IDs Now</span>
             </button>
           </div>
         </div>
@@ -1145,6 +983,23 @@ export default function ExerciseBuilderWorkspacePage() {
 
                     {/* Section Right Actions */}
                   <div className="flex items-center gap-2">
+                    <Link
+                      href={`/team/exercises/${exercise.id}/author?section=${sec.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 text-xs font-bold transition shadow-2xs"
+                      title={`Write a new question into "${sec.title}"`}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Add New Question</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setPdfUploadSection(sec.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 px-2.5 py-1.5 text-xs font-bold transition dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                      title={`Upload a PDF into "${sec.title}"`}
+                    >
+                      <FileUp className="h-3.5 w-3.5" />
+                      <span>PDF</span>
+                    </button>
                     {/* Direct Import to this Topic */}
                     <button
                       type="button"
@@ -1152,11 +1007,11 @@ export default function ExerciseBuilderWorkspacePage() {
                         setImportTargetSection({ id: sec.id, title: sec.title });
                         setShowImportModal(true);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 text-xs font-bold transition shadow-2xs cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-2.5 py-1.5 text-xs font-bold transition cursor-pointer dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                       title={`Import Question IDs directly into "${sec.title}"`}
                     >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Import into this Part</span>
+                      <Upload className="h-3.5 w-3.5 text-amber-600" />
+                      <span>Import by ID</span>
                     </button>
 
                     {sec.questions.length === 0 && (
@@ -1178,6 +1033,12 @@ export default function ExerciseBuilderWorkspacePage() {
                     {sectionQuestions.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-slate-200 bg-white/50 py-6 text-center text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
                         <p className="italic">No questions in this part yet.</p>
+                        <Link
+                          href={`/team/exercises/${exercise.id}/author?section=${sec.id}`}
+                          className="mt-2 mr-3 inline-block text-xs font-bold text-blue-600 hover:underline"
+                        >
+                          + Add a new question
+                        </Link>
                         <button
                           type="button"
                           onClick={() => {
@@ -1186,7 +1047,7 @@ export default function ExerciseBuilderWorkspacePage() {
                           }}
                           className="mt-2 text-xs font-bold text-amber-600 hover:underline cursor-pointer"
                         >
-                          + Click to import questions into this part
+                          + Import by ID
                         </button>
                       </div>
                     ) : (
@@ -1264,112 +1125,15 @@ export default function ExerciseBuilderWorkspacePage() {
         defaultLanguageMode={exercise.languageMode}
       />
 
-      {/* Add Sibling Exercise Modal */}
-      {showAddSiblingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-blue-600" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Add Exercise to {exercise.chapter}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAddSiblingModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      <ExercisePdfUploadModal
+        exerciseId={exercise.id}
+        exerciseTitle={exercise.title}
+        isOpen={pdfUploadSection !== null}
+        onClose={() => setPdfUploadSection(null)}
+        sections={sectionsList}
+        defaultSectionId={pdfUploadSection || undefined}
+      />
 
-            <form onSubmit={handleCreateSibling} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Preset Templates
-                </label>
-                <select
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === "EX1") {
-                      setNewSiblingTitle("Exercise 1 — Topic-wise Practice Questions");
-                      setNewSiblingType("TOPIC_WISE");
-                    } else if (val === "EX2") {
-                      setNewSiblingTitle("Exercise 2 — Advanced / Multi-Concept Questions");
-                      setNewSiblingType("ADVANCED");
-                    } else if (val === "EX3") {
-                      setNewSiblingTitle("Exercise 3 — NEET Past Year Questions (PYQs)");
-                      setNewSiblingType("NEET_PYQ");
-                    } else if (val === "EX4") {
-                      setNewSiblingTitle("Exercise 4 — JEE Main Past Year Questions (PYQs)");
-                      setNewSiblingType("JEE_PYQ");
-                    } else if (val === "EX5") {
-                      setNewSiblingTitle("Exercise 5 — Mixed Practice & Mock Questions");
-                      setNewSiblingType("MIXED");
-                    }
-                  }}
-                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                >
-                  <option value="EX2">Exercise 2 — Advanced / Multi-Concept Questions</option>
-                  <option value="EX3">Exercise 3 — NEET Past Year Questions (PYQs)</option>
-                  <option value="EX4">Exercise 4 — JEE Main Past Year Questions (PYQs)</option>
-                  <option value="EX1">Exercise 1 — Topic-wise Practice Questions</option>
-                  <option value="EX5">Exercise 5 — Mixed Practice &amp; Mock Questions</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Exercise Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newSiblingTitle}
-                  onChange={(e) => setNewSiblingTitle(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Exercise Type &amp; Organization
-                </label>
-                <select
-                  value={newSiblingType}
-                  onChange={(e) => setNewSiblingType(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                >
-                  <option value="TOPIC_WISE">Topic-Wise (Auto-Populate Chapter Topics)</option>
-                  <option value="ADVANCED">Advanced Level Practice</option>
-                  <option value="NEET_PYQ">NEET Past Year Questions (Year-Wise 2024, 2023...)</option>
-                  <option value="JEE_PYQ">JEE Main Past Year Questions (Year-Wise)</option>
-                  <option value="MIXED">Mixed Practice</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowAddSiblingModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingSibling || !newSiblingTitle.trim()}
-                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-500 disabled:opacity-50"
-                >
-                  {isCreatingSibling ? "Creating..." : "Create & Open Workspace"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    
       {/* Modal: Add New Section / Topic */}
       {showAddSectionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -1529,7 +1293,7 @@ export default function ExerciseBuilderWorkspacePage() {
                   required
                   value={editExerciseTitle}
                   onChange={(e) => setEditExerciseTitle(e.target.value)}
-                  placeholder="e.g. Exercise 2 — Advanced Practice or NEET PYQs"
+                  placeholder="e.g. Exercise 2"
                   className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:border-blue-500"
                 />
 
@@ -1537,13 +1301,7 @@ export default function ExerciseBuilderWorkspacePage() {
                 <div className="mt-2">
                   <span className="text-[11px] text-slate-400">Quick name presets:</span>
                   <div className="flex flex-wrap gap-1.5 mt-1">
-                    {[
-                      "Exercise 1 — Foundational Questions",
-                      "Exercise 2 — Advanced Practice",
-                      "Exercise 3 — NEET Past Year Questions (PYQs)",
-                      "Exercise 4 — JEE Main PYQs",
-                      "Exercise — Speed & Accuracy Drill",
-                    ].map((preset) => (
+                    {STANDARD_EXERCISES.map((e) => e.title).map((preset) => (
                       <button
                         key={preset}
                         type="button"
@@ -1576,6 +1334,7 @@ export default function ExerciseBuilderWorkspacePage() {
                   <option value="NEET_PYQ">NEET Past Year Questions (PYQ)</option>
                   <option value="JEE_PYQ">JEE Main Past Year Questions (PYQ)</option>
                   <option value="MIXED">Mixed Concept &amp; Speed Test</option>
+                  <option value="NCERT">NCERT &amp; NCERT Exemplar</option>
                   <option value="CUSTOM">Custom Practice Sheet</option>
                 </select>
               </div>

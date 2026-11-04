@@ -8,6 +8,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { uploadFile } from "@/lib/storage";
 import { processExtractionJob } from "@/lib/extraction/process-job";
+import { exerciseTargetTags } from "@/lib/exercises/standard-exercises";
 
 // The extraction runs in the background of this request (waitUntil) and
 // keeps inside this limit; the job page shows its progress.
@@ -27,6 +28,9 @@ type Fields = {
   subject?: string;
   chapter?: string;
   rawText?: string;
+  /** Started from an exercise ("Upload PDF"): its verified questions are added to it. */
+  exerciseId?: string;
+  exerciseSectionId?: string;
 };
 
 /**
@@ -90,8 +94,18 @@ export async function POST(request: NextRequest) {
     const pyqExam = String(fields.pyqExam ?? "").trim() || null;
     const pyqYear = parseInt(String(fields.pyqYear ?? year ?? ""), 10) || null;
     const pyqMonth = String(fields.pyqMonth ?? "").trim() || null;
-    const subject = String(fields.subject ?? "").trim() || "Auto Detect";
-    const chapter = String(fields.chapter ?? "").trim() || null;
+    let subject = String(fields.subject ?? "").trim() || "Auto Detect";
+    let chapter = String(fields.chapter ?? "").trim() || null;
+    let tags: string[] = [];
+    const exerciseId = String(fields.exerciseId ?? "").trim();
+    if (exerciseId) {
+      const exercise = await prisma.exercise.findUnique({ where: { id: exerciseId }, select: { id: true, subject: true, chapter: true, sections: { select: { id: true } } } });
+      if (!exercise) return apiError("Exercise not found.", 404);
+      const sectionId = String(fields.exerciseSectionId ?? "").trim();
+      subject = exercise.subject;
+      chapter = exercise.chapter;
+      tags = exerciseTargetTags(exercise.id, exercise.sections.some((s) => s.id === sectionId) ? sectionId : null);
+    }
     const rawText = String(fields.rawText ?? "").trim() || null;
 
     if (!pdfBuffer && !rawText) return apiError("Please upload a PDF file or provide extracted document text.", 400);
@@ -125,6 +139,7 @@ export async function POST(request: NextRequest) {
         pyqMonth,
         subject: subject !== "Auto Detect" ? subject : null,
         chapter,
+        tags,
         createdById: session.user.id,
       },
     });

@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { STANDARD_EXERCISES } from "@/lib/exercises/standard-exercises";
 import {
   ArrowLeft,
   BookOpen,
@@ -53,14 +54,17 @@ interface ExistingExerciseItem {
   };
 }
 
-const EXERCISE_NAME_PRESETS = [
-  "Exercise 1 — Topic-wise Questions",
-  "Exercise 2 — Basic Practice",
-  "Exercise 3 — Advanced Questions",
-  "Exercise 4 — NEET PYQs",
-  "Exercise 5 — JEE Main PYQs",
-  "Exercise 6 — Mixed Practice",
-];
+const EXERCISE_NAME_PRESETS: string[] = STANDARD_EXERCISES.map((e) => e.title);
+
+/** Has the chapter already got this standard exercise? ("Exercise 1" also matches "Exercise 1 — Topic-wise …".) */
+function hasStandard(existing: ExistingExerciseItem[], std: (typeof STANDARD_EXERCISES)[number]): boolean {
+  return existing.some((e) => {
+    const t = e.title.trim().toLowerCase();
+    const want = std.title.toLowerCase();
+    if (want.startsWith("exercise ")) return t === want || new RegExp(`^${want}\\b(?!\\d)`).test(t);
+    return t === want || (std.exerciseType === "NCERT" && e.exerciseType === "NCERT");
+  });
+}
 
 function NewExerciseContent() {
   const router = useRouter();
@@ -91,7 +95,8 @@ function NewExerciseContent() {
   const [selectedSubTopic, setSelectedSubTopic] = useState<string>("");
 
   // Configuration state
-  const [title, setTitle] = useState("Exercise 1 — Topic-wise Questions");
+  const [title, setTitle] = useState("Exercise 1");
+  const [creatingModule, setCreatingModule] = useState(false);
   const [subtitle, setSubtitle] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState(
@@ -130,20 +135,14 @@ function NewExerciseContent() {
       if (json.success && json.data?.exercises) {
         const exs: ExistingExerciseItem[] = json.data.exercises;
         setExistingChapterExercises(exs);
-        const count = exs.length;
-        if (count === 1) {
-          setTitle("Exercise 2 — Advanced Questions");
-          setExerciseType("ADVANCED");
-        } else if (count === 2) {
-          setTitle("Exercise 3 — NEET PYQs");
-          setExerciseType("NEET_PYQ");
-          setOrganizationMode("YEAR_WISE");
-        } else if (count === 3) {
-          setTitle("Exercise 4 — JEE Main PYQs");
-          setExerciseType("JEE_PYQ");
-          setOrganizationMode("YEAR_WISE");
-        } else if (count >= 4) {
-          setTitle(`Exercise ${count + 1} — Mixed Practice`);
+        // Suggest the first standard exercise the chapter doesn't have yet.
+        const next = STANDARD_EXERCISES.find((std) => !hasStandard(exs, std));
+        if (next) {
+          setTitle(next.title);
+          setExerciseType(next.exerciseType);
+          setOrganizationMode(next.exerciseType.includes("PYQ") ? "YEAR_WISE" : "TOPIC_WISE");
+        } else {
+          setTitle(`Exercise ${exs.length + 1}`);
           setExerciseType("MIXED");
         }
       }
@@ -314,6 +313,27 @@ function NewExerciseContent() {
     }
   };
 
+  // The whole chapter module at once: every standard exercise the chapter is missing.
+  const handleCreateModule = async () => {
+    if (!selectedSubject || !selectedChapter) return;
+    setCreatingModule(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/team/exercises/chapter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: selectedSubject, chapter: selectedChapter }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Could not create the chapter module.");
+      const first = json.data.exercises?.[0];
+      router.push(first ? `/team/exercises/${first.id}` : "/team/exercises");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Something went wrong.");
+      setCreatingModule(false);
+    }
+  };
+
   const handleCreateExercise = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !selectedSubject || !selectedChapter) {
@@ -372,10 +392,10 @@ function NewExerciseContent() {
         <div className="mt-3 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Create New Exercise Practice Sheet
+              New Exercise
             </h1>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Follow the academic taxonomy flow: Subject &rarr; Chapter &rarr; Topic &rarr; Subtopic.
+              Choose the subject and chapter — its exercises (Exercise 1–5, NCERT &amp; NCERT Exemplar) are created together.
             </p>
           </div>
         </div>
@@ -537,6 +557,56 @@ function NewExerciseContent() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* CHAPTER MODULE: all standard exercises in one go */}
+      {currentStep >= 3 && selectedSubject && selectedChapter && (
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50/60 p-5 shadow-xs dark:border-amber-800 dark:bg-amber-950/20 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                Chapter module: {selectedSubject} &rarr; {selectedChapter}
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Creates every exercise below that this chapter doesn&apos;t have yet. Then add questions in each one.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={creatingModule || loadingExisting || STANDARD_EXERCISES.every((std) => hasStandard(existingChapterExercises, std))}
+              onClick={handleCreateModule}
+              className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-amber-500 disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              {creatingModule
+                ? "Creating..."
+                : STANDARD_EXERCISES.every((std) => hasStandard(existingChapterExercises, std))
+                ? "All exercises already created"
+                : `Create ${STANDARD_EXERCISES.filter((std) => !hasStandard(existingChapterExercises, std)).length} Exercises`}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {STANDARD_EXERCISES.map((std) => {
+              const done = hasStandard(existingChapterExercises, std);
+              return (
+                <div
+                  key={std.title}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${
+                    done
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  }`}
+                >
+                  {done ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Plus className="h-3.5 w-3.5 shrink-0 text-amber-600" />}
+                  <span className="truncate">{std.title}</span>
+                  {done && <span className="ml-auto text-[10px] font-semibold">exists</span>}
+                </div>
+              );
+            })}
+          </div>
+          {errorMsg && <p className="text-xs font-semibold text-rose-600">{errorMsg}</p>}
+          <p className="text-[11px] text-slate-400">Need a different, single exercise? Set it up below instead.</p>
         </div>
       )}
 
@@ -814,25 +884,10 @@ function NewExerciseContent() {
                   type="button"
                   onClick={() => {
                     setTitle(p);
-                    if (p.includes("NEET")) {
-                      setExerciseType("NEET_PYQ");
-                      setOrganizationMode("YEAR_WISE");
-                    } else if (p.includes("JEE")) {
-                      setExerciseType("JEE_PYQ");
-                      setOrganizationMode("YEAR_WISE");
-                    } else if (p.includes("Advanced")) {
-                      setExerciseType("ADVANCED");
-                      setOrganizationMode("TOPIC_WISE");
-                    } else if (p.includes("Basic")) {
-                      setExerciseType("BASIC_PRACTICE");
-                      setOrganizationMode("TOPIC_WISE");
-                    } else if (p.includes("Mixed")) {
-                      setExerciseType("MIXED");
-                      setOrganizationMode("TOPIC_WISE");
-                    } else {
-                      setExerciseType("TOPIC_WISE");
-                      setOrganizationMode("TOPIC_WISE");
-                    }
+                    const std = STANDARD_EXERCISES.find((x) => x.title === p);
+                    const type = std?.exerciseType ?? "TOPIC_WISE";
+                    setExerciseType(type);
+                    setOrganizationMode(type.includes("PYQ") ? "YEAR_WISE" : "TOPIC_WISE");
                   }}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                     title === p
@@ -894,6 +949,7 @@ function NewExerciseContent() {
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               >
                 <option value="TOPIC_WISE">Topic-wise Questions</option>
+                <option value="NCERT">NCERT &amp; NCERT Exemplar</option>
                 <option value="BASIC_PRACTICE">Basic Practice Sheet</option>
                 <option value="ADVANCED">Advanced / High-Yield</option>
                 <option value="NEET_PYQ">NEET Previous Year Questions (PYQs)</option>

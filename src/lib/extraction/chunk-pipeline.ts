@@ -21,6 +21,8 @@ import {
 } from "./figure-crops";
 import { validateAndClassifyQuestions } from "./validator";
 import { questionFingerprint } from "@/lib/pyq/fingerprint";
+import { exerciseTargetOf } from "@/lib/exercises/standard-exercises";
+import { importVerifiedQuestionsToDraft } from "./draft-importer";
 import { cropQuestionImages, hasFigure } from "./question-images";
 
 export interface ChunkMetadata {
@@ -666,6 +668,18 @@ export async function processChunkForJob(
       reportJson: report,
     },
   });
+
+  // A PDF uploaded from an exercise: its verified questions go to the
+  // Question Bank (as drafts) and into the exercise at once. Questions that
+  // need review stay on the job page; importing them there adds them too.
+  if (isComplete) {
+    const job = await prisma.extractionJob.findUnique({ where: { id: jobId }, select: { tags: true, createdById: true } });
+    if (exerciseTargetOf(job?.tags)) {
+      await importVerifiedQuestionsToDraft(jobId, job!.createdById).catch((err) =>
+        console.error(`[chunk-pipeline] auto-import of job ${jobId} into its exercise failed:`, err)
+      );
+    }
+  }
 
   return {
     success: chunkMeta.status === "COMPLETED",

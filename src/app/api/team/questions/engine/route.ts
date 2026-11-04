@@ -11,6 +11,26 @@ import { analyzeQuestionSimilarity } from "@/lib/questions/similarity";
 import { QuestionType, Difficulty } from "@prisma/client";
 import { testStartedReason } from "@/lib/tests/scheduled-publish";
 import { contentFingerprint, duplicateMessage, findInTest, testIdOfSection, withTestLock } from "@/lib/tests/test-question-guard";
+import { importQuestionsToExercise } from "@/lib/exercises/exercise-service";
+
+/**
+ * "Add New Question" from an exercise (and its part): the saved question is
+ * placed in that exercise straight away. Returns a note if it could not be.
+ */
+async function linkToExercise(questionId: string, exerciseId: unknown, sectionId: unknown, userId: string): Promise<string | null> {
+  if (typeof exerciseId !== "string" || !exerciseId) return null;
+  try {
+    const res = await importQuestionsToExercise({
+      exerciseId,
+      rawInput: questionId,
+      targetSectionId: typeof sectionId === "string" && sectionId ? sectionId : undefined,
+      userId,
+    });
+    return res.importedCount + res.alreadyIncludedCount > 0 ? null : "The question was saved but could not be added to the exercise.";
+  } catch (err) {
+    return `The question was saved but could not be added to the exercise: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
 
 /** A test's questions stop changing once it has started (or someone has taken it). */
 async function testSectionLockReason(sectionId: unknown): Promise<string | null> {
@@ -154,6 +174,8 @@ export async function POST(request: NextRequest) {
       isPublished = true,
       dppId,
       testSectionId,
+      exerciseId,
+      exerciseSectionId,
       order,
       slotNumber,
     } = body;
@@ -404,6 +426,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const exerciseNote = await linkToExercise(question.id, exerciseId, exerciseSectionId, session.user.id);
+
     // 7. Audit Log
     await prisma.auditLog.create({
       data: {
@@ -428,6 +452,7 @@ export async function POST(request: NextRequest) {
         dppQuestion,
         sectionQuestion,
         similarityReport: simReport,
+        exerciseNote,
       },
       201
     );
@@ -471,6 +496,8 @@ export async function PUT(request: NextRequest) {
       tags = [],
       dppId,
       testSectionId,
+      exerciseId,
+      exerciseSectionId,
       order,
       slotNumber,
     } = body;
@@ -798,7 +825,8 @@ export async function PUT(request: NextRequest) {
       },
     });
 
-    return apiSuccess({ question: updated, sectionQuestion, dppQuestion });
+    const exerciseNote = await linkToExercise(questionId, exerciseId, exerciseSectionId, session.user.id);
+    return apiSuccess({ question: updated, sectionQuestion, dppQuestion, exerciseNote });
   } catch (error) {
     return handleApiError(error);
   }

@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
-import { getExercisesForChapter } from "@/lib/exercises/exercise-service";
+import { ensureChapterModule, getExercisesForChapter } from "@/lib/exercises/exercise-service";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,28 @@ export async function GET(request: NextRequest) {
 
     const exercises = await getExercisesForChapter(subject, chapter);
     return apiSuccess({ exercises });
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+/**
+ * POST { subject, chapter } — creates the chapter module: the standard
+ * exercises (Exercise 1–5, NCERT & NCERT Exemplar) the chapter doesn't have yet.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+    await requirePermission(session.user.id, PERMISSIONS.QUESTION_CREATE);
+
+    const body = (await request.json().catch(() => ({}))) as { subject?: string; chapter?: string };
+    const subject = body.subject?.trim();
+    const chapter = body.chapter?.trim();
+    if (!subject || !chapter) {
+      return NextResponse.json({ success: false, error: "Subject and chapter are required." }, { status: 400 });
+    }
+    return apiSuccess(await ensureChapterModule(subject, chapter, session.user.id));
   } catch (err) {
     return handleApiError(err);
   }

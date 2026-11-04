@@ -10,11 +10,15 @@
 import { prisma } from "@/lib/db";
 import { questionFingerprint } from "@/lib/pyq/fingerprint";
 import { withNewQuestionCode, toQuestionType, toDifficulty, isOptionBasedType } from "@/lib/questions/create-with-code";
+import { exerciseTargetOf } from "@/lib/exercises/standard-exercises";
+import { importQuestionsToExercise } from "@/lib/exercises/exercise-service";
 
 export interface ImportToDraftResult {
   importedCount: number;
   skippedCount: number;
   draftQuestionIds: string[];
+  /** Questions placed in the exercise the PDF was uploaded from (if any). */
+  addedToExercise?: number;
 }
 
 export async function importVerifiedQuestionsToDraft(
@@ -36,6 +40,9 @@ export async function importVerifiedQuestionsToDraft(
   if (!job) throw new Error("Extraction job not found.");
 
   const draftQuestionIds: string[] = [];
+  // Already in the Question Bank (exact copy): not imported again, but an
+  // exercise the PDF was uploaded for still gets that question.
+  const existingQuestionIds: string[] = [];
   let skippedCount = 0;
 
   for (const eq of job.questions) {
@@ -98,8 +105,9 @@ export async function importVerifiedQuestionsToDraft(
 
     // An exact copy already in the Question Bank is not imported again.
     const fingerprint = questionFingerprint(eq.statement || "", (eq.options as Record<string, string>) || null);
-    const already = await prisma.question.findFirst({ where: { contentFingerprint: fingerprint }, select: { questionCode: true } });
+    const already = await prisma.question.findFirst({ where: { contentFingerprint: fingerprint }, select: { id: true, questionCode: true } });
     if (already) {
+      existingQuestionIds.push(already.id);
       await prisma.extractedQuestion.update({
         where: { id: eq.id },
         data: { status: "DUPLICATE", reviewReasons: [...((Array.isArray(eq.reviewReasons) ? eq.reviewReasons : []) as string[]), `🔁 Duplicate of ${already.questionCode} in the Question Bank.`] },
@@ -189,6 +197,23 @@ export async function importVerifiedQuestionsToDraft(
     draftQuestionIds.push(createdQuestion.id);
   }
 
+  let addedToExercise: number | undefined;
+  const target = exerciseTargetOf(job.tags);
+  const forExercise = [...draftQuestionIds, ...existingQuestionIds];
+  if (target && forExercise.length) {
+    try {
+      const res = await importQuestionsToExercise({
+        exerciseId: target.exerciseId,
+        rawInput: forExercise.join("\n"),
+        targetSectionId: target.sectionId ?? undefined,
+        userId,
+      });
+      addedToExercise = res.importedCount;
+    } catch (err) {
+      console.error(`[draft-importer] adding job ${jobId}'s questions to exercise ${target.exerciseId} failed:`, err);
+    }
+  }
+
   // Update extraction job stats
   const remainingReview = await prisma.extractedQuestion.count({
     where: { jobId, status: "REVIEW_REQUIRED" },
@@ -205,5 +230,6 @@ export async function importVerifiedQuestionsToDraft(
     importedCount: draftQuestionIds.length,
     skippedCount,
     draftQuestionIds,
+    addedToExercise,
   };
 }

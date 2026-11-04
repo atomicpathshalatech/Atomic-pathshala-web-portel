@@ -49,6 +49,27 @@ export interface ExtractedQuestionData {
   costEstimate?: CostEstimateResult;
 }
 
+/**
+ * How every AI-written solution looks (question extraction and "Generate
+ * solution"): the concept first, then numbered steps, and a calculation one
+ * line at a time — never several calculations run together on one line.
+ */
+const SOLUTION_FORMAT_RULES = `STEP-BY-STEP BILINGUAL SOLUTION (short, but every step shown; STRICTLY NO markdown stars '**' or '*'):
+   - "solutionEn":
+     Concept : [the rule / formula / fact the question uses, 1-2 lines]
+     Solution :
+     Step 1 : [first step]
+     Step 2 : [next step]
+     (as many steps as the question needs — usually 2 to 5)
+     Final Answer : Option (X)
+   - "solutionHi": the same in Hindi — सिद्धांत : …, हल :, चरण 1 : …, चरण 2 : …, अंतिम उत्तर : विकल्प (X)
+   - CALCULATIONS LINE BY LINE (Physics, Physical Chemistry, Maths, any numerical): write the formula on one line, put in the values on the next, simplify on the next, and the result on its own line. NEVER chain several calculations on one line (no "a = b = c = d" runs), never squeeze a whole derivation into one sentence.
+   - Theory questions: the steps give the reason the answer is right (and, in one line, why a tempting wrong option is wrong) — no long paragraphs.
+   - Each Step on its own line (separate lines with \\n). Plain text; LaTeX $...$ only for math, formulas and symbols.`;
+
+const SOLUTION_EXAMPLE_EN = "Concept : ...\\nSolution :\\nStep 1 : ...\\nStep 2 : ...\\nFinal Answer : Option (A)";
+const SOLUTION_EXAMPLE_HI = "सिद्धांत : ...\\nहल :\\nचरण 1 : ...\\nचरण 2 : ...\\nअंतिम उत्तर : विकल्प (A)";
+
 // Model order and retired / blocked handling live in one shared place.
 const GEMINI_MODELS = GEMINI_TEXT_MODELS;
 
@@ -252,19 +273,7 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
 2. SCIENTIFICALLY VERIFIED CORRECT ANSWER:
    - Identify visibly marked answer or deduce the 100% scientifically correct option ("A", "B", "C", or "D"). Put in "correctAnswer": ["A"].
 
-3. CONCISE & TO-THE-POINT BILINGUAL SOLUTION (Max 3-5 lines, STRICTLY NO markdown stars '**' or '*'):
-   - Keep solution SHORT, CRISP, direct, and to the point. No bloated introductory filler.
-   - "solutionEn":
-     Concept : [1-line core formula or scientific rule]
-     Solution : [Concise 1-3 line derivation or direct option verification]
-     Final Answer : Option (X)
-
-   - "solutionHi":
-     सिद्धांत : [1-पंक्ति का मुख्य सूत्र या नियम]
-     हल : [संक्षिप्त 1-3 पंक्ति का चरणबद्ध हल]
-     अंतिम उत्तर : विकल्प (X)
-
-   - CRITICAL: DO NOT use markdown bold asterisks (NO ** or *). Use clean plain text with LaTeX $...$ for equations and symbols only.
+3. ${SOLUTION_FORMAT_RULES}
 
 4. ${metadataInstructions(allowedChapters)}
    - "hasFigure": true/false (if question relies on a diagram/graph/circuit) and "figureCaption".
@@ -276,8 +285,8 @@ RETURN STRICT JSON SCHEMA:
   "optionsEn": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "optionsHi": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "correctAnswer": ["A"],
-  "solutionEn": "Concept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
-  "solutionHi": "सिद्धांत : ...\\nहल : ...\\nअंतिम उत्तर : विकल्प (A)",
+  "solutionEn": "${SOLUTION_EXAMPLE_EN}",
+  "solutionHi": "${SOLUTION_EXAMPLE_HI}",
   "hasFigure": false,
   "figureCaption": "",
   "figures": [],
@@ -414,11 +423,7 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
 2. DEDUCE CORRECT ANSWER:
    - Identify or deduce the 100% scientifically correct option in "correctAnswer": ["A"].
 
-3. CONCISE & TO-THE-POINT BILINGUAL SOLUTION (Max 3-5 lines, STRICTLY NO markdown stars '**' or '*'):
-   - Keep solution SHORT, CRISP, and direct. No bloated filler.
-   - "solutionEn": Concept : [1-line rule/formula], Solution : [1-3 line derivation or reason], Final Answer : Option (X)
-   - "solutionHi": सिद्धांत : [1-पंक्ति का सूत्र/नियम], हल : [संक्षिप्त 1-3 पंक्ति का हल], अंतिम उत्तर : विकल्प (X)
-   - CRITICAL: NO markdown asterisks (NO ** or *).
+3. ${SOLUTION_FORMAT_RULES}
 
 4. ${metadataInstructions(allowedChapters)}
 
@@ -434,8 +439,8 @@ RETURN STRICT JSON SCHEMA:
   "optionsEn": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "optionsHi": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "correctAnswer": ["A"],
-  "solutionEn": "Concept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
-  "solutionHi": "सिद्धांत : ...\\nहल : ...\\nअंतिम उत्तर : विकल्प (A)",
+  "solutionEn": "${SOLUTION_EXAMPLE_EN}",
+  "solutionHi": "${SOLUTION_EXAMPLE_HI}",
   "subject": "Biology",
   "chapter": "Cell: The Unit of Life",
   "topic": "Cell Organelles",
@@ -543,31 +548,14 @@ ${userSelectedPrompt}
 ${userReferencePrompt}
 ${userInstructionPrompt}
 
-MANDATORY SOLUTION STRUCTURE (SMALL, CRISP, AND STRICTLY TO THE POINT):
-- Maximum 3-5 lines total. DO NOT write long explanations or bloated introductory paragraphs.
-- STRICTLY NO markdown bold asterisks (NO ** or *). Use clean plain text. LaTeX $...$ only for math/formulas.
-
-"solutionEn":
-Concept : [1-line core rule/formula/theorem]
-
-Solution :
-[Concise 1-3 line step-by-step calculation or direct option evaluation]
-
-Final Answer : Option (X)
-
-"solutionHi":
-सिद्धांत : [1-पंक्ति का मुख्य सूत्र या नियम]
-
-हल :
-[संक्षिप्त 1-3 पंक्ति का चरणबद्ध हल]
-
-अंतिम उत्तर : विकल्प (X)
+MANDATORY SOLUTION STRUCTURE:
+${SOLUTION_FORMAT_RULES}
 
 RETURN STRICT JSON SCHEMA:
 {
   "recommendedAnswer": "A",
-  "solutionEn": "Concept : ...\\n\\nSolution :\\n...\\n\\nFinal Answer : Option (A)",
-  "solutionHi": "सिद्धांत : ...\\n\\nहल :\\n...\\n\\nअंतिम उत्तर : विकल्प (A)"
+  "solutionEn": "${SOLUTION_EXAMPLE_EN}",
+  "solutionHi": "${SOLUTION_EXAMPLE_HI}"
 }`;
 
     const response = await model.generateContent(prompt);

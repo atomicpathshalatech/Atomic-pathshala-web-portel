@@ -43,7 +43,7 @@ import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
 import { CamDrawEditor } from "@/components/camdraw/CamDrawEditor";
 
 export interface UnifiedQuestionEditorProps {
-  mode: "bank" | "dpp" | "test";
+  mode: "bank" | "dpp" | "test" | "exercise";
   initialQuestion?: any;
   questionId?: string;
   dppId?: string;
@@ -51,6 +51,9 @@ export interface UnifiedQuestionEditorProps {
   testId?: string;
   testSectionId?: string;
   testName?: string;
+  /** Exercise Builder "Add New Question": the saved question goes into this exercise (and part). */
+  exerciseId?: string;
+  exerciseSectionId?: string;
   slotNumber?: number;
   order?: number;
   totalSlots?: number;
@@ -126,6 +129,8 @@ export function UnifiedQuestionEditor({
   testId,
   testSectionId,
   testName,
+  exerciseId,
+  exerciseSectionId,
   slotNumber = 1,
   order,
   totalSlots = 1,
@@ -1261,6 +1266,8 @@ export function UnifiedQuestionEditor({
         camDrawData: camDrawData || undefined,
         dppId,
         testSectionId,
+        exerciseId,
+        exerciseSectionId,
         order,
         slotNumber,
         isPublished: false,
@@ -1289,6 +1296,7 @@ export function UnifiedQuestionEditor({
       }
 
       const savedQ = json.data?.question;
+      if (json.data?.exerciseNote) toast.error(json.data.exerciseNote);
       if (savedQ?.id) {
         setCurrentDraftId(savedQ.id);
       }
@@ -2322,7 +2330,7 @@ export function UnifiedQuestionEditor({
       {/* METADATA — last thing before Save */}
       <QuestionMetadataPanel
         ref={metadataPanelRef}
-        slotLabel={mode === "bank" ? undefined : `Q.${slotNumber}`}
+        slotLabel={mode === "bank" ? undefined : mode === "exercise" ? `New Q.${slotNumber}` : `Q.${slotNumber}`}
         subject={subject}
         chapter={chapter}
         setChapter={setChapter}
@@ -2393,6 +2401,14 @@ export function UnifiedQuestionEditor({
             >
               Cancel
             </button>
+          ) : mode === "exercise" ? (
+            <button
+              type="button"
+              onClick={() => router.push(onCancelHref)}
+              className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition cursor-pointer"
+            >
+              ← Back to Exercise
+            </button>
           ) : (
             <div className="flex items-center gap-2">
               <button
@@ -2448,6 +2464,8 @@ export function UnifiedQuestionEditor({
                 ? "Saving..."
                 : mode === "bank"
                 ? "Save & Submit to Review (Stage 1)"
+                : mode === "exercise"
+                ? "Save & Add to Exercise"
                 : "Save Question"}
             </span>
           </button>
