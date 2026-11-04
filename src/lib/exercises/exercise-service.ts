@@ -299,8 +299,19 @@ export async function importQuestionsToExercise(params: {
         },
       });
     }
-  } else if (exercise.organizationMode === "TOPIC_WISE" || exercise.exerciseType === "TOPIC_WISE") {
-    // Topic-wise distribution
+  } else if (
+    exercise.organizationMode === "TOPIC_WISE" ||
+    exercise.exerciseType === "TOPIC_WISE" ||
+    // A whole PDF / a batch into Exercise 2, 5 … is arranged by topic too
+    // (the NCERT exercise keeps its NCERT / Exemplar parts).
+    (exercise.exerciseType !== "NCERT" && exercise.organizationMode !== "CUSTOM")
+  ) {
+    // Topic-wise distribution — topic by topic, sub-topics kept together.
+    toInsertQuestions.sort(
+      (a, b) =>
+        cleanTopicKey(a.topic).localeCompare(cleanTopicKey(b.topic)) ||
+        String(a.subTopic ?? "").localeCompare(String(b.subTopic ?? ""))
+    );
     // Map existing sections by normalized topic key and full title
     const sectionTopicMap = new Map<string, string>();
     for (const sec of exercise.sections) {

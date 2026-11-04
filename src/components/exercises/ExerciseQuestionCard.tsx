@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import type { SimilarityHit } from "@/lib/exercises/module-similarity";
 import {
   Trash2,
   MoveRight,
@@ -52,6 +53,8 @@ interface ExerciseQuestionCardProps {
   exerciseChapter: string;
   currentSectionId: string | null;
   sections: SectionOption[];
+  /** Closest other question in the chapter module (40 %+), if any. */
+  similarity?: SimilarityHit;
   onRemove: (eqId: string) => void;
   onMoveSection: (eqId: string, newSectionId: string) => void;
 }
@@ -64,6 +67,7 @@ export function ExerciseQuestionCard({
   exerciseChapter,
   currentSectionId,
   sections,
+  similarity,
   onRemove,
   onMoveSection,
 }: ExerciseQuestionCardProps) {
@@ -107,6 +111,24 @@ export function ExerciseQuestionCard({
           <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
             {question.questionCode || question.id}
           </span>
+
+          {/* Similarity with another question of the chapter module */}
+          {similarity && similarity.score >= 60 && (
+            <span
+              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-black border ${
+                similarity.score >= 100
+                  ? "bg-rose-600 text-white border-rose-700"
+                  : similarity.score >= 90
+                  ? "bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-950 dark:text-orange-300"
+                  : similarity.score >= 75
+                  ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300"
+                  : "bg-yellow-50 text-yellow-800 border-yellow-200 dark:bg-yellow-950/50 dark:text-yellow-300"
+              }`}
+              title={`${similarity.reason}\nMatches ${similarity.match.exerciseTitle}, Q.${similarity.match.number} (${similarity.match.questionCode ?? ""}): ${similarity.match.preview}`}
+            >
+              {similarity.score}% {similarity.label} · {similarity.match.exerciseTitle} Q.{similarity.match.number}
+            </span>
+          )}
 
           {/* PYQ Badge */}
           {(question.pyqExam || question.pyqYear) && (

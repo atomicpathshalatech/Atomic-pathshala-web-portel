@@ -35,6 +35,7 @@ import { ExercisePdfExportModal } from "@/components/exercises/ExercisePdfExport
 import { ExerciseQuestionCard } from "@/components/exercises/ExerciseQuestionCard";
 import { ExercisePdfUploadModal } from "@/components/exercises/ExercisePdfUploadModal";
 import { STANDARD_EXERCISES } from "@/lib/exercises/standard-exercises";
+import type { SimilarityHit } from "@/lib/exercises/module-similarity";
 
 interface ExerciseDetail {
   id: string;
@@ -129,6 +130,14 @@ export default function ExerciseBuilderWorkspacePage() {
 
   // Filter questions within workspace
   const [filterWarningOnly, setFilterWarningOnly] = useState(false);
+  // Similarity check against the whole chapter module (all its exercises)
+  const [similarity, setSimilarity] = useState<{
+    byExerciseQuestionId: Record<string, SimilarityHit>;
+    duplicates: number;
+    nearDuplicates: number;
+    compared: number;
+  } | null>(null);
+  const [filterSimilarOnly, setFilterSimilarOnly] = useState(false);
 
   // Add / Edit Section & Topic Modal State
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
@@ -166,6 +175,7 @@ export default function ExerciseBuilderWorkspacePage() {
         throw new Error(json.error || "Failed to load exercise");
       }
       setExercise(json.data);
+      loadSimilarity();
       if (json.data?.subject && json.data?.chapter) {
         loadSiblings(json.data.subject, json.data.chapter);
         loadChapterTopics(json.data.subject, json.data.chapter);
@@ -174,6 +184,16 @@ export default function ExerciseBuilderWorkspacePage() {
       setErrorMsg(err.message || "Failed to load exercise.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSimilarity = async () => {
+    try {
+      const res = await fetch(`/api/team/exercises/${exerciseId}/similarity`);
+      const json = await res.json();
+      if (json.success) setSimilarity(json.data);
+    } catch (err) {
+      console.warn("Similarity check failed", err);
     }
   };
 
@@ -799,6 +819,28 @@ export default function ExerciseBuilderWorkspacePage() {
 
         {/* Filter questions toggle */}
         <div className="flex items-center gap-2 text-xs">
+          {similarity && similarity.duplicates + similarity.nearDuplicates > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilterSimilarOnly(!filterSimilarOnly)}
+              className={`rounded-md px-2.5 py-1 text-xs font-bold border transition-colors ${
+                filterSimilarOnly
+                  ? "border-rose-500 bg-rose-100 text-rose-900"
+                  : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+              }`}
+              title="Questions that match another question in this chapter module"
+            >
+              {similarity.duplicates > 0 && `${similarity.duplicates} duplicate${similarity.duplicates === 1 ? "" : "s"} (100%)`}
+              {similarity.duplicates > 0 && similarity.nearDuplicates > 0 && " · "}
+              {similarity.nearDuplicates > 0 && `${similarity.nearDuplicates} near (90%+)`}
+              {filterSimilarOnly ? " — showing only these" : ""}
+            </button>
+          )}
+          {similarity && similarity.duplicates + similarity.nearDuplicates === 0 && exercise.audit.totalQuestions > 0 && (
+            <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-bold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+              No duplicates in this chapter module
+            </span>
+          )}
           {exercise.audit.chapterMismatchCount > 0 && (
             <button
               type="button"
@@ -913,6 +955,7 @@ export default function ExerciseBuilderWorkspacePage() {
           {exercise.sections.map((sec, secIdx) => {
             const isCollapsed = Boolean(collapsedSections[sec.id]);
             const sectionQuestions = sec.questions.filter((qItem) => {
+              if (filterSimilarOnly && (similarity?.byExerciseQuestionId[qItem.id]?.score ?? 0) < 90) return false;
               if (filterWarningOnly) {
                 const qChap = qItem.question.chapter;
                 return (
@@ -1064,6 +1107,7 @@ export default function ExerciseBuilderWorkspacePage() {
                               exerciseChapter={exercise.chapter}
                               currentSectionId={sec.id}
                               sections={sectionsList}
+                              similarity={similarity?.byExerciseQuestionId[qItem.id]}
                               onRemove={handleRemoveQuestion}
                               onMoveSection={handleMoveQuestionSection}
                             />

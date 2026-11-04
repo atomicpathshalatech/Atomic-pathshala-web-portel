@@ -2,8 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
 import { UnifiedQuestionEditor } from "@/components/questions/UnifiedQuestionEditor";
+import type { SimilarityHit } from "@/lib/exercises/module-similarity";
+
+type LastCheck = { questionCode: string | null; exerciseQuestionId: string; number: number; hits: SimilarityHit[]; compared: number; removed?: boolean };
 
 interface Props {
   exercise: { id: string; title: string; subject: string; chapter: string; exerciseType: string; questionCount: number };
@@ -22,6 +25,28 @@ export function ExerciseQuestionAuthor({ exercise, sections, initialSectionId }:
   const [added, setAdded] = useState(0);
   // A fresh, empty editor after each saved question (subject, chapter and part stay).
   const [editorKey, setEditorKey] = useState(0);
+  // Similarity of the question just saved with the rest of the chapter module.
+  const [lastCheck, setLastCheck] = useState<LastCheck | null>(null);
+
+  const checkSimilarity = async (questionId: string, questionCode: string | null) => {
+    try {
+      const res = await fetch(`/api/team/exercises/${exercise.id}/similarity?questionId=${encodeURIComponent(questionId)}`);
+      const json = await res.json();
+      if (json.success) setLastCheck({ questionCode, ...json.data });
+    } catch {
+      // the check is a help; saving already worked
+    }
+  };
+
+  const removeLast = async () => {
+    if (!lastCheck) return;
+    const res = await fetch(`/api/team/exercises/${exercise.id}/questions/${lastCheck.exerciseQuestionId}`, { method: "DELETE" });
+    const json = await res.json().catch(() => null);
+    if (json?.success) {
+      setLastCheck({ ...lastCheck, removed: true });
+      setAdded((n) => Math.max(0, n - 1));
+    }
+  };
 
   const section = sections.find((s) => s.id === sectionId) ?? null;
   const backHref = `/team/exercises/${exercise.id}${section ? `#section-${section.id}` : ""}`;
@@ -91,6 +116,49 @@ export function ExerciseQuestionAuthor({ exercise, sections, initialSectionId }:
         </div>
       </div>
 
+      {lastCheck && (() => {
+        const top = lastCheck.hits[0];
+        const tone = !top || top.score < 60
+          ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+          : top.score >= 90
+          ? "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200"
+          : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200";
+        return (
+          <div className={`rounded-2xl border px-4 py-3 text-xs ${tone}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-bold">
+                {lastCheck.removed
+                  ? `Q.${lastCheck.number} (${lastCheck.questionCode ?? ""}) was removed from this exercise.`
+                  : !top || top.score < 60
+                  ? `Saved Q.${lastCheck.number} (${lastCheck.questionCode ?? ""}) — no similar question among the ${lastCheck.compared} in this chapter module.`
+                  : `Saved Q.${lastCheck.number} (${lastCheck.questionCode ?? ""}) is ${top.score}% similar to ${top.match.exerciseTitle} Q.${top.match.number} — ${top.reason}`}
+              </p>
+              {!lastCheck.removed && top && top.score >= 60 && (
+                <button
+                  type="button"
+                  onClick={removeLast}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-2.5 py-1 font-bold text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:bg-slate-900 dark:text-rose-300"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Remove it from the exercise
+                </button>
+              )}
+            </div>
+            {!lastCheck.removed && top && top.score >= 60 && (
+              <ul className="mt-2 space-y-1">
+                {lastCheck.hits.map((h) => (
+                  <li key={h.match.exerciseQuestionId} className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      <b>{h.score}%</b> {h.match.exerciseTitle} Q.{h.match.number} ({h.match.questionCode}) — {h.match.preview}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })()}
+
       <UnifiedQuestionEditor
         key={`${editorKey}-${sectionId}`}
         mode="exercise"
@@ -101,8 +169,9 @@ export function ExerciseQuestionAuthor({ exercise, sections, initialSectionId }:
         totalSlots={exercise.questionCount + added + 1}
         syllabus={[{ subject: exercise.subject, chapter: exercise.chapter, topics: [] }]}
         onCancelHref={backHref}
-        onSaveSuccess={() => {
+        onSaveSuccess={(saved) => {
           setAdded((n) => n + 1);
+          if (saved?.id) void checkSimilarity(saved.id, saved.questionCode ?? null);
           setEditorKey((k) => k + 1);
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
