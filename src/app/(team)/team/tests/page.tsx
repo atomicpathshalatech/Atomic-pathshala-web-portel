@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
+import type { AttemptStatus } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
@@ -35,6 +36,10 @@ export default async function TestsListPage() {
   // A DPP's backing test (testType "DPP", see lib/dpp/dpp-test.ts) is managed
   // from Team → DPP, never from this list.
   const notDpp = { OR: [{ testType: null }, { testType: { not: "DPP" } }] };
+  // "Attempts" here = submitted attempts, as on the test's leaderboard. A test
+  // opened but not submitted (still running, or left) is counted apart —
+  // counting it in used to make this number bigger than the leaderboard's.
+  const SUBMITTED = { status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] as AttemptStatus[] } };
 
   let tests;
   if (isAdmin) {
@@ -43,7 +48,7 @@ export default async function TestsListPage() {
       include: {
         batchSchedule: { include: { batch: { select: { name: true } } } },
         sections: { select: { _count: { select: { questions: true } } } },
-        _count: { select: { attempts: true } },
+        _count: { select: { attempts: { where: SUBMITTED } } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -63,11 +68,18 @@ export default async function TestsListPage() {
       include: {
         batchSchedule: { include: { batch: { select: { name: true } } } },
         sections: { select: { _count: { select: { questions: true } } } },
-        _count: { select: { attempts: true } },
+        _count: { select: { attempts: { where: SUBMITTED } } },
       },
       orderBy: { createdAt: "desc" },
     });
   }
+
+  const started = await prisma.attempt.groupBy({
+    by: ["testId"],
+    where: { testId: { in: tests.map((t) => t.id) }, status: "IN_PROGRESS" },
+    _count: { _all: true },
+  });
+  const startedByTest = new Map(started.map((g) => [g.testId, g._count._all]));
 
   return (
     <div className="space-y-stack-lg max-w-5xl">
@@ -116,6 +128,9 @@ export default async function TestsListPage() {
                   <p className="text-label-sm text-on-surface-variant">
                     {questionCount} question{questionCount === 1 ? "" : "s"} · {t.durationMin} min ·{" "}
                     {t._count.attempts} attempt{t._count.attempts === 1 ? "" : "s"}
+                    {(startedByTest.get(t.id) ?? 0) > 0 && (
+                      <span className="text-on-surface-variant/70"> (+{startedByTest.get(t.id)} not submitted)</span>
+                    )}
                   </p>
                 </Link>
 
