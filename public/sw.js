@@ -14,16 +14,28 @@
  *     the next page load, so pushes arrived with no handler. That file now
  *     just loads this one.
  *
+ * The offline page is plain HTML written here, not the Next.js /offline
+ * route: a cached Next page loads the JS chunks of the deploy it was cached
+ * from, and after the next deploy those are gone ("Loading chunk … failed").
+ *
  * Bump SW_VERSION on every deploy that changes caching behaviour so old
  * caches are dropped on activate.
  */
-const SW_VERSION = "v1.1.0";
+const SW_VERSION = "v1.2.0";
 const RUNTIME_CACHE = `atomic-guru-runtime-${SW_VERSION}`;
 const PRECACHE = `atomic-guru-precache-${SW_VERSION}`;
-const OFFLINE_URL = "/offline";
+const OFFLINE_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Offline · Atomic Pathshala</title></head>
+<body style="margin:0;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:2rem;box-sizing:border-box;text-align:center;background:#090D16;color:#E7ECF5;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
+<img src="/icons/icon-192.png" alt="Atomic Pathshala" width="72" height="72" style="border-radius:16px">
+<h1 style="font-size:1.15rem;font-weight:700;margin:0">You are offline. Please check your internet connection.</h1>
+<p style="font-size:.9rem;opacity:.7;margin:0;max-width:22rem">Atomic Pathshala needs a connection to load your classes, tests and doubts. This page reloads by itself once you're back online.</p>
+<button onclick="location.reload()" style="margin-top:.5rem;padding:.6rem 1.4rem;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#E7ECF5;font-weight:600;font-size:.9rem;cursor:pointer">Try again</button>
+<script>addEventListener("online",function(){location.reload()})</script>
+</body></html>`;
 
 const PRECACHE_URLS = [
-  OFFLINE_URL,
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
@@ -92,15 +104,10 @@ async function networkFirstNavigation(request) {
     const res = await fetch(request);
     return res;
   } catch {
-    const cache = await caches.open(PRECACHE);
-    const offline = await cache.match(OFFLINE_URL);
-    return (
-      offline ||
-      new Response(
-        "<!doctype html><meta charset=utf-8><title>Offline</title><body style=\"font-family:system-ui;padding:2rem;text-align:center\">You are offline. Please check your internet connection.</body>",
-        { headers: { "Content-Type": "text/html" }, status: 503 }
-      )
-    );
+    return new Response(OFFLINE_HTML, {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+      status: 503,
+    });
   }
 }
 

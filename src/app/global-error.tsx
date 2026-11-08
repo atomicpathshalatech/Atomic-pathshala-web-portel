@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { reportClientError } from "@/lib/client-error-report";
+import { reloadForChunkError, reportClientError } from "@/lib/client-error-report";
 
 /**
  * Catches an error thrown by the ROOT layout itself (e.g. a session/auth
@@ -18,6 +18,8 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
+    // An old build's file is gone after a deploy: load the new build instead.
+    if (reloadForChunkError(error)) return;
     console.error("[global error boundary]", error);
     reportClientError(error, "global");
   }, [error]);

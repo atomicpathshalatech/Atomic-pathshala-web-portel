@@ -7,9 +7,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Shown by the service worker when a navigation request fails and there is
- * no network. Deliberately static — no session, no data — so it can be
- * precached and never displays stale student information.
+ * Offline notice at /offline. The service worker no longer serves this
+ * route (it has its own plain-HTML copy in public/sw.js, which needs no JS
+ * chunks); kept for anyone who opens the URL.
  */
 export default function OfflinePage() {
   return (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { reportClientError } from "@/lib/client-error-report";
+import { reloadForChunkError, reportClientError } from "@/lib/client-error-report";
 
 /**
  * App-wide error boundary (Next.js App Router convention — catches any
@@ -21,6 +21,8 @@ export default function ErrorBoundary({
   reset: () => void;
 }) {
   useEffect(() => {
+    // An old build's file is gone after a deploy: load the new build instead.
+    if (reloadForChunkError(error)) return;
     console.error("[app error boundary]", error);
     reportClientError(error, "app");
   }, [error]);
