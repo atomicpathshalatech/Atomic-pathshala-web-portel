@@ -30,6 +30,8 @@ const STUDENT_SAFE_SESSION_SELECT = {
   actualStartedAt: true,
   actualEndedAt: true,
   totalExtendedMinutes: true,
+  chatEnabled: true,
+  handRaiseEnabled: true,
 } as const;
 
 /**
@@ -94,6 +96,36 @@ export async function GET(
             ws = await prisma.whiteboardSession.findUnique({ where: { id: groupRoomId }, select: STUDENT_SAFE_SESSION_SELECT });
           }
         }
+
+        // Auto-initialize whiteboardSession for scheduled class if not yet created
+        if (!ws && schedule.teacherId) {
+          try {
+            ws = await prisma.whiteboardSession.upsert({
+              where: { batchScheduleId: params.batchScheduleId },
+              update: {},
+              create: {
+                batchScheduleId: params.batchScheduleId,
+                teacherId: schedule.teacherId,
+                title: schedule.title,
+                status: "ACTIVE",
+                livePhase: "SCHEDULED",
+                scheduledStart: schedule.startsAt,
+                scheduledEnd: schedule.endsAt,
+                chatEnabled: true,
+                handRaiseEnabled: true,
+              },
+              select: STUDENT_SAFE_SESSION_SELECT,
+            });
+          } catch {
+            // Handled
+          }
+        }
+
+        // If ws has no video id yet, fall back to schedule's stored youtubeUrl
+        if (ws && !ws.youtubeVideoId && schedule.youtubeUrl) {
+          const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
+          ws = { ...ws, youtubeVideoId: extractYouTubeVideoId(schedule.youtubeUrl) ?? ws.youtubeVideoId };
+        }
         // A stored link (older rows) is served as its video id.
         if (ws?.youtubeVideoId && ws.youtubeVideoId.length !== 11) {
           const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
@@ -119,9 +151,7 @@ export async function GET(
     // Students only get the video id while the class is actually live (or
     // ending) — a pre-created or already-finished broadcast is not "live".
     // Sessions with no lifecycle row yet (not backfilled) keep old behaviour.
-    if (!teacher && wbSession && liveState && liveState !== "LIVE" && liveState !== "ENDING") {
-      wbSession = { ...wbSession, youtubeVideoId: null };
-    }
+    // Keep youtubeVideoId for waiting room thumbnail
 
     // No YouTube API call here: this route is polled by every student every
     // few seconds, and the videos.update (≈50 quota units) that used to run

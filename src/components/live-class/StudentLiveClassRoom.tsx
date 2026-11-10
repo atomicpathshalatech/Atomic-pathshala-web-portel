@@ -1462,80 +1462,7 @@ export function StudentLiveClassRoom({
     );
   }
 
-  // ---------------- PRE-CLASS CLASSROOM ----------------
-  // Before the educator starts the session (livePhase: "LIVE"), students see
-  // this pre-class classroom view instead — class info, countdown, teacher,
-  // and chat, not a bare "waiting room" placeholder. The whiteboard canvas,
-  // video broadcast, and teacher slides are strictly NOT mounted or revealed
-  // until livePhase flips to "LIVE".
-  if (!isLive) {
-    const hours = Math.floor(Math.max(0, secondsUntilStart) / 3600);
-    const minutes = Math.floor((Math.max(0, secondsUntilStart) % 3600) / 60);
-    const seconds = Math.max(0, secondsUntilStart) % 60;
 
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return (
-      <div className="min-h-screen-safe w-full bg-slate-50 text-slate-900 flex flex-col select-none">
-        {/* Slim header */}
-        <header className="h-12 px-3 sm:px-4 shrink-0 flex items-center gap-2.5 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
-          <Link href="/schedule" className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0" title="Back to Schedule">
-            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-          </Link>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-7 h-7 object-contain shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold text-slate-500 truncate leading-tight">{batchName}</p>
-            <h1 className="text-xs font-bold truncate leading-tight">{scheduleTitle}</h1>
-          </div>
-        </header>
-
-        <main className="flex-1 w-full max-w-md mx-auto p-3 sm:p-4 flex flex-col gap-3 justify-center">
-          {/* Class card */}
-          <div className="bg-white rounded-2xl p-4 shadow-[0_2px_12px_rgba(15,23,42,0.06)] space-y-3">
-            <div className="space-y-0.5">
-              <h2 className="text-base font-bold leading-snug">{scheduleTitle}</h2>
-              <p className="text-[11px] text-slate-500">
-                {[subject, chapterTitle, teacherName].filter(Boolean).join(" · ")}
-              </p>
-            </div>
-
-            {secondsUntilStart > 0 ? (
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                <span className="text-[11px] font-semibold text-slate-500">Class starts in</span>
-                <span className="font-mono text-lg font-bold text-slate-900">
-                  {pad(hours)}:{pad(minutes)}:<span className="text-blue-600">{pad(seconds)}</span>
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                <span className="text-[11px] font-semibold text-emerald-700">Starting soon — you will join automatically</span>
-              </div>
-            )}
-          </div>
-
-          {/* Pre-class chat, when the teacher has it on */}
-          {wbSession?.id && wbSession?.chatEnabled && (
-            <div className="h-72 flex flex-col bg-white rounded-2xl overflow-hidden shadow-[0_2px_12px_rgba(15,23,42,0.06)]">
-              <div className="px-3 py-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 shrink-0">
-                <span className="material-symbols-outlined text-[16px] text-blue-600">chat</span>
-                Chat
-              </div>
-              <div className="flex-1 min-h-0">
-                <MessagesPanel
-                  whiteboardSessionId={wbSession.id}
-                  currentUserId={currentUserId}
-                  role="STUDENT"
-                  theme="light"
-                  showOwnToggle={false}
-                />
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    );
-  }
 
   // ---------------- COMPLETE WHITEBOARD STUDIO (ACTIVE FOR ALL STUDENTS ONCE LIVE) ----------------
   return (
@@ -1623,22 +1550,7 @@ export function StudentLiveClassRoom({
             <span className="text-[10px] uppercase font-bold hidden xs:inline">Rotate</span>
           </button>
 
-          {/* Local Hide/Show Teacher-Video-&-Chat Popup (Student Preference). */}
-          <button
-            type="button"
-            onClick={() => setShowChat((v) => !v)}
-            className={`hidden lg:flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm border ${
-              showChat
-                ? "bg-slate-800 hover:bg-slate-700 text-blue-300 border-blue-500/40"
-                : "bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 border-slate-700"
-            }`}
-            title={showChat ? "Minimize teacher video & chat (distraction-free focus)" : "Show teacher video & chat"}
-          >
-            <span className="material-symbols-outlined text-sm">
-              {showChat ? "chat" : "chat_bubble_outline"}
-            </span>
-            <span className="hidden xs:inline">{showChat ? "Chat" : "Chat Off"}</span>
-          </button>
+
 
           {/* Fullscreen Toggle */}
           <button
@@ -1739,7 +1651,7 @@ export function StudentLiveClassRoom({
             ref={stageContainerRef}
             className="flex-1 min-h-0 w-full relative flex items-center justify-center p-2 bg-[#0d0e16] overflow-hidden"
           >
-            {isYouTube && activeViewMode === "STREAM" ? (
+            {(!isLive || isYouTube || activeViewMode === "STREAM") ? (
               <div className="w-full h-full max-w-full max-h-full aspect-video flex items-center justify-center">
                 <YouTubeLivePlayer
                   silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
@@ -1763,18 +1675,7 @@ export function StudentLiveClassRoom({
               />
             ) : null}
 
-            {/* When chat is minimized: Open Chat floating pill */}
-            {!showChat && (
-              <button
-                type="button"
-                onClick={() => setShowChat(true)}
-                className="absolute top-3 right-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#121420]/95 hover:bg-[#1b1f33] text-white border border-blue-500/40 shadow-2xl backdrop-blur-md text-xs font-bold transition hover:scale-105 active:scale-95 cursor-pointer"
-                title="Open Live Chat"
-              >
-                <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
-                <span>Open Chat</span>
-              </button>
-            )}
+
 
             {/* In Stage Fullscreen: Floating chat toggle + overlay drawer */}
             <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
@@ -1804,7 +1705,7 @@ export function StudentLiveClassRoom({
                   </button>
                 </div>
                 <StudentEngagementPanel
-                  wbSessionId={wbSession?.id}
+                  wbSessionId={wbSession?.id || batchScheduleId}
                   currentUserId={currentUserId}
                   isThemeDark={isThemeDark}
                   activeTab={activeTab}
@@ -1838,21 +1739,12 @@ export function StudentLiveClassRoom({
         </div>
 
         {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
-        {showChat && (
-        <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl animate-in slide-in-from-right duration-200">
-          <div className="flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800/80 shrink-0">
+        <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
+          <div className="flex items-center px-3 py-2 bg-[#0a0b12] border-b border-slate-800/80 shrink-0">
             <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
               <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
               Live Chat & Questions
             </span>
-            <button
-              type="button"
-              onClick={() => setShowChat(false)}
-              className="w-7 h-7 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
-              title="Minimize Chat"
-            >
-              <span className="material-symbols-outlined text-sm">dock_to_right</span>
-            </button>
           </div>
           {/* Every class is a YouTube class now: there is no LiveKit class video. This
               tile exists only while this student is on a call with the teacher. */}
@@ -1922,7 +1814,7 @@ export function StudentLiveClassRoom({
           )}
 
           <StudentEngagementPanel
-            wbSessionId={wbSession?.id}
+            wbSessionId={wbSession?.id || batchScheduleId}
             currentUserId={currentUserId}
             isThemeDark={isThemeDark}
             activeTab={activeTab}
@@ -1951,7 +1843,6 @@ export function StudentLiveClassRoom({
             onCancelPendingDoubt={handleCancelPendingDoubt}
           />
         </aside>
-        )}
       </div>
       )}
 
@@ -2127,7 +2018,7 @@ export function StudentLiveClassRoom({
           </div>
 
           <StudentEngagementPanel
-            wbSessionId={wbSession?.id}
+            wbSessionId={wbSession?.id || batchScheduleId}
             currentUserId={currentUserId}
             isThemeDark={isThemeDark}
             activeTab={activeTab}

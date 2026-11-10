@@ -74,10 +74,16 @@ export async function resolveWhiteboardAccess(
   userId: string,
   whiteboardSessionId: string
 ): Promise<WhiteboardAccess | null> {
-  const wbSession = await prisma.whiteboardSession.findUnique({
+  let wbSession = await prisma.whiteboardSession.findUnique({
     where: { id: whiteboardSessionId },
     include: { teacher: { include: { user: true } }, batchSchedule: true },
   });
+  if (!wbSession) {
+    wbSession = await prisma.whiteboardSession.findUnique({
+      where: { batchScheduleId: whiteboardSessionId },
+      include: { teacher: { include: { user: true } }, batchSchedule: true },
+    });
+  }
   if (!wbSession) return null;
 
   // Backend-enforced auto-end: there is no cron/worker in this app, so a
