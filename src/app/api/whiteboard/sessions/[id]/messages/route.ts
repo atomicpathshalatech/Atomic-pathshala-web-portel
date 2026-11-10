@@ -26,16 +26,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
     if (!access) throw new ForbiddenError();
 
-    const wbSession = await prisma.whiteboardSession.findUnique({
-      where: { id: params.id },
-      select: { chatEnabled: true },
+    const wbSession = await prisma.whiteboardSession.findFirst({
+      where: { OR: [{ id: params.id }, { batchScheduleId: params.id }] },
+      select: { id: true, chatEnabled: true },
     });
     if (!wbSession) return apiError("Whiteboard session not found", 404);
+    const targetSessionId = wbSession.id;
 
     const after = request.nextUrl.searchParams.get("after");
     const anchor = after
       ? await prisma.whiteboardMessage.findFirst({
-          where: { id: after, whiteboardSessionId: params.id },
+          where: { id: after, whiteboardSessionId: targetSessionId },
           select: { createdAt: true },
         })
       : null;
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       // From the anchor's own instant on (the client drops ids it already has),
       // so two messages saved in the same millisecond are never skipped.
       messages = await prisma.whiteboardMessage.findMany({
-        where: { whiteboardSessionId: params.id, deletedAt: null, createdAt: { gte: anchor.createdAt }, NOT: { id: after! } },
+        where: { whiteboardSessionId: targetSessionId, deletedAt: null, createdAt: { gte: anchor.createdAt }, NOT: { id: after! } },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: CATCH_UP_LIMIT,
       });
@@ -55,12 +56,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       // and push the actual chat out of it.
       const [chat, joins] = await Promise.all([
         prisma.whiteboardMessage.findMany({
-          where: { whiteboardSessionId: params.id, deletedAt: null, isSystemMessage: false },
+          where: { whiteboardSessionId: targetSessionId, deletedAt: null, isSystemMessage: false },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: HISTORY_LIMIT,
         }),
         prisma.whiteboardMessage.findMany({
-          where: { whiteboardSessionId: params.id, deletedAt: null, isSystemMessage: true },
+          where: { whiteboardSessionId: targetSessionId, deletedAt: null, isSystemMessage: true },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 40,
         }),
@@ -116,11 +117,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // the sender's own photoUrl lookup — so run them together instead of
     // as two sequential round-trips on every single chat message send.
     const [wbSession, authorUser] = await Promise.all([
-      prisma.whiteboardSession.findUnique({ where: { id: params.id } }),
+      prisma.whiteboardSession.findFirst({
+        where: { OR: [{ id: params.id }, { batchScheduleId: params.id }] },
+      }),
       prisma.user.findUnique({ where: { id: session.user.id }, select: { photoUrl: true } }),
     ]);
     if (!wbSession) return apiError("Whiteboard session not found", 404);
     if (wbSession.status === "ENDED") return apiError("This class has ended.", 409);
+    const targetSessionId = wbSession.id;
 
     if (access.role === "STUDENT" && !wbSession.chatEnabled) {
       return apiError("The teacher has turned off chat for this class.", 403);
@@ -130,13 +134,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const created = await prisma.whiteboardMessage.create({
       data: {
-        whiteboardSessionId: params.id,
+        whiteboardSessionId: targetSessionId,
         authorRole: access.role,
         authorUserId: session.user.id,
         authorName: access.name,
         body: input.body,
       },
     });
+
+    if (params.id !== targetSessionId) {
+      await pushMessage(targetSessionId, {
+        id: created.id,
+        authorRole: access.role,
+        authorUserId: session.user.id,
+        authorName: access.name,
+        authorPhotoUrl,
+        body: created.body,
+        createdAt: created.createdAt.toISOString(),
+      }).catch(() => null);
+    }
 
     await pushMessage(params.id, {
       id: created.id,
