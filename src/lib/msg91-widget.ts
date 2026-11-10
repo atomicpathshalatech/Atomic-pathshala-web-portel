@@ -137,12 +137,15 @@ export function verifyWithMsg91Widget(identifier: string): Promise<string> {
             }
           },
           failure: (err: unknown) => {
-            // This one IS shown to the user as-is (unlike the load/config
-            // errors above) — it's the widget's own OTP-flow message
-            // ("Incorrect OTP", "cancelled", etc.), not an internal detail.
-            const msg =
+            const raw =
               (err as { message?: string })?.message ||
               (typeof err === "string" ? err : "OTP verification was cancelled or failed.");
+
+            let msg = raw;
+            if (/ipblocked|ip.*block/i.test(raw)) {
+              msg =
+                "Too many OTP attempts from this network (IP Blocked). Please switch off Wi-Fi and use Mobile Data, or try again after 15 minutes.";
+            }
             reject(new Error(msg));
           },
         });

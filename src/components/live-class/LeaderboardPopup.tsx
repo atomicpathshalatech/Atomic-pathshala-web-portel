@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface PublishedLeaderboard {
   rankings: Array<{
@@ -29,10 +29,10 @@ export interface PublishedLeaderboard {
 export function YouTubeBadge() {
   return (
     <span
-      className="shrink-0 px-1.5 py-px rounded bg-red-600/90 text-white text-[9px] font-bold tracking-wide"
+      className="shrink-0 px-1 py-px rounded bg-red-600 text-white text-[8px] font-bold tracking-wide leading-none"
       title="Answered in the YouTube chat"
     >
-      YouTube
+      YT
     </span>
   );
 }
@@ -42,13 +42,11 @@ export function isPublishedLeaderboard(data: unknown): data is PublishedLeaderbo
   return Boolean(data && Array.isArray((data as PublishedLeaderboard).rankings));
 }
 
-const MEDALS = ["🥇", "🥈", "🥉"];
-
 /**
- * The quiz leaderboard the teacher publishes — shown to the students AND the
- * teacher, closing itself after `durationSec`. A compact card in the corner
- * (it used to darken the whole screen and hide the board), which can be
- * folded down to a small chip and opened again.
+ * Athletic Victory Podium Leaderboard for live class quizzes.
+ * Floats on the display (movable/draggable anywhere by pointer/touch),
+ * presents Top 3 on an Olympic/athletic victory podium (2nd on left, 1st elevated in center with crown, 3rd on right),
+ * and lists subsequent ranks below in a compact scrollable list.
  */
 export function LeaderboardPopup({
   leaderboard,
@@ -61,7 +59,20 @@ export function LeaderboardPopup({
   const [left, setLeft] = useState(duration);
   const [minimized, setMinimized] = useState(false);
 
-  // Restart the countdown for every new publish (a re-publish replaces the old one).
+  // Drag state for moving over the screen/display
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && !pos) {
+      const cardWidth = Math.min(340, window.innerWidth - 24);
+      const x = Math.max(12, Math.round((window.innerWidth - cardWidth) / 2));
+      const y = Math.max(64, Math.round(window.innerHeight * 0.1));
+      setPos({ x, y });
+    }
+  }, [pos]);
+
+  // Restart the countdown for every new publish
   useEffect(() => {
     setLeft(duration);
     setMinimized(false);
@@ -73,92 +84,259 @@ export function LeaderboardPopup({
     if (left <= 0) onClose();
   }, [left, onClose]);
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    if (!pos) return;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: pos.x,
+      initY: pos.y,
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    const maxX = Math.max(12, window.innerWidth - 100);
+    const maxY = Math.max(12, window.innerHeight - 80);
+    setPos({
+      x: Math.max(8, Math.min(maxX, dragRef.current.initX + dx)),
+      y: Math.max(8, Math.min(maxY, dragRef.current.initY + dy)),
+    });
+  };
+
+  const handlePointerUp = () => {
+    dragRef.current = null;
+  };
+
   if (minimized) {
     return (
-      <button
-        type="button"
-        onClick={() => setMinimized(false)}
-        className="fixed bottom-4 right-4 z-[70] flex items-center gap-2 px-3 py-2 rounded-full bg-[#121420] border border-amber-500/40 text-white text-xs font-bold shadow-xl hover:bg-[#1a1d2e] transition"
-        title="Show the leaderboard"
+      <div
+        style={pos ? { left: `${pos.x}px`, top: `${pos.y}px` } : undefined}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        className="fixed z-[70] flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#121420]/95 backdrop-blur-md border border-amber-500/50 text-white text-xs font-bold shadow-2xl cursor-move touch-none select-none animate-in fade-in duration-150"
       >
-        <span className="material-symbols-outlined text-base text-amber-400">military_tech</span>
-        Leaderboard
-        <span className="font-mono text-blue-300">{left}s</span>
-      </button>
-    );
-  }
-
-  const top = leaderboard.rankings.slice(0, 3);
-  const rest = leaderboard.rankings.slice(3);
-
-  return (
-    <div
-      className="fixed bottom-4 right-4 z-[70] w-[min(22rem,calc(100vw-2rem))] bg-[#121420] border border-[#2b3046] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[60vh] text-white animate-in fade-in slide-in-from-bottom-2 duration-200"
-      role="dialog"
-      aria-label="Class quiz leaderboard"
-    >
-      <div className="px-3 py-2.5 bg-gradient-to-r from-blue-950 via-[#171a2b] to-[#121420] border-b border-[#25283a] flex items-center gap-2">
-        <span className="material-symbols-outlined text-lg text-amber-400">military_tech</span>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-xs text-white leading-tight">Class Quiz Leaderboard</h3>
-          <p className="text-[10px] text-slate-400 leading-tight">
-            {leaderboard.scope === "chapter" ? "Chapter" : "This class"}
-            {leaderboard.stats &&
-              ` · ${leaderboard.stats.totalParticipants} students · ${leaderboard.stats.totalPolls} questions · ${leaderboard.stats.averageAccuracy}% avg`}
-          </p>
-        </div>
-        <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[10px] font-mono font-bold">{left}s</span>
         <button
           type="button"
-          onClick={() => setMinimized(true)}
-          className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          title="Minimize"
+          onClick={() => setMinimized(false)}
+          className="flex items-center gap-1.5 hover:text-amber-300 transition"
+          title="Maximize Leaderboard"
         >
-          <span className="material-symbols-outlined text-base">remove</span>
+          <span className="material-symbols-outlined text-base text-amber-400">military_tech</span>
+          <span>Leaderboard</span>
+          <span className="font-mono text-blue-300 bg-blue-500/20 px-1.5 py-0.5 rounded text-[10px]">{left}s</span>
         </button>
         <button
           type="button"
           onClick={onClose}
-          className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          className="text-slate-400 hover:text-white p-0.5 transition"
           title="Close Leaderboard"
         >
-          <span className="material-symbols-outlined text-base">close</span>
+          <span className="material-symbols-outlined text-xs">close</span>
+        </button>
+      </div>
+    );
+  }
+
+  const rankings = leaderboard.rankings || [];
+  const rank1 = rankings[0];
+  const rank2 = rankings[1];
+  const rank3 = rankings[2];
+  const rest = rankings.slice(3);
+
+  return (
+    <div
+      style={pos ? { left: `${pos.x}px`, top: `${pos.y}px` } : undefined}
+      className="fixed z-[70] w-[min(22rem,calc(100vw-1.5rem))] bg-[#121420]/95 backdrop-blur-md border border-[#2e344e] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[75vh] text-white animate-in fade-in zoom-in-95 duration-150 select-none"
+      role="dialog"
+      aria-label="Class quiz leaderboard"
+    >
+      {/* Draggable Header */}
+      <div
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        className="px-3 py-2 bg-gradient-to-r from-blue-950/90 via-[#171a2b] to-[#121420] border-b border-[#25283a] flex items-center gap-2 cursor-move touch-none"
+      >
+        <span className="material-symbols-outlined text-base text-amber-400">military_tech</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="font-bold text-xs text-white leading-tight">Quiz Leaderboard</h3>
+            <span className="material-symbols-outlined text-[13px] text-slate-500" title="Drag to move anywhere">drag_indicator</span>
+          </div>
+          <p className="text-[9px] text-slate-400 leading-tight truncate">
+            {leaderboard.stats
+              ? `${leaderboard.stats.totalParticipants} students · ${leaderboard.stats.averageAccuracy}% avg`
+              : `${rankings.length} participants`}
+          </p>
+        </div>
+        <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[10px] font-mono font-bold">
+          {left}s
+        </span>
+        <button
+          type="button"
+          onClick={() => setMinimized(true)}
+          className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          title="Minimize"
+        >
+          <span className="material-symbols-outlined text-xs">remove</span>
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          title="Close"
+        >
+          <span className="material-symbols-outlined text-xs">close</span>
         </button>
       </div>
 
-      <div className="p-2.5 space-y-1.5 overflow-y-auto text-xs">
-        {leaderboard.rankings.length === 0 && <p className="text-center text-slate-400 py-4">No answers yet.</p>}
-        {top.map((student, i) => (
-          <div
-            key={student.studentId}
-            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border ${
-              i === 0 ? "bg-amber-500/10 border-amber-500/40" : i === 1 ? "bg-slate-400/10 border-slate-400/30" : "bg-amber-700/10 border-amber-700/30"
-            }`}
-          >
-            <span className="text-lg leading-none shrink-0" aria-label={`Rank ${student.rank}`}>{MEDALS[i]}</span>
-            <div className="min-w-0 flex-1">
-              <p className="font-bold text-white truncate flex items-center gap-1.5">
-                <span className="truncate">{student.name}</span>
-                {student.source === "YOUTUBE" && <YouTubeBadge />}
-              </p>
-              <p className="text-[10px] text-slate-400 font-mono">
-                {student.correctCount}/{student.totalAttempted} correct · {(student.avgResponseTimeMs / 1000).toFixed(1)}s avg
-              </p>
+      {rankings.length === 0 ? (
+        <div className="p-6 text-center text-slate-400 text-xs">No answers submitted yet.</div>
+      ) : (
+        <div className="flex flex-col overflow-hidden">
+          {/* Athletic Victory Podium for Top 3 */}
+          <div className="px-3 pt-3 pb-2 bg-gradient-to-b from-[#181c2f]/60 to-[#0e101a]/80 border-b border-[#202438]">
+            <div className="flex items-end justify-center gap-2 text-center">
+              {/* Rank 2 (Silver) - Left */}
+              <div className="flex-1 flex flex-col items-center min-w-0">
+                {rank2 ? (
+                  <>
+                    <div className="w-9 h-9 rounded-full bg-slate-700 border-2 border-slate-300 flex items-center justify-center font-bold text-xs text-white shadow-md relative mb-1">
+                      {rank2.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={rank2.photoUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                      ) : (
+                        rank2.name.charAt(0).toUpperCase()
+                      )}
+                      <span className="absolute -bottom-1 -right-1 text-xs">🥈</span>
+                    </div>
+                    <p className="w-full truncate text-[11px] font-semibold text-slate-200 leading-tight">
+                      {rank2.name}
+                    </p>
+                    {rank2.source === "YOUTUBE" && <YouTubeBadge />}
+                    <span className="text-[10px] font-mono font-bold text-slate-300 mb-1">
+                      {rank2.accuracyPct}%
+                    </span>
+                    {/* Podium Step 2 */}
+                    <div className="w-full h-14 rounded-t-lg bg-gradient-to-t from-slate-700 to-slate-500/80 border-t-2 border-slate-300 flex flex-col items-center justify-center shadow-lg">
+                      <span className="text-xl font-black text-slate-100 leading-none">2</span>
+                      <span className="text-[8px] uppercase tracking-wider text-slate-300 font-bold">Silver</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-14 rounded-t-lg bg-slate-800/30 border-t border-slate-700/50 flex items-center justify-center text-slate-600 text-xs">
+                    -
+                  </div>
+                )}
+              </div>
+
+              {/* Rank 1 (Gold) - Center (Elevated with Crown) */}
+              <div className="flex-1 flex flex-col items-center min-w-0">
+                {rank1 ? (
+                  <>
+                    {/* Crown on top */}
+                    <span className="text-base leading-none -mb-1 animate-bounce duration-1000 select-none">👑</span>
+                    <div className="w-11 h-11 rounded-full bg-amber-500/30 border-2 border-amber-400 ring-2 ring-amber-400/40 shadow-lg shadow-amber-500/30 flex items-center justify-center font-black text-sm text-amber-200 relative mb-1">
+                      {rank1.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={rank1.photoUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                      ) : (
+                        rank1.name.charAt(0).toUpperCase()
+                      )}
+                      <span className="absolute -bottom-1 -right-1 text-sm">🥇</span>
+                    </div>
+                    <p className="w-full truncate text-xs font-black text-amber-200 leading-tight">
+                      {rank1.name}
+                    </p>
+                    {rank1.source === "YOUTUBE" && <YouTubeBadge />}
+                    <span className="text-[11px] font-mono font-black text-amber-300 mb-1">
+                      {rank1.accuracyPct}%
+                    </span>
+                    {/* Podium Step 1 (Highest) */}
+                    <div className="w-full h-20 rounded-t-lg bg-gradient-to-t from-amber-700/90 via-amber-600/90 to-amber-400 border-t-2 border-amber-200 flex flex-col items-center justify-center shadow-xl shadow-amber-500/20">
+                      <span className="text-2xl font-black text-slate-950 leading-none">1</span>
+                      <span className="text-[8px] uppercase tracking-wider text-slate-900 font-black">Gold</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-20 rounded-t-lg bg-slate-800/30 border-t border-slate-700/50 flex items-center justify-center text-slate-600 text-xs">
+                    -
+                  </div>
+                )}
+              </div>
+
+              {/* Rank 3 (Bronze) - Right */}
+              <div className="flex-1 flex flex-col items-center min-w-0">
+                {rank3 ? (
+                  <>
+                    <div className="w-8 h-8 rounded-full bg-amber-950 border-2 border-amber-700 flex items-center justify-center font-bold text-xs text-amber-300 shadow-md relative mb-1">
+                      {rank3.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={rank3.photoUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                      ) : (
+                        rank3.name.charAt(0).toUpperCase()
+                      )}
+                      <span className="absolute -bottom-1 -right-1 text-xs">🥉</span>
+                    </div>
+                    <p className="w-full truncate text-[11px] font-semibold text-slate-300 leading-tight">
+                      {rank3.name}
+                    </p>
+                    {rank3.source === "YOUTUBE" && <YouTubeBadge />}
+                    <span className="text-[10px] font-mono font-bold text-amber-400 mb-1">
+                      {rank3.accuracyPct}%
+                    </span>
+                    {/* Podium Step 3 (Lowest) */}
+                    <div className="w-full h-10 rounded-t-lg bg-gradient-to-t from-amber-950 to-amber-800/90 border-t-2 border-amber-600 flex flex-col items-center justify-center shadow">
+                      <span className="text-lg font-black text-amber-200 leading-none">3</span>
+                      <span className="text-[8px] uppercase tracking-wider text-amber-300/80 font-bold">Bronze</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-10 rounded-t-lg bg-slate-800/30 border-t border-slate-700/50 flex items-center justify-center text-slate-600 text-xs">
+                    -
+                  </div>
+                )}
+              </div>
             </div>
-            <span className="font-mono font-black text-emerald-400 shrink-0">{student.accuracyPct}%</span>
           </div>
-        ))}
-        {rest.map((student) => (
-          <div key={student.studentId} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-[#161826]">
-            <span className="w-5 text-center font-mono font-bold text-slate-400 shrink-0">{student.rank}</span>
-            <span className="flex-1 min-w-0 truncate text-slate-200 flex items-center gap-1.5">
-              <span className="truncate">{student.name}</span>
-              {student.source === "YOUTUBE" && <YouTubeBadge />}
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono shrink-0">{student.correctCount}/{student.totalAttempted}</span>
-          </div>
-        ))}
-      </div>
+
+          {/* Subsequent Ranks (4, 5, 6...) */}
+          {rest.length > 0 && (
+            <div className="p-2 space-y-1 overflow-y-auto max-h-40 text-xs scrollbar-thin">
+              <div className="px-1 py-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex justify-between">
+                <span>Other Ranks</span>
+                <span>Accuracy</span>
+              </div>
+              {rest.map((student) => (
+                <div
+                  key={student.studentId}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[#161928]/80 hover:bg-[#1a1e32] border border-[#22273d] transition"
+                >
+                  <span className="w-5 text-center font-mono font-bold text-slate-400 text-[11px] shrink-0">
+                    #{student.rank}
+                  </span>
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                    <span className="truncate text-slate-200 text-xs">{student.name}</span>
+                    {student.source === "YOUTUBE" && <YouTubeBadge />}
+                  </div>
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold shrink-0">
+                    {student.accuracyPct}%
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono shrink-0">
+                    {student.correctCount}/{student.totalAttempted}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
