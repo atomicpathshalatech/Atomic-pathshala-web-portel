@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   VideoTrack,
   useLocalParticipant,
@@ -127,7 +128,7 @@ export function LiveVideoCallModal({
       activeStudents.length > 0 || remoteVideoTracks.length > 0 || remoteAudioTracks.length > 0;
     if (!hasActiveStudent) return null;
 
-    return (
+    const teacherModalContent = (
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -206,11 +207,22 @@ export function LiveVideoCallModal({
         )}
       </div>
     );
+    return typeof document !== "undefined" ? createPortal(teacherModalContent, document.body) : teacherModalContent;
   }
 
   // ---------------------------------------------------------------------------
   // STUDENT VIEW: Persistent control dock with self-preview & mute/camera/leave
   // ---------------------------------------------------------------------------
+  // Auto-enable mic when approved speaker
+  useEffect(() => {
+    if (isApprovedSpeaker && role === "STUDENT") {
+      localParticipant.setMicrophoneEnabled(true).catch(() => {});
+      if (requestType === "VIDEO") {
+        localParticipant.setCameraEnabled(true).catch(() => {});
+      }
+    }
+  }, [isApprovedSpeaker, role, requestType, localParticipant]);
+
   const isVideoMode = requestType === "VIDEO" || teacherVideoConnected;
   const isAudioActive = isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected;
   const localCameraTrack = tracks.find((t) => t.participant.isLocal && t.source === Track.Source.Camera);

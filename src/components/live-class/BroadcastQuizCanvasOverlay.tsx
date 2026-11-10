@@ -44,6 +44,21 @@ export function BroadcastQuizCanvasOverlay({
   // about a quarter of the stage wide, between 220 and 300 px.
   const cardWidth = Math.round(Math.min(300, Math.max(220, (containerWidth || 1200) * 0.26)));
   const [fit, setFit] = useState(1);
+  const [stageDismissed, setStageDismissed] = useState(false);
+
+  useEffect(() => {
+    setStageDismissed(false);
+  }, [activeQuiz.id]);
+
+  // Auto-dismiss 7 seconds after results are revealed so it doesn't block the screen
+  useEffect(() => {
+    if (activeQuiz.status === "REVEALED") {
+      const timer = setTimeout(() => {
+        setStageDismissed(true);
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeQuiz.status]);
 
   // Position state (relative to stage container)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -170,6 +185,8 @@ export function BroadcastQuizCanvasOverlay({
       if (pos.x > maxX || pos.y > maxY) setPos({ x: Math.min(pos.x, maxX), y: Math.min(pos.y, maxY) });
     }
   });
+
+  if (stageDismissed) return null;
 
   if (isMinimized) {
     return (

@@ -113,6 +113,22 @@ export async function POST(request: NextRequest, { params }: { params: { schedul
 
     // Realtime broadcast
     try {
+      // Also notify schedule channel directly in case student is subscribed to schedule id
+      if (scheduleId && scheduleId !== wbSession.id) {
+        await pusherServer.trigger(sessionChannel(scheduleId), WB_EVENTS.LIVE_PHASE_CHANGED, {
+          phase: effectivePhase,
+          livePhase: effectivePhase,
+          videoTransport: updatedWbSession.videoTransport,
+          youtubeVideoId: updatedWbSession.youtubeVideoId,
+          actualStartedAt: now.toISOString(),
+          serverTime: now.toISOString(),
+        }).catch(() => {});
+        await pusherServer.trigger(sessionChannel(scheduleId), WB_EVENTS.CONFIG_UPDATED, {
+          videoTransport: updatedWbSession.videoTransport,
+          youtubeVideoId: updatedWbSession.youtubeVideoId,
+        }).catch(() => {});
+      }
+
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, {
         phase: effectivePhase,
         livePhase: effectivePhase,
