@@ -510,7 +510,6 @@ export function StudentLiveClassRoom({
   subject = null,
   chapterTitle = null,
   currentUserId,
-  teacherPhotoUrl = null,
 }: {
   batchScheduleId: string;
   scheduleTitle: string;
@@ -519,8 +518,6 @@ export function StudentLiveClassRoom({
   subject?: string | null;
   chapterTitle?: string | null;
   currentUserId: string;
-  /** The teacher's cut-out photo (or profile photo) for the waiting screen. */
-  teacherPhotoUrl?: string | null;
 }) {
   const [phase, setPhase] = useState<"waiting" | "lobby" | "live" | "ended">("waiting");
   const [wbSession, setWbSession] = useState<WhiteboardSessionData | null>(null);
@@ -554,10 +551,6 @@ export function StudentLiveClassRoom({
 
   // Quiz leaderboard published by the teacher (the popup closes itself).
   const [publishedLeaderboard, setPublishedLeaderboard] = useState<PublishedLeaderboard | null>(null);
-  // This student's own place on the published leaderboard (it shows only the top 10).
-  const [myLeaderboardRank, setMyLeaderboardRank] = useState<{ rank: number | null; correctCount: number; totalAttempted: number } | null>(null);
-  const wbSessionIdRef = useRef<string | null>(null);
-  wbSessionIdRef.current = wbSession?.id ?? null;
   const closeLeaderboard = useCallback(() => setPublishedLeaderboard(null), []);
 
   // Auto-dismiss quiz 5 seconds after results are revealed or closed
@@ -706,15 +699,18 @@ export function StudentLiveClassRoom({
   // Layout follows how the phone is held, not the viewport's shape (keyboard-safe).
   useDeviceOrientationClass();
   const [isDesktopViewport, setIsDesktopViewport] = useState(
-    () => typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches
+    () => typeof window === "undefined" || window.matchMedia("(min-width: 768px)").matches
   );
   useEffect(() => {
-    const mql = window.matchMedia("(min-width: 1024px)");
+    const mql = window.matchMedia("(min-width: 768px)");
     setIsDesktopViewport(mql.matches);
     const handler = (e: MediaQueryListEvent) => setIsDesktopViewport(e.matches);
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
   }, []);
+
+  const [fullscreenOverlayChat, setFullscreenOverlayChat] = useState(false);
+  const [mobileLandscapeActive, setMobileLandscapeActive] = useState(false);
 
   // Time & countdown state (Synchronized with authoritative server clock)
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
@@ -731,6 +727,19 @@ export function StudentLiveClassRoom({
   const [boardBackground, setBoardBackground] = useState<string>("blank");
   const [boardObjects, setBoardObjects] = useState<StrokeObject[]>([]);
   const [activeViewMode, setActiveViewMode] = useState<"STREAM" | "WHITEBOARD">("STREAM");
+
+  const classThumbnailUrl = useMemo(() => {
+    if (boardBackground && boardBackground !== "blank" && boardBackground.startsWith("http")) {
+      return boardBackground;
+    }
+    if (wbSession?.presentationUrl && wbSession.presentationUrl.startsWith("http")) {
+      return wbSession.presentationUrl;
+    }
+    if (wbSession?.youtubeVideoId) {
+      return `https://img.youtube.com/vi/${wbSession.youtubeVideoId}/hqdefault.jpg`;
+    }
+    return null;
+  }, [boardBackground, wbSession?.presentationUrl, wbSession?.youtubeVideoId]);
 
   // Keep local clock ticking with server offset
   useEffect(() => {
@@ -750,14 +759,20 @@ export function StudentLiveClassRoom({
   const toggleMobileOrientation = async () => {
     if (typeof document === "undefined") return;
     try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
+      const nextActive = !mobileLandscapeActive;
+      setMobileLandscapeActive(nextActive);
+      if (nextActive) {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen().catch(() => {});
+        }
         setIsFullscreen(true);
         if (screen.orientation && "lock" in screen.orientation) {
           await (screen.orientation as any).lock("landscape").catch(() => {});
         }
       } else {
-        await document.exitFullscreen();
+        if (document.fullscreenElement && document.exitFullscreen) {
+          await document.exitFullscreen().catch(() => {});
+        }
         setIsFullscreen(false);
         if (screen.orientation && "unlock" in screen.orientation) {
           (screen.orientation as any).unlock();
@@ -1127,18 +1142,7 @@ export function StudentLiveClassRoom({
     // session id, which a student who joined early may only know as the
     // schedule id.
     const handleLeaderboard = (data: unknown) => {
-      if (!isPublishedLeaderboard(data)) return;
-      setPublishedLeaderboard({ ...data });
-      setMyLeaderboardRank(null);
-      const sid = wbSessionIdRef.current;
-      if (!sid) return;
-      const scope = data.scope === "chapter" ? "chapter" : "session";
-      fetch(`/api/whiteboard/sessions/${sid}/quiz/leaderboard?scope=${scope}&me=1`, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((json) => {
-          if (json?.success && json.data?.me) setMyLeaderboardRank(json.data.me);
-        })
-        .catch(() => undefined);
+      if (isPublishedLeaderboard(data)) setPublishedLeaderboard({ ...data });
     };
     channel.bind(WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, handleLeaderboard);
     secondaryChannel?.bind(WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, handleLeaderboard);
@@ -1236,13 +1240,12 @@ export function StudentLiveClassRoom({
       // Lower hand directly
       if (!wbSession?.id || handRaiseBusy) return;
       setHandRaiseBusy(true);
-      setHandRaised(false);
-      setIsApprovedSpeaker(false);
       try {
-        const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { method: "DELETE" });
-        if (!res.ok) setHandRaised(true);
+        await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { method: "DELETE" });
+        setHandRaised(false);
+        setIsApprovedSpeaker(false);
       } catch {
-        setHandRaised(true);
+        // ignore
       } finally {
         setHandRaiseBusy(false);
       }
@@ -1471,63 +1474,65 @@ export function StudentLiveClassRoom({
     const seconds = Math.max(0, secondsUntilStart) % 60;
 
     const pad = (n: number) => String(n).padStart(2, "0");
-    // Like a YouTube premiere: the class's waiting screen on top (teacher's
-    // picture, title, live countdown), the chat right under it — open and
-    // with its whole history, so students can talk before the class starts.
     return (
-      <div className="min-h-screen-safe w-full bg-[#0b0d14] text-white flex flex-col select-none">
-        <div className="relative w-full aspect-video max-h-[45vh] overflow-hidden bg-gradient-to-br from-[#0b1f4a] via-[#14306e] to-[#f97316]/70">
-          <Link href="/schedule" className="native-hide absolute left-2 top-2 z-10 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center" title="Back to Schedule">
+      <div className="min-h-screen-safe w-full bg-slate-50 text-slate-900 flex flex-col select-none">
+        {/* Slim header */}
+        <header className="h-12 px-3 sm:px-4 shrink-0 flex items-center gap-2.5 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+          <Link href="/schedule" className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0" title="Back to Schedule">
             <span className="material-symbols-outlined text-[20px]">arrow_back</span>
           </Link>
-          {teacherPhotoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- teacher photo from storage
-            <img src={teacherPhotoUrl} alt="" className="absolute bottom-0 right-2 h-[92%] max-w-[55%] object-contain object-bottom drop-shadow-2xl" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- static brand asset
-            <img src="/brand/logo.png" alt="" className="absolute right-4 top-1/2 -translate-y-1/2 h-1/2 object-contain opacity-90" />
-          )}
-          <div className="absolute inset-y-0 left-0 flex w-[62%] flex-col justify-center gap-1.5 bg-gradient-to-r from-black/55 via-black/30 to-transparent p-3 sm:p-6">
-            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-              <span className="material-symbols-outlined text-[13px]">sensors</span>
-              {secondsUntilStart > 0 ? "Upcoming live class" : "Starting soon"}
-            </span>
-            <h1 className="line-clamp-2 text-sm font-black leading-snug sm:text-xl">{scheduleTitle}</h1>
-            <p className="truncate text-[11px] text-white/80">{[teacherName, subject, chapterTitle].filter(Boolean).join(" · ")}</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-7 h-7 object-contain shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold text-slate-500 truncate leading-tight">{batchName}</p>
+            <h1 className="text-xs font-bold truncate leading-tight">{scheduleTitle}</h1>
+          </div>
+        </header>
+
+        <main className="flex-1 w-full max-w-md mx-auto p-3 sm:p-4 flex flex-col gap-3 justify-center">
+          {/* Class card */}
+          <div className="bg-white rounded-2xl p-4 shadow-[0_2px_12px_rgba(15,23,42,0.06)] space-y-3">
+            <div className="space-y-0.5">
+              <h2 className="text-base font-bold leading-snug">{scheduleTitle}</h2>
+              <p className="text-[11px] text-slate-500">
+                {[subject, chapterTitle, teacherName].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+
             {secondsUntilStart > 0 ? (
-              <div className="mt-1">
-                <p className="text-[10px] font-semibold text-white/70">Class starts in</p>
-                <p className="font-mono text-xl font-black tabular-nums sm:text-3xl">
-                  {hours > 0 ? `${pad(hours)}:` : ""}
-                  {pad(minutes)}:{pad(seconds)}
-                </p>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                <span className="text-[11px] font-semibold text-slate-500">Class starts in</span>
+                <span className="font-mono text-lg font-bold text-slate-900">
+                  {pad(hours)}:{pad(minutes)}:<span className="text-blue-600">{pad(seconds)}</span>
+                </span>
               </div>
             ) : (
-              <p className="mt-1 flex items-center gap-1.5 text-xs font-bold">
-                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500" />
-                Waiting for {teacherName || "the teacher"} — you will join automatically
-              </p>
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span className="text-[11px] font-semibold text-emerald-700">Starting soon — you will join automatically</span>
+              </div>
             )}
           </div>
-        </div>
 
-        {/* Chat under the waiting screen — open before the class, history kept */}
-        <div className="flex min-h-0 flex-1 flex-col bg-white text-slate-900">
-          <div className="flex shrink-0 items-center justify-between px-3 py-2 text-[11px] font-semibold text-slate-600">
-            <span className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-blue-600">chat</span>
-              Live chat
-            </span>
-            <span className="truncate pl-2 text-slate-400">{batchName}</span>
-          </div>
-          <div className="min-h-0 flex-1">
-            {wbSession?.id ? (
-              <MessagesPanel whiteboardSessionId={wbSession.id} currentUserId={currentUserId} role="STUDENT" theme="light" showOwnToggle={false} />
-            ) : (
-              <p className="mt-8 text-center text-sm text-slate-400">Chat opens as soon as the class room is ready.</p>
-            )}
-          </div>
-        </div>
+          {/* Pre-class chat, when the teacher has it on */}
+          {wbSession?.id && wbSession?.chatEnabled && (
+            <div className="h-72 flex flex-col bg-white rounded-2xl overflow-hidden shadow-[0_2px_12px_rgba(15,23,42,0.06)]">
+              <div className="px-3 py-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 shrink-0">
+                <span className="material-symbols-outlined text-[16px] text-blue-600">chat</span>
+                Chat
+              </div>
+              <div className="flex-1 min-h-0">
+                <MessagesPanel
+                  whiteboardSessionId={wbSession.id}
+                  currentUserId={currentUserId}
+                  role="STUDENT"
+                  theme="light"
+                  showOwnToggle={false}
+                />
+              </div>
+            </div>
+          )}
+        </main>
       </div>
     );
   }
@@ -1658,7 +1663,7 @@ export function StudentLiveClassRoom({
           (the two kicked each other off: calls wouldn't connect or end
           cleanly) and a second YouTube player downloaded the stream. */}
       {isDesktopViewport && (
-      <div className="hidden lg:flex flex-1 min-h-0 flex-row p-3 gap-3 overflow-hidden bg-[#0b0d14]">
+      <div className="hidden md:flex flex-1 min-h-0 flex-row p-3 gap-3 overflow-hidden bg-[#0b0d14]">
         {/* Left Main Stage (Whiteboard Canvas / YouTube Player + Overlaid Quiz Drawer) */}
         <div className="flex-1 min-w-0 h-full flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-2xl">
           {/* Presentation Title Banner */}
@@ -1737,16 +1742,16 @@ export function StudentLiveClassRoom({
             {isYouTube && activeViewMode === "STREAM" ? (
               <div className="w-full h-full max-w-full max-h-full aspect-video flex items-center justify-center">
                 <YouTubeLivePlayer
-                silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
-                shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
+                  silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
+                  shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
                   youtubeVideoId={wbSession?.youtubeVideoId ?? null}
                   title={scheduleTitle}
                   subject={subject || batchName}
                   educatorName={teacherName}
+                  thumbnailUrl={classThumbnailUrl}
                   scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
                   livePhase={isLive ? "LIVE" : "PREPARING"}
-                >
-                </YouTubeLivePlayer>
+                />
               </div>
             ) : isDesktopViewport ? (
               <StudentWhiteboardMirror
@@ -1757,11 +1762,98 @@ export function StudentLiveClassRoom({
                 objects={boardObjects}
               />
             ) : null}
+
+            {/* When chat is minimized: Open Chat floating pill */}
+            {!showChat && (
+              <button
+                type="button"
+                onClick={() => setShowChat(true)}
+                className="absolute top-3 right-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#121420]/95 hover:bg-[#1b1f33] text-white border border-blue-500/40 shadow-2xl backdrop-blur-md text-xs font-bold transition hover:scale-105 active:scale-95 cursor-pointer"
+                title="Open Live Chat"
+              >
+                <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+                <span>Open Chat</span>
+              </button>
+            )}
+
+            {/* In Stage Fullscreen: Floating chat toggle + overlay drawer */}
+            <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFullscreenOverlayChat((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-2xl backdrop-blur-md text-xs font-bold transition active:scale-95 cursor-pointer"
+                title="Toggle chat in fullscreen"
+              >
+                <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+                <span>{fullscreenOverlayChat ? "Hide Chat" : "Live Chat"}</span>
+              </button>
+            </div>
+            {fullscreenOverlayChat && (
+              <div className="absolute right-0 top-0 bottom-0 w-80 max-w-[90vw] z-40 bg-[#10121d]/95 backdrop-blur-xl border-l border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+                <div className="flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+                    Live Chat
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFullscreenOverlayChat(false)}
+                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+                <StudentEngagementPanel
+                  wbSessionId={wbSession?.id}
+                  currentUserId={currentUserId}
+                  isThemeDark={isThemeDark}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  quiz={quiz}
+                  quizError={quizError}
+                  mySelection={mySelection}
+                  remainingSec={remainingSec}
+                  submitAnswer={submitAnswer}
+                  submittingAnswer={submittingAnswer}
+                  quizDismissed={quizDismissed}
+                  setQuizDismissed={setQuizDismissed}
+                  handRaised={handRaised}
+                  handRaiseBusy={handRaiseBusy}
+                  participationType={participationType}
+                  onToggleHandRaise={handleRaiseHandClick}
+                  onSubmitHandRaise={submitHandRaise}
+                  doubtImageInputRef={doubtImageInputRef}
+                  onDoubtImageSelected={handleDoubtImageSelected}
+                  uploadingDoubtImage={uploadingDoubtImage}
+                  doubtImageError={doubtImageError}
+                  pendingDoubtPreviewUrl={pendingDoubtPreviewUrl}
+                  pendingDoubtNote={pendingDoubtNote}
+                  onNoteChange={setPendingDoubtNote}
+                  onConfirmSendDoubt={handleConfirmSendDoubt}
+                  onCancelPendingDoubt={handleCancelPendingDoubt}
+                />
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
-        <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
+        {showChat && (
+        <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl animate-in slide-in-from-right duration-200">
+          <div className="flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800/80 shrink-0">
+            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+              Live Chat & Questions
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowChat(false)}
+              className="w-7 h-7 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+              title="Minimize Chat"
+            >
+              <span className="material-symbols-outlined text-sm">dock_to_right</span>
+            </button>
+          </div>
           {/* Every class is a YouTube class now: there is no LiveKit class video. This
               tile exists only while this student is on a call with the teacher. */}
           {!isYouTube && (isAppVideoClass || isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) ? (
@@ -1859,6 +1951,7 @@ export function StudentLiveClassRoom({
             onCancelPendingDoubt={handleCancelPendingDoubt}
           />
         </aside>
+        )}
       </div>
       )}
 
@@ -1869,11 +1962,17 @@ export function StudentLiveClassRoom({
       {/* MOBILE & TABLET VIEW (< lg): Fullscreen Landscape / Tabbed Portrait View */}
       {/* ========================================================================= */}
       {!isDesktopViewport && (
-      <div className="lg:hidden flex-1 min-h-0 flex flex-col ls:flex-row overflow-hidden bg-[#0b0d14] relative">
+      <div className={`md:hidden flex-1 min-h-0 flex flex-col ls:flex-row overflow-hidden bg-[#0b0d14] relative ${
+        mobileLandscapeActive ? "fixed inset-0 z-[80] w-screen h-screen bg-black" : ""
+      }`}>
         {/* Mobile Media Area: In portrait takes top 40-45dvh; in LANDSCAPE takes 100% FULL SCREEN */}
-        <div className="w-full aspect-video max-h-[45vh] ls:w-auto ls:flex-1 ls:min-w-0 ls:h-full ls:max-h-full ls:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b ls:border-0 border-slate-800/80">
+        <div className={`w-full aspect-video ${
+          mobileLandscapeActive
+            ? "w-full h-full max-h-full border-0"
+            : "max-h-[45vh] border-b border-slate-800/80"
+        } ls:w-auto ls:flex-1 ls:min-w-0 ls:h-full ls:max-h-full ls:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden ls:border-0`}>
           {isYouTube ? (
-            <div className="relative w-full h-full">
+            <div className="relative w-full h-full flex items-center justify-center">
               <YouTubeLivePlayer
                 silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
                 shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
@@ -1882,10 +1981,21 @@ export function StudentLiveClassRoom({
                 title={scheduleTitle}
                 subject={subject || batchName}
                 educatorName={teacherName}
+                thumbnailUrl={classThumbnailUrl}
                 scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
                 livePhase={isLive ? "LIVE" : "PREPARING"}
-              >
-              </YouTubeLivePlayer>
+              />
+              {mobileLandscapeActive && (
+                <button
+                  type="button"
+                  onClick={toggleMobileOrientation}
+                  className="absolute top-3 left-3 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/70 hover:bg-black/90 text-white border border-white/20 text-xs font-semibold backdrop-blur-md shadow-xl"
+                  title="Exit Landscape"
+                >
+                  <span className="material-symbols-outlined text-sm">fullscreen_exit</span>
+                  <span>Exit</span>
+                </button>
+              )}
 
               {/* Teacher's camera is already baked into the YouTube video via
                   OBS, so this stays hidden the rest of the time — it only
@@ -2063,7 +2173,7 @@ export function StudentLiveClassRoom({
 
       {/* Quiz leaderboard published by the teacher */}
       {publishedLeaderboard && (
-        <LeaderboardPopup leaderboard={publishedLeaderboard} onClose={closeLeaderboard} me={myLeaderboardRank} />
+        <LeaderboardPopup leaderboard={publishedLeaderboard} onClose={closeLeaderboard} />
       )}
     </div>
   );

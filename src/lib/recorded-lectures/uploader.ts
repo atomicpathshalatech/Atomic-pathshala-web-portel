@@ -4,7 +4,7 @@
  * signed URLs from /api/team/recorded-lectures/[id]/upload. Only one part
  * at a time per worker is in memory (File.slice), never the whole video.
  *
- * - 3 parts in flight; a failed part is retried 4 times with backoff
+ * - 2 parts in flight (balanced for uplink stability); a failed part is retried up to 8 times with backoff & jitter
  * - pause() stops after the parts in flight; resume() continues
  * - a page refresh / new tab resumes: init with the same file returns the
  *   parts R2 already has, and only the rest are sent
@@ -141,6 +141,7 @@ export class RecordedVideoUploader {
     const queue = Array.from({ length: this.partCount }, (_, i) => i + 1).filter((n) => !this.done.has(n));
     let failure: Error | null = null;
 
+    // Use 2 parallel workers to maintain steady bandwidth without choking the socket
     const worker = async () => {
       while (queue.length && !this.paused && !failure) {
         const batch = queue.splice(0, 1);
@@ -153,7 +154,7 @@ export class RecordedVideoUploader {
         }
       }
     };
-    await Promise.all([worker(), worker(), worker()]);
+    await Promise.all([worker(), worker()]);
 
     if (this.cancelled) return false;
     if (failure) {
@@ -183,7 +184,8 @@ export class RecordedVideoUploader {
     const start = (partNumber - 1) * this.partSize;
     const blob = this.file.slice(start, Math.min(start + this.partSize, this.file.size));
     let lastError: unknown = null;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    // Up to 8 attempts with exponential backoff & randomized jitter for network fluctuations
+    for (let attempt = 0; attempt < 8; attempt++) {
       if (this.paused) throw new Error("Paused");
       try {
         // A fresh signed URL each attempt — an old one may have expired.
@@ -196,7 +198,8 @@ export class RecordedVideoUploader {
       } catch (err) {
         lastError = err;
         this.inFlightBytes.delete(partNumber);
-        await sleep(Math.min(15000, 1000 * 2 ** attempt));
+        const backoff = Math.min(20000, 800 * Math.pow(1.5, attempt) + Math.random() * 800);
+        await sleep(backoff);
       }
     }
     throw new Error(`Part ${partNumber} could not be uploaded (${(lastError as Error)?.message ?? "network error"})`);
@@ -217,9 +220,9 @@ export class RecordedVideoUploader {
           else resolve(etag);
         } else reject(new Error(`Storage refused the part (HTTP ${xhr.status})`));
       };
-      xhr.onerror = () => reject(new Error("Network error"));
-      xhr.ontimeout = () => reject(new Error("Timed out"));
-      xhr.timeout = 10 * 60 * 1000;
+      xhr.onerror = () => reject(new Error("Network connection drop"));
+      xhr.ontimeout = () => reject(new Error("Upload timed out"));
+      xhr.timeout = 15 * 60 * 1000;
       xhr.send(blob);
     });
   }
