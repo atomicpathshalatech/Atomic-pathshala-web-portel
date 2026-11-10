@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from "react";
 
 export type YouTubeLivePlayerProps = {
   youtubeVideoId: string | null;
@@ -10,6 +10,7 @@ export type YouTubeLivePlayerProps = {
   scheduledStart?: string | Date | null;
   livePhase: string;
   isTeacher?: boolean;
+  thumbnailUrl?: string | null;
   onRefresh?: () => void;
   /** Host-provided fullscreen (e.g. the student room: whole page + landscape, so chat can sit beside the video). */
   onFullscreen?: () => void;
@@ -18,21 +19,12 @@ export type YouTubeLivePlayerProps = {
   /** On a live call with the teacher: the stream's (delayed) audio is silenced so the student doesn't hear the teacher twice. */
   silenced?: boolean;
   className?: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
 };
 
 /**
  * The live class as YouTube's own embedded player.
- *
- * YouTube API Services policy: the player is shown as YouTube ships it — its
- * controls, logo and title stay visible, nothing is drawn over it and clicks
- * reach it. (This player used to crop YouTube's branding off, cover the video
- * with a click shield and custom controls, and offer a pop-up window; all of
- * that is gone.) Our own pieces — status before the class starts, "tap for
- * sound", share, fullscreen — sit outside the player, never on it.
- *
- * The IFrame API is used only to read the player's state and to mute the
- * stream while the student is on a live call (they hear the teacher directly).
+ * Embeds the stream cleanly without exposing YouTube redirects or external sharing.
  */
 export function YouTubeLivePlayer({
   youtubeVideoId,
@@ -42,6 +34,7 @@ export function YouTubeLivePlayer({
   scheduledStart,
   livePhase,
   isTeacher,
+  thumbnailUrl,
   onRefresh,
   onFullscreen,
   shareUrl,
@@ -54,8 +47,6 @@ export function YouTubeLivePlayer({
   const playerRef = useRef<any>(null);
 
   const [hasEmbedError, setHasEmbedError] = useState(false);
-  // The embed autoplays muted (browsers only allow muted autoplay); this
-  // mirrors the player so the "tap for sound" button shows only when needed.
   const [isMuted, setIsMuted] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [shareNote, setShareNote] = useState<string | null>(null);
@@ -114,8 +105,6 @@ export function YouTubeLivePlayer({
           events: {
             onReady: (e: any) => {
               playerRef.current = e.target;
-              // Try for sound straight away; the browser may refuse it until
-              // the student taps the page — read back what actually happened.
               try {
                 e.target.unMute?.();
                 e.target.setVolume?.(100);
@@ -159,7 +148,6 @@ export function YouTubeLivePlayer({
       }
     }
 
-    // The student can unmute with YouTube's own button too — keep in step.
     const poll = setInterval(() => {
       try {
         const p = playerRef.current;
@@ -173,9 +161,7 @@ export function YouTubeLivePlayer({
       playerRef.current = null;
       try {
         player?.destroy?.();
-      } catch {
-        // no-op
-      }
+      } catch {}
     };
   }, [playerKey, isLive, ytPlayerElementId]);
 
@@ -187,8 +173,6 @@ export function YouTubeLivePlayer({
     setIsMuted(false);
   }, []);
 
-  // Call audio comes live over LiveKit; the stream carries the same voice
-  // 5-20 s later, so it is muted for the call and restored afterwards.
   const mutedBeforeCallRef = useRef<boolean | null>(null);
   useEffect(() => {
     const p = playerRef.current;
@@ -206,8 +190,7 @@ export function YouTubeLivePlayer({
       }
       mutedBeforeCallRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [silenced]);
+  }, [silenced, isMuted]);
 
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -235,16 +218,18 @@ export function YouTubeLivePlayer({
   };
 
   const shareClass = async () => {
-    if (!shareUrl) return;
+    // Strictly share Atomic Pathshala URL, NEVER youtube.com
+    const finalUrl = shareUrl || (typeof window !== "undefined" ? window.location.href : "");
+    if (!finalUrl) return;
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({ title, text: `Join the live class: ${title}`, url: shareUrl });
+        await navigator.share({ title, text: `Join the live class on Atomic Pathshala: ${title}`, url: finalUrl });
         return;
       }
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(finalUrl);
       setShareNote("Class link copied");
     } catch {
-      setShareNote(shareUrl);
+      setShareNote(finalUrl);
     }
     setTimeout(() => setShareNote(null), 3000);
   };
@@ -263,35 +248,50 @@ export function YouTubeLivePlayer({
     );
   }
 
-  // Before the class is live: our own card — no YouTube player behind it.
+  // Before the class is live: Show auto-generated / lecture thumbnail with overlay
   if (!isLive) {
+    const autoThumbnail =
+      thumbnailUrl ||
+      (youtubeVideoId ? `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg` : null);
+
     return (
       <div className={`w-full aspect-video bg-[#0a0c16] rounded-2xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center gap-3 relative overflow-hidden ${className}`}>
-        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 p-3 border border-white/20 flex items-center justify-center">
+        {autoThumbnail && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={autoThumbnail}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover opacity-40 filter blur-[0.5px] scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c16] via-[#0a0c16]/75 to-[#0a0c16]/55" />
+          </>
+        )}
+        <div className="relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 p-3 border border-white/20 flex items-center justify-center backdrop-blur-md shadow-xl">
           {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
           <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-full h-full object-contain" />
         </div>
-        <div className="max-w-md space-y-1">
+        <div className="relative z-10 max-w-md space-y-1">
           {subject && (
-            <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-600/30 text-blue-300 border border-blue-500/30">
+            <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-600/40 text-blue-300 border border-blue-500/40 backdrop-blur-sm">
               {subject}
             </span>
           )}
-          <h3 className="font-bold text-base sm:text-lg text-white line-clamp-2">{title}</h3>
-          {educatorName && <p className="text-xs text-slate-300">{educatorName}</p>}
-          <p className="text-xs text-slate-400">
+          <h3 className="font-bold text-base sm:text-lg text-white line-clamp-2 drop-shadow-md">{title}</h3>
+          {educatorName && <p className="text-xs text-slate-200 drop-shadow">{educatorName}</p>}
+          <p className="text-xs text-slate-300">
             {isTeacher
               ? "Start the stream from the Teacher Studio or the Windows app to go live."
               : "The class will appear here automatically when the teacher goes live."}
           </p>
         </div>
         {lateSeconds > 0 ? (
-          <span className="px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-mono font-bold">
+          <span className="relative z-10 px-3 py-1 rounded-full bg-rose-500/25 border border-rose-500/50 text-rose-300 text-[11px] font-mono font-bold backdrop-blur-md">
             Teacher connecting… {Math.floor(lateSeconds / 60) > 0 ? `${Math.floor(lateSeconds / 60)}m ` : ""}
             {lateSeconds % 60}s
           </span>
         ) : countdownSeconds > 0 ? (
-          <span className="px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[11px] font-mono font-bold">
+          <span className="relative z-10 px-3 py-1 rounded-full bg-blue-500/25 border border-blue-500/50 text-blue-300 text-[11px] font-mono font-bold backdrop-blur-md">
             Starts in {Math.floor(countdownSeconds / 60)}m {countdownSeconds % 60}s
           </span>
         ) : null}
@@ -299,7 +299,7 @@ export function YouTubeLivePlayer({
           <button
             type="button"
             onClick={onRefresh}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+            className="relative z-10 px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-white text-xs font-semibold flex items-center gap-1.5 border border-slate-700 cursor-pointer shadow-lg backdrop-blur-sm"
           >
             <span className="material-symbols-outlined text-sm">refresh</span>
             Check stream status
@@ -314,39 +314,25 @@ export function YouTubeLivePlayer({
       ref={containerRef}
       className={`w-full flex flex-col bg-black ${isFullscreen ? "h-screen" : "h-full"} ${className}`}
     >
-      <div
-        // Fills the box the room gives it (its height minus the slim bar);
-        // the iframe keeps YouTube's own letterboxing inside.
-        className="relative w-full flex-1 min-h-0 bg-black overflow-hidden"
-      >
+      <div className="relative w-full flex-1 min-h-0 bg-black overflow-hidden">
         {hasEmbedError ? (
-          // The player itself reported it can't play here — show why and a
-          // link to the video on YouTube (a normal new tab, no pop-up).
           <div className="absolute inset-0 bg-[#0a0c16] flex flex-col items-center justify-center p-6 text-center gap-3">
-            <span className="material-symbols-outlined text-3xl text-rose-400">live_tv</span>
+            <span className="material-symbols-outlined text-3xl text-amber-400">sync</span>
             <h3 className="text-sm sm:text-base font-bold text-white line-clamp-2">{title}</h3>
             <p className="text-xs text-slate-400 max-w-sm">
-              YouTube couldn&apos;t play this stream inside the app. You can watch it on YouTube.
+              Connecting to live stream... If the stream doesn&apos;t load, tap Reconnect below.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <a
-                href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1.5"
-              >
-                Watch on YouTube
-                <span className="material-symbols-outlined text-sm">open_in_new</span>
-              </a>
               <button
                 type="button"
                 onClick={() => {
                   setHasEmbedError(false);
                   setRetryKey((k) => k + 1);
                 }}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg"
               >
-                Retry
+                <span className="material-symbols-outlined text-sm">refresh</span>
+                Reconnect Stream
               </button>
             </div>
           </div>
@@ -357,7 +343,8 @@ export function YouTubeLivePlayer({
             ref={iframeRef}
             src={embedUrl}
             title={title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            // Deliberately omitted web-share to block YouTube's native share menu
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
             allowFullScreen
             referrerPolicy="strict-origin-when-cross-origin"
             className="absolute inset-0 w-full h-full border-0"

@@ -699,15 +699,18 @@ export function StudentLiveClassRoom({
   // Layout follows how the phone is held, not the viewport's shape (keyboard-safe).
   useDeviceOrientationClass();
   const [isDesktopViewport, setIsDesktopViewport] = useState(
-    () => typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches
+    () => typeof window === "undefined" || window.matchMedia("(min-width: 768px)").matches
   );
   useEffect(() => {
-    const mql = window.matchMedia("(min-width: 1024px)");
+    const mql = window.matchMedia("(min-width: 768px)");
     setIsDesktopViewport(mql.matches);
     const handler = (e: MediaQueryListEvent) => setIsDesktopViewport(e.matches);
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
   }, []);
+
+  const [fullscreenOverlayChat, setFullscreenOverlayChat] = useState(false);
+  const [mobileLandscapeActive, setMobileLandscapeActive] = useState(false);
 
   // Time & countdown state (Synchronized with authoritative server clock)
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
@@ -724,6 +727,19 @@ export function StudentLiveClassRoom({
   const [boardBackground, setBoardBackground] = useState<string>("blank");
   const [boardObjects, setBoardObjects] = useState<StrokeObject[]>([]);
   const [activeViewMode, setActiveViewMode] = useState<"STREAM" | "WHITEBOARD">("STREAM");
+
+  const classThumbnailUrl = useMemo(() => {
+    if (boardBackground && boardBackground !== "blank" && boardBackground.startsWith("http")) {
+      return boardBackground;
+    }
+    if (wbSession?.presentationUrl && wbSession.presentationUrl.startsWith("http")) {
+      return wbSession.presentationUrl;
+    }
+    if (wbSession?.youtubeVideoId) {
+      return `https://img.youtube.com/vi/${wbSession.youtubeVideoId}/hqdefault.jpg`;
+    }
+    return null;
+  }, [boardBackground, wbSession?.presentationUrl, wbSession?.youtubeVideoId]);
 
   // Keep local clock ticking with server offset
   useEffect(() => {
@@ -743,14 +759,20 @@ export function StudentLiveClassRoom({
   const toggleMobileOrientation = async () => {
     if (typeof document === "undefined") return;
     try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
+      const nextActive = !mobileLandscapeActive;
+      setMobileLandscapeActive(nextActive);
+      if (nextActive) {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen().catch(() => {});
+        }
         setIsFullscreen(true);
         if (screen.orientation && "lock" in screen.orientation) {
           await (screen.orientation as any).lock("landscape").catch(() => {});
         }
       } else {
-        await document.exitFullscreen();
+        if (document.fullscreenElement && document.exitFullscreen) {
+          await document.exitFullscreen().catch(() => {});
+        }
         setIsFullscreen(false);
         if (screen.orientation && "unlock" in screen.orientation) {
           (screen.orientation as any).unlock();
@@ -1641,7 +1663,7 @@ export function StudentLiveClassRoom({
           (the two kicked each other off: calls wouldn't connect or end
           cleanly) and a second YouTube player downloaded the stream. */}
       {isDesktopViewport && (
-      <div className="hidden lg:flex flex-1 min-h-0 flex-row p-3 gap-3 overflow-hidden bg-[#0b0d14]">
+      <div className="hidden md:flex flex-1 min-h-0 flex-row p-3 gap-3 overflow-hidden bg-[#0b0d14]">
         {/* Left Main Stage (Whiteboard Canvas / YouTube Player + Overlaid Quiz Drawer) */}
         <div className="flex-1 min-w-0 h-full flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-2xl">
           {/* Presentation Title Banner */}
@@ -1720,16 +1742,16 @@ export function StudentLiveClassRoom({
             {isYouTube && activeViewMode === "STREAM" ? (
               <div className="w-full h-full max-w-full max-h-full aspect-video flex items-center justify-center">
                 <YouTubeLivePlayer
-                silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
-                shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
+                  silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
+                  shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
                   youtubeVideoId={wbSession?.youtubeVideoId ?? null}
                   title={scheduleTitle}
                   subject={subject || batchName}
                   educatorName={teacherName}
+                  thumbnailUrl={classThumbnailUrl}
                   scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
                   livePhase={isLive ? "LIVE" : "PREPARING"}
-                >
-                </YouTubeLivePlayer>
+                />
               </div>
             ) : isDesktopViewport ? (
               <StudentWhiteboardMirror
@@ -1740,11 +1762,98 @@ export function StudentLiveClassRoom({
                 objects={boardObjects}
               />
             ) : null}
+
+            {/* When chat is minimized: Open Chat floating pill */}
+            {!showChat && (
+              <button
+                type="button"
+                onClick={() => setShowChat(true)}
+                className="absolute top-3 right-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#121420]/95 hover:bg-[#1b1f33] text-white border border-blue-500/40 shadow-2xl backdrop-blur-md text-xs font-bold transition hover:scale-105 active:scale-95 cursor-pointer"
+                title="Open Live Chat"
+              >
+                <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+                <span>Open Chat</span>
+              </button>
+            )}
+
+            {/* In Stage Fullscreen: Floating chat toggle + overlay drawer */}
+            <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFullscreenOverlayChat((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-2xl backdrop-blur-md text-xs font-bold transition active:scale-95 cursor-pointer"
+                title="Toggle chat in fullscreen"
+              >
+                <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+                <span>{fullscreenOverlayChat ? "Hide Chat" : "Live Chat"}</span>
+              </button>
+            </div>
+            {fullscreenOverlayChat && (
+              <div className="absolute right-0 top-0 bottom-0 w-80 max-w-[90vw] z-40 bg-[#10121d]/95 backdrop-blur-xl border-l border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+                <div className="flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+                    Live Chat
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFullscreenOverlayChat(false)}
+                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+                <StudentEngagementPanel
+                  wbSessionId={wbSession?.id}
+                  currentUserId={currentUserId}
+                  isThemeDark={isThemeDark}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  quiz={quiz}
+                  quizError={quizError}
+                  mySelection={mySelection}
+                  remainingSec={remainingSec}
+                  submitAnswer={submitAnswer}
+                  submittingAnswer={submittingAnswer}
+                  quizDismissed={quizDismissed}
+                  setQuizDismissed={setQuizDismissed}
+                  handRaised={handRaised}
+                  handRaiseBusy={handRaiseBusy}
+                  participationType={participationType}
+                  onToggleHandRaise={handleRaiseHandClick}
+                  onSubmitHandRaise={submitHandRaise}
+                  doubtImageInputRef={doubtImageInputRef}
+                  onDoubtImageSelected={handleDoubtImageSelected}
+                  uploadingDoubtImage={uploadingDoubtImage}
+                  doubtImageError={doubtImageError}
+                  pendingDoubtPreviewUrl={pendingDoubtPreviewUrl}
+                  pendingDoubtNote={pendingDoubtNote}
+                  onNoteChange={setPendingDoubtNote}
+                  onConfirmSendDoubt={handleConfirmSendDoubt}
+                  onCancelPendingDoubt={handleCancelPendingDoubt}
+                />
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
-        <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
+        {showChat && (
+        <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl animate-in slide-in-from-right duration-200">
+          <div className="flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800/80 shrink-0">
+            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+              Live Chat & Questions
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowChat(false)}
+              className="w-7 h-7 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+              title="Minimize Chat"
+            >
+              <span className="material-symbols-outlined text-sm">dock_to_right</span>
+            </button>
+          </div>
           {/* Every class is a YouTube class now: there is no LiveKit class video. This
               tile exists only while this student is on a call with the teacher. */}
           {!isYouTube && (isAppVideoClass || isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) ? (
@@ -1842,6 +1951,7 @@ export function StudentLiveClassRoom({
             onCancelPendingDoubt={handleCancelPendingDoubt}
           />
         </aside>
+        )}
       </div>
       )}
 
@@ -1852,11 +1962,17 @@ export function StudentLiveClassRoom({
       {/* MOBILE & TABLET VIEW (< lg): Fullscreen Landscape / Tabbed Portrait View */}
       {/* ========================================================================= */}
       {!isDesktopViewport && (
-      <div className="lg:hidden flex-1 min-h-0 flex flex-col ls:flex-row overflow-hidden bg-[#0b0d14] relative">
+      <div className={`md:hidden flex-1 min-h-0 flex flex-col ls:flex-row overflow-hidden bg-[#0b0d14] relative ${
+        mobileLandscapeActive ? "fixed inset-0 z-[80] w-screen h-screen bg-black" : ""
+      }`}>
         {/* Mobile Media Area: In portrait takes top 40-45dvh; in LANDSCAPE takes 100% FULL SCREEN */}
-        <div className="w-full aspect-video max-h-[45vh] ls:w-auto ls:flex-1 ls:min-w-0 ls:h-full ls:max-h-full ls:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b ls:border-0 border-slate-800/80">
+        <div className={`w-full aspect-video ${
+          mobileLandscapeActive
+            ? "w-full h-full max-h-full border-0"
+            : "max-h-[45vh] border-b border-slate-800/80"
+        } ls:w-auto ls:flex-1 ls:min-w-0 ls:h-full ls:max-h-full ls:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden ls:border-0`}>
           {isYouTube ? (
-            <div className="relative w-full h-full">
+            <div className="relative w-full h-full flex items-center justify-center">
               <YouTubeLivePlayer
                 silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
                 shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
@@ -1865,10 +1981,21 @@ export function StudentLiveClassRoom({
                 title={scheduleTitle}
                 subject={subject || batchName}
                 educatorName={teacherName}
+                thumbnailUrl={classThumbnailUrl}
                 scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
                 livePhase={isLive ? "LIVE" : "PREPARING"}
-              >
-              </YouTubeLivePlayer>
+              />
+              {mobileLandscapeActive && (
+                <button
+                  type="button"
+                  onClick={toggleMobileOrientation}
+                  className="absolute top-3 left-3 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/70 hover:bg-black/90 text-white border border-white/20 text-xs font-semibold backdrop-blur-md shadow-xl"
+                  title="Exit Landscape"
+                >
+                  <span className="material-symbols-outlined text-sm">fullscreen_exit</span>
+                  <span>Exit</span>
+                </button>
+              )}
 
               {/* Teacher's camera is already baked into the YouTube video via
                   OBS, so this stays hidden the rest of the time — it only

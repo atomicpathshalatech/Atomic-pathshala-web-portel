@@ -18,12 +18,14 @@ export const MIN_PART_BYTES = 5 * MIB;
 export const MAX_PARTS = 10_000;
 
 /**
- * Part size for a file: 16 MiB, or larger for very big files so the upload
- * stays under 9,000 parts (room to spare below R2's 10,000).
+ * Part size for a file: 8 MiB for files <= 600 MB (fast, reliable uploads over
+ * typical uplinks), 16 MiB or larger for larger files to stay well under
+ * R2's 10,000 part limit.
  */
 export function partSizeFor(sizeBytes: number): number {
   const needed = Math.ceil(sizeBytes / 9000);
-  return Math.max(16 * MIB, Math.ceil(needed / MIB) * MIB);
+  const baseSize = sizeBytes <= 600 * MIB ? 8 * MIB : 16 * MIB;
+  return Math.max(baseSize, Math.ceil(needed / MIB) * MIB);
 }
 
 export function partCountFor(sizeBytes: number, partSize: number): number {
