@@ -76,6 +76,16 @@ export function VideoPollOverlay({
   }, [poll]);
 
   // Reset minimized when a new poll arrives
+  // Auto-dismiss 6s after revealed
+  useEffect(() => {
+    if (poll?.status === "REVEALED") {
+      const timer = setTimeout(() => {
+        onDismiss?.();
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [poll?.status, onDismiss]);
+
   useEffect(() => {
     if (poll?.id) {
       setIsMinimized(false);
@@ -124,6 +134,16 @@ export function VideoPollOverlay({
           </span>
           <span className="material-symbols-outlined text-sm">open_in_full</span>
         </button>
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="w-7 h-7 rounded-full bg-slate-900/90 hover:bg-rose-900 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700 shadow-xl text-xs transition active:scale-95"
+            title="Dismiss poll"
+          >
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+        )}
       </div>
     );
   }

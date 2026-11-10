@@ -502,6 +502,7 @@ function VideoStripInner({
       >
         {/* Audio Renderer for any approved student speakers */}
         <RoomAudioRenderer />
+        <AudioUnlock role="TEACHER" />
 
         {/* Video Canvas */}
         {cameraTrack && cameraTrack.publication && !cameraTrack.publication.isMuted && isCameraEnabled ? (
