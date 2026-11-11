@@ -18,9 +18,11 @@ import {
   PhoneCall,
   GraduationCap,
   ShieldCheck,
+  Smartphone,
 } from "lucide-react";
 import type { CrmLead, CounsellorOption, CourseOption, BatchOption } from "./types";
 import { InbuiltTelecallerModal } from "./InbuiltTelecallerModal";
+import { SimCallingModal } from "./SimCallingModal";
 
 interface LeadDetailDrawerProps {
   leadId: string | null;
@@ -45,6 +47,7 @@ export function LeadDetailDrawer({
     "overview" | "timeline" | "call" | "counselling" | "admission" | "ai"
   >("overview");
   const [isTelecallerOpen, setIsTelecallerOpen] = useState(false);
+  const [isSimCallingOpen, setIsSimCallingOpen] = useState(false);
 
   // Call form state
   const [callOutcome, setCallOutcome] = useState("CONNECTED");
@@ -340,11 +343,19 @@ export function LeadDetailDrawer({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={() => setIsSimCallingOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 shadow-sm transition active:scale-95"
+                title="Call via Paired Android Phone (Cellular SIM)"
+              >
+                <Smartphone className="w-3.5 h-3.5" /> Call (Mobile SIM)
+              </button>
+              <button
+                type="button"
                 onClick={() => setIsTelecallerOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 shadow-sm transition active:scale-95"
                 title="Inbuilt Virtual Telecaller Call"
               >
-                <PhoneCall className="w-3.5 h-3.5" /> Call (Telecaller Line)
+                <PhoneCall className="w-3.5 h-3.5" /> Virtual Line
               </button>
               <a
                 href={`https://wa.me/${lead.cleanPhone}?text=${encodeURIComponent(
@@ -893,12 +904,23 @@ export function LeadDetailDrawer({
       </div>
 
       {lead && (
-        <InbuiltTelecallerModal
-          lead={lead}
-          isOpen={isTelecallerOpen}
-          onClose={() => setIsTelecallerOpen(false)}
-          onCallLogged={() => fetchLeadDetail(lead.id)}
-        />
+        <>
+          <InbuiltTelecallerModal
+            lead={lead}
+            isOpen={isTelecallerOpen}
+            onClose={() => setIsTelecallerOpen(false)}
+            onCallLogged={() => fetchLeadDetail(lead.id)}
+          />
+          <SimCallingModal
+            lead={lead}
+            isOpen={isSimCallingOpen}
+            onClose={() => setIsSimCallingOpen(false)}
+            onCallCompleted={() => {
+              fetchLeadDetail(lead.id);
+              onLeadUpdated();
+            }}
+          />
+        </>
       )}
     </div>
   );

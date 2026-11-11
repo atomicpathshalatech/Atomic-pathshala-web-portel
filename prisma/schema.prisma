@@ -184,6 +184,9 @@ model User {
   crmCounsellingSessions CRMCounsellingSession[] @relation("CRMCounsellingSessionCounsellor")
   crmLeadActivities      CRMLeadActivity[]      @relation("CRMLeadActivityUser")
   crmAssignmentRules     CRMAssignmentRule[]    @relation("CRMAssignmentRuleUser")
+  callingDevicesAssigned CallingDevice[]        @relation("CallingDeviceAssignedUser")
+  callingRequestsRequested CallingRequest[]     @relation("CallingRequestRequester")
+  callingDeviceAssignments CallingDeviceAssignment[]
 
   @@index([roleId])
   @@index([status])
@@ -7919,6 +7922,7 @@ model CRMLead {
   callRecords         CRMCallRecord[]
   counsellingSessions CRMCounsellingSession[]
   communicationLogs   CRMCommunicationLog[]
+  callingRequests     CallingRequest[]
 
   @@index([cleanPhone])
   @@index([email])
@@ -8095,3 +8099,144 @@ model CRMCommunicationLog {
   @@index([createdAt])
   @@map("crm_communication_logs")
 }
+
+// ==========================================
+// SIM-BASED CALLING SYSTEM (ATOMIC CALLING)
+// ==========================================
+
+enum CallingRequestStatus {
+  CREATED
+  QUEUED
+  SENT
+  DELIVERED
+  DIALER_OPENED
+  CALLING
+  COMPLETED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum CallingSimPreference {
+  SIM_1
+  SIM_2
+  DEFAULT
+}
+
+model CallingDevice {
+  id               String                    @id @default(cuid())
+  deviceName       String
+  deviceIdentifier String                    @unique
+  fcmToken         String?
+  pairingCode      String?                   @unique
+  pairingCodeExp   DateTime?
+  platform         String                    @default("ANDROID")
+  androidVersion   String?
+  appVersion       String?
+  batteryLevel     Int?
+  networkType      String?
+  sim1Carrier      String?
+  sim1Number       String?
+  sim2Carrier      String?
+  sim2Number       String?
+  isActive         Boolean                   @default(true)
+  isOnline         Boolean                   @default(false)
+  lastHeartbeat    DateTime?
+  assignedUserId   String?
+  assignedUser     User?                     @relation("CallingDeviceAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  assignments      CallingDeviceAssignment[]
+  requests         CallingRequest[]
+  sessions         CallingSession[]
+  activityLogs     CallingActivityLog[]
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  @@index([assignedUserId])
+  @@index([isOnline])
+  @@index([isActive])
+  @@map("calling_devices")
+}
+
+model CallingDeviceAssignment {
+  id         String        @id @default(cuid())
+  deviceId   String
+  userId     String
+  assignedBy String
+  assignedAt DateTime      @default(now())
+  revokedAt  DateTime?
+  isActive   Boolean       @default(true)
+
+  device     CallingDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId])
+  @@index([userId])
+  @@map("calling_device_assignments")
+}
+
+model CallingRequest {
+  id             String               @id @default(cuid())
+  leadId         String?
+  studentId      String?
+  studentPhone   String
+  requestedById  String
+  deviceId       String
+  preferredSim   CallingSimPreference @default(DEFAULT)
+  status         CallingRequestStatus @default(CREATED)
+  idempotencyKey String               @unique
+  failureReason  String?
+  expiresAt      DateTime
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  lead           CRMLead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  requestedBy    User                 @relation("CallingRequestRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  device         CallingDevice        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sessions       CallingSession[]
+  activityLogs   CallingActivityLog[]
+
+  @@index([deviceId])
+  @@index([requestedById])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("calling_requests")
+}
+
+model CallingSession {
+  id               String         @id @default(cuid())
+  callingRequestId String
+  leadId           String?
+  deviceId         String
+  initiatedAt      DateTime       @default(now())
+  completedAt      DateTime?
+  outcome          String?
+  durationSeconds  Int?
+  durationSource   String?
+  remarks          String?
+  createdAt        DateTime       @default(now())
+
+  callingRequest   CallingRequest @relation(fields: [callingRequestId], references: [id], onDelete: Cascade)
+  device           CallingDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([callingRequestId])
+  @@index([deviceId])
+  @@map("calling_sessions")
+}
+
+model CallingActivityLog {
+  id               String          @id @default(cuid())
+  callingRequestId String?
+  deviceId         String?
+  actorId          String?
+  eventType        String
+  metadata         Json?
+  createdAt        DateTime        @default(now())
+
+  callingRequest   CallingRequest? @relation(fields: [callingRequestId], references: [id], onDelete: SetNull)
+  device           CallingDevice?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([callingRequestId])
+  @@index([deviceId])
+  @@map("calling_activity_logs")
+}
+

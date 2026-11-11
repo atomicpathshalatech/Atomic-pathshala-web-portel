@@ -25,6 +25,11 @@ import {
   Sparkles,
   ExternalLink,
   MessageCircle,
+  Smartphone,
+  Battery,
+  Wifi,
+  QrCode,
+  RefreshCw,
 } from "lucide-react";
 import type {
   CrmLead,
@@ -37,6 +42,8 @@ import { LeadDetailDrawer } from "./LeadDetailDrawer";
 import { AddLeadModal } from "./AddLeadModal";
 import { ImportCsvModal } from "./ImportCsvModal";
 import { InbuiltTelecallerModal } from "./InbuiltTelecallerModal";
+import { PairDeviceModal } from "./PairDeviceModal";
+import { SimCallingModal } from "./SimCallingModal";
 
 interface EnterpriseCrmPortalProps {
   initialMetrics: CrmDashboardMetrics;
@@ -59,7 +66,7 @@ export function EnterpriseCrmPortal({
 }: EnterpriseCrmPortalProps) {
   // Active Navigation Tab
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "leads" | "kanban" | "followups" | "calling" | "counselling" | "campaigns" | "admissions"
+    "dashboard" | "leads" | "kanban" | "followups" | "calling" | "devices" | "counselling" | "campaigns" | "admissions"
   >("dashboard");
 
   // Metrics & Leads State
@@ -85,8 +92,14 @@ export function EnterpriseCrmPortal({
   // Modals & Drawer
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [telecallerLead, setTelecallerLead] = useState<CrmLead | null>(null);
+  const [simCallingLead, setSimCallingLead] = useState<CrmLead | null>(null);
+  const [isPairModalOpen, setIsPairModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // Calling Devices state
+  const [callingDevices, setCallingDevices] = useState<any[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
 
   // Follow-ups state
   const [followUps, setFollowUps] = useState<any[]>([]);
@@ -108,12 +121,66 @@ export function EnterpriseCrmPortal({
       refreshMetrics();
     } else if (activeTab === "followups") {
       fetchFollowUps();
+    } else if (activeTab === "devices") {
+      fetchDevices();
     } else if (activeTab === "counselling") {
       fetchCounselling();
     } else if (activeTab === "campaigns") {
       fetchCampaigns();
     }
   }, [activeTab, followUpFilter]);
+
+  async function fetchDevices() {
+    setLoadingDevices(true);
+    try {
+      const res = await fetch("/api/calling/devices");
+      const json = await res.json();
+      if (json.success && json.data) {
+        setCallingDevices(json.data.devices);
+      }
+    } catch {
+      toast.error("Failed to load calling devices");
+    } finally {
+      setLoadingDevices(false);
+    }
+  }
+
+  async function handleAssignDevice(deviceId: string, userId: string | null) {
+    try {
+      const res = await fetch(`/api/calling/devices/${deviceId}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedUserId: userId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Device assignment updated");
+        fetchDevices();
+      } else {
+        toast.error(json.error || "Failed to assign device");
+      }
+    } catch {
+      toast.error("Error updating assignment");
+    }
+  }
+
+  async function handleUnpairDevice(deviceId: string, deviceName: string) {
+    if (!confirm(`Are you sure you want to unpair "${deviceName}"?`)) return;
+    try {
+      const res = await fetch(`/api/calling/devices/${deviceId}/unpair`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Device unpaired");
+        fetchDevices();
+      } else {
+        toast.error(json.error || "Failed to unpair device");
+      }
+    } catch {
+      toast.error("Error unpairing device");
+    }
+  }
 
   async function refreshMetrics() {
     try {
@@ -304,6 +371,7 @@ export function EnterpriseCrmPortal({
           { id: "kanban", label: "Pipeline (Kanban)", icon: Kanban },
           { id: "followups", label: `Follow-ups (${metrics.kpis.followUpsDueToday})`, icon: Clock },
           { id: "calling", label: "Calling Center", icon: PhoneCall },
+          { id: "devices", label: "Mobile Devices (SIM)", icon: Smartphone },
           { id: "counselling", label: "Counselling Desk", icon: Calendar },
           { id: "campaigns", label: "Campaigns & ROAS", icon: DollarSign },
           { id: "admissions", label: `Admissions (${metrics.kpis.enrolled})`, icon: GraduationCap },
@@ -701,6 +769,14 @@ export function EnterpriseCrmPortal({
                             <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
+                                onClick={() => setSimCallingLead(lead)}
+                                title="Call via Paired Android SIM"
+                                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition active:scale-95"
+                              >
+                                <Smartphone className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => setTelecallerLead(lead)}
                                 title="Inbuilt Virtual Telecaller Call"
                                 className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition active:scale-95"
@@ -910,16 +986,268 @@ export function EnterpriseCrmPortal({
                       {l.phone} · {l.targetExam || "NEET"} · Priority: {l.priority}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setTelecallerLead(l)}
-                    className="px-4 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm active:scale-95 transition"
-                  >
-                    <PhoneCall className="w-3.5 h-3.5" /> Call (Virtual Line)
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSimCallingLead(l)}
+                      className="px-3 py-1.5 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm active:scale-95 transition"
+                      title="Call through paired Android mobile SIM"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" /> Call (Mobile SIM)
+                    </button>
+                    <button
+                      onClick={() => setTelecallerLead(l)}
+                      className="px-3 py-1.5 bg-surface-container text-on-surface font-semibold text-xs rounded-xl hover:bg-surface-container-high flex items-center gap-1.5 border border-outline-variant/30 active:scale-95 transition"
+                      title="Virtual browser dialer"
+                    >
+                      <PhoneCall className="w-3.5 h-3.5 text-primary" /> Virtual Line
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB: MOBILE DEVICES (SIM FLEET) */}
+      {activeTab === "devices" && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="p-5 rounded-2xl border border-outline-variant/20 bg-surface flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                  Cellular SIM Telephony
+                </span>
+                <span className="text-xs text-on-surface-variant font-mono">No VoIP • Physical SIM</span>
+              </div>
+              <h3 className="text-base font-bold text-on-surface flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-emerald-600" />
+                Mobile Calling Devices Fleet
+              </h3>
+              <p className="text-xs text-on-surface-variant leading-relaxed max-w-2xl">
+                Pair up to 5 physical Android phones running the <b>Atomic Calling</b> companion app. Initiate calls directly from your CRM browser, and the voice call is placed automatically over the handset's physical SIM (Jio, Airtel, Vi) using standard cellular minutes.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={fetchDevices}
+                disabled={loadingDevices}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-outline-variant/30 bg-surface hover:bg-surface-container transition"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingDevices ? "animate-spin text-primary" : ""}`} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPairModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition active:scale-95"
+              >
+                <QrCode className="w-4 h-4" />
+                Pair New Handset
+              </button>
+            </div>
+          </div>
+
+          {/* Fleet Stats Overview */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-4 rounded-xl border border-outline-variant/20 bg-surface">
+              <span className="text-[11px] font-semibold text-on-surface-variant block">Paired Handsets</span>
+              <span className="text-2xl font-black text-on-surface">{callingDevices.length}</span>
+            </div>
+            <div className="p-4 rounded-xl border border-outline-variant/20 bg-surface">
+              <span className="text-[11px] font-semibold text-on-surface-variant block">Online Now</span>
+              <span className="text-2xl font-black text-emerald-600">
+                {callingDevices.filter((d) => d.isOnline).length}
+              </span>
+            </div>
+            <div className="p-4 rounded-xl border border-outline-variant/20 bg-surface">
+              <span className="text-[11px] font-semibold text-on-surface-variant block">Total Calls Placed</span>
+              <span className="text-2xl font-black text-primary">
+                {callingDevices.reduce((acc, d) => acc + (d.stats?.totalCalls || 0), 0)}
+              </span>
+            </div>
+            <div className="p-4 rounded-xl border border-outline-variant/20 bg-surface">
+              <span className="text-[11px] font-semibold text-on-surface-variant block">Talk Time (Minutes)</span>
+              <span className="text-2xl font-black text-indigo-600">
+                {Math.round(
+                  callingDevices.reduce((acc, d) => acc + (d.stats?.totalDurationSeconds || 0), 0) / 60
+                )}m
+              </span>
+            </div>
+          </div>
+
+          {/* Devices Grid or Empty State */}
+          {loadingDevices && callingDevices.length === 0 ? (
+            <div className="p-12 text-center text-xs text-on-surface-variant rounded-2xl border border-outline-variant/20 bg-surface">
+              <RefreshCw className="w-6 h-6 text-primary mx-auto animate-spin mb-2" />
+              Loading paired handsets...
+            </div>
+          ) : callingDevices.length === 0 ? (
+            <div className="p-10 rounded-2xl border border-dashed border-outline-variant/40 bg-surface text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                <Smartphone className="w-7 h-7" />
+              </div>
+              <div className="max-w-md mx-auto space-y-1">
+                <h4 className="text-sm font-bold text-on-surface">No Android Calling Devices Paired</h4>
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  Install the <b>Atomic Calling</b> companion app on your office Android phone, click below to generate a 6-digit PIN, and start making cellular SIM calls.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPairModalOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow transition"
+              >
+                <Plus className="w-4 h-4" /> Pair First Android Device
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {callingDevices.map((dev: any) => {
+                const isOnline = dev.isOnline;
+                return (
+                  <div
+                    key={dev.id}
+                    className="p-5 rounded-2xl border border-outline-variant/20 bg-surface shadow-xs space-y-4 flex flex-col justify-between"
+                  >
+                    {/* Device Header */}
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                            isOnline ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"
+                          }`}>
+                            <Smartphone className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-on-surface">{dev.deviceName}</h4>
+                            <p className="text-[11px] text-on-surface-variant font-mono">{dev.model}</p>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                            isOnline
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isOnline ? "bg-emerald-600 animate-pulse" : "bg-slate-400"
+                            }`}
+                          />
+                          {isOnline ? "Online" : "Offline"}
+                        </span>
+                      </div>
+
+                      {/* Device Indicators (Battery, Android, Heartbeat) */}
+                      <div className="flex items-center gap-2 text-[10px] text-on-surface-variant pt-1 border-t border-outline-variant/10">
+                        <span className="flex items-center gap-1 font-medium">
+                          <Battery className="w-3.5 h-3.5 text-emerald-600" />
+                          {dev.batteryLevel !== null ? `${dev.batteryLevel}%` : "100%"}
+                          {dev.isCharging && " ⚡"}
+                        </span>
+                        <span>·</span>
+                        <span>Android {dev.androidVersion || "14"}</span>
+                        <span>·</span>
+                        <span title={dev.lastHeartbeatAt ? new Date(dev.lastHeartbeatAt).toLocaleString() : ""}>
+                          Sync: {dev.lastHeartbeatAt ? "Active" : "Pending"}
+                        </span>
+                      </div>
+
+                      {/* SIM Slot Details */}
+                      <div className="space-y-1.5 bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/10 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-on-surface-variant">SIM 1:</span>
+                          <span className="font-bold text-[11px] text-on-surface">
+                            {dev.sim1Carrier || "Primary SIM Ready"}
+                          </span>
+                        </div>
+                        {dev.sim1Number && (
+                          <div className="flex items-center justify-between text-[10px] text-on-surface-variant font-mono">
+                            <span>Phone:</span>
+                            <span>{dev.sim1Number}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between pt-1 border-t border-outline-variant/10">
+                          <span className="text-[11px] font-semibold text-on-surface-variant">SIM 2:</span>
+                          <span className="font-bold text-[11px] text-on-surface-variant">
+                            {dev.sim2Carrier || (dev.sim2Number ? "Secondary SIM Ready" : "Empty Slot")}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Counsellor Assignment */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                          Assigned Counsellor
+                        </label>
+                        <select
+                          value={dev.currentAssignment?.assignedUser?.id || ""}
+                          onChange={(e) => handleAssignDevice(dev.id, e.target.value || null)}
+                          className="w-full text-xs font-medium px-2.5 py-1.5 rounded-lg border border-outline-variant/30 bg-surface text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          <option value="">(Shared Fleet Handset - Any Counsellor)</option>
+                          {counselors.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.email})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Performance Stats */}
+                      <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-outline-variant/10">
+                        <div className="bg-surface-container-low p-2 rounded-lg">
+                          <span className="text-[10px] text-on-surface-variant block">Calls</span>
+                          <span className="text-xs font-bold text-on-surface">{dev.stats?.totalCalls || 0}</span>
+                        </div>
+                        <div className="bg-surface-container-low p-2 rounded-lg">
+                          <span className="text-[10px] text-on-surface-variant block">Connected</span>
+                          <span className="text-xs font-bold text-emerald-600">{dev.stats?.connectedCalls || 0}</span>
+                        </div>
+                        <div className="bg-surface-container-low p-2 rounded-lg">
+                          <span className="text-[10px] text-on-surface-variant block">Minutes</span>
+                          <span className="text-xs font-bold text-indigo-600">
+                            {Math.round((dev.stats?.totalDurationSeconds || 0) / 60)}m
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-between gap-2 pt-3 border-t border-outline-variant/10">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (leads.length > 0) {
+                            setSimCallingLead(leads[0]);
+                          } else {
+                            toast.info("No leads available to place test call");
+                          }
+                        }}
+                        className="flex-1 py-1.5 px-3 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 transition active:scale-95 text-center flex items-center justify-center gap-1.5"
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" /> Test Call Lead
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUnpairDevice(dev.id, dev.deviceName)}
+                        className="py-1.5 px-3 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-semibold transition"
+                      >
+                        Unpair
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1063,6 +1391,25 @@ export function EnterpriseCrmPortal({
         onCallLogged={() => {
           fetchLeads();
           refreshMetrics();
+        }}
+      />
+
+      <PairDeviceModal
+        isOpen={isPairModalOpen}
+        onClose={() => setIsPairModalOpen(false)}
+        onDevicePaired={() => {
+          fetchDevices();
+        }}
+      />
+
+      <SimCallingModal
+        lead={simCallingLead}
+        isOpen={!!simCallingLead}
+        onClose={() => setSimCallingLead(null)}
+        onCallCompleted={() => {
+          fetchLeads();
+          refreshMetrics();
+          fetchDevices();
         }}
       />
     </div>

@@ -12,6 +12,7 @@ import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
 import { LeaderboardPopup, isPublishedLeaderboard, type PublishedLeaderboard } from "./LeaderboardPopup";
 import { VideoPollOverlay, type VideoPollData } from "@/components/live-class/VideoPollOverlay";
 import {
+  startFloatingPollSession,
   checkOverlayPermission,
   requestOverlayPermission,
   showNativeFloatingPoll,
@@ -578,7 +579,7 @@ export function StudentLiveClassRoom({
       id: quiz.id,
       questionText: quiz.questionText || (quiz.isQuickQuiz ? "Quick Quiz: Select your answer" : "Live Class Poll"),
       options: quiz.options,
-      correctOption: quiz.correctOption || undefined,
+      correctOption: quiz.status === "REVEALED" ? (quiz.correctOption || undefined) : undefined,
       timeLimitSec: quiz.timeLimitSec,
       startedAt: quiz.startedAt,
       status: quiz.status === "REVEALED" ? "REVEALED" : "ACTIVE",
@@ -973,6 +974,9 @@ export function StudentLiveClassRoom({
     if (!channelId) return;
     const client = getPusherClient();
     let cleanupPollResync: () => void = () => {};
+    if (typeof window !== "undefined") {
+      startFloatingPollSession({ sessionId: channelId, apiUrl: window.location.origin });
+    }
     const channel = client.subscribe(sessionChannel(channelId));
     const secondaryChannel =
       wbSession?.id && wbSession.id !== batchScheduleId

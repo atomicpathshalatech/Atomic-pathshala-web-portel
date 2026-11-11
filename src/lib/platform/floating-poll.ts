@@ -8,6 +8,11 @@ export type FloatingPollOption = {
   label: string;
 };
 
+export type StartFloatingPollSessionOptions = {
+  sessionId: string;
+  apiUrl: string;
+};
+
 export type ShowFloatingPollOptions = {
   id: string;
   questionText: string;
@@ -31,6 +36,7 @@ export type UpdateFloatingPollResultsOptions = {
 export interface FloatingPollPlugin {
   checkPermission(): Promise<{ granted: boolean }>;
   requestPermission(): Promise<{ requested: boolean }>;
+  startSession(options: StartFloatingPollSessionOptions): Promise<{ success: boolean }>;
   showPoll(options: ShowFloatingPollOptions): Promise<{ success: boolean }>;
   updateResults(options: UpdateFloatingPollResultsOptions): Promise<{ success: boolean }>;
   dismissPoll(options?: { id?: string }): Promise<{ success: boolean }>;
@@ -56,6 +62,15 @@ export async function requestOverlayPermission(): Promise<void> {
     await FloatingPoll.requestPermission();
   } catch (err) {
     console.warn("[FloatingPoll] requestPermission failed:", err);
+  }
+}
+
+export async function startFloatingPollSession(options: StartFloatingPollSessionOptions): Promise<void> {
+  if (!isNativeApp() || !isAndroid()) return;
+  try {
+    await FloatingPoll.startSession(options);
+  } catch (err) {
+    console.warn("[FloatingPoll] startSession failed:", err);
   }
 }
 
