@@ -213,6 +213,8 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
           errMsg = "Meta WhatsApp Access Token has expired. Please update with a Permanent System User Token in /team/whatsapp.";
         } else if (resJson.error?.code === 190) {
           errMsg = "Invalid Meta WhatsApp Access Token. A valid token starts with 'EAA...' and must be generated from Meta Business Suite.";
+        } else if (resJson.error?.code === 131030) {
+          errMsg = "Recipient number is not in Meta's allowed list (#131030). When using Meta's test phone number (+1 555...), recipients must be verified in Meta's test list, or a real Indian business number must be linked in Meta WhatsApp API Setup.";
         } else if (resJson.error?.code === 131047) {
           errMsg = "Meta 24-hour customer window expired. A pre-approved WhatsApp Template is required to message this recipient.";
         }

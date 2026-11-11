@@ -84,7 +84,7 @@ export async function updateWhatsAppSettings(
       ...(data.provider !== undefined && { provider: data.provider }),
       ...(data.apiKey !== undefined && { apiKey: data.apiKey }),
       ...(data.apiSecret !== undefined && { apiSecret: data.apiSecret }),
-      ...(data.phoneNumberId !== undefined && { phoneNumberId: data.phoneNumberId }),
+      ...(data.phoneNumberId ? { phoneNumberId: data.phoneNumberId } : {}),
       updatedById: userId,
     },
   });
