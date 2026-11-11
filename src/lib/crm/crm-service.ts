@@ -956,3 +956,71 @@ export async function getCrmDashboardMetrics() {
     })),
   };
 }
+
+/**
+ * Real-time student activity tracking for CRM
+ * Updates lead journey based on actual live logins, course exploration, and checkout
+ */
+export async function trackLiveStudentActivity(params: {
+  studentId?: string;
+  userId?: string;
+  phone?: string;
+  email?: string;
+  eventType: "LOGIN" | "COURSE_VISIT" | "BATCH_EXPLORED" | "CHECKOUT_VISITED" | "VIDEO_WATCHED";
+  title: string;
+  description: string;
+  metadata?: Record<string, any>;
+}) {
+  try {
+    // 1. Locate CRM lead
+    const lead = await prisma.cRMLead.findFirst({
+      where: {
+        OR: [
+          params.studentId ? { studentId: params.studentId } : undefined,
+          params.phone ? { cleanPhone: normalizePhoneNumber(params.phone) } : undefined,
+          params.phone ? { phone: params.phone } : undefined,
+          params.email ? { email: params.email } : undefined,
+        ].filter(Boolean) as any,
+      },
+    });
+
+    if (!lead) return null;
+
+    // 2. Record activity in CRM timeline
+    await prisma.cRMLeadActivity.create({
+      data: {
+        leadId: lead.id,
+        type: CRMActivityType.STATUS_CHANGE,
+        title: params.title,
+        description: params.description,
+      },
+    });
+
+    // 3. Update priority / score dynamically based on real engagement
+    let updatedPriority = lead.priority;
+    let scoreDelta = 0;
+
+    if (params.eventType === "CHECKOUT_VISITED") {
+      updatedPriority = CRMLeadPriority.HOT;
+      scoreDelta = 20;
+    } else if (params.eventType === "BATCH_EXPLORED" || params.eventType === "COURSE_VISIT") {
+      if (lead.priority === CRMLeadPriority.COLD) updatedPriority = CRMLeadPriority.WARM;
+      scoreDelta = 10;
+    }
+
+    if (scoreDelta > 0 || updatedPriority !== lead.priority) {
+      await prisma.cRMLead.update({
+        where: { id: lead.id },
+        data: {
+          priority: updatedPriority,
+          score: Math.min(100, lead.score + scoreDelta),
+        },
+      });
+    }
+
+    return { success: true, leadId: lead.id };
+  } catch (err) {
+    console.warn("[CRM Activity Tracking] Warning:", err);
+    return null;
+  }
+}

@@ -36,6 +36,7 @@ import type {
 import { LeadDetailDrawer } from "./LeadDetailDrawer";
 import { AddLeadModal } from "./AddLeadModal";
 import { ImportCsvModal } from "./ImportCsvModal";
+import { InbuiltTelecallerModal } from "./InbuiltTelecallerModal";
 
 interface EnterpriseCrmPortalProps {
   initialMetrics: CrmDashboardMetrics;
@@ -83,6 +84,7 @@ export function EnterpriseCrmPortal({
 
   // Modals & Drawer
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [telecallerLead, setTelecallerLead] = useState<CrmLead | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
@@ -697,13 +699,14 @@ export function EnterpriseCrmPortal({
                           </td>
                           <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1.5">
-                              <a
-                                href={`tel:${lead.phone}`}
-                                title="Click to call"
-                                className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                              <button
+                                type="button"
+                                onClick={() => setTelecallerLead(lead)}
+                                title="Inbuilt Virtual Telecaller Call"
+                                className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition active:scale-95"
                               >
                                 <PhoneCall className="w-3.5 h-3.5" />
-                              </a>
+                              </button>
                               <a
                                 href={`https://wa.me/${lead.cleanPhone}`}
                                 target="_blank"
@@ -908,10 +911,10 @@ export function EnterpriseCrmPortal({
                     </p>
                   </div>
                   <button
-                    onClick={() => setSelectedLeadId(l.id)}
-                    className="px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded-xl hover:bg-blue-700 flex items-center gap-1.5"
+                    onClick={() => setTelecallerLead(l)}
+                    className="px-4 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm active:scale-95 transition"
                   >
-                    <PhoneCall className="w-3.5 h-3.5" /> Call & Log Notes
+                    <PhoneCall className="w-3.5 h-3.5" /> Call (Virtual Line)
                   </button>
                 </div>
               ))}
@@ -1048,6 +1051,16 @@ export function EnterpriseCrmPortal({
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImportComplete={() => {
+          fetchLeads();
+          refreshMetrics();
+        }}
+      />
+
+      <InbuiltTelecallerModal
+        lead={telecallerLead}
+        isOpen={!!telecallerLead}
+        onClose={() => setTelecallerLead(null)}
+        onCallLogged={() => {
           fetchLeads();
           refreshMetrics();
         }}

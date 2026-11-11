@@ -17,8 +17,10 @@ import {
   CheckCircle2,
   PhoneCall,
   GraduationCap,
+  ShieldCheck,
 } from "lucide-react";
 import type { CrmLead, CounsellorOption, CourseOption, BatchOption } from "./types";
+import { InbuiltTelecallerModal } from "./InbuiltTelecallerModal";
 
 interface LeadDetailDrawerProps {
   leadId: string | null;
@@ -42,6 +44,7 @@ export function LeadDetailDrawer({
   const [activeTab, setActiveTab] = useState<
     "overview" | "timeline" | "call" | "counselling" | "admission" | "ai"
   >("overview");
+  const [isTelecallerOpen, setIsTelecallerOpen] = useState(false);
 
   // Call form state
   const [callOutcome, setCallOutcome] = useState("CONNECTED");
@@ -335,12 +338,14 @@ export function LeadDetailDrawer({
         {lead && (
           <div className="px-5 py-3 bg-surface-container flex items-center justify-between gap-3 border-b border-outline-variant/20 flex-wrap">
             <div className="flex items-center gap-2">
-              <a
-                href={`tel:${lead.phone}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition"
+              <button
+                type="button"
+                onClick={() => setIsTelecallerOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 shadow-sm transition active:scale-95"
+                title="Inbuilt Virtual Telecaller Call"
               >
-                <Phone className="w-3.5 h-3.5" /> Call
-              </a>
+                <PhoneCall className="w-3.5 h-3.5" /> Call (Telecaller Line)
+              </button>
               <a
                 href={`https://wa.me/${lead.cleanPhone}?text=${encodeURIComponent(
                   `Namaste ${lead.name}! Atomic Pathshala se counsellor connect kar rahe hain.`
@@ -886,6 +891,15 @@ export function LeadDetailDrawer({
           )}
         </div>
       </div>
+
+      {lead && (
+        <InbuiltTelecallerModal
+          lead={lead}
+          isOpen={isTelecallerOpen}
+          onClose={() => setIsTelecallerOpen(false)}
+          onCallLogged={() => fetchLeadDetail(lead.id)}
+        />
+      )}
     </div>
   );
 }
