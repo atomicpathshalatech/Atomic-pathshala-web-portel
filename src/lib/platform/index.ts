@@ -74,3 +74,5 @@ export async function runNativeOnly<T>(
     return fallback;
   }
 }
+
+export * from './floating-poll';
