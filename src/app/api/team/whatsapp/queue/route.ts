@@ -74,3 +74,27 @@ export async function GET(req: NextRequest) {
     return handleApiError(error);
   }
 }
+
+export async function POST(_req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+    await requirePermission(session.user.id, PERMISSIONS.WHATSAPP_MANAGE);
+
+    // Reset failed messages to PENDING so they get another attempt
+    await prisma.whatsAppMessageQueue.updateMany({
+      where: { status: "FAILED" },
+      data: { status: "PENDING", attempts: 0, scheduledFor: new Date() },
+    });
+
+    const { processWhatsAppQueue } = await import("@/lib/whatsapp/engine");
+    const result = await processWhatsAppQueue(50);
+
+    return apiSuccess({
+      message: `Processed ${result.processed} messages (${result.succeeded} sent, ${result.failed} failed)`,
+      result,
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

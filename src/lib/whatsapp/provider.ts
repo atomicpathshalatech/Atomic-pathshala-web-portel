@@ -65,15 +65,15 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
     };
   }
 
-  // Check if API key is configured for live provider
-  if (!settings.apiKey) {
-    console.warn(`[WHATSAPP_KEY_NOT_CONFIGURED] Provider ${provider} has no API key set. Go to /team/whatsapp Settings to configure.`);
+  // Check if credentials are configured for live provider
+  if (!settings.apiKey && !process.env.WHATSAPP_ACCESS_TOKEN && !process.env.WHATSAPP_API_KEY) {
+    console.warn(`[WHATSAPP_KEY_NOT_CONFIGURED] Provider ${provider} has no API key or access token set. Go to /team/whatsapp Settings to configure.`);
     return {
       success: false,
       messageId: `not_configured_${Date.now()}`,
       status: "FAILED",
       provider,
-      error: "WhatsApp API Key is not configured. Go to WhatsApp Automation Settings to enter your Interakt/Meta API key.",
+      error: "WhatsApp credentials are not configured. Go to WhatsApp Automation Settings to enter your credentials.",
     };
   }
 
@@ -151,14 +151,20 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
   if (provider === "META") {
     try {
       const phoneNumberId = settings.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
-      const accessToken = settings.apiKey || process.env.WHATSAPP_ACCESS_TOKEN;
+      let accessToken = settings.apiKey || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      // Handle case where numeric App ID was entered in apiKey field
+      if (accessToken && /^\d+$/.test(accessToken)) {
+        console.warn(`[WHATSAPP_META_NUMERIC_KEY] settings.apiKey appears to be a numeric ID (${accessToken}) rather than a Meta Access Token. Falling back to env.`);
+        accessToken = process.env.WHATSAPP_ACCESS_TOKEN || null;
+      }
 
       if (!phoneNumberId || !accessToken) {
         return {
           success: false,
           status: "FAILED",
           provider: "META",
-          error: "Missing WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN in settings/env",
+          error: "Missing Meta Phone Number ID or Access Token. Configure Permanent System User Token in /team/whatsapp Settings.",
         };
       }
 
@@ -215,11 +221,19 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
 
       const resJson = await response.json().catch(() => ({}));
       if (!response.ok || resJson.error) {
+        let errMsg = resJson.error?.message || `Meta Cloud API error (HTTP ${response.status})`;
+        if (resJson.error?.code === 190 && resJson.error?.error_subcode === 463) {
+          errMsg = "Meta WhatsApp Access Token has expired. Please update with a Permanent System User Token in /team/whatsapp.";
+        } else if (resJson.error?.code === 190) {
+          errMsg = "Invalid Meta WhatsApp Access Token. A valid token starts with 'EAA...' and must be generated from Meta Business Suite.";
+        } else if (resJson.error?.code === 131047) {
+          errMsg = "Meta 24-hour customer window expired. A pre-approved WhatsApp Template is required to message this recipient.";
+        }
         return {
           success: false,
           status: "FAILED",
           provider: "META",
-          error: resJson.error?.message || `Meta Cloud API error (HTTP ${response.status})`,
+          error: errMsg,
           rawResponse: resJson,
         };
       }
