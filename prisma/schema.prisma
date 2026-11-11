@@ -177,6 +177,12 @@ model User {
   revisionItems          RevisionItem[]
   aiChatStudyPlan        StudyPlan?
   aiChatCoachConversation CoachConversation?
+  crmLeadsAssigned       CRMLead[]              @relation("CRMLeadAssignedUser")
+  crmFollowUpsAssigned   CRMLeadFollowUp[]      @relation("CRMLeadFollowUpCounsellor")
+  crmCallRecords         CRMCallRecord[]        @relation("CRMCallRecordCounsellor")
+  crmCounsellingSessions CRMCounsellingSession[] @relation("CRMCounsellingSessionCounsellor")
+  crmLeadActivities      CRMLeadActivity[]      @relation("CRMLeadActivityUser")
+  crmAssignmentRules     CRMAssignmentRule[]    @relation("CRMAssignmentRuleUser")
 
   @@index([roleId])
   @@index([status])
@@ -278,6 +284,7 @@ model Student {
   lectureNotes        LectureNote[]
   xpEvents         XPEvent[]
   whatsAppContacts WhatsAppContact[]
+  crmLeads         CRMLead[]
   user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // --- Test Portal integration (imported from Atomic Test Portal) --------
@@ -558,6 +565,7 @@ model Batch {
   // rather than presigned because a listing renders many of these at once,
   // often for viewers who do not own the batch.
   thumbnailUrl String?
+  crmLeads     CRMLead[]
   // true while thumbnailUrl was last set by the creative engine (spec
   // section 6/14: auto-updates as assigned educators change). Flips to
   // false the moment an admin uploads their own thumbnail through the
@@ -1837,6 +1845,7 @@ model QuizSession {
   createdById          String
   startedAt            DateTime          @default(now())
   revealedAt           DateTime?
+  dismissedAt          DateTime?
 
   whiteboardSession WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
   responses         QuizResponse[]
@@ -2243,6 +2252,7 @@ model Course {
   updatedAt   DateTime  @updatedAt
   subjects    Subject[]
   batches     Batch[]
+  crmLeads    CRMLead[]
 
   @@map("courses")
 }
@@ -7666,4 +7676,381 @@ model RecordedPlaybackSession {
   lastSeenAt DateTime @default(now())
 
   @@map("recorded_playback_sessions")
+}
+
+
+// --- ENTERPRISE CRM & STUDENT ACQUISITION SYSTEM -----------------------------
+
+enum CRMLeadStatus {
+  NEW_LEAD
+  UNASSIGNED
+  ASSIGNED
+  FIRST_CALL_PENDING
+  CONTACTED
+  NOT_CONNECTED
+  INTERESTED
+  HIGHLY_INTERESTED
+  COUNSELLING_SCHEDULED
+  COUNSELLING_COMPLETED
+  DEMO_SCHEDULED
+  DEMO_ATTENDED
+  FOLLOW_UP_REQUIRED
+  PAYMENT_PENDING
+  ADMISSION_CONFIRMED
+  ENROLLED
+  NOT_INTERESTED
+  LOST
+  INVALID_NUMBER
+  DUPLICATE
+}
+
+enum CRMLeadPriority {
+  HOT
+  WARM
+  COLD
+}
+
+enum CRMLeadSource {
+  WEBSITE
+  REGISTRATION_FORM
+  COURSE_LANDING_PAGE
+  META_ADS
+  GOOGLE_ADS
+  YOUTUBE
+  INSTAGRAM
+  WHATSAPP
+  ORGANIC_SEARCH
+  REFERRAL
+  TELEGRAM
+  OFFLINE_COUNSELLING
+  MANUAL_ENTRY
+  CSV_IMPORT
+  GOOGLE_FORMS
+  API_WEBHOOK
+  OTHER
+}
+
+enum CRMActivityType {
+  STATUS_CHANGE
+  STAGE_CHANGE
+  NOTE_ADDED
+  CALL_LOGGED
+  COUNSELLING_SCHEDULED
+  COUNSELLING_COMPLETED
+  DEMO_SCHEDULED
+  DEMO_ATTENDED
+  FOLLOW_UP_CREATED
+  FOLLOW_UP_COMPLETED
+  WHATSAPP_SENT
+  WHATSAPP_RECEIVED
+  EMAIL_SENT
+  SMS_SENT
+  PAYMENT_LINK_SENT
+  PAYMENT_RECEIVED
+  ADMISSION_CREATED
+  STUDENT_ENROLLED
+  ASSIGNMENT_CHANGED
+  SCORE_UPDATED
+  MERGED_DUPLICATE
+}
+
+enum CRMFollowUpType {
+  PHONE_CALL
+  WHATSAPP
+  SMS
+  EMAIL
+  COUNSELLING
+  DEMO_CLASS
+  PAYMENT_REMINDER
+}
+
+enum CRMFollowUpStatus {
+  PENDING
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+enum CRMCallOutcome {
+  CONNECTED
+  NOT_ANSWERED
+  BUSY
+  SWITCHED_OFF
+  INVALID_NUMBER
+  INTERESTED
+  NOT_INTERESTED
+  CALL_BACK_LATER
+  ADMISSION_CONFIRMED
+}
+
+enum CRMCounsellingOutcome {
+  HIGH_INTEREST
+  MODERATE_INTEREST
+  NEED_PARENT_DISCUSSION
+  DEMO_RECOMMENDED
+  ADMISSION_OFFERED
+  FEES_OBJECTION
+  NOT_INTERESTED
+}
+
+enum CRMCampaignPlatform {
+  META
+  GOOGLE
+  YOUTUBE
+  INSTAGRAM
+  WHATSAPP
+  ORGANIC
+  REFERRAL
+  ADMISSION_DRIVE
+  OFFLINE
+}
+
+enum CRMCampaignStatus {
+  PLANNED
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model CRMLead {
+  id                  String             @id @default(cuid())
+  leadCode            String             @unique
+  name                String
+  phone               String
+  cleanPhone          String
+  alternatePhone      String?
+  whatsappNumber      String?
+  email               String?
+  fatherName          String?
+  motherName          String?
+  studentClass        String?
+  board               String?
+  medium              String?
+  targetExam          String?
+  targetYear          Int?
+  preferredSubject    String?
+  preferredCourse     String?
+  targetCourseId      String?
+  targetBatchId       String?
+  state               String?
+  city                String?
+  school              String?
+  academicBackground  String?
+  previousScore       String?
+  expectedBudget      Float?
+  status              CRMLeadStatus      @default(NEW_LEAD)
+  priority            CRMLeadPriority    @default(WARM)
+  score               Int                @default(0)
+  source              CRMLeadSource      @default(WEBSITE)
+  campaignId          String?
+  campaignName        String?
+  utmSource           String?
+  utmMedium           String?
+  utmCampaign         String?
+  utmContent          String?
+  utmTerm             String?
+  landingPage         String?
+  referrerUrl         String?
+  firstTouchSource    String?
+  lastTouchSource     String?
+  assignedUserId      String?
+  lastContactedAt     DateTime?
+  nextFollowUpAt      DateTime?
+  isConverted         Boolean            @default(false)
+  studentId           String?
+  notes               String?
+  customFields        Json?
+  tags                String[]           @default([])
+  deletedAt           DateTime?
+  duplicateOfId       String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  assignedUser        User?              @relation("CRMLeadAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  student             Student?           @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  campaign            CRMCampaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  targetCourse        Course?            @relation(fields: [targetCourseId], references: [id], onDelete: SetNull)
+  targetBatch         Batch?             @relation(fields: [targetBatchId], references: [id], onDelete: SetNull)
+  duplicateOf         CRMLead?           @relation("CRMLeadDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates          CRMLead[]          @relation("CRMLeadDuplicates")
+  activities          CRMLeadActivity[]
+  followUps           CRMLeadFollowUp[]
+  callRecords         CRMCallRecord[]
+  counsellingSessions CRMCounsellingSession[]
+  communicationLogs   CRMCommunicationLog[]
+
+  @@index([cleanPhone])
+  @@index([email])
+  @@index([status])
+  @@index([priority])
+  @@index([source])
+  @@index([assignedUserId])
+  @@index([campaignId])
+  @@index([createdAt])
+  @@index([nextFollowUpAt])
+  @@index([isConverted])
+  @@index([duplicateOfId])
+  @@map("crm_leads")
+}
+
+model CRMLeadActivity {
+  id            String          @id @default(cuid())
+  leadId        String
+  type          CRMActivityType
+  title         String
+  description   String?
+  metadata      Json?
+  performedById String?
+  createdAt     DateTime        @default(now())
+
+  lead          CRMLead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  performedBy   User?           @relation("CRMLeadActivityUser", fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@map("crm_lead_activities")
+}
+
+model CRMLeadFollowUp {
+  id           String            @id @default(cuid())
+  leadId       String
+  counsellorId String?
+  title        String
+  description  String?
+  type         CRMFollowUpType   @default(PHONE_CALL)
+  priority     CRMLeadPriority   @default(WARM)
+  status       CRMFollowUpStatus @default(PENDING)
+  scheduledAt  DateTime
+  completedAt  DateTime?
+  outcome      String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  lead         CRMLead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  counsellor   User?             @relation("CRMLeadFollowUpCounsellor", fields: [counsellorId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([counsellorId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("crm_lead_follow_ups")
+}
+
+model CRMCallRecord {
+  id              String         @id @default(cuid())
+  leadId          String
+  counsellorId    String?
+  direction       String         @default("OUTBOUND")
+  durationSeconds Int            @default(0)
+  outcome         CRMCallOutcome @default(CONNECTED)
+  notes           String?
+  recordingUrl    String?
+  provider        String?        @default("MANUAL")
+  providerCallId  String?
+  createdAt       DateTime       @default(now())
+
+  lead            CRMLead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  counsellor      User?          @relation("CRMCallRecordCounsellor", fields: [counsellorId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([counsellorId])
+  @@index([createdAt])
+  @@map("crm_call_records")
+}
+
+model CRMCounsellingSession {
+  id                     String                 @id @default(cuid())
+  leadId                 String
+  counsellorId           String?
+  scheduledAt            DateTime
+  completedAt            DateTime?
+  status                 String                 @default("SCHEDULED")
+  mode                   String                 @default("PHONE")
+  meetingLink            String?
+  parentPresent          Boolean                @default(false)
+  parentInteractionNotes String?
+  studentAspirations     String?
+  recommendedCourseId    String?
+  recommendedBatchId     String?
+  outcome                CRMCounsellingOutcome?
+  counsellingNotes       String?
+  demoClassScheduled     Boolean                @default(false)
+  demoClassDate          DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  lead                   CRMLead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  counsellor             User?                  @relation("CRMCounsellingSessionCounsellor", fields: [counsellorId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([counsellorId])
+  @@index([scheduledAt])
+  @@map("crm_counselling_sessions")
+}
+
+model CRMCampaign {
+  id             String              @id @default(cuid())
+  name           String
+  campaignCode   String              @unique
+  platform       CRMCampaignPlatform @default(META)
+  status         CRMCampaignStatus   @default(ACTIVE)
+  budget         Float               @default(0)
+  spend          Float               @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
+  targetAudience String?
+  targetCourseId String?
+  utmSource      String?
+  utmCampaign    String?
+  notes          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  leads          CRMLead[]
+
+  @@index([platform])
+  @@index([status])
+  @@map("crm_campaigns")
+}
+
+model CRMAssignmentRule {
+  id             String   @id @default(cuid())
+  name           String
+  targetExam     String?
+  medium         String?
+  studentClass   String?
+  state          String?
+  assignedUserId String
+  maxActiveLeads Int      @default(100)
+  priority       Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  assignedUser   User     @relation("CRMAssignmentRuleUser", fields: [assignedUserId], references: [id], onDelete: Cascade)
+
+  @@index([assignedUserId])
+  @@index([isActive])
+  @@map("crm_assignment_rules")
+}
+
+model CRMCommunicationLog {
+  id             String   @id @default(cuid())
+  leadId         String
+  channel        String   @default("WHATSAPP")
+  direction      String   @default("OUTBOUND")
+  senderUserId   String?
+  recipient      String
+  templateName   String?
+  messageContent String
+  status         String   @default("SENT")
+  providerId     String?
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+
+  lead           CRMLead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([channel])
+  @@index([createdAt])
+  @@map("crm_communication_logs")
 }

@@ -47,6 +47,8 @@ import { formatFreeCameraLayout, isBrandedTemplate, toStagePoll, type StagePoll 
 import { loadSavedChroma, saveChroma, type ChromaSettings } from "@/lib/live-class/chroma-key";
 import { ChromaKeyPanel } from "@/components/live-class/ChromaKeyPanel";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
+import { TeacherPollCreationModal } from "@/components/live-class/TeacherPollCreationModal";
+import { TeacherPollControlPanel } from "@/components/live-class/TeacherPollControlPanel";
 
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
 const DEFAULT_FLOAT_CAM_SIZE = 180;
@@ -1112,6 +1114,22 @@ export function TeacherLiveClassRoom({
     null
   );
   stagePollRef.current = toStagePoll(activeQuiz, quizMetrics);
+  // Restore active or revealed poll on mount / reconnect
+  useEffect(() => {
+    if (!wbSession?.id) return;
+    fetch(`/api/whiteboard/sessions/${wbSession.id}/quiz`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && data.data?.quiz) {
+          setActiveQuiz(data.data.quiz);
+          if (data.data.quizMetrics) {
+            setQuizMetrics(data.data.quizMetrics);
+          }
+        }
+      })
+      .catch((err) => console.error("Error restoring quiz session:", err));
+  }, [wbSession?.id]);
+
   const [quizForm, setQuizForm] = useState({
     isQuickQuiz: true,
     questionText: "",
@@ -3181,12 +3199,7 @@ export function TeacherLiveClassRoom({
       // client-side; the functional setState form guards against a
       // manual close/new-launch already having moved past this quiz by
       // the time the timer fires.
-      const revealedQuizId = data.quiz.id;
-      window.setTimeout(() => {
-        postJson(`/api/whiteboard/sessions/${wbSession.id}/quiz/${revealedQuizId}/close`).catch(() => {});
-        setActiveQuiz((prev) => (prev?.id === revealedQuizId ? null : prev));
-        setQuizMetrics((prev) => (prev ? null : prev));
-      }, 2500);
+      // Results remain visible until teacher clicks Dismiss Poll
     } catch (err) {
       setQuizError(err instanceof Error ? err.message : "Could not reveal the answer.");
     }
@@ -5442,27 +5455,74 @@ export function TeacherLiveClassRoom({
       )}
 
       {pollOpen && (
-        <PollModal
-          onClose={() => setPollOpen(false)}
-          sessionId={wbSession.id}
-          activeQuiz={activeQuiz}
-          quizMetrics={quizMetrics}
-          form={quizForm}
-          setForm={setQuizForm}
-          error={quizError}
-          launching={launchingQuiz}
-          onLaunch={launchQuiz}
-          onReveal={(opt) => revealQuiz(opt)}
-          onClose2={closeQuiz}
-          pollModalTab={pollModalTab}
-          setPollModalTab={setPollModalTab}
-          pollType={pollType}
-          setPollType={setPollType}
-          onLeaderboardPublished={(lb) => {
-            setPollOpen(false);
-            setShownLeaderboard(lb);
-          }}
-        />
+        pollModalTab === "ranks" ? (
+          <PollModal
+            onClose={() => setPollOpen(false)}
+            sessionId={wbSession.id}
+            activeQuiz={activeQuiz}
+            quizMetrics={quizMetrics}
+            form={quizForm}
+            setForm={setQuizForm}
+            error={quizError}
+            launching={launchingQuiz}
+            onLaunch={launchQuiz}
+            onReveal={(opt) => revealQuiz(opt)}
+            onClose2={closeQuiz}
+            pollModalTab={pollModalTab}
+            setPollModalTab={setPollModalTab}
+            pollType={pollType}
+            setPollType={setPollType}
+            onLeaderboardPublished={(lb) => {
+              setPollOpen(false);
+              setShownLeaderboard(lb);
+            }}
+          />
+        ) : activeQuiz && activeQuiz.status !== "CLOSED" ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+            <div className="w-full max-w-md">
+              <TeacherPollControlPanel
+                activeQuiz={activeQuiz}
+                quizMetrics={quizMetrics}
+                onReveal={(opt) => revealQuiz(opt)}
+                onDismiss={() => {
+                  closeQuiz();
+                  setPollOpen(false);
+                }}
+                onNewPoll={() => {
+                  closeQuiz();
+                }}
+                onClosePanel={() => setPollOpen(false)}
+              />
+            </div>
+          </div>
+        ) : (
+          <TeacherPollCreationModal
+            isOpen={pollOpen}
+            onClose={() => setPollOpen(false)}
+            launching={launchingQuiz}
+            error={quizError}
+            onPublish={async (pollData) => {
+              if (!wbSession) return;
+              setQuizError(null);
+              setLaunchingQuiz(true);
+              try {
+                const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/quiz`, {
+                  questionText: pollData.questionText || undefined,
+                  isQuickQuiz: !pollData.questionText,
+                  options: pollData.options,
+                  correctOption: pollData.correctOption || undefined,
+                  timeLimitSec: pollData.timeLimitSec,
+                });
+                setActiveQuiz(data.quiz);
+                setQuizMetrics({ counts: {}, totalResponses: 0 });
+              } catch (err) {
+                setQuizError(err instanceof Error ? err.message : "Could not publish poll.");
+              } finally {
+                setLaunchingQuiz(false);
+              }
+            }}
+          />
+        )
       )}
 
       {shownLeaderboard && (

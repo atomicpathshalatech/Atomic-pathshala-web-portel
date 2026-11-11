@@ -1,4 +1,6 @@
 import "server-only";
+import { prisma } from "@/lib/db";
+import { CRMLeadStatus, CRMLeadPriority, CRMLeadSource } from "@prisma/client";
 
 export type OutreachContact = {
   id: string;
@@ -29,59 +31,152 @@ export type OutreachLead = {
 };
 
 export class OutreachIntegrationError extends Error {
-  constructor(message = "Could not reach the CRM (atomic-outreach-system). Check OUTREACH_APP_URL / OUTREACH_API_KEY in .env.") {
+  constructor(message = "CRM Service Error") {
     super(message);
     this.name = "OutreachIntegrationError";
   }
 }
 
-function config() {
-  const baseUrl = process.env.OUTREACH_APP_URL;
-  const apiKey = process.env.OUTREACH_API_KEY;
-  if (!baseUrl || !apiKey) throw new OutreachIntegrationError();
-  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey };
+function mapCrmLeadToOutreach(lead: any): OutreachLead {
+  return {
+    id: lead.id,
+    status: lead.priority === "HOT" ? "HOT" : lead.isConverted ? "CONVERTED" : lead.status,
+    stage: lead.status,
+    score: lead.score,
+    targetCourse: lead.preferredCourse || lead.targetCourse?.title || null,
+    targetBatch: lead.targetBatch?.name || null,
+    isConvertedToLms: lead.isConverted,
+    registrationUrl: null,
+    createdAt: lead.createdAt instanceof Date ? lead.createdAt.toISOString() : String(lead.createdAt),
+    updatedAt: lead.updatedAt instanceof Date ? lead.updatedAt.toISOString() : String(lead.updatedAt),
+    contact: {
+      id: lead.id,
+      name: lead.name,
+      phone: lead.phone,
+      email: lead.email,
+      studentClass: lead.studentClass,
+      targetExam: lead.targetExam,
+      city: lead.city,
+      leadSource: lead.source,
+    },
+    assignedUser: lead.assignedUser
+      ? {
+          id: lead.assignedUser.id,
+          name: lead.assignedUser.name,
+          role: lead.assignedUser.role?.label || "Counsellor",
+        }
+      : null,
+  };
 }
 
 /**
- * Everything here is a live read/write against atomic-outreach-system's
- * own database — atomic-ops deliberately keeps no local copy of leads.
- * `assignedUserId` always refers to an outreach-system User, not an
- * atomic-ops one; the two apps have no shared user identity, so the
- * Leads page shows outreach's own counselor list for reassignment.
+ * Returns leads directly from the native integrated Atomic Pathshala CRM
  */
 export async function getOutreachLeads(status?: string): Promise<OutreachLead[]> {
-  const { baseUrl, apiKey } = config();
-  const url = new URL(`${baseUrl}/api/integrations/lms/leads`);
-  if (status && status !== "ALL") url.searchParams.set("status", status);
+  try {
+    const where: any = { deletedAt: null };
+    if (status && status !== "ALL") {
+      if (status === "HOT") {
+        where.priority = CRMLeadPriority.HOT;
+      } else if (status === "CONVERTED") {
+        where.isConverted = true;
+      } else if (Object.values(CRMLeadStatus).includes(status as any)) {
+        where.status = status as CRMLeadStatus;
+      }
+    }
 
-  const res = await fetch(url, { headers: { "x-api-key": apiKey }, cache: "no-store" });
-  if (!res.ok) throw new OutreachIntegrationError(`CRM returned ${res.status} while listing leads.`);
-  const json = await res.json();
-  return json.leads as OutreachLead[];
+    const leads = await prisma.cRMLead.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        assignedUser: {
+          select: { id: true, name: true, role: { select: { label: true } } },
+        },
+        targetCourse: { select: { title: true } },
+        targetBatch: { select: { name: true } },
+      },
+    });
+
+    return leads.map(mapCrmLeadToOutreach);
+  } catch (error) {
+    console.error("[CRM_GET_LEADS_ERROR]", error);
+    throw new OutreachIntegrationError("Could not retrieve leads from the database.");
+  }
 }
 
+/**
+ * Returns available counsellors / staff from the native system
+ */
 export async function getOutreachUsers(): Promise<OutreachUser[]> {
-  const { baseUrl, apiKey } = config();
-  const res = await fetch(`${baseUrl}/api/integrations/lms/users`, {
-    headers: { "x-api-key": apiKey },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new OutreachIntegrationError(`CRM returned ${res.status} while listing counselors.`);
-  const json = await res.json();
-  return json.users as OutreachUser[];
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        status: "ACTIVE",
+        role: {
+          name: { in: ["ADMIN", "SUPER_ADMIN", "SALES", "MARKETING", "TEACHER", "FOUNDER"] },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        role: { select: { label: true } },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    return users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      role: u.role?.label || "Staff",
+    }));
+  } catch (error) {
+    console.error("[CRM_GET_USERS_ERROR]", error);
+    return [];
+  }
 }
 
+/**
+ * Updates a lead in the native database
+ */
 export async function updateOutreachLead(
   leadId: string,
   data: { status?: string; stage?: string; assignedUserId?: string | null }
 ): Promise<OutreachLead> {
-  const { baseUrl, apiKey } = config();
-  const res = await fetch(`${baseUrl}/api/integrations/lms/leads`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-    body: JSON.stringify({ leadId, ...data }),
-  });
-  if (!res.ok) throw new OutreachIntegrationError(`CRM returned ${res.status} while updating the lead.`);
-  const json = await res.json();
-  return json.lead as OutreachLead;
+  try {
+    const updateData: any = {};
+    if (data.status) {
+      if (data.status === "HOT") {
+        updateData.priority = CRMLeadPriority.HOT;
+      } else if (data.status === "CONVERTED") {
+        updateData.status = CRMLeadStatus.ENROLLED;
+        updateData.isConverted = true;
+      } else if (Object.values(CRMLeadStatus).includes(data.status as any)) {
+        updateData.status = data.status as CRMLeadStatus;
+      }
+    }
+    if (data.assignedUserId !== undefined) {
+      updateData.assignedUserId = data.assignedUserId;
+      if (data.assignedUserId && !updateData.status) {
+        updateData.status = CRMLeadStatus.ASSIGNED;
+      }
+    }
+
+    const updated = await prisma.cRMLead.update({
+      where: { id: leadId },
+      data: updateData,
+      include: {
+        assignedUser: {
+          select: { id: true, name: true, role: { select: { label: true } } },
+        },
+        targetCourse: { select: { title: true } },
+        targetBatch: { select: { name: true } },
+      },
+    });
+
+    return mapCrmLeadToOutreach(updated);
+  } catch (error) {
+    console.error("[CRM_UPDATE_LEAD_ERROR]", error);
+    throw new OutreachIntegrationError("Could not update the lead in the database.");
+  }
 }
