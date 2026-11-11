@@ -59,6 +59,16 @@ export function WhatsAppAutomationDashboard({
   // Campaigns State
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
+
+  // Connection & Queue Processing State
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<{
+    success: boolean;
+    message: string;
+    metaAccount?: any;
+    error?: string;
+  } | null>(null);
+  const [processingQueue, setProcessingQueue] = useState(false);
   const [showCreateCampaignModal, setShowCreateCampaignModal] = useState(false);
   const [newCampaign, setNewCampaign] = useState({
     name: "",
@@ -166,6 +176,56 @@ export function WhatsAppAutomationDashboard({
       alert(err.message || "Save settings failed");
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setConnectionTestResult(null);
+    try {
+      const res = await fetch("/api/team/whatsapp/test-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: settings.provider,
+          apiKey: settings.apiKey,
+          phoneNumberId: settings.phoneNumberId,
+        }),
+      });
+      const data = await res.json();
+      if (data?.success && data?.data) {
+        setConnectionTestResult(data.data);
+      } else {
+        setConnectionTestResult({
+          success: false,
+          message: data?.error?.message || "Connection test failed",
+        });
+      }
+    } catch (err: any) {
+      setConnectionTestResult({
+        success: false,
+        message: err.message || "Failed to reach server",
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleProcessQueue = async () => {
+    setProcessingQueue(true);
+    try {
+      const res = await fetch("/api/team/whatsapp/queue", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.data?.message || "Queue processed successfully");
+        fetchQueue();
+      } else {
+        alert(data.error?.message || "Failed to process queue");
+      }
+    } catch (err: any) {
+      alert(err.message || "Queue processing failed");
+    } finally {
+      setProcessingQueue(false);
     }
   };
 
@@ -457,6 +517,17 @@ export function WhatsAppAutomationDashboard({
                 className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800"
               >
                 <RefreshCw className={`w-4 h-4 ${queueLoading ? "animate-spin" : ""}`} />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleProcessQueue}
+                disabled={processingQueue}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+                title="Retry failed and dispatch pending messages"
+              >
+                <RotateCw className={`w-3.5 h-3.5 ${processingQueue ? 'animate-spin' : ''}`} />
+                <span>{processingQueue ? "Processing..." : "Retry & Process Queue"}</span>
               </button>
             </div>
           </div>
@@ -802,33 +873,101 @@ export function WhatsAppAutomationDashboard({
                   <select
                     value={settings.provider}
                     onChange={(e) => setSettings({ ...settings, provider: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold"
                   >
-                    <option value="INTERAKT">Interakt API (Recommended)</option>
+                    <option value="META">Meta WhatsApp Cloud API (Direct)</option>
+                    <option value="INTERAKT">Interakt API</option>
                     <option value="AISENSY">AiSensy API</option>
-                    <option value="META">Meta WhatsApp Cloud API</option>
                     <option value="MOCK">Development Mock (Console / Dry-run)</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">API Key / Secret Token</label>
+
+                {settings.provider === "META" && (
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Phone Number ID (from Meta WhatsApp Setup)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1328884150314487"
+                      value={settings.phoneNumberId || ""}
+                      onChange={(e) => setSettings({ ...settings, phoneNumberId: e.target.value.trim() })}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono"
+                    />
+                  </div>
+                )}
+
+                <div className={settings.provider === "META" ? "sm:col-span-2" : ""}>
+                  <label className="block text-xs text-slate-500 mb-1">
+                    {settings.provider === "META"
+                      ? "Permanent System User Access Token (starts with EAA...)"
+                      : "API Key / Secret Token"}
+                  </label>
                   <input
                     type="password"
-                    placeholder="Paste WhatsApp API Key"
+                    placeholder={settings.provider === "META" ? "EAAg... (Paste permanent token from Meta Business Suite)" : "Paste WhatsApp API Key"}
                     value={settings.apiKey || ""}
-                    onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
+                    onChange={(e) => setSettings({ ...settings, apiKey: e.target.value.trim() })}
                     className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono"
                   />
+                  {settings.provider === "META" && settings.apiKey && /^\d+$/.test(settings.apiKey) && (
+                    <p className="text-[11px] text-amber-500 mt-1 flex items-center gap-1 font-semibold">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Warning: You entered a numeric ID (${settings.apiKey}). This is an App ID or Phone ID, NOT an Access Token. A Meta Access Token begins with "EAA..." and is 200+ characters long.
+                    </p>
+                  )}
+                  {settings.provider === "META" && (
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Note: Temporary tokens expire in 24 hours. To generate a permanent token: Meta Business Settings &gt; Users &gt; System Users &gt; Add Asset &gt; Generate Token with <code>whatsapp_business_messaging</code>.
+                    </p>
+                  )}
                 </div>
               </div>
+
+              {/* Connection Test Result Banner */}
+              {connectionTestResult && (
+                <div
+                  className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
+                    connectionTestResult.success
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+                      : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200"
+                  }`}
+                >
+                  {connectionTestResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="space-y-1">
+                    <p className="font-semibold">{connectionTestResult.message || connectionTestResult.error}</p>
+                    {connectionTestResult.metaAccount && (
+                      <div className="text-[11px] opacity-90">
+                        <span>Display Phone: {connectionTestResult.metaAccount.displayPhoneNumber}</span>
+                        {" · "}
+                        <span>Verified Name: {connectionTestResult.metaAccount.verifiedName}</span>
+                        {" · "}
+                        <span>Status: {connectionTestResult.metaAccount.status}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={handleTestConnection}
+              disabled={testingConnection}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`} />
+              <span>{testingConnection ? "Testing Connection..." : "Test WhatsApp Connection"}</span>
+            </button>
+
             <button
               type="submit"
               disabled={savingSettings}
-              className="px-5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm transition-colors"
+              className="px-5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50"
             >
               {savingSettings ? "Saving Settings..." : "Save Automation Settings"}
             </button>
