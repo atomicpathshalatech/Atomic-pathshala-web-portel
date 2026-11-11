@@ -7,6 +7,7 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { quizLaunchSchema } from "@/lib/validation/whiteboard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { addCounts, youtubeVoteCounts } from "@/lib/whiteboard/youtube-votes";
 
 /**
  * Launches a new quiz/quick-poll on the board. Only one quiz can be ACTIVE
@@ -28,8 +29,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const input = quizLaunchSchema.parse(await request.json());
 
     await prisma.quizSession.updateMany({
-      where: { whiteboardSessionId: params.id, status: "ACTIVE" },
-      data: { status: "CLOSED" },
+      where: { whiteboardSessionId: params.id, status: { in: ["ACTIVE", "REVEALED"] } },
+      data: { status: "CLOSED", dismissedAt: new Date() },
     });
 
     const quiz = await prisma.quizSession.create({
@@ -45,13 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     });
 
     // Everyone in the session sees the question, options, and timer — never
-    // the correct answer, which stays server-side until reveal. Fired
-    // BEFORE the audit log write (below), not after: this was previously
-    // ordered audit-log-then-broadcast, which meant every quiz launch paid
-    // for a full extra Postgres round-trip (cross-region Vercel<->Supabase,
-    // already the dominant latency cost elsewhere in this app) before any
-    // student even saw the question appear. The audit trail matters, but
-    // not enough to sit in front of "the quiz is live" for every student.
+    // the correct answer, which stays server-side until reveal.
     try {
       await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_LAUNCHED, {
         id: quiz.id,
@@ -64,10 +59,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       console.error("[pusher_trigger_error]", err);
     }
 
-    // Fire-and-forget: never block the response (or the broadcast above) on
-    // this — same "best effort, don't let a side-write stall the real
-    // action" pattern already used for cleanup writes elsewhere (e.g.
-    // deleteFile(...).catch(() => undefined) in the background-upload route).
     prisma.auditLog
       .create({
         data: {
@@ -88,9 +79,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
 /**
  * The current (or most recently launched) quiz for this session — used by
- * clients that join or refresh mid-quiz instead of relying solely on the
- * launch event, which they may have missed. Response shape is role-gated:
- * students never receive correctOption before reveal.
+ * clients that join or refresh mid-quiz or during published results.
+ * Preserves published results until dismissed.
  */
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -103,20 +93,45 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       where: { whiteboardSessionId: params.id },
       orderBy: { startedAt: "desc" },
     });
-    if (!quiz) return apiSuccess({ quiz: null });
 
-    if (access.role === "TEACHER") {
-      return apiSuccess({ quiz });
+    // If no quiz exists or latest quiz has been closed/dismissed, return null
+    if (!quiz || quiz.status === "CLOSED") {
+      return apiSuccess({ quiz: null });
     }
 
-    const myResponse =
-      quiz.status !== "ACTIVE"
-        ? null
-        : await prisma.quizResponse.findUnique({
-            where: {
-              quizSessionId_studentId: { quizSessionId: quiz.id, studentId: access.entityId },
-            },
-          });
+    // Pre-calculate live metrics for active or revealed poll
+    const [grouped, appResponses, youtube] = await Promise.all([
+      prisma.quizResponse.groupBy({
+        by: ["selectedOption"],
+        where: { quizSessionId: quiz.id },
+        _count: { _all: true },
+      }),
+      prisma.quizResponse.count({ where: { quizSessionId: quiz.id } }),
+      youtubeVoteCounts(quiz.id),
+    ]);
+    const counts = addCounts(
+      Object.fromEntries(grouped.map((r) => [r.selectedOption, r._count._all])),
+      youtube.counts
+    );
+    const totalResponses = appResponses + youtube.total;
+
+    if (access.role === "TEACHER") {
+      return apiSuccess({
+        quiz,
+        quizMetrics: {
+          counts,
+          totalResponses,
+          youtubeResponses: youtube.total,
+        },
+      });
+    }
+
+    // Student: Look up their answer (both while ACTIVE and while REVEALED)
+    const myResponse = await prisma.quizResponse.findUnique({
+      where: {
+        quizSessionId_studentId: { quizSessionId: quiz.id, studentId: access.entityId },
+      },
+    });
 
     return apiSuccess({
       quiz: {
@@ -128,16 +143,12 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         status: quiz.status,
         startedAt: quiz.startedAt,
         revealedAt: quiz.revealedAt,
-        // correctOption only travels once the teacher has revealed it.
         correctOption: quiz.status === "REVEALED" ? quiz.correctOption : undefined,
+        counts: quiz.status === "REVEALED" ? counts : undefined,
+        totalVotes: quiz.status === "REVEALED" ? totalResponses : undefined,
       },
-      hasResponded: quiz.status === "ACTIVE" ? Boolean(myResponse) : undefined,
-      // The actual option the student picked — previously only a boolean
-      // was returned, so a student who refreshed or rejoined mid-quiz saw
-      // every option unhighlighted (buttons disabled via hasResponded, but
-      // nothing showing *which* one they'd picked) even though the correct
-      // answer was sitting right there in myResponse.selectedOption.
-      mySelection: quiz.status === "ACTIVE" ? myResponse?.selectedOption ?? null : null,
+      hasResponded: Boolean(myResponse),
+      mySelection: myResponse?.selectedOption ?? null,
     });
   } catch (error) {
     return handleApiError(error);

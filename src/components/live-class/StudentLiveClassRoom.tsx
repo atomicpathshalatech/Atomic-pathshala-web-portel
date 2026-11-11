@@ -11,6 +11,15 @@ import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
 import { LeaderboardPopup, isPublishedLeaderboard, type PublishedLeaderboard } from "./LeaderboardPopup";
 import { VideoPollOverlay, type VideoPollData } from "@/components/live-class/VideoPollOverlay";
+import {
+  checkOverlayPermission,
+  requestOverlayPermission,
+  showNativeFloatingPoll,
+  updateNativeFloatingPollResults,
+  dismissNativeFloatingPoll,
+  stopNativeFloatingPollService,
+} from "@/lib/platform/floating-poll";
+import { isAndroid, isNativeApp } from "@/lib/platform";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { StudentPostClassFeedback } from "@/components/live-class/StudentPostClassFeedback";
@@ -548,20 +557,20 @@ export function StudentLiveClassRoom({
   const [quizDismissed, setQuizDismissed] = useState(false);
   // The poll currently on screen, by id (see the QUIZ_LAUNCHED handler).
   const activePollIdRef = useRef<string | null>(null);
+  const [overlayPermissionGranted, setOverlayPermissionGranted] = useState(false);
+  const [showOverlayModal, setShowOverlayModal] = useState(false);
+
+  useEffect(() => {
+    if (isNativeApp() && isAndroid()) {
+      checkOverlayPermission().then(setOverlayPermissionGranted);
+    }
+  }, []);
 
   // Quiz leaderboard published by the teacher (the popup closes itself).
   const [publishedLeaderboard, setPublishedLeaderboard] = useState<PublishedLeaderboard | null>(null);
   const closeLeaderboard = useCallback(() => setPublishedLeaderboard(null), []);
 
-  // Auto-dismiss quiz 5 seconds after results are revealed or closed
-  useEffect(() => {
-    if (quiz?.status === "REVEALED" || quiz?.status === "CLOSED") {
-      const timer = setTimeout(() => {
-        setQuizDismissed(true);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [quiz?.status]);
+  // Results remain visible until dismissed by teacher (auto-dismiss removed)
 
   const videoPollData: VideoPollData | null = useMemo(() => {
     if (!quiz || quizDismissed || quiz.status === "CLOSED") return null;
@@ -1064,9 +1073,7 @@ export function StudentLiveClassRoom({
       }
     );
 
-    channel.bind(WB_EVENTS.QUIZ_LAUNCHED, (data: LiveQuiz) => {
-      // One poll = one id. The same launch delivered twice (reconnect, two
-      // channels) must not show a second poll or wipe the answer already given.
+        channel.bind(WB_EVENTS.QUIZ_LAUNCHED, (data: LiveQuiz) => {
       if (activePollIdRef.current === data.id) return;
       activePollIdRef.current = data.id;
       setQuiz({ ...data, status: "ACTIVE" });
@@ -1074,9 +1081,22 @@ export function StudentLiveClassRoom({
       setQuizError(null);
       setQuizDismissed(false);
       playPollAlert();
+
+      if (wbSession?.id && typeof window !== "undefined") {
+        showNativeFloatingPoll({
+          id: data.id,
+          questionText: data.questionText || (data.isQuickQuiz ? "Quick Quiz" : "Live Poll"),
+          options: data.options,
+          timeLimitSec: data.timeLimitSec,
+          startedAt: data.startedAt,
+          sessionId: wbSession.id,
+          apiUrl: window.location.origin,
+          mySelection: null,
+        });
+      }
     });
 
-    channel.bind(
+        channel.bind(
       WB_EVENTS.QUIZ_REVEALED,
       (data: { id: string; correctOption: string | null; counts?: Record<string, number>; totalResponses?: number; correctCount?: number }) => {
         setQuiz((prev) => {
@@ -1092,12 +1112,24 @@ export function StudentLiveClassRoom({
           }
           return prev;
         });
+
+        updateNativeFloatingPollResults({
+          id: data.id,
+          correctOption: data.correctOption || undefined,
+          counts: data.counts,
+          totalResponses: data.totalResponses,
+        });
+      }
+    );
       }
     );
 
-    channel.bind(WB_EVENTS.QUIZ_CLOSED, (data: { id: string }) => {
+        const handlePollDismissed = (data: { id: string }) => {
       setQuiz((prev) => (prev && prev.id === data.id ? null : prev));
-    });
+      dismissNativeFloatingPoll(data.id);
+    };
+    channel.bind(WB_EVENTS.QUIZ_CLOSED, handlePollDismissed);
+    channel.bind(WB_EVENTS.QUIZ_DISMISSED, handlePollDismissed);
 
     // Poll resync: whatever was missed while the phone slept / the network
     // dropped (a launch, a reveal, a close) is read from the server again.
@@ -1216,6 +1248,7 @@ export function StudentLiveClassRoom({
 
     return () => {
       cleanupPollResync();
+      stopNativeFloatingPollService();
       client.unsubscribe(sessionChannel(channelId));
       if (secondaryChannel) {
         client.unsubscribe(sessionChannel(batchScheduleId));
@@ -2061,6 +2094,77 @@ export function StudentLiveClassRoom({
         voting={submittingAnswer}
         error={quizError}
       />
+      {/* Android External YouTube Floating Poll Permission & Settings Modal (PART 4) */}
+      {showOverlayModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-sm bg-[#11131f] border border-[#272b3c] rounded-2xl shadow-2xl p-5 text-white flex flex-col gap-3.5">
+            <div className="flex items-center justify-between border-b border-[#232738] pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-400 text-xl">picture_in_picture_alt</span>
+                <h3 className="text-sm font-bold text-gray-100">YouTube Floating Poll</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOverlayModal(false)}
+                className="p-1 rounded text-gray-400 hover:text-white"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300 leading-relaxed">
+              When watching the live class in the external YouTube app, enable <strong>Display over other apps</strong> so live polls float directly on your screen without interrupting video playback.
+            </p>
+
+            <div className="flex items-center justify-between p-3 rounded-xl bg-[#171a28] border border-[#2b3044]">
+              <span className="text-xs font-semibold text-gray-200">Overlay Permission:</span>
+              <span
+                className={`text-[11px] font-bold px-2 py-0.5 rounded border ${
+                  overlayPermissionGranted
+                    ? "bg-emerald-950/60 text-emerald-400 border-emerald-800"
+                    : "bg-amber-950/60 text-amber-400 border-amber-800"
+                }`}
+              >
+                {overlayPermissionGranted ? "✓ Enabled" : "Not Enabled"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowOverlayModal(false)}
+                className="flex-1 py-2 rounded-xl bg-[#1d2132] text-xs font-bold text-gray-300"
+              >
+                Close
+              </button>
+              {!overlayPermissionGranted ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await requestOverlayPermission();
+                    setTimeout(async () => {
+                      const granted = await checkOverlayPermission();
+                      setOverlayPermissionGranted(granted);
+                    }, 1200);
+                  }}
+                  className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-xs"
+                >
+                  Grant Permission
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowOverlayModal(false)}
+                  className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition"
+                >
+                  Ready to Use
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Quiz leaderboard published by the teacher */}
       {publishedLeaderboard && (

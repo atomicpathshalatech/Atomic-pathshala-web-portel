@@ -38,18 +38,35 @@ export function VideoPollOverlay({
 }: VideoPollOverlayProps) {
   const [isMinimized, setIsMinimized] = useState(false);
   const [remainingSec, setRemainingSec] = useState<number>(0);
+  const [isLandscape, setIsLandscape] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
-  // Position initialized nicely on screen (upper-right floating area)
+  // Detect orientation (Portrait vs Landscape)
+  useEffect(() => {
+    const checkOrientation = () => {
+      if (typeof window === "undefined") return;
+      setIsLandscape(window.innerWidth > window.innerHeight && window.innerWidth >= 640);
+    };
+    checkOrientation();
+    window.addEventListener("resize", checkOrientation);
+    window.addEventListener("orientationchange", checkOrientation);
+    return () => {
+      window.removeEventListener("resize", checkOrientation);
+      window.removeEventListener("orientationchange", checkOrientation);
+    };
+  }, []);
+
+  // Position initialized near bottom above video controls
   useEffect(() => {
     if (!pos && typeof window !== "undefined") {
+      const cardW = isLandscape ? 360 : 310;
       setPos({
-        x: Math.max(12, window.innerWidth - 260),
-        y: Math.max(60, Math.floor(window.innerHeight * 0.12)),
+        x: Math.max(12, Math.floor((window.innerWidth - cardW) / 2)),
+        y: Math.max(60, window.innerHeight - (isLandscape ? 210 : 280)),
       });
     }
-  }, [pos]);
+  }, [pos, isLandscape]);
 
   // Pointer drag handling
   const handlePointerDown = (e: PointerEvent) => {
@@ -72,8 +89,8 @@ export function VideoPollOverlay({
     e.stopPropagation();
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
-    const newX = Math.max(8, Math.min(window.innerWidth - 250, dragRef.current.origX + dx));
-    const newY = Math.max(8, Math.min(window.innerHeight - 140, dragRef.current.origY + dy));
+    const newX = Math.max(8, Math.min(window.innerWidth - 260, dragRef.current.origX + dx));
+    const newY = Math.max(8, Math.min(window.innerHeight - 100, dragRef.current.origY + dy));
     setPos({ x: newX, y: newY });
   };
 
@@ -87,7 +104,7 @@ export function VideoPollOverlay({
     }
   };
 
-  // Calculate countdown timer
+  // Synchronize countdown timer with server startedAt + timeLimitSec
   useEffect(() => {
     if (!poll || poll.status !== "ACTIVE") {
       setRemainingSec(0);
@@ -98,8 +115,7 @@ export function VideoPollOverlay({
       const startMs = new Date(poll.startedAt).getTime();
       const nowMs = Date.now();
       const elapsedSec = Math.floor((nowMs - startMs) / 1000);
-      const left = Math.max(0, poll.timeLimitSec - elapsedSec);
-      return left;
+      return Math.max(0, poll.timeLimitSec - elapsedSec);
     };
 
     setRemainingSec(calculateRemaining());
@@ -113,17 +129,9 @@ export function VideoPollOverlay({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [poll]);
+  }, [poll?.startedAt, poll?.timeLimitSec, poll?.status]);
 
-  // Auto-dismiss 6s after revealed so results don't block display
-  useEffect(() => {
-    if (poll?.status === "REVEALED") {
-      const timer = setTimeout(() => {
-        onDismiss?.();
-      }, 6000);
-      return () => clearTimeout(timer);
-    }
-  }, [poll?.status, onDismiss]);
+  // NOTE: Auto-dismiss removed! Results stay visible indefinitely until dismissed by teacher.
 
   // Reset minimized when a new poll arrives
   useEffect(() => {
@@ -151,74 +159,76 @@ export function VideoPollOverlay({
   const mySelection = poll.mySelection;
   const isTimeUp = remainingSec <= 0 && poll.status === "ACTIVE";
 
-  // Minimized pill state (movable)
+  // Minimized pill state
   if (isMinimized) {
     return (
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        style={pos ? { left: `${pos.x}px`, top: `${pos.y}px` } : { right: "12px", top: "70px" }}
-        className="fixed z-[75] flex items-center gap-1 select-none cursor-move animate-in fade-in zoom-in-95"
+        style={pos ? { left: `${pos.x}px`, top: `${pos.y}px` } : { right: "16px", bottom: "80px" }}
+        className="fixed z-[75] flex items-center gap-1.5 select-none cursor-move animate-in fade-in zoom-in-95"
         data-poll-id={poll.id}
       >
         <button
           type="button"
           onClick={() => setIsMinimized(false)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-white text-[11px] font-bold shadow-xl border border-amber-500/60 backdrop-blur-md transition-all active:scale-95"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-white text-xs font-bold shadow-2xl border border-blue-500/60 backdrop-blur-md transition-all active:scale-95"
         >
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
           <span>
             {isRevealed
-              ? "Result"
+              ? "📊 Poll Results"
               : mySelection
               ? `Voted (${remainingSec}s)`
-              : `Poll (${remainingSec}s)`}
+              : `Live Poll (${remainingSec}s)`}
           </span>
-          <span className="material-symbols-outlined text-xs">open_in_full</span>
+          <span className="material-symbols-outlined text-sm">open_in_full</span>
         </button>
         {onDismiss && (
           <button
             type="button"
             onClick={onDismiss}
-            className="w-6 h-6 rounded-full bg-slate-900/90 hover:bg-rose-900 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700 shadow-xl text-xs transition active:scale-95 cursor-pointer"
-            title="Dismiss poll"
+            className="w-7 h-7 rounded-full bg-slate-900/90 hover:bg-rose-900 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700 shadow-xl text-xs transition active:scale-95 cursor-pointer"
+            title="Minimize to side"
           >
-            <span className="material-symbols-outlined text-xs">close</span>
+            <span className="material-symbols-outlined text-sm">close</span>
           </button>
         )}
       </div>
     );
   }
 
-  // 1/4th Compact Size Card with Draggable Header
+  // Floating Card Container (PART 3 & PART 5: Compact card positioned near bottom)
   return (
     <div
       data-poll-id={poll.id}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      style={pos ? { left: `${pos.x}px`, top: `${pos.y}px` } : { right: "12px", top: "70px" }}
-      className="fixed z-[75] w-60 sm:w-64 select-none cursor-move bg-[#0c0e18]/95 text-white border-2 border-indigo-500/80 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.85)] p-2.5 flex flex-col gap-2 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+      style={pos ? { left: `${pos.x}px`, top: `${pos.y}px` } : { bottom: "80px", left: "50%", transform: "translateX(-50%)" }}
+      className={`fixed z-[75] ${
+        isLandscape ? "w-[360px] max-w-[90vw]" : "w-[310px] max-w-[92vw]"
+      } select-none cursor-move bg-[#0b0e17]/95 text-white border-2 border-blue-500/70 rounded-2xl shadow-[0_16px_48px_rgba(0,0,0,0.85)] p-3 flex flex-col gap-2.5 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150`}
     >
-      {/* Header with Drag Grip, Timer & Actions */}
-      <div className="flex items-center justify-between gap-1.5 border-b border-slate-800 pb-1.5">
+      {/* Header Bar */}
+      <div className="flex items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="material-symbols-outlined text-slate-400 text-sm cursor-grab">drag_indicator</span>
-          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0">
+          <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
             POLL
           </span>
           {isRevealed ? (
-            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-              Revealed
+            <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold">
+              ✓ Result Published
             </span>
           ) : isTimeUp ? (
-            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-bold">
-              Time Up
+            <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-bold">
+              Time Expired
             </span>
           ) : (
-            <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-mono font-bold">
+            <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[10px] font-mono font-bold">
               ⏳ {remainingSec}s
             </span>
           )}
@@ -241,10 +251,10 @@ export function VideoPollOverlay({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onDismiss();
+                setIsMinimized(true);
               }}
               className="p-1 text-slate-400 hover:text-white rounded hover:bg-rose-900/60 transition cursor-pointer"
-              title="Close"
+              title="Minimize pill"
             >
               <span className="material-symbols-outlined text-sm">close</span>
             </button>
@@ -252,9 +262,9 @@ export function VideoPollOverlay({
         </div>
       </div>
 
-      {/* Question Text (Compact 1-2 lines) */}
+      {/* Question Text */}
       {poll.questionText && (
-        <p className="text-[11px] font-medium text-slate-200 line-clamp-2 px-0.5 leading-snug">
+        <p className="text-xs font-semibold text-slate-100 line-clamp-3 px-0.5 leading-snug">
           {poll.questionText}
         </p>
       )}
@@ -262,40 +272,47 @@ export function VideoPollOverlay({
       {/* Answer Feedback Banner on Reveal */}
       {isRevealed && (
         <div
-          className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center justify-between ${
+          className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center justify-between ${
             mySelection === poll.correctOption
               ? "bg-emerald-950/80 border border-emerald-500/60 text-emerald-300"
               : mySelection
               ? "bg-rose-950/80 border border-rose-500/60 text-rose-300"
-              : "bg-slate-800 border border-slate-700 text-slate-300"
+              : "bg-slate-800/80 border border-slate-700 text-slate-300"
           }`}
         >
-          <span>
-            {mySelection === poll.correctOption ? "🎉 Correct!" : mySelection ? "❌ Wrong" : "Ended"}
+          <span className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-sm">
+              {mySelection === poll.correctOption ? "check_circle" : mySelection ? "cancel" : "info"}
+            </span>
+            {mySelection === poll.correctOption
+              ? "Correct Answer!"
+              : mySelection
+              ? "Your answer was incorrect"
+              : "Results Published"}
           </span>
           {poll.correctOption && (
-            <span className="px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 font-black">
-              Ans: {poll.correctOption}
+            <span className="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-black text-[11px]">
+              Correct: Option {poll.correctOption}
             </span>
           )}
         </div>
       )}
 
-      {/* Options Grid (Super Compact 2x2 layout) */}
-      <div className={`grid ${poll.options.length <= 4 ? "grid-cols-2" : "grid-cols-1"} gap-1.5`}>
+      {/* PART 5: Options Layout - Vertical on Portrait, 2x2 Grid on Landscape */}
+      <div className={`grid ${isLandscape ? "grid-cols-2" : "grid-cols-1"} gap-2`}>
         {poll.options.map((opt) => {
           const isSelected = mySelection === opt.key;
           const isCorrect = isRevealed && poll.correctOption === opt.key;
           const isWrong = isRevealed && isSelected && poll.correctOption !== opt.key;
           const percentage = optionPercentages[opt.key];
 
-          let btnBg = "bg-slate-900/90 border-slate-700/80 text-slate-200 hover:bg-slate-800";
+          let btnStyle = "bg-[#131622] border-slate-800 text-slate-200 hover:border-blue-500/60 hover:bg-[#1a1f30]";
           if (isCorrect) {
-            btnBg = "border-emerald-400 bg-emerald-900/70 text-emerald-100 shadow-sm";
+            btnStyle = "border-emerald-500 bg-emerald-950/70 text-emerald-100 ring-1 ring-emerald-500/50";
           } else if (isWrong) {
-            btnBg = "border-rose-500 bg-rose-950/70 text-rose-200";
+            btnStyle = "border-rose-500 bg-rose-950/70 text-rose-200 ring-1 ring-rose-500/50";
           } else if (isSelected) {
-            btnBg = "border-indigo-400 bg-indigo-950/90 text-white shadow ring-2 ring-indigo-500/50";
+            btnStyle = "border-blue-500 bg-blue-950/90 text-white shadow ring-2 ring-blue-500/50";
           }
 
           return (
@@ -307,44 +324,44 @@ export function VideoPollOverlay({
                 e.stopPropagation();
                 onVote(opt.key);
               }}
-              className={`relative overflow-hidden h-9 px-2 rounded-xl border text-left font-medium transition-all active:scale-95 disabled:cursor-default flex items-center justify-between gap-1.5 ${btnBg}`}
+              className={`relative overflow-hidden min-h-[38px] px-2.5 py-1.5 rounded-xl border text-left font-medium transition-all active:scale-95 disabled:cursor-default flex items-center justify-between gap-2 ${btnStyle}`}
             >
-              {/* Vote Percentage background fill when revealed */}
+              {/* Vote Percentage progress bar when revealed */}
               {isRevealed && percentage !== undefined && (
                 <div
                   className={`absolute inset-0 opacity-25 pointer-events-none transition-all duration-500 ${
-                    isCorrect ? "bg-emerald-400" : "bg-indigo-400"
+                    isCorrect ? "bg-emerald-400" : "bg-blue-500"
                   }`}
                   style={{ width: `${percentage}%` }}
                 />
               )}
 
-              <div className="relative z-10 flex items-center gap-1.5 min-w-0">
+              <div className="relative z-10 flex items-center gap-2 min-w-0">
                 <span
-                  className={`w-5 h-5 rounded-md flex items-center justify-center font-mono font-black text-[11px] shrink-0 ${
+                  className={`w-6 h-6 rounded-lg flex items-center justify-center font-mono font-black text-xs shrink-0 ${
                     isCorrect
                       ? "bg-emerald-500 text-slate-950"
                       : isWrong
                       ? "bg-rose-500 text-white"
                       : isSelected
-                      ? "bg-indigo-500 text-white"
-                      : "bg-slate-800 text-slate-300"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-800 text-slate-300 border border-slate-700"
                   }`}
                 >
                   {opt.key}
                 </span>
-                <span className="text-[11px] font-semibold truncate leading-none">
-                  {opt.label !== opt.key ? opt.label : `Opt ${opt.key}`}
+                <span className="text-xs font-semibold truncate leading-none">
+                  {opt.label !== opt.key ? opt.label : `Option ${opt.key}`}
                 </span>
               </div>
 
               {isRevealed && percentage !== undefined ? (
-                <span className="relative z-10 text-[10px] font-mono font-bold text-slate-300 shrink-0">
+                <span className="relative z-10 text-xs font-mono font-bold text-slate-200 shrink-0">
                   {percentage}%
                 </span>
               ) : isSelected ? (
-                <span className="material-symbols-outlined text-xs text-indigo-400 shrink-0">
-                  check
+                <span className="material-symbols-outlined text-sm text-blue-400 shrink-0">
+                  check_circle
                 </span>
               ) : null}
             </button>
@@ -352,26 +369,31 @@ export function VideoPollOverlay({
         })}
       </div>
 
-      {/* Compact Footer Status */}
-      <div className="flex items-center justify-between text-[10px] text-slate-400 px-0.5 pt-0.5">
+      {/* Footer Status */}
+      <div className="flex items-center justify-between text-[11px] text-slate-400 px-0.5 pt-0.5">
         {mySelection ? (
           <span className="text-emerald-400 font-medium flex items-center gap-1">
-            <span className="material-symbols-outlined text-xs">done</span>
-            Voted ({mySelection})
+            <span className="material-symbols-outlined text-xs">done_all</span>
+            Answer submitted ({mySelection})
           </span>
         ) : isTimeUp ? (
           <span className="text-amber-400">Time expired</span>
         ) : (
-          <span className="text-slate-400">Tap to answer</span>
+          <span className="text-slate-400">Select your answer</span>
         )}
 
         {isRevealed && totalVotes > 0 && (
-          <span className="font-mono text-slate-400">
-            {totalVotes} vote{totalVotes === 1 ? "" : "s"}
+          <span className="font-mono text-slate-300">
+            {totalVotes} response{totalVotes === 1 ? "" : "s"}
           </span>
         )}
       </div>
-      {error && <p className="text-[10px] font-semibold text-rose-400">{error}</p>}
+
+      {error && (
+        <p className="text-[11px] font-semibold text-rose-400 bg-rose-950/40 border border-rose-900/50 rounded-lg p-1.5">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

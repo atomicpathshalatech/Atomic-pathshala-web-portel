@@ -2,11 +2,15 @@ import type { Metadata } from "next";
 import { requireTeamSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { getOutreachLeads, getOutreachUsers, OutreachIntegrationError } from "@/lib/integrations/outreach-leads";
-import { getLocalCrmDataForContacts } from "@/lib/crm/lead-category";
-import { LeadsManager } from "@/components/team-portal/LeadsManager";
+import { prisma } from "@/lib/db";
+import { getOutreachUsers } from "@/lib/integrations/outreach-leads";
+import { getCrmDashboardMetrics, getLeads } from "@/lib/crm/crm-service";
+import { EnterpriseCrmPortal } from "@/components/crm/EnterpriseCrmPortal";
 
-export const metadata: Metadata = { title: "CRM / Leads — Team Portal" };
+export const metadata: Metadata = {
+  title: "Growth & CRM — Atomic Pathshala",
+  description: "Enterprise CRM, Lead Management, Counselling & Student Acquisition System",
+};
 
 export default async function LeadsPage() {
   const { user } = await requireTeamSession();
@@ -24,53 +28,46 @@ export default async function LeadsPage() {
     hasPermission(user.id, PERMISSIONS.LEAD_ASSIGN),
   ]);
 
-  let leads: Awaited<ReturnType<typeof getOutreachLeads>> = [];
-  let counselors: Awaited<ReturnType<typeof getOutreachUsers>> = [];
-  let loadError: string | null = null;
-  try {
-    [leads, counselors] = await Promise.all([getOutreachLeads(), getOutreachUsers()]);
-  } catch (error) {
-    loadError = error instanceof OutreachIntegrationError ? error.message : "Could not load leads from the CRM.";
-  }
+  // Fetch real database metrics, initial leads, active courses, batches and counsellors
+  const [initialMetrics, leadsResult, courses, batches, counselors] = await Promise.all([
+    getCrmDashboardMetrics(),
+    getLeads({ page: 1, limit: 25 }),
+    prisma.course.findMany({
+      where: { isPublished: true },
+      select: { id: true, title: true, slug: true },
+      orderBy: { title: "asc" },
+    }),
+    prisma.batch.findMany({
+      select: { id: true, name: true, code: true, courseId: true, status: true },
+      orderBy: { name: "asc" },
+    }),
+    getOutreachUsers(),
+  ]);
 
-  // Local activity/category data (see src/lib/crm/lead-category.ts) — this
-  // app tracks its own students' activity, the external CRM doesn't, so
-  // this is joined in here by contact rather than coming from the CRM
-  // response itself. A failure here should never hide the leads list.
-  let localCrmData: Awaited<ReturnType<typeof getLocalCrmDataForContacts>> = new Map();
-  try {
-    localCrmData = await getLocalCrmDataForContacts(leads.map((l) => ({ email: l.contact.email, phone: l.contact.phone })));
-  } catch (error) {
-    console.error("getLocalCrmDataForContacts failed:", error);
-  }
-  const localCrmDataByLead = Object.fromEntries(
-    leads.map((l) => {
-      const data = (l.contact.email && localCrmData.get(l.contact.email)) || localCrmData.get(l.contact.phone);
-      return [l.id, data ?? null];
-    })
-  );
+  // Format leads to match client CrmLead format
+  const initialLeads = leadsResult.leads.map((l) => ({
+    ...l,
+    createdAt: l.createdAt.toISOString(),
+    updatedAt: l.updatedAt.toISOString(),
+    lastContactedAt: l.lastContactedAt ? l.lastContactedAt.toISOString() : null,
+    nextFollowUpAt: l.nextFollowUpAt ? l.nextFollowUpAt.toISOString() : null,
+    followUps: l.followUps.map((fu) => ({
+      ...fu,
+      scheduledAt: fu.scheduledAt.toISOString(),
+    })),
+  }));
 
   return (
-    <div className="space-y-stack-lg max-w-6xl">
-      <div>
-        <h1 className="font-headline-lg text-headline-lg text-on-surface">CRM / Leads</h1>
-        <p className="font-body-md text-body-md text-on-surface-variant">
-          Live from atomic-outreach-system — this is a management view, not a separate lead store. Full
-          calling, campaigns and follow-up tools stay in the CRM itself.
-        </p>
-      </div>
-
-      {loadError ? (
-        <div className="glass-card rounded-2xl p-8 text-center text-error font-body-md">{loadError}</div>
-      ) : (
-        <LeadsManager
-          initialLeads={leads}
-          counselors={counselors}
-          canUpdate={canUpdate}
-          canAssign={canAssign}
-          localCrmDataByLead={localCrmDataByLead}
-        />
-      )}
+    <div className="max-w-7xl mx-auto space-y-6">
+      <EnterpriseCrmPortal
+        initialMetrics={initialMetrics}
+        initialLeads={initialLeads as any}
+        counselors={counselors}
+        courses={courses}
+        batches={batches}
+        canUpdate={canUpdate}
+        canAssign={canAssign}
+      />
     </div>
   );
 }

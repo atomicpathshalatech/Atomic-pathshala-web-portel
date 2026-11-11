@@ -50,14 +50,9 @@ export function BroadcastQuizCanvasOverlay({
     setStageDismissed(false);
   }, [activeQuiz.id]);
 
-  // Auto-dismiss 7 seconds after results are revealed so it doesn't block the screen
+    // Results remain visible until manually dismissed by teacher
   useEffect(() => {
-    if (activeQuiz.status === "REVEALED") {
-      const timer = setTimeout(() => {
-        setStageDismissed(true);
-      }, 7000);
-      return () => clearTimeout(timer);
-    }
+    // Keep results on stage until manually closed
   }, [activeQuiz.status]);
 
   // Position state (relative to stage container)
