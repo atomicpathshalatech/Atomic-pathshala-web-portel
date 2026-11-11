@@ -1121,8 +1121,6 @@ export function StudentLiveClassRoom({
         });
       }
     );
-      }
-    );
 
         const handlePollDismissed = (data: { id: string }) => {
       setQuiz((prev) => (prev && prev.id === data.id ? null : prev));
