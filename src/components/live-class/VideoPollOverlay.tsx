@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, type PointerEvent } from "react";
+import React, { useState, useEffect, useMemo, useRef, type PointerEvent } from "react";
 
 export type VideoPollOption = {
   key: string;
