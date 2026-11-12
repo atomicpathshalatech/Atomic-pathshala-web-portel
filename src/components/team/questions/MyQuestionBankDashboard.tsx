@@ -95,6 +95,7 @@ export function MyQuestionBankDashboard({
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("ALL");
+  const [taskStatusTab, setTaskStatusTab] = useState<"PENDING" | "COMPLETED">("PENDING");
   const [viewAll, setViewAll] = useState(isAssignAdmin);
 
   // Selected Chapter for Chapter Review Dashboard
@@ -338,13 +339,25 @@ export function MyQuestionBankDashboard({
 
   const subjects = ["ALL", "BIOLOGY", "PHYSICS", "CHEMISTRY", "MATHEMATICS"];
 
+  const pendingCount = assignments.filter((a) => {
+    const isDone = a.status === "COMPLETED" || ((a.liveStats?.total || 0) > 0 && (a.liveStats?.published || 0) >= (a.liveStats?.total || 0));
+    return !isDone;
+  }).length;
+
+  const completedCount = assignments.filter((a) => {
+    const isDone = a.status === "COMPLETED" || ((a.liveStats?.total || 0) > 0 && (a.liveStats?.published || 0) >= (a.liveStats?.total || 0));
+    return isDone;
+  }).length;
+
   const filteredAssignments = assignments.filter((a) => {
     const matchSearch =
       a.chapter.toLowerCase().includes(search.toLowerCase()) ||
       a.subject.toLowerCase().includes(search.toLowerCase()) ||
       a.assignedTo.name.toLowerCase().includes(search.toLowerCase());
     const matchSubject = selectedSubject === "ALL" || a.subject.toUpperCase() === selectedSubject.toUpperCase();
-    return matchSearch && matchSubject;
+    const isDone = a.status === "COMPLETED" || ((a.liveStats?.total || 0) > 0 && (a.liveStats?.published || 0) >= (a.liveStats?.total || 0));
+    const matchStatus = taskStatusTab === "COMPLETED" ? isDone : !isDone;
+    return matchSearch && matchSubject && matchStatus;
   });
 
   return (
