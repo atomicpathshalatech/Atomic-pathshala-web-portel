@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const filePath = path.join(process.cwd(), "public", "downloads", "AtomicCalling.apk");
     if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ error: "APK build file not found" }, { status: 404 });
+      // In serverless environments where local file tracing might not include public dir, redirect to static asset
+      return NextResponse.redirect(new URL("/downloads/AtomicCalling.apk", req.url), 302);
     }
 
     const fileBuffer = fs.readFileSync(filePath);
@@ -20,6 +23,6 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.redirect(new URL("/downloads/AtomicCalling.apk", req.url), 302);
   }
 }

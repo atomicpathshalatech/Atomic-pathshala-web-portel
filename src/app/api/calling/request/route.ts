@@ -7,6 +7,8 @@ import { apiSuccess, handleApiError } from "@/lib/api/response";
 import { createCallingRequest } from "@/lib/calling/calling-service";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const requestCallSchema = z.object({
   leadId: z.string().optional(),
   studentId: z.string().optional(),

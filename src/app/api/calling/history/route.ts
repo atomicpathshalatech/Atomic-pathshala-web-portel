@@ -6,6 +6,8 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
 import { getCallingHistory } from "@/lib/calling/calling-service";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
