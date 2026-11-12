@@ -184,6 +184,10 @@ export async function recordDeviceHeartbeat(params: {
 export async function getCallingDevices(userId?: string) {
   const now = Date.now();
   const devices = await prisma.callingDevice.findMany({
+    where: {
+      isActive: true,
+      pairingCode: null, // Don't show pending uncompleted pairing PIN placeholders
+    },
     orderBy: { createdAt: "desc" },
     include: {
       assignedUser: { select: { id: true, name: true, email: true } },
@@ -245,22 +249,23 @@ export async function assignCallingDevice(deviceId: string, userId: string, assi
  * Unpair/revoke a device
  */
 export async function unpairCallingDevice(deviceId: string) {
-  await prisma.callingDevice.update({
-    where: { id: deviceId },
-    data: {
-      isActive: false,
-      isOnline: false,
-      fcmToken: null,
-      assignedUserId: null,
-    },
-  });
-
-  await prisma.callingActivityLog.create({
-    data: {
-      deviceId,
-      eventType: "DEVICE_UNPAIRED",
-    },
-  });
+  try {
+    await prisma.callingDeviceAssignment.deleteMany({ where: { deviceId } });
+    await prisma.callingSession.deleteMany({ where: { deviceId } });
+    await prisma.callingActivityLog.deleteMany({ where: { deviceId } });
+    await prisma.callingRequest.deleteMany({ where: { deviceId } });
+    await prisma.callingDevice.deleteMany({ where: { id: deviceId } });
+  } catch {
+    await prisma.callingDevice.updateMany({
+      where: { id: deviceId },
+      data: {
+        isActive: false,
+        isOnline: false,
+        fcmToken: null,
+        assignedUserId: null,
+      },
+    });
+  }
 
   return { success: true };
 }

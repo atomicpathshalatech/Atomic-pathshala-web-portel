@@ -166,6 +166,8 @@ export function EnterpriseCrmPortal({
 
   async function handleUnpairDevice(deviceId: string, deviceName: string) {
     if (!confirm(`Are you sure you want to unpair "${deviceName}"?`)) return;
+    // Optimistic instant removal from UI
+    setCallingDevices((prev) => prev.filter((d) => d.id !== deviceId));
     try {
       const res = await fetch(`/api/calling/devices/${deviceId}/unpair`, {
         method: "POST",
@@ -176,9 +178,11 @@ export function EnterpriseCrmPortal({
         fetchDevices();
       } else {
         toast.error(json.error || "Failed to unpair device");
+        fetchDevices();
       }
     } catch {
       toast.error("Error unpairing device");
+      fetchDevices();
     }
   }
 

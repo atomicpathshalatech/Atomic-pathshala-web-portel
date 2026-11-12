@@ -13,11 +13,15 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.LEAD_ASSIGN);
+    await requirePermission(session.user.id, PERMISSIONS.LEAD_READ);
 
     const result = await unpairCallingDevice(params.id);
     return apiSuccess(result);
-  } catch (error) {
-    return handleApiError(error);
+  } catch (error: any) {
+    console.error("[API_DEVICE_UNPAIR_ERROR]", error);
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      return handleApiError(error);
+    }
+    return apiError(error.message || "Failed to unpair device", 400);
   }
 }
