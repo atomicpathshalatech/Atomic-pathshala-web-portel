@@ -74,6 +74,36 @@ export async function registerDeviceFromApp(params: {
     throw new Error("Invalid or expired pairing code. Please generate a new code from the CRM.");
   }
 
+  // If this physical phone hardware identifier was paired before, clean up prior records to prevent unique constraint conflict
+  if (params.deviceIdentifier) {
+    const existingOldDevices = await prisma.callingDevice.findMany({
+      where: {
+        deviceIdentifier: params.deviceIdentifier,
+        id: { not: pendingDevice.id },
+      },
+      select: { id: true },
+    });
+    for (const oldDev of existingOldDevices) {
+      try {
+        await prisma.callingDeviceAssignment.deleteMany({ where: { deviceId: oldDev.id } });
+        await prisma.callingSession.deleteMany({ where: { deviceId: oldDev.id } });
+        await prisma.callingActivityLog.deleteMany({ where: { deviceId: oldDev.id } });
+        await prisma.callingRequest.deleteMany({ where: { deviceId: oldDev.id } });
+        await prisma.callingDevice.delete({ where: { id: oldDev.id } });
+      } catch {
+        await prisma.callingDevice.update({
+          where: { id: oldDev.id },
+          data: {
+            deviceIdentifier: `UNPAIRED-${Date.now()}-${oldDev.id}`,
+            isActive: false,
+            isOnline: false,
+            fcmToken: null,
+          },
+        });
+      }
+    }
+  }
+
   // Update device record with actual hardware identity
   const device = await prisma.callingDevice.update({
     where: { id: pendingDevice.id },

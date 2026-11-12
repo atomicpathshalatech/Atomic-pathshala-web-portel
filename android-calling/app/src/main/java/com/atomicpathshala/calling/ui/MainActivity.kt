@@ -107,11 +107,85 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
     var inputCode by remember { mutableStateOf("") }
     var inputServer by remember { mutableStateOf(serverUrl) }
     var isLoading by remember { mutableStateOf(false) }
+    var showQrScanner by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var statusText by remember { mutableStateOf("Online & Listening for CRM calls") }
 
     val callDispatcher = remember { CallDispatcher(context) }
     var lastHandledRequestId by remember { mutableStateOf("") }
+
+    val performPairing: (String, String) -> Unit = { codeToUse, serverToUse ->
+        val trimmedCode = codeToUse.trim()
+        val trimmedServer = serverToUse.trim().ifBlank { "https://ap.atomicpathshala.in" }
+        if (trimmedCode.length != 6) {
+            errorMessage = "Please enter or scan a valid 6-digit PIN"
+        } else {
+            isLoading = true
+            errorMessage = null
+
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                val fcmToken = if (task.isSuccessful) task.result else null
+                val androidId = Settings.Secure.getString(
+                    context.contentResolver,
+                    Settings.Secure.ANDROID_ID
+                ) ?: "android-${System.currentTimeMillis()}"
+
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val api = ApiClient.getService(trimmedServer)
+                        val sim1 = sims.firstOrNull()?.carrierName
+                        val sim2 = sims.getOrNull(1)?.carrierName
+
+                        val response = api.registerDevice(
+                            DeviceRegisterRequest(
+                                pairingCode = trimmedCode,
+                                deviceIdentifier = androidId,
+                                deviceName = "${Build.MANUFACTURER.capitalize()} ${Build.MODEL}",
+                                fcmToken = fcmToken,
+                                androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+                                appVersion = "1.0.0",
+                                batteryLevel = 90,
+                                networkType = "CELLULAR",
+                                sim1Carrier = sim1,
+                                sim1Number = null,
+                                sim2Carrier = sim2,
+                                sim2Number = null
+                            )
+                        )
+
+                        withContext(Dispatchers.Main) {
+                            isLoading = false
+                            if (response.isSuccessful && response.body()?.success == true) {
+                                val data = response.body()?.data
+                                deviceId = data?.deviceId ?: ""
+                                deviceName = data?.deviceName ?: "Handset"
+                                serverUrl = trimmedServer
+                                isPaired = true
+
+                                prefs.edit()
+                                    .putBoolean("is_paired", true)
+                                    .putString("device_id", deviceId)
+                                    .putString("device_name", deviceName)
+                                    .putString("server_url", serverUrl)
+                                    .apply()
+                            } else {
+                                val errBody = try { response.errorBody()?.string() } catch (e: Exception) { null }
+                                val serverMsg = try {
+                                    org.json.JSONObject(errBody ?: "").optString("error", "")
+                                } catch (e: Exception) { "" }
+                                errorMessage = if (serverMsg.isNotBlank()) serverMsg else "Pairing failed. Please check the PIN or Barcode."
+                            }
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            isLoading = false
+                            errorMessage = "Connection error: ${e.message}"
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Automatic Live Heartbeat & Instant Call Dispatch Loop (every 2.5 seconds)
     LaunchedEffect(isPaired, deviceId, serverUrl) {
@@ -222,12 +296,45 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
                             color = Color(0xFF0F172A)
                         )
                         Text(
-                            "Enter the 6-digit code generated in your CRM laptop dashboard to connect this physical SIM.",
+                            "Scan the barcode on your CRM laptop screen, or enter the 6-digit PIN below.",
                             fontSize = 12.sp,
                             color = Color(0xFF64748B),
                             lineHeight = 18.sp,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+                            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                         )
+
+                        // 1. Instant Camera Barcode / QR Code Scanner Button
+                        Button(
+                            onClick = { showQrScanner = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0052CC))
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Scan Barcode / QR Code", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Divider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+                            Text(
+                                " OR ENTER PIN ",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF94A3B8),
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                            Divider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         OutlinedTextField(
                             value = inputCode,
@@ -257,87 +364,53 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        Button(
-                            onClick = {
-                                if (inputCode.length != 6) {
-                                    errorMessage = "Please enter a valid 6-digit PIN"
-                                    return@Button
-                                }
-                                isLoading = true
-                                errorMessage = null
-
-                                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                                    val fcmToken = if (task.isSuccessful) task.result else null
-                                    val androidId = Settings.Secure.getString(
-                                        context.contentResolver,
-                                        Settings.Secure.ANDROID_ID
-                                    ) ?: "android-${System.currentTimeMillis()}"
-
-                                    scope.launch(Dispatchers.IO) {
-                                        try {
-                                            val api = ApiClient.getService(inputServer)
-                                            val sim1 = sims.firstOrNull()?.carrierName
-                                            val sim2 = sims.getOrNull(1)?.carrierName
-
-                                            val response = api.registerDevice(
-                                                DeviceRegisterRequest(
-                                                    pairingCode = inputCode,
-                                                    deviceIdentifier = androidId,
-                                                    deviceName = "${Build.MANUFACTURER.capitalize()} ${Build.MODEL}",
-                                                    fcmToken = fcmToken,
-                                                    androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-                                                    appVersion = "1.0.0",
-                                                    batteryLevel = 90,
-                                                    networkType = "CELLULAR",
-                                                    sim1Carrier = sim1,
-                                                    sim1Number = null,
-                                                    sim2Carrier = sim2,
-                                                    sim2Number = null
-                                                )
-                                            )
-
-                                            withContext(Dispatchers.Main) {
-                                                isLoading = false
-                                                if (response.isSuccessful && response.body()?.success == true) {
-                                                    val data = response.body()?.data
-                                                    deviceId = data?.deviceId ?: ""
-                                                    deviceName = data?.deviceName ?: "Handset"
-                                                    serverUrl = inputServer
-                                                    isPaired = true
-
-                                                    prefs.edit()
-                                                        .putBoolean("is_paired", true)
-                                                        .putString("device_id", deviceId)
-                                                        .putString("device_name", deviceName)
-                                                        .putString("server_url", serverUrl)
-                                                        .apply()
-                                                } else {
-                                                    errorMessage = "Pairing failed. Please check the PIN."
-                                                }
-                                            }
-                                        } catch (e: Exception) {
-                                            withContext(Dispatchers.Main) {
-                                                isLoading = false
-                                                errorMessage = "Error: ${e.message}"
-                                            }
-                                        }
-                                    }
-                                }
-                            },
+                        OutlinedButton(
+                            onClick = { performPairing(inputCode, inputServer) },
                             enabled = !isLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp),
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0052CC))
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF0052CC))
                         ) {
                             if (isLoading) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                                CircularProgressIndicator(color = Color(0xFF0052CC), modifier = Modifier.size(20.dp))
                             } else {
-                                Text("Verify & Connect Device", fontWeight = FontWeight.Bold)
+                                Text("Connect via PIN", fontWeight = FontWeight.Bold, color = Color(0xFF0052CC))
                             }
                         }
                     }
+                }
+
+                if (showQrScanner) {
+                    QrScannerModal(
+                        onDismiss = { showQrScanner = false },
+                        onCodeScanned = { rawCode ->
+                            showQrScanner = false
+                            try {
+                                if (rawCode.trim().startsWith("{")) {
+                                    val json = org.json.JSONObject(rawCode)
+                                    val code = json.optString("pairingCode", "")
+                                    val sUrl = json.optString("serverUrl", "")
+                                    val finalCode = if (code.isNotBlank()) code else inputCode
+                                    val finalServer = if (sUrl.isNotBlank()) sUrl else inputServer
+                                    inputCode = finalCode
+                                    inputServer = finalServer
+                                    performPairing(finalCode, finalServer)
+                                } else {
+                                    val digits = rawCode.filter { it.isDigit() }.take(6)
+                                    if (digits.length == 6) {
+                                        inputCode = digits
+                                        performPairing(digits, inputServer)
+                                    } else {
+                                        inputCode = rawCode.take(6)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                inputCode = rawCode.take(6)
+                            }
+                        }
+                    )
                 }
             } else {
                 // PAIRED ACTIVE DASHBOARD

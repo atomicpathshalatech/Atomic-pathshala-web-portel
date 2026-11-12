@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import QRCode from "qrcode";
 import {
   Smartphone,
   QrCode,
@@ -25,6 +26,7 @@ export function PairDeviceModal({ isOpen, onClose, onDevicePaired }: PairDeviceM
   const [loading, setLoading] = useState(false);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,6 +46,23 @@ export function PairDeviceModal({ isOpen, onClose, onDevicePaired }: PairDeviceM
         setPairingCode(data.data.pairingCode);
         setQrPayload(data.data.qrPayload);
         setExpiresAt(data.data.expiresAt);
+
+        // Generate visual QR code data URL
+        if (data.data.qrPayload) {
+          try {
+            const dataUrl = await QRCode.toDataURL(data.data.qrPayload, {
+              width: 220,
+              margin: 1,
+              color: {
+                dark: "#0F172A",
+                light: "#FFFFFF",
+              },
+            });
+            setQrCodeDataUrl(dataUrl);
+          } catch (qrErr) {
+            console.error("QR Code generation error:", qrErr);
+          }
+        }
       } else {
         toast.error(data.error || "Failed to generate pairing code");
       }
@@ -89,33 +108,52 @@ export function PairDeviceModal({ isOpen, onClose, onDevicePaired }: PairDeviceM
             </p>
           </div>
 
-          {/* 6-Digit PIN Canvas */}
-          <div className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-5 space-y-2">
-            <p className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
-              Pairing PIN (Valid for 15 mins)
+          {/* QR Barcode & PIN Container */}
+          <div className="bg-surface-container-low border border-outline-variant/30 rounded-3xl p-5 flex flex-col items-center justify-center space-y-4">
+            {/* Visual QR Code (Barcode) */}
+            <div className="relative p-3 bg-white rounded-2xl shadow-sm border border-outline-variant/20 flex items-center justify-center min-h-[190px] min-w-[190px]">
+              {loading ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-8 text-on-surface-variant">
+                  <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
+                  <span className="text-xs font-medium">Generating Barcode & PIN...</span>
+                </div>
+              ) : qrCodeDataUrl ? (
+                <img
+                  src={qrCodeDataUrl}
+                  alt="Pairing Barcode / QR Code"
+                  className="w-44 h-44 object-contain rounded-lg"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 text-on-surface-variant text-xs">
+                  <QrCode className="w-12 h-12 text-slate-300" />
+                  <span>Loading Barcode...</span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">
+              Scan Barcode with App or enter PIN below
             </p>
-            {loading ? (
-              <div className="py-2 text-sm text-on-surface-variant animate-pulse">Generating secure PIN...</div>
-            ) : (
-              <div className="flex items-center justify-center gap-2">
-                <span className="font-mono text-3xl font-extrabold tracking-widest text-blue-600 bg-surface px-4 py-2 rounded-xl border border-blue-200 dark:border-blue-900 shadow-sm">
-                  {pairingCode || "------"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (pairingCode) {
-                      navigator.clipboard.writeText(pairingCode);
-                      toast.success("Pairing code copied!");
-                    }
-                  }}
-                  className="p-2.5 rounded-xl border border-outline-variant/30 hover:bg-surface-container text-on-surface-variant transition"
-                  title="Copy PIN"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+
+            {/* 6-Digit PIN */}
+            <div className="flex items-center justify-center gap-2 w-full">
+              <span className="font-mono text-2xl sm:text-3xl font-extrabold tracking-widest text-blue-600 bg-surface px-4 py-2 rounded-xl border border-blue-200 dark:border-blue-900 shadow-sm">
+                {pairingCode || "------"}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (pairingCode) {
+                    navigator.clipboard.writeText(pairingCode);
+                    toast.success("Pairing PIN copied!");
+                  }
+                }}
+                className="p-2.5 rounded-xl border border-outline-variant/30 hover:bg-surface-container text-on-surface-variant transition"
+                title="Copy PIN"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Security Features */}

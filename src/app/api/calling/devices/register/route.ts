@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
-import { apiSuccess, handleApiError } from "@/lib/api/response";
+import { apiSuccess, apiError } from "@/lib/api/response";
 import { registerDeviceFromApp } from "@/lib/calling/calling-service";
 import { z } from "zod";
+
+export const dynamic = "force-dynamic";
 
 const registerSchema = z.object({
   pairingCode: z.string().min(6).max(6),
@@ -25,7 +27,8 @@ export async function POST(req: NextRequest) {
 
     const result = await registerDeviceFromApp(data);
     return apiSuccess(result, 200);
-  } catch (error) {
-    return handleApiError(error);
+  } catch (error: any) {
+    console.error("[calling/register] Failed:", error?.message || error);
+    return apiError(error?.message || "Device pairing failed. Check PIN and try again.", 400);
   }
 }
