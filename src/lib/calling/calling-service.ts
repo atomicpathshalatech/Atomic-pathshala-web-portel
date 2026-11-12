@@ -151,7 +151,31 @@ export async function recordDeviceHeartbeat(params: {
     },
   });
 
-  return { success: true, timestamp: new Date().toISOString() };
+  // Check for any pending call request queued for this device (fast polling support)
+  const pendingCall = await prisma.callingRequest.findFirst({
+    where: {
+      deviceId: params.deviceId,
+      status: { in: [CallingRequestStatus.QUEUED, CallingRequestStatus.SENT] },
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      lead: { select: { name: true } },
+    },
+  });
+
+  return {
+    success: true,
+    timestamp: new Date().toISOString(),
+    pendingCall: pendingCall
+      ? {
+          requestId: pendingCall.id,
+          phone: pendingCall.studentPhone,
+          studentName: pendingCall.lead?.name || "Student",
+          preferredSim: pendingCall.preferredSim,
+        }
+      : null,
+  };
 }
 
 /**
@@ -271,25 +295,24 @@ export async function createCallingRequest(params: {
   }
 
   // Check device heartbeats
-  const isOnline =
+  const isRecentlyActive =
     device.lastHeartbeat &&
-    Date.now() - device.lastHeartbeat.getTime() < HEARTBEAT_OFFLINE_THRESHOLD_MS;
-  if (!isOnline) {
-    throw new Error(`Device "${device.deviceName}" is currently offline. Please open Atomic Calling app on the device.`);
+    Date.now() - device.lastHeartbeat.getTime() < 5 * 60 * 1000;
+  if (!isRecentlyActive && !device.isOnline) {
+    throw new Error(`Device "${device.deviceName}" is offline. Please open Atomic Calling app on the device.`);
   }
 
-  // 2. Prevent concurrent active requests on the same device
-  const activeRequest = await prisma.callingRequest.findFirst({
+  // 2. Clear any stale pending requests on this device so the user is never blocked
+  await prisma.callingRequest.updateMany({
     where: {
       deviceId: device.id,
-      status: { in: [CallingRequestStatus.QUEUED, CallingRequestStatus.SENT, CallingRequestStatus.DELIVERED, CallingRequestStatus.CALLING] },
-      expiresAt: { gt: new Date() },
+      status: { in: [CallingRequestStatus.QUEUED, CallingRequestStatus.SENT] },
+    },
+    data: {
+      status: CallingRequestStatus.MISSED,
+      failureReason: "Superseded by new call request",
     },
   });
-
-  if (activeRequest) {
-    throw new Error(`Device "${device.deviceName}" already has an ongoing call request. Please wait for it to complete.`);
-  }
 
   // 3. Create CallingRequest record
   const idempotencyKey = crypto.randomUUID();

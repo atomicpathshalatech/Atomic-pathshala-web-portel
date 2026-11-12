@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.LEAD_UPDATE);
+    // Verify user has CRM access
+    await requirePermission(session.user.id, PERMISSIONS.LEAD_READ);
 
     const body = await req.json();
     const data = requestCallSchema.parse(body);
@@ -30,7 +31,11 @@ export async function POST(req: NextRequest) {
     });
 
     return apiSuccess(result, 201);
-  } catch (error) {
-    return handleApiError(error);
+  } catch (error: any) {
+    console.error("[API_CALLING_REQUEST_ERROR]", error);
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      return handleApiError(error);
+    }
+    return apiError(error.message || "Failed to trigger call on handset", 400);
   }
 }
