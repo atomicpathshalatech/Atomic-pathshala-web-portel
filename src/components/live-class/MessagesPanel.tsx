@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 
@@ -19,6 +19,11 @@ export type ChatMessage = {
   // means not pinned.
   pinnedAt?: string | null;
   source?: "APP" | "YOUTUBE";
+  customEmojis?: Array<{
+    shortcut: string;
+    url: string;
+    label?: string;
+  }>;
 };
 
 async function getJson(url: string) {
@@ -149,10 +154,65 @@ const EMOJI_SHORTCODES: Record<string, string> = {
   ":trophy:": "🏆",
 };
 
-export function renderFormattedChatMessage(body: string) {
+export type CustomEmojiItem = {
+  shortcut: string;
+  url: string;
+  label?: string;
+};
+
+export function renderFormattedChatMessage(
+  body: string,
+  customEmojis?: CustomEmojiItem[]
+): React.ReactNode {
   if (!body) return "";
-  return body.replace(/:[a-zA-Z0-9_+]+:/g, (match) => {
-    return EMOJI_SHORTCODES[match.toLowerCase()] || match;
+
+  if (!customEmojis || customEmojis.length === 0) {
+    return body.replace(/:[a-zA-Z0-9_+]+:/g, (match) => {
+      return EMOJI_SHORTCODES[match.toLowerCase()] || match;
+    });
+  }
+
+  const validEmojis = customEmojis.filter((e) => {
+    return e.shortcut && typeof e.url === "string" && e.url.startsWith("https://");
+  });
+
+  if (validEmojis.length === 0) {
+    return body.replace(/:[a-zA-Z0-9_+]+:/g, (match) => {
+      return EMOJI_SHORTCODES[match.toLowerCase()] || match;
+    });
+  }
+
+  const escapedShortcuts = validEmojis
+    .map((e) => e.shortcut.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .sort((a, b) => b.length - a.length);
+  const customPattern = new RegExp(`(${escapedShortcuts.join("|")})`, "g");
+  const parts = body.split(customPattern);
+
+  const emojiMap = new Map<string, CustomEmojiItem>();
+  for (const e of validEmojis) {
+    emojiMap.set(e.shortcut, e);
+  }
+
+  return parts.map((part, idx) => {
+    const custom = emojiMap.get(part);
+    if (custom) {
+      return (
+        <img
+          key={`emoji-${idx}-${custom.shortcut}`}
+          src={custom.url}
+          alt={custom.shortcut}
+          title={custom.label || custom.shortcut}
+          className="inline-block w-5 h-5 object-contain align-text-bottom mx-0.5 select-none"
+          loading="lazy"
+        />
+      );
+    }
+
+    const textWithStandardEmojis = part.replace(/:[a-zA-Z0-9_+]+:/g, (match) => {
+      return EMOJI_SHORTCODES[match.toLowerCase()] || match;
+    });
+
+    return <React.Fragment key={`text-${idx}`}>{textWithStandardEmojis}</React.Fragment>;
   });
 }
 
@@ -413,7 +473,7 @@ export function MessagesPanel({
               <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">push_pin</span>
               <div className="min-w-0 flex-1">
                 <span className="font-bold">{m.authorName}: </span>
-                <span className="break-words">{renderFormattedChatMessage(m.body)}</span>
+                <span className="break-words">{renderFormattedChatMessage(m.body, m.customEmojis)}</span>
               </div>
               {role === "TEACHER" && (
                 <button
@@ -635,7 +695,7 @@ export function MessagesPanel({
                         : "bg-slate-100/90 border border-slate-200/90 text-slate-800 rounded-tl-sm"
                     }`}
                   >
-                    {renderFormattedChatMessage(m.body)}
+                    {renderFormattedChatMessage(m.body, m.customEmojis)}
                   </div>
                 </div>
               </div>

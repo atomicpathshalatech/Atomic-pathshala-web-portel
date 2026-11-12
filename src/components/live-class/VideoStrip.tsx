@@ -17,6 +17,7 @@ import {
 import { Track, ConnectionState, VideoQuality, Participant, VideoPresets, DefaultReconnectPolicy } from "livekit-client";
 import type { RoomOptions } from "livekit-client";
 import { LiveVideoCallModal, type TeacherConnectedStudent } from "@/components/live-class/LiveVideoCallModal";
+import { TeacherMediaDiagnosticsHUD } from "@/components/live-class/TeacherMediaDiagnosticsHUD";
 
 // Previously `<LiveKitRoom>` connected with zero custom options - raw SDK
 // defaults, meaning adaptiveStream/dynacast were both off and there were no
@@ -326,6 +327,7 @@ function VideoStripInner({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPiPActive, setIsPiPActive] = useState(false);
   const [controlsHovered, setControlsHovered] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoElemRef = useRef<HTMLVideoElement | null>(null);
@@ -603,6 +605,20 @@ function VideoStripInner({
               </TrackToggle>
 
               <TeacherDeviceSettingsPopover mic={mic} cam={cam} speaker={speaker} onSpeakerChange={handleSpeakerSelect} />
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDiagnostics(true);
+                }}
+                className="w-7 h-7 rounded-md bg-slate-700/80 hover:bg-blue-600 text-white flex items-center justify-center transition"
+                title="WebRTC Media Diagnostics"
+              >
+                <span className="material-symbols-outlined text-base">monitoring</span>
+              </button>
+
+          <TeacherMediaDiagnosticsHUD isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
             </div>
           </div>
         )}

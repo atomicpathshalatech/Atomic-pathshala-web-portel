@@ -369,6 +369,7 @@ export function TeacherLiveClassRoom({
   const saveQueueRef = useRef<BoardSaveQueue<StrokeObject> | null>(null);
   const latestPagesRef = useRef<WhiteboardPage[]>([]);
   const activePageNumberRef = useRef(1);
+  const pageSwitchSeqRef = useRef(0);
   // Slides whose ink came back from this device's backup and still has to be saved.
   const recoveredInkRef = useRef(new Map<string, StrokeObject[]>());
   // Board history (src/lib/whiteboard/board-history.ts), and each slide's own
@@ -1854,6 +1855,7 @@ export function TeacherLiveClassRoom({
     const currentOutPageId = enginePageIdRef.current;
     if (currentOutPageId && currentEngine) {
       const currentObjs = currentEngine.getObjects();
+      saveQueueRef.current?.markDirty(currentOutPageId, currentObjs);
       latestPagesRef.current = latestPagesRef.current.map((p) =>
         p.id === currentOutPageId ? { ...p, objects: currentObjs } : p
       );
@@ -1879,10 +1881,19 @@ export function TeacherLiveClassRoom({
     pendingObjectsRef.current = null;
     pendingPageIdRef.current = null;
 
-    patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber }).catch((err) => {
-      console.error("[switchToPage_error]", pageNumber, err);
-      setSaveState("offline");
-    });
+    const seq = ++pageSwitchSeqRef.current;
+    patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber })
+      .then(() => {
+        if (seq === pageSwitchSeqRef.current) {
+          setSaveState("saved");
+        }
+      })
+      .catch((err) => {
+        if (seq === pageSwitchSeqRef.current) {
+          console.error("[switchToPage_error]", pageNumber, err);
+          setSaveState("offline");
+        }
+      });
   }
 
   /** Slides after a new one was put in: the server's order, keeping what this tab already holds for each slide. */
