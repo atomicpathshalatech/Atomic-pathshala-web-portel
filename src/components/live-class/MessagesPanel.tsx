@@ -635,7 +635,7 @@ export function MessagesPanel({
                         : "bg-slate-100/90 border border-slate-200/90 text-slate-800 rounded-tl-sm"
                     }`}
                   >
-                    {m.body}
+                    {renderFormattedChatMessage(m.body)}
                   </div>
                 </div>
               </div>
