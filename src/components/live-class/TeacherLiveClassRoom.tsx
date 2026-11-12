@@ -1884,7 +1884,6 @@ export function TeacherLiveClassRoom({
       setSaveState("offline");
     });
   }
-  }
 
   /** Slides after a new one was put in: the server's order, keeping what this tab already holds for each slide. */
   function mergeInsertedPage(prevPages: WhiteboardPage[], data: { page: WhiteboardPage; pages?: WhiteboardPage[] }): WhiteboardPage[] {
