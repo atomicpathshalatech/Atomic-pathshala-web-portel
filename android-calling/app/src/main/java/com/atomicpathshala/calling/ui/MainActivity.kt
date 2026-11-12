@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -22,14 +23,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.atomicpathshala.calling.data.api.ApiClient
 import com.atomicpathshala.calling.data.model.DeviceRegisterRequest
 import com.atomicpathshala.calling.data.model.HeartbeatRequest
 import com.atomicpathshala.calling.telephony.CallDispatcher
 import com.atomicpathshala.calling.telephony.SimManager
+import com.atomicpathshala.calling.update.AppUpdater
+import com.atomicpathshala.calling.update.VersionInfo
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -113,6 +118,28 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
 
     val callDispatcher = remember { CallDispatcher(context) }
     var lastHandledRequestId by remember { mutableStateOf("") }
+
+    // In-App Direct Auto-Update System
+    val currentVersionCode = 2
+    val currentVersionName = "1.0.1"
+    var availableUpdate by remember { mutableStateOf<VersionInfo?>(null) }
+    var updateProgress by remember { mutableStateOf<Int?>(null) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+
+    val startUpdateDownload: (String) -> Unit = { downloadUrl ->
+        updateProgress = 0
+        scope.launch {
+            AppUpdater.downloadAndInstallApk(context, downloadUrl) { pct ->
+                updateProgress = pct
+            }
+            updateProgress = null
+        }
+    }
+
+    LaunchedEffect(serverUrl) {
+        val upd = AppUpdater.checkForUpdate(serverUrl, currentVersionCode)
+        availableUpdate = upd
+    }
 
     val performPairing: (String, String) -> Unit = { codeToUse, serverToUse ->
         val trimmedCode = codeToUse.trim()
@@ -248,6 +275,40 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF0F172A)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            color = Color(0xFFF1F5F9),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                "v$currentVersionName",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF475569),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                isCheckingUpdate = true
+                                val upd = AppUpdater.checkForUpdate(serverUrl, currentVersionCode)
+                                availableUpdate = upd
+                                isCheckingUpdate = false
+                                if (upd == null) {
+                                    statusText = "App is up to date (v$currentVersionName)"
+                                }
+                            }
+                        }
+                    ) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color(0xFF0052CC))
+                        } else {
+                            Icon(Icons.Default.SystemUpdate, contentDescription = "Check for Updates", tint = Color(0xFF0052CC))
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -261,6 +322,88 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // In-App Update Available Banner
+            if (availableUpdate != null) {
+                Surface(
+                    color = Color(0xFFEFF6FF),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.DownloadDone, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("New Version Available (v${availableUpdate!!.versionName})", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E3A8A))
+                            }
+                            Text(
+                                "Direct in-app update ready. Tap to install.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF3B82F6),
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                        Button(
+                            onClick = { startUpdateDownload(availableUpdate!!.downloadUrl) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0052CC)),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("Update Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // In-App Download Progress Modal
+            if (updateProgress != null) {
+                Dialog(onDismissRequest = {}) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { (updateProgress!! / 100f).coerceIn(0f, 1f) },
+                                color = Color(0xFF0052CC),
+                                modifier = Modifier.size(54.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Updating Atomic Calling...", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0F172A))
+                            Text("$updateProgress% downloaded", fontSize = 12.sp, color = Color(0xFF64748B))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            LinearProgressIndicator(
+                                progress = { (updateProgress!! / 100f).coerceIn(0f, 1f) },
+                                color = Color(0xFF0052CC),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Installer will launch immediately once downloaded.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF94A3B8),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
             if (!isPaired) {
                 // UNPAIRED STATE — PAIRING FORM
                 Card(
@@ -546,6 +689,22 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
                             Icon(Icons.Default.Sync, contentDescription = null, tint = Color(0xFF0F172A))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Send Manual Heartbeat", color = Color(0xFF0F172A), fontSize = 12.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val downloadUrl = availableUpdate?.downloadUrl ?: "$serverUrl/downloads/AtomicCalling.apk"
+                                startUpdateDownload(downloadUrl)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEBF3FF))
+                        ) {
+                            Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = Color(0xFF0052CC))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("1-Click Direct App Update", color = Color(0xFF0052CC), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
