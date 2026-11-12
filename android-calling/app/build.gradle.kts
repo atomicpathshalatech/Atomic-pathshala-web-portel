@@ -1,12 +1,13 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.compiler)
     alias(libs.plugins.google.services)
 }
 
 android {
     namespace = "com.atomicpathshala.calling"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.atomicpathshala.calling"

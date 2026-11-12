@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "695269944535",
+    "project_id": "atomic-pathshala-334e7",
+    "storage_bucket": "atomic-pathshala-334e7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:695269944535:android:454f9108527a44c27e1492",
+        "android_client_info": {
+          "package_name": "com.atomicpathshala.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDusSpHDTW2YKWdj1-bjioJvT6_OoyWCcw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:695269944535:android:454f9108527a44c27e1493",
+        "android_client_info": {
+          "package_name": "com.atomicpathshala.calling"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDusSpHDTW2YKWdj1-bjioJvT6_OoyWCcw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
