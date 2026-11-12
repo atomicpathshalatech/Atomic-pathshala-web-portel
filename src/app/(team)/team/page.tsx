@@ -135,6 +135,43 @@ export default async function TeamHomePage() {
 
       {commandCenterData && <TeacherCommandCenter data={commandCenterData} />}
 
+      {/* Atomic Calling Mobile Companion App Quick Download Banner */}
+      <div className="p-4 sm:p-5 rounded-2xl border border-primary/20 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-surface flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-sm">
+            <span className="material-symbols-outlined text-2xl">phone_iphone</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm font-bold text-on-surface">Atomic Calling — Android SIM Dialer (v1.0)</h2>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                Staff Companion App
+              </span>
+            </div>
+            <p className="text-xs text-on-surface-variant mt-0.5 max-w-xl">
+              Install on your office Android phone to connect CRM calling. Make direct cellular SIM calls (Airtel / Jio) from your CRM laptop with automatic activity logging.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <a
+            href="/downloads/AtomicCalling.apk"
+            download="AtomicCalling.apk"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition shadow-sm active:scale-95"
+          >
+            <span className="material-symbols-outlined text-base">download</span>
+            Download APK (40 MB)
+          </a>
+          <Link
+            href="/team/leads"
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-outline-variant/30 bg-surface hover:bg-surface-container text-xs font-semibold text-on-surface transition"
+          >
+            Open CRM
+          </Link>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
         <div className="lg:col-span-8 space-y-stack-lg">
           {cards.length === 0 ? (

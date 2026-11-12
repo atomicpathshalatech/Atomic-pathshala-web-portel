@@ -1034,7 +1034,16 @@ export function EnterpriseCrmPortal({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <a
+                href="/downloads/AtomicCalling.apk"
+                download="AtomicCalling.apk"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition active:scale-95"
+                title="Download Atomic Calling Android APK"
+              >
+                <Download className="w-4 h-4" />
+                Download App (.APK)
+              </a>
               <button
                 type="button"
                 onClick={fetchDevices}
@@ -1100,13 +1109,22 @@ export function EnterpriseCrmPortal({
                   Install the <b>Atomic Calling</b> companion app on your office Android phone, click below to generate a 6-digit PIN, and start making cellular SIM calls.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsPairModalOpen(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow transition"
-              >
-                <Plus className="w-4 h-4" /> Pair First Android Device
-              </button>
+              <div className="flex items-center justify-center gap-3 flex-wrap">
+                <a
+                  href="/downloads/AtomicCalling.apk"
+                  download="AtomicCalling.apk"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow transition"
+                >
+                  <Download className="w-4 h-4" /> Download APK (40 MB)
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setIsPairModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow transition"
+                >
+                  <Plus className="w-4 h-4" /> Pair First Android Device
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

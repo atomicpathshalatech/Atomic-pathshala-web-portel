@@ -11,6 +11,7 @@ import {
   RefreshCw,
   X,
   Copy,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -125,6 +126,21 @@ export function PairDeviceModal({ isOpen, onClose, onDevicePaired }: PairDeviceM
             <p className="text-[11px] text-emerald-800 dark:text-emerald-400 leading-relaxed">
               Once paired, calls initiated on your CRM laptop will directly trigger outbound cellular calls through this phone&apos;s physical SIM card using your unlimited operator calling pack.
             </p>
+          </div>
+
+          {/* Direct APK Download Link */}
+          <div className="bg-surface-container-low border border-outline-variant/20 p-3.5 rounded-2xl flex items-center justify-between gap-3 text-left">
+            <div>
+              <p className="text-xs font-bold text-on-surface">App not installed on phone yet?</p>
+              <p className="text-[11px] text-on-surface-variant">Download Atomic Calling APK directly</p>
+            </div>
+            <a
+              href="/downloads/AtomicCalling.apk"
+              download="AtomicCalling.apk"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shrink-0 shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5" /> Download APK
+            </a>
           </div>
 
           <div className="flex gap-3 pt-2">
