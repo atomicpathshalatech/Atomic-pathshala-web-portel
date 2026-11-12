@@ -29,11 +29,91 @@ interface LiveVideoCallModalProps {
   teacherAudioConnected?: boolean;
   teacherVideoConnected?: boolean;
   onEndCall?: () => Promise<void> | void;
-  // A DIFFERENT student who is currently an approved video speaker — the
-  // rest of the class previously had no way to see a classmate's video at
-  // all, only the teacher did. Read-only: no mic/camera/end-call controls,
-  // since this viewer isn't the one on the call.
+  // A DIFFERENT student who is currently an approved video speaker
   classSpeaker?: { studentUserId: string; studentName: string } | null;
+}
+
+/**
+ * Adaptive student video feed:
+ * Automatically detects whether the remote feed is portrait (e.g. Android phone held vertically 9:16)
+ * or landscape (16:9). Renders with object-contain so faces are never cropped, squished, or stretched.
+ */
+function AdaptiveStudentVideoTile({
+  trackRef,
+  displayName,
+  onCutCall,
+  isReadOnly = false,
+}: {
+  trackRef: any;
+  displayName: string;
+  onCutCall?: () => void;
+  isReadOnly?: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isPortrait, setIsPortrait] = useState<boolean>(() => {
+    const dims = (trackRef?.publication as any)?.dimensions || (trackRef?.track as any)?.dimensions;
+    if (dims?.height && dims?.width) {
+      return dims.height > dims.width;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const checkDimensions = () => {
+      const video = container.querySelector("video");
+      if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+        setIsPortrait(video.videoHeight > video.videoWidth);
+      } else {
+        const dims = (trackRef?.publication as any)?.dimensions || (trackRef?.track as any)?.dimensions;
+        if (dims?.height && dims?.width) {
+          setIsPortrait(dims.height > dims.width);
+        }
+      }
+    };
+
+    checkDimensions();
+    const interval = setInterval(checkDimensions, 750);
+    return () => clearInterval(interval);
+  }, [trackRef]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative w-full bg-black overflow-hidden flex items-center justify-center transition-all duration-300 ${
+        isPortrait
+          ? "aspect-[9/16] max-h-[380px] mx-auto"
+          : "aspect-video"
+      }`}
+    >
+      <VideoTrack trackRef={trackRef} className="w-full h-full object-contain" />
+
+      {/* Clean Student Name Tag Top-Left */}
+      <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/75 backdrop-blur-xs px-2.5 py-1 rounded-full border border-white/10 text-white shadow pointer-events-none z-10">
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-xs font-bold truncate max-w-[140px]">{displayName}</span>
+      </div>
+
+      {/* Single Red Call End Button Floating Bottom-Center */}
+      {!isReadOnly && onCutCall && (
+        <div className="absolute bottom-2 inset-x-0 flex justify-center z-10">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCutCall();
+            }}
+            className="w-10 h-10 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-2xl transition hover:scale-110 active:scale-95 cursor-pointer border border-white/20"
+            title="Disconnect Student Call"
+          >
+            <span className="material-symbols-outlined text-xl">call_end</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function LiveVideoCallModal({
@@ -147,33 +227,12 @@ export function LiveVideoCallModal({
               const studentId = studentInfo?.studentId;
 
               return (
-                <div
+                <AdaptiveStudentVideoTile
                   key={trk.participant.identity}
-                  className="relative aspect-video w-full bg-black overflow-hidden flex items-center justify-center"
-                >
-                  <VideoTrack trackRef={trk} className="w-full h-full object-cover" />
-
-                  {/* Clean Student Name Tag Top-Left */}
-                  <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/75 backdrop-blur-xs px-2.5 py-1 rounded-full border border-white/10 text-white shadow">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-xs font-bold truncate max-w-[140px]">{displayName}</span>
-                  </div>
-
-                  {/* Single Red Call End Button Floating Bottom-Center */}
-                  <div className="absolute bottom-2 inset-x-0 flex justify-center z-10">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCutCall(studentId, trk.participant.identity);
-                      }}
-                      className="w-10 h-10 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-2xl transition hover:scale-110 active:scale-95 cursor-pointer border border-white/20"
-                      title="Disconnect Student Call"
-                    >
-                      <span className="material-symbols-outlined text-xl">call_end</span>
-                    </button>
-                  </div>
-                </div>
+                  trackRef={trk}
+                  displayName={displayName}
+                  onCutCall={() => handleCutCall(studentId, trk.participant.identity)}
+                />
               );
             })}
           </div>
@@ -227,12 +286,6 @@ export function LiveVideoCallModal({
   const isAudioActive = isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected;
   const localCameraTrack = tracks.find((t) => t.participant.isLocal && t.source === Track.Source.Camera);
 
-  // Not this viewer's own call — but a classmate is currently an approved
-  // video speaker. Everyone in the room already subscribes to every
-  // published track (see ROOM_OPTIONS in VideoStrip.tsx / the room's
-  // subscribe grant), so their track is already reachable here by
-  // identity; only the UI to show it for a non-speaking student was
-  // missing.
   if (!isAudioActive && classSpeaker) {
     const classmateTrack = tracks.find(
       (t) => t.source === Track.Source.Camera && t.participant.identity === classSpeaker.studentUserId
@@ -240,15 +293,11 @@ export function LiveVideoCallModal({
     if (!classmateTrack) return null;
     return (
       <div className="fixed bottom-20 right-4 z-40 w-40 sm:w-48 rounded-xl overflow-hidden bg-slate-950 border-2 border-blue-500/80 shadow-2xl animate-in fade-in slide-in-from-bottom duration-200">
-        <div className="relative aspect-video">
-          <VideoTrack trackRef={classmateTrack} className="w-full h-full object-cover" />
-          <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-black/80 backdrop-blur-xs px-1.5 py-0.5 rounded-md border border-white/10">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-bold text-white truncate max-w-[100px]">
-              {classSpeaker.studentName}
-            </span>
-          </div>
-        </div>
+        <AdaptiveStudentVideoTile
+          trackRef={classmateTrack}
+          displayName={classSpeaker.studentName}
+          isReadOnly
+        />
       </div>
     );
   }
@@ -278,7 +327,7 @@ export function LiveVideoCallModal({
             <div className="w-full h-full transform scale-x-[-1]">
               <VideoTrack
                 trackRef={localCameraTrack}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain bg-black"
               />
             </div>
           ) : (

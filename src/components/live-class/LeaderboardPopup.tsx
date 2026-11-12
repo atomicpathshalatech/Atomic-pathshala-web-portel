@@ -47,16 +47,22 @@ export function isPublishedLeaderboard(data: unknown): data is PublishedLeaderbo
  * Floats on the display (movable/draggable anywhere by pointer/touch),
  * presents Top 3 on an Olympic/athletic victory podium (2nd on left, 1st elevated in center with crown, 3rd on right),
  * and lists subsequent ranks below in a compact scrollable list.
+ *
+ * CRITICAL REQUIREMENTS:
+ * 1. Remains open until closed via (X). No auto-close timer.
+ * 2. Displays the individual student's own actual rank even if outside the top 10.
  */
 export function LeaderboardPopup({
   leaderboard,
   onClose,
+  currentStudentId,
+  currentStudentName,
 }: {
   leaderboard: PublishedLeaderboard;
   onClose: () => void;
+  currentStudentId?: string;
+  currentStudentName?: string;
 }) {
-  const duration = typeof leaderboard.durationSec === "number" && leaderboard.durationSec > 0 ? leaderboard.durationSec : 30;
-  const [left, setLeft] = useState(duration);
   const [minimized, setMinimized] = useState(false);
 
   // Drag state for moving over the screen/display
@@ -72,17 +78,9 @@ export function LeaderboardPopup({
     }
   }, [pos]);
 
-  // Restart the countdown for every new publish
   useEffect(() => {
-    setLeft(duration);
     setMinimized(false);
-    const timer = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(timer);
-  }, [leaderboard, duration]);
-
-  useEffect(() => {
-    if (left <= 0) onClose();
-  }, [left, onClose]);
+  }, [leaderboard]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest("button")) return;
@@ -119,22 +117,21 @@ export function LeaderboardPopup({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        className="fixed z-[70] flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#121420]/95 backdrop-blur-md border border-amber-500/50 text-white text-xs font-bold shadow-2xl cursor-move touch-none select-none animate-in fade-in duration-150"
+        className="fixed z-[85] flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#121420]/95 backdrop-blur-md border border-amber-500/50 text-white text-xs font-bold shadow-2xl cursor-move touch-none select-none animate-in fade-in duration-150"
       >
         <button
           type="button"
           onClick={() => setMinimized(false)}
-          className="flex items-center gap-1.5 hover:text-amber-300 transition"
+          className="flex items-center gap-1.5 hover:text-amber-300 transition cursor-pointer"
           title="Maximize Leaderboard"
         >
           <span className="material-symbols-outlined text-base text-amber-400">military_tech</span>
           <span>Leaderboard</span>
-          <span className="font-mono text-blue-300 bg-blue-500/20 px-1.5 py-0.5 rounded text-[10px]">{left}s</span>
         </button>
         <button
           type="button"
           onClick={onClose}
-          className="text-slate-400 hover:text-white p-0.5 transition"
+          className="text-slate-400 hover:text-white p-0.5 transition cursor-pointer"
           title="Close Leaderboard"
         >
           <span className="material-symbols-outlined text-xs">close</span>
@@ -149,10 +146,19 @@ export function LeaderboardPopup({
   const rank3 = rankings[2];
   const rest = rankings.slice(3);
 
+  // Find current student's actual individual rank
+  const myRankItem = (currentStudentId || currentStudentName)
+    ? rankings.find(
+        (r) =>
+          (currentStudentId && (r.studentId === currentStudentId || (r as any).userId === currentStudentId)) ||
+          (currentStudentName && r.name.toLowerCase() === currentStudentName.toLowerCase())
+      )
+    : null;
+
   return (
     <div
       style={pos ? { left: `${pos.x}px`, top: `${pos.y}px` } : undefined}
-      className="fixed z-[70] w-[min(22rem,calc(100vw-1.5rem))] bg-[#121420]/95 backdrop-blur-md border border-[#2e344e] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[75vh] text-white animate-in fade-in zoom-in-95 duration-150 select-none"
+      className="fixed z-[85] w-[min(22rem,calc(100vw-1.5rem))] bg-[#121420]/95 backdrop-blur-md border border-[#2e344e] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] text-white animate-in fade-in zoom-in-95 duration-150 select-none"
       role="dialog"
       aria-label="Class quiz leaderboard"
     >
@@ -161,7 +167,7 @@ export function LeaderboardPopup({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        className="px-3 py-2 bg-gradient-to-r from-blue-950/90 via-[#171a2b] to-[#121420] border-b border-[#25283a] flex items-center gap-2 cursor-move touch-none"
+        className="px-3 py-2 bg-gradient-to-r from-blue-950/90 via-[#171a2b] to-[#121420] border-b border-[#25283a] flex items-center gap-2 cursor-grab active:cursor-grabbing touch-none"
       >
         <span className="material-symbols-outlined text-base text-amber-400">military_tech</span>
         <div className="flex-1 min-w-0">
@@ -175,13 +181,11 @@ export function LeaderboardPopup({
               : `${rankings.length} participants`}
           </p>
         </div>
-        <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[10px] font-mono font-bold">
-          {left}s
-        </span>
+
         <button
           type="button"
           onClick={() => setMinimized(true)}
-          className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
           title="Minimize"
         >
           <span className="material-symbols-outlined text-xs">remove</span>
@@ -189,11 +193,35 @@ export function LeaderboardPopup({
         <button
           type="button"
           onClick={onClose}
-          className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          title="Close"
+          className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+          title="Close (X)"
         >
           <span className="material-symbols-outlined text-xs">close</span>
         </button>
+      </div>
+
+      {/* HIGHLIGHTED SECTION: Display Individual Student's Actual Rank */}
+      <div className="px-3 pt-2.5 pb-1 bg-[#141829] border-b border-[#20253d]">
+        <div className="flex items-center justify-between p-2 rounded-xl bg-gradient-to-r from-blue-950/90 to-indigo-950/90 border border-blue-500/40 text-xs shadow-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white font-mono font-black text-xs shrink-0 shadow-xs">
+              {myRankItem ? `YOUR RANK: #${myRankItem.rank}` : "YOUR RANK"}
+            </span>
+            <span className="truncate font-bold text-white text-xs">
+              {myRankItem ? myRankItem.name : currentStudentName || "You"}
+            </span>
+          </div>
+          {myRankItem ? (
+            <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0">
+              <span className="text-emerald-400 font-bold">{myRankItem.accuracyPct}%</span>
+              <span className="text-slate-400">({myRankItem.correctCount}/{myRankItem.totalAttempted})</span>
+            </div>
+          ) : (
+            <span className="text-[10px] text-slate-400 italic shrink-0">
+              Not ranked in this quiz
+            </span>
+          )}
+        </div>
       </div>
 
       {rankings.length === 0 ? (

@@ -326,21 +326,7 @@ export function RecordedLecturePlayer({
         {watermark} · {now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
       </div>
 
-      {live && (
-        <div className="absolute top-14 left-3">
-          {behindSec > 8 ? (
-            <button type="button" onClick={goLive} className="inline-flex items-center gap-1 rounded-md bg-black/60 hover:bg-black/80 text-white text-[11px] font-black px-2 py-1">
-              <span className="w-2 h-2 rounded-full bg-slate-300" />
-              Go live
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-md bg-red-600 text-white text-[11px] font-black px-2 py-1">
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              LIVE
-            </span>
-          )}
-        </div>
-      )}
+      {/* Clean recorded lecture playback: no misleading LIVE badge */}
 
       {hasSubtitles && (
         <button

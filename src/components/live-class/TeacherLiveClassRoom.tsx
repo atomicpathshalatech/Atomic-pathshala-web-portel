@@ -1151,7 +1151,7 @@ export function TeacherLiveClassRoom({
   const [quizMetrics, setQuizMetrics] = useState<QuizMetricsView | null>(
     null
   );
-  stagePollRef.current = toStagePoll(activeQuiz, quizMetrics);
+  stagePollRef.current = null; // Interactive overlay handles poll display; keep whiteboard canvas clean
   // Restore active or revealed poll on mount / reconnect
   useEffect(() => {
     if (!wbSession?.id) return;
@@ -4181,18 +4181,7 @@ export function TeacherLiveClassRoom({
             )}
           </div>
 
-          {/* Broadcast On-Canvas Poll Overlay for Screen Capture / OBS / YouTube Viewers */}
-          {/* Not while the Poll / Quiz window is open: the same poll was shown twice, one on top of the other. */}
-          {activeQuiz && activeQuiz.status !== "CLOSED" && !pollOpen && (
-            <BroadcastQuizCanvasOverlay
-              activeQuiz={activeQuiz}
-              quizMetrics={quizMetrics}
-              containerWidth={stageDimensions.width}
-              containerHeight={stageDimensions.height}
-              onReveal={(chosen) => revealQuiz(chosen)}
-              onClose={() => closeQuiz()}
-            />
-          )}
+          
 
           {/* Teacher's Camera Overlay directly on PPT / Whiteboard Slide */}
           {!cameraDocked && !cameraHidden && (
@@ -7037,95 +7026,7 @@ function QuizPanel({
     <div className="space-y-4">
       {error && <p className="text-xs text-rose-400 font-semibold bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/50">{error}</p>}
 
-      {/* Sub-selector: YES / NO vs 4-Option Quiz (Screenshot 1) */}
-      <div className="grid grid-cols-2 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
-        <button
-          type="button"
-          onClick={() => {
-            setPollType("yesno");
-            setForm((f) => ({
-              ...f,
-              options: ["YES", "NO"],
-              correctOption: "",
-            }));
-          }}
-          className={`py-1.5 rounded-lg text-xs font-bold transition ${
-            pollType === "yesno"
-              ? "bg-blue-600 text-white shadow-md"
-              : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
-          YES / NO
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setPollType("mcq4");
-            setForm((f) => ({
-              ...f,
-              options: ["Option A", "Option B", "Option C", "Option D"],
-              correctOption: "",
-            }));
-          }}
-          className={`py-1.5 rounded-lg text-xs font-bold transition ${
-            pollType === "mcq4"
-              ? "bg-blue-600 text-white shadow-md"
-              : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
-          4-Option Quiz
-        </button>
-      </div>
-
-      {/* Board-Driven MCQ Quiz Checkbox (Screenshot 1) */}
-      <label className="flex items-center gap-2 p-2.5 rounded-xl bg-[#10111a] border border-[#242634] text-xs font-bold text-gray-200 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={form.isQuickQuiz}
-          onChange={(e) => setForm((f) => ({ ...f, isQuickQuiz: e.target.checked }))}
-          className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
-        />
-        <span>Board-Driven MCQ Quiz</span>
-      </label>
-
-      {!form.isQuickQuiz && (
-        <textarea
-          rows={2}
-          placeholder="Type your question statement here..."
-          value={form.questionText}
-          onChange={(e) => setForm((f) => ({ ...f, questionText: e.target.value }))}
-          className="w-full rounded-xl border border-[#2d2e3b] bg-[#10111a] text-white py-2 px-3 text-xs outline-none focus:border-blue-500"
-        />
-      )}
-
-      {/* Options List — click one to mark it the correct answer. This used
-          to be a static, non-interactive list that always silently kept
-          `correctOption` at its default "A" (from initial/reset state)
-          with no way for the teacher to actually change it — Reveal Answer
-          then always revealed "A" no matter what the teacher intended. */}
-      <div className="space-y-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
-          Options:
-        </span>
-        <div className="space-y-1.5">
-          {form.options.map((val, i) => {
-            const key = String.fromCharCode(65 + i);
-            return (
-              <div
-                key={key}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border border-[#242634] bg-[#10111a] text-left"
-              >
-                <span className="w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center font-mono border bg-blue-600/30 text-blue-400 border-blue-500/40">
-                  {key}
-                </span>
-                <span className="text-xs font-semibold text-gray-200 flex-1">
-                  {val || `Option ${key}`}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      
 
       {/* Timer dropdown (Screenshot 1) */}
       <div className="flex items-center justify-between pt-1">

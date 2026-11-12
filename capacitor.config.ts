@@ -39,8 +39,6 @@ const config: CapacitorConfig = {
     allowNavigation: [
       'ap.atomicpathshala.in',
       '*.atomicpathshala.in',
-      'app.atomicpathshala.com',
-      '*.atomicpathshala.com',
       '*.livekit.cloud',
       '*.r2.cloudflarestorage.com',
       '*.amazonaws.com',

@@ -40,11 +40,19 @@ export async function POST(
     }
 
     try {
+      const wb = await prisma.whiteboardSession.findUnique({
+        where: { id: params.id },
+        select: { batchScheduleId: true },
+      });
+      const channels = [sessionChannel(params.id)];
+      if (wb?.batchScheduleId && wb.batchScheduleId !== params.id) {
+        channels.push(sessionChannel(wb.batchScheduleId));
+      }
       await Promise.all([
-        pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_DISMISSED, {
+        pusherServer.trigger(channels, WB_EVENTS.QUIZ_DISMISSED, {
           id: params.quizId,
         }),
-        pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_CLOSED, {
+        pusherServer.trigger(channels, WB_EVENTS.QUIZ_CLOSED, {
           id: params.quizId,
         }),
       ]);

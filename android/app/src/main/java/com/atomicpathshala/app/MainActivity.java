@@ -2,9 +2,13 @@ package com.atomicpathshala.app;
 
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
+import android.provider.Settings;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
 import android.widget.Toast;
@@ -16,14 +20,20 @@ import android.view.ViewGroup;
 import android.webkit.WebChromeClient;
 import android.widget.FrameLayout;
 import androidx.activity.OnBackPressedCallback;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.graphics.Insets;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebView;
+import android.widget.Button;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebChromeClient;
+import com.getcapacitor.BridgeWebViewClient;
 
 /**
  * Video full screen inside the app. Capacitor's own WebChromeClient cancels
@@ -52,8 +62,13 @@ public class MainActivity extends BridgeActivity {
     private static final long SPLASH_MIN_MS = 1200;
     private static final long SPLASH_MAX_MS = 5000;
 
+    private static final String PREFS_NAME = "atomic_prefs";
+    private static final String KEY_OVERLAY_ASKED = "overlay_permission_prompted";
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(FloatingPollPlugin.class);
+
         final long start = SystemClock.uptimeMillis();
         SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> {
             long shown = SystemClock.uptimeMillis() - start;
@@ -70,6 +85,34 @@ public class MainActivity extends BridgeActivity {
         bridge.getWebView().getSettings().setTextZoom(90);
         keepPageClearOfSystemBars();
         handleDownloads();
+        checkAndPromptOverlayPermission();
+
+        final String liveUrl = "https://ap.atomicpathshala.in/dashboard";
+        bridge.getWebView().setWebViewClient(new BridgeWebViewClient(bridge) {
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request != null && request.isForMainFrame()) {
+                    String failingUrl = request.getUrl() != null ? request.getUrl().toString() : "";
+                    if (failingUrl.contains("atomicpathshala.com") || failingUrl.isEmpty()) {
+                        view.post(() -> {
+                            view.clearCache(true);
+                            view.loadUrl(liveUrl);
+                        });
+                        return;
+                    }
+                }
+                super.onReceivedError(view, request, error);
+            }
+        });
+
+        bridge.getWebView().post(() -> {
+            String current = bridge.getWebView().getUrl();
+            if (current == null || current.contains("atomicpathshala.com") || current.equals("about:blank")) {
+                bridge.getWebView().clearCache(true);
+                bridge.getWebView().loadUrl(liveUrl);
+            }
+        });
+
         bridge.getWebView().setWebChromeClient(new BridgeWebChromeClient(bridge) {
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
@@ -81,6 +124,73 @@ public class MainActivity extends BridgeActivity {
                 exitFullscreen();
             }
         });
+    }
+
+    /**
+     * Prompt student at install/first launch time for 'Display over other apps'
+     * so polls float directly over YouTube without requiring in-class permission dialogs.
+     */
+    private void checkAndPromptOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                boolean alreadyAsked = prefs.getBoolean(KEY_OVERLAY_ASKED, false);
+                if (!alreadyAsked) {
+                    prefs.edit().putBoolean(KEY_OVERLAY_ASKED, true).apply();
+                    try {
+                        View dialogView = getLayoutInflater().inflate(R.layout.dialog_overlay_permission, null);
+                        AlertDialog dialog = new AlertDialog.Builder(this)
+                            .setView(dialogView)
+                            .setCancelable(false)
+                            .create();
+
+                        if (dialog.getWindow() != null) {
+                            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+                        }
+
+                        Button btnAllow = dialogView.findViewById(R.id.btnAllow);
+                        Button btnCancel = dialogView.findViewById(R.id.btnCancel);
+
+                        btnAllow.setOnClickListener(v -> {
+                            dialog.dismiss();
+                            try {
+                                Intent intent = new Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:" + getPackageName())
+                                );
+                                startActivity(intent);
+                            } catch (Exception e) {
+                                Intent fallback = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+                                startActivity(fallback);
+                            }
+                        });
+
+                        btnCancel.setOnClickListener(v -> dialog.dismiss());
+                        dialog.show();
+                    } catch (Exception e) {
+                        // Fallback in case of inflation exception
+                        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+                            .setTitle("Enable Live Polls Over YouTube")
+                            .setMessage("Jab aap live class YouTube app me dekh rahe honge, tab bhi Teacher ke polls aapki screen par floating card me aayenge! Iske liye 'Display over other apps' allow karein.")
+                            .setPositiveButton("Allow Permission", (dialog, which) -> {
+                                try {
+                                    Intent intent = new Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:" + getPackageName())
+                                    );
+                                    startActivity(intent);
+                                } catch (Exception ex) {
+                                    Intent fallback = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+                                    startActivity(fallback);
+                                }
+                            })
+                            .setNegativeButton("Maybe Later", null)
+                            .setCancelable(false)
+                            .show();
+                    }
+                }
+            }
+        }
     }
 
     /**

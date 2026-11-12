@@ -2133,67 +2133,7 @@ export function AtomicWhiteboardStudio({
             {/* Body */}
             {pollModalTab === "quiz" ? (
               <div className="p-6 space-y-4">
-                {/* YES/NO vs 4-Option Quiz */}
-                <div className="grid grid-cols-2 gap-2 bg-[#0e0f17] p-1.5 rounded-xl border border-[#252836]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPollType("yesno");
-                      setPollOptions(["YES", "NO"]);
-                    }}
-                    className={`py-1.5 rounded-lg text-xs font-bold transition ${
-                      pollType === "yesno" ? "bg-blue-600 text-white shadow" : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    YES / NO Quiz
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPollType("mcq4");
-                      setPollOptions(["Option A", "Option B", "Option C", "Option D"]);
-                    }}
-                    className={`py-1.5 rounded-lg text-xs font-bold transition ${
-                      pollType === "mcq4" ? "bg-blue-600 text-white shadow" : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    4-Option Quiz
-                  </button>
-                </div>
-
-                {/* Optional Question Input */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-gray-400">Question / Prompt (Optional):</label>
-                  <input
-                    type="text"
-                    placeholder="Enter question or leave blank for Board-Driven MCQ..."
-                    value={pollQuestion}
-                    onChange={(e) => setPollQuestion(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#161724] border border-[#252836] text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {/* Options List */}
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
-                    OPTIONS (ANSWER WILL REMAIN HIDDEN UNTIL YOU REVEAL):
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {pollOptions.map((opt, idx) => (
-                      <input
-                        key={idx}
-                        type="text"
-                        value={opt}
-                        onChange={(e) => {
-                          const updated = [...pollOptions];
-                          updated[idx] = e.target.value;
-                          setPollOptions(updated);
-                        }}
-                        className="p-2.5 rounded-xl bg-[#161724] border border-[#252836] text-xs font-bold text-gray-200 outline-none focus:border-blue-500"
-                      />
-                    ))}
-                  </div>
-                </div>
+                
 
                 {/* Timer Dropdown */}
                 <div className="flex items-center justify-between pt-1">

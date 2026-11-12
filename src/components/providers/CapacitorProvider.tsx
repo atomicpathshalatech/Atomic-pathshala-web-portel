@@ -13,6 +13,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { AppWelcome } from './AppWelcome';
 import { PullToRefresh } from './PullToRefresh';
 import { AppUpdatePrompt } from './AppUpdatePrompt';
+import { FloatingPollPermissionPrompt } from './FloatingPollPermissionPrompt';
 
 export function CapacitorProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -119,6 +120,7 @@ export function CapacitorProvider({ children }: { children: React.ReactNode }) {
       <AppWelcome />
       <PullToRefresh />
       <AppUpdatePrompt />
+      <FloatingPollPermissionPrompt />
       {children}
     </>
   );

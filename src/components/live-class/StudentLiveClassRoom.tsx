@@ -1133,6 +1133,38 @@ export function StudentLiveClassRoom({
     channel.bind(WB_EVENTS.QUIZ_CLOSED, handlePollDismissed);
     channel.bind(WB_EVENTS.QUIZ_DISMISSED, handlePollDismissed);
 
+    if (secondaryChannel) {
+      secondaryChannel.bind(WB_EVENTS.QUIZ_LAUNCHED, (data: LiveQuiz) => {
+        if (activePollIdRef.current === data.id) return;
+        activePollIdRef.current = data.id;
+        setQuiz({ ...data, status: "ACTIVE" });
+        setMySelection(null);
+        setQuizError(null);
+        setQuizDismissed(false);
+        playPollAlert();
+      });
+      secondaryChannel.bind(
+        WB_EVENTS.QUIZ_REVEALED,
+        (data: { id: string; correctOption: string | null; counts?: Record<string, number>; totalResponses?: number; correctCount?: number }) => {
+          setQuiz((prev) => {
+            if (prev && prev.id === data.id) {
+              playPollRevealChime(mySelection === data.correctOption);
+              return {
+                ...prev,
+                status: "REVEALED",
+                correctOption: data.correctOption,
+                counts: data.counts,
+                totalVotes: data.totalResponses,
+              } as any;
+            }
+            return prev;
+          });
+        }
+      );
+      secondaryChannel.bind(WB_EVENTS.QUIZ_CLOSED, handlePollDismissed);
+      secondaryChannel.bind(WB_EVENTS.QUIZ_DISMISSED, handlePollDismissed);
+    }
+
     // Poll resync: whatever was missed while the phone slept / the network
     // dropped (a launch, a reveal, a close) is read from the server again.
     const resyncPoll = () => {
@@ -1250,7 +1282,7 @@ export function StudentLiveClassRoom({
 
     return () => {
       cleanupPollResync();
-      stopNativeFloatingPollService();
+      // Keep floating poll service active in background for external YouTube app compatibility
       client.unsubscribe(sessionChannel(channelId));
       if (secondaryChannel) {
         client.unsubscribe(sessionChannel(batchScheduleId));
@@ -2170,7 +2202,7 @@ export function StudentLiveClassRoom({
 
       {/* Quiz leaderboard published by the teacher */}
       {publishedLeaderboard && (
-        <LeaderboardPopup leaderboard={publishedLeaderboard} onClose={closeLeaderboard} />
+        <LeaderboardPopup leaderboard={publishedLeaderboard} onClose={closeLeaderboard} currentStudentId={currentUserId} />
       )}
     </div>
   );

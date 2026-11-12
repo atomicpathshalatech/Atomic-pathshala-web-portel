@@ -79,7 +79,15 @@ export async function POST(
     // was sitting in front of every reveal reaching students, adding a
     // full extra cross-region DB round-trip to what should be instant.
     try {
-      await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_REVEALED, {
+      const wb = await prisma.whiteboardSession.findUnique({
+        where: { id: params.id },
+        select: { batchScheduleId: true },
+      });
+      const channels = [sessionChannel(params.id)];
+      if (wb?.batchScheduleId && wb.batchScheduleId !== params.id) {
+        channels.push(sessionChannel(wb.batchScheduleId));
+      }
+      await pusherServer.trigger(channels, WB_EVENTS.QUIZ_REVEALED, {
         id: quiz.id,
         correctOption: effectiveCorrectOption,
         counts,

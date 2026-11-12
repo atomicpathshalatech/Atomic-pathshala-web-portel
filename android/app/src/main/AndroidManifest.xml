@@ -9,6 +9,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- System Alert Window (Floating Poll Overlay over YouTube) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <!-- Media & Live Classroom Audio / Video -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -20,9 +25,6 @@
     <!-- File Storage & Downloads -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-    <!-- No READ_MEDIA_IMAGES / VIDEO / AUDIO: choosing a photo or PDF to upload goes
-         through the system file picker, which needs no permission, and Google Play
-         allows broad photo/video access only to apps built around a gallery. -->
 
     <application
         android:allowBackup="true"
@@ -66,15 +68,6 @@
                     android:host="ap.atomicpathshala.in" />
             </intent-filter>
 
-            <!-- Android App Links: https://app.atomicpathshala.com/... -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="app.atomicpathshala.com" />
-            </intent-filter>
 
         </activity>
 
@@ -87,6 +80,25 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Firebase Cloud Messaging Receiver & Auto-Activation Service -->
+        <service
+            android:name=".AtomicFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Floating Poll Foreground Service over YouTube -->
+        <service
+            android:name=".FloatingPollService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Live class interactive floating poll overlay over external YouTube video" />
+        </service>
 
         <!-- Firebase Cloud Messaging Defaults -->
         <meta-data

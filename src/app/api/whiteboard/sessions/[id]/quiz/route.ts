@@ -48,7 +48,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Everyone in the session sees the question, options, and timer — never
     // the correct answer, which stays server-side until reveal.
     try {
-      await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_LAUNCHED, {
+      const channels = [sessionChannel(params.id)];
+      if (wbSession.batchScheduleId && wbSession.batchScheduleId !== params.id) {
+        channels.push(sessionChannel(wbSession.batchScheduleId));
+      }
+      await pusherServer.trigger(channels, WB_EVENTS.QUIZ_LAUNCHED, {
         id: quiz.id,
         questionText: quiz.questionText,
         options: quiz.options,

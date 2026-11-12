@@ -646,15 +646,7 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
         view={boardView}
       />
 
-      {/* Broadcast Quiz / MCQ Overlay on Stage */}
-      {data.activeQuiz && data.activeQuiz.status !== "CLOSED" && (
-        <BroadcastQuizCanvasOverlay
-          activeQuiz={data.activeQuiz}
-          quizMetrics={data.quizMetrics ?? null}
-          containerWidth={stageDimensions.width}
-          containerHeight={stageDimensions.height}
-        />
-      )}
+      
 
       {/* Live Hand Raise / Doubt Notice on Stage */}
       {data.handRaise && (
@@ -696,7 +688,7 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
               (liveBoard ? liveBoard.background : data.page?.background) || (data.classroomTheme === "DARK" ? "atomic_dark" : "atomic_white"),
             cameraShape: liveCamera?.shape ?? data.cameraShape,
             cameraPosition: liveCamera?.position ?? data.cameraPosition,
-            poll: toStagePoll(data.activeQuiz, data.quizMetrics),
+            poll: null, // Interactive overlay handles poll display; keep whiteboard canvas clean
             view: boardView,
           }}
           call={

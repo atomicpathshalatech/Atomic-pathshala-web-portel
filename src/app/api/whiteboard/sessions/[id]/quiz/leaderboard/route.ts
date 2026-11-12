@@ -46,8 +46,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 /**
  * POST /api/whiteboard/sessions/[id]/quiz/leaderboard
- * Teacher publishes the current leaderboard to everyone in the class
- * (top 10, shown as a popup with a timer).
+ * Teacher publishes the current leaderboard to everyone in the class.
+ * Includes complete rankings so all individual students can calculate their own rank.
+ * Broadcasts across both session channel and batch schedule channel.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -67,16 +68,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return apiError("No answers yet — run a poll and let students answer, then publish.", 409);
     }
 
+    const wb = await prisma.whiteboardSession.findUnique({
+      where: { id: params.id },
+      select: { id: true, batchScheduleId: true },
+    });
+
     const payload = {
       ...board,
-      rankings: board.rankings.slice(0, 10),
+      rankings: board.rankings, // Send full rankings so every student gets their own individual rank calculated
       durationSec,
       publishedAt: new Date().toISOString(),
     };
 
     try {
       const { pusherServer, sessionChannel, WB_EVENTS } = await import("@/lib/realtime/pusher-server");
+      // Trigger on primary session channel
       await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, payload);
+      // Trigger on secondary batch schedule channel if present
+      if (wb?.batchScheduleId && wb.batchScheduleId !== params.id) {
+        await pusherServer.trigger(sessionChannel(wb.batchScheduleId), WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, payload);
+      }
     } catch (pushErr) {
       console.error("[publish_leaderboard_pusher_error]", pushErr);
     }
