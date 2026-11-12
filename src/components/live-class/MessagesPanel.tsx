@@ -96,6 +96,66 @@ const THEME = {
  * catches up on anything missed while it was closed, rather than needing an
  * always-mounted background subscription just for this one feature.
  */
+
+const EMOJI_SHORTCODES: Record<string, string> = {
+  ":thumbsup:": "👍",
+  ":thumbs_up:": "👍",
+  ":+1:": "👍",
+  ":thumbsdown:": "👎",
+  ":thumbs_down:": "👎",
+  ":-1:": "👎",
+  ":clap:": "👏",
+  ":clapping_hands:": "👏",
+  ":fire:": "🔥",
+  ":heart:": "❤️",
+  ":red_heart:": "❤️",
+  ":blue_heart:": "💙",
+  ":smile:": "😊",
+  ":smiling_face:": "😊",
+  ":joy:": "😂",
+  ":face_with_tears_of_joy:": "😂",
+  ":rofl:": "🤣",
+  ":100:": "💯",
+  ":tada:": "🎉",
+  ":party_popper:": "🎉",
+  ":rocket:": "🚀",
+  ":ok_hand:": "👌",
+  ":ok:": "👌",
+  ":pray:": "🙏",
+  ":folded_hands:": "🙏",
+  ":sparkles:": "✨",
+  ":star:": "⭐",
+  ":thinking:": "🤔",
+  ":thinking_face:": "🤔",
+  ":heart_eyes:": "😍",
+  ":sunglasses:": "😎",
+  ":wave:": "👋",
+  ":waving_hand:": "👋",
+  ":eyes:": "👀",
+  ":brain:": "🧠",
+  ":bulb:": "💡",
+  ":check:": "✅",
+  ":white_check_mark:": "✅",
+  ":cross:": "❌",
+  ":x:": "❌",
+  ":warning:": "⚠️",
+  ":party:": "🥳",
+  ":partying_face:": "🥳",
+  ":cool:": "🆒",
+  ":muscle:": "💪",
+  ":salute:": "🫡",
+  ":raised_hands:": "🙌",
+  ":crown:": "👑",
+  ":trophy:": "🏆",
+};
+
+export function renderFormattedChatMessage(body: string) {
+  if (!body) return "";
+  return body.replace(/:[a-zA-Z0-9_+]+:/g, (match) => {
+    return EMOJI_SHORTCODES[match.toLowerCase()] || match;
+  });
+}
+
 export function MessagesPanel({
   whiteboardSessionId,
   currentUserId,
@@ -353,7 +413,7 @@ export function MessagesPanel({
               <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">push_pin</span>
               <div className="min-w-0 flex-1">
                 <span className="font-bold">{m.authorName}: </span>
-                <span className="break-words">{m.body}</span>
+                <span className="break-words">{renderFormattedChatMessage(m.body)}</span>
               </div>
               {role === "TEACHER" && (
                 <button

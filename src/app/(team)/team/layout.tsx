@@ -43,7 +43,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/questions", label: "Question Bank", icon: "database", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/questions/atomic", label: "Atomic Question Bank", icon: "verified", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/exercises", label: "Exercise Builder", icon: "assignment", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/my-question-bank", label: "My Question Bank", icon: "inventory_2", permission: PERMISSIONS.QUESTION_READ },
+      { href: "/team/my-question-bank", label: "My Assigned Questions", icon: "assignment_turned_in", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/questions/reports", label: "Question Reports", icon: "flag", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/qc", label: "Question QC", icon: "verified_user", permission: PERMISSIONS.QUESTION_VERIFY },
       { href: "/team/questions/collections", label: "Question Collections", icon: "folder_special", permission: PERMISSIONS.QUESTION_READ },
@@ -97,7 +97,13 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/onboarding", label: "Onboarding", icon: "pending_actions", permission: PERMISSIONS.ONBOARDING_REVIEW },
       { href: "/team/leaderboard", label: "Leaderboard", icon: "leaderboard", permission: PERMISSIONS.LEADERBOARD_READ },
     ],
+  },  {
+    title: "Gamification",
+    items: [
+      { href: "/team/gamification/xp", label: "XP Management", icon: "military_tech", permission: PERMISSIONS.GAMIFICATION_MANAGE },
+    ],
   },
+
   {
     title: "Growth",
     items: [

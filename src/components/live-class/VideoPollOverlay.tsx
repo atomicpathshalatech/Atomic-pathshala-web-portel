@@ -40,6 +40,8 @@ export function VideoPollOverlay({
   const [isLandscape, setIsLandscape] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [localSelection, setLocalSelection] = useState<string | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<string | null>(null);
+  const [isMinimized, setIsMinimized] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
@@ -47,19 +49,25 @@ export function VideoPollOverlay({
   useEffect(() => {
     if (!poll?.id) {
       setLocalSelection(null);
+      setPendingSelection(null);
+      setIsMinimized(false);
       return;
     }
     try {
       const persisted = localStorage.getItem(`atomic_poll_vote_${poll.id}`);
       if (persisted) {
         setLocalSelection(persisted);
+        setPendingSelection(persisted);
       } else if (poll.mySelection) {
         setLocalSelection(poll.mySelection);
+        setPendingSelection(poll.mySelection);
       } else {
         setLocalSelection(null);
+        setPendingSelection(null);
       }
     } catch {
       setLocalSelection(poll.mySelection || null);
+      setPendingSelection(poll.mySelection || null);
     }
   }, [poll?.id, poll?.mySelection]);
 
@@ -78,25 +86,23 @@ export function VideoPollOverlay({
     };
   }, []);
 
-  // Compute compact card dimensions
+  // Compute compact card dimensions (~25% viewport footprint)
   const cardWidth = useMemo(() => {
-    if (typeof window === "undefined") return 320;
-    return isLandscape
-      ? Math.min(460, Math.max(300, Math.round(window.innerWidth * 0.55)))
-      : Math.min(360, Math.max(280, Math.round(window.innerWidth * 0.88)));
+    if (typeof window === "undefined") return 270;
+    return Math.min(280, Math.max(250, Math.round(window.innerWidth * 0.25)));
   }, [isLandscape]);
 
-  // Position initialized centered on screen
+  // Position initialized safely on screen (default right side or bottom right)
   useEffect(() => {
     if (!pos && typeof window !== "undefined") {
       setPos({
-        x: Math.max(10, Math.floor((window.innerWidth - cardWidth) / 2)),
-        y: Math.max(70, Math.floor((window.innerHeight - 300) / 2)),
+        x: Math.max(12, window.innerWidth - cardWidth - 20),
+        y: Math.max(70, Math.min(180, Math.floor(window.innerHeight * 0.2))),
       });
     }
-  }, [pos, cardWidth, isLandscape]);
+  }, [pos, cardWidth]);
 
-  // Reset position or bounds on resize
+  // Reset bounds on window resize
   useEffect(() => {
     if (pos && typeof window !== "undefined") {
       const maxX = Math.max(8, window.innerWidth - cardWidth - 8);
@@ -195,18 +201,41 @@ export function VideoPollOverlay({
   const isTimeUp = remainingSec <= 0 && poll.status === "ACTIVE";
   const hasSubmitted = Boolean(mySelection);
 
-  // Can the student dismiss locally? Only allowed once answered, or time is up, or result published
-  const canLocalDismiss = hasSubmitted || isTimeUp || isRevealed;
+  // If student minimized, show a persistent floating recoverable pill
+  if (isMinimized) {
+    return (
+      <div
+        onClick={() => setIsMinimized(false)}
+        style={{
+          position: "fixed",
+          top: pos ? `${pos.y}px` : "75px",
+          right: "16px",
+          zIndex: 9999,
+          pointerEvents: "auto",
+        }}
+        className="cursor-pointer bg-[#0a0d18]/95 hover:bg-[#14192d] border border-blue-500/80 text-white px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 text-xs font-bold transition-transform transform hover:scale-105 active:scale-95 select-none backdrop-blur-md"
+        title="Click to restore active poll"
+      >
+        <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+        <span>📊 Poll</span>
+        {!isRevealed && !isTimeUp && (
+          <span className="font-mono text-blue-300">⏳ {remainingSec}s</span>
+        )}
+        {isRevealed && <span className="text-emerald-400 text-[10px]">Result</span>}
+        <span className="text-slate-400 text-[10px] underline ml-0.5">Open</span>
+      </div>
+    );
+  }
 
-  const handleVoteClick = (optionKey: string) => {
-    if (hasSubmitted || isRevealed || isTimeUp || voting) return;
-    setLocalSelection(optionKey);
+  const handleConfirmSubmit = () => {
+    if (!pendingSelection || hasSubmitted || isRevealed || isTimeUp || voting) return;
+    setLocalSelection(pendingSelection);
     try {
       if (poll?.id) {
-        localStorage.setItem(`atomic_poll_vote_${poll.id}`, optionKey);
+        localStorage.setItem(`atomic_poll_vote_${poll.id}`, pendingSelection);
       }
     } catch {}
-    onVote(optionKey);
+    onVote(pendingSelection);
   };
 
   return (
@@ -219,58 +248,75 @@ export function VideoPollOverlay({
         zIndex: 9999,
         ...(pos
           ? { left: `${pos.x}px`, top: `${pos.y}px` }
-          : { top: "50%", left: "50%", transform: "translate(-50%, -50%)" }),
+          : { top: "15%", right: "20px" }),
       }}
-      className="fixed select-none bg-[#0a0d18]/95 text-white border-2 border-blue-500/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] p-3 flex flex-col gap-2 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+      className="fixed select-none bg-[#0a0d18]/95 text-white border-2 border-blue-500/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] p-2.5 flex flex-col gap-2 backdrop-blur-xl"
     >
       {/* Header Bar - Dedicated Drag Handle */}
       <div
         onPointerDown={handleHeaderPointerDown}
         onPointerMove={handleHeaderPointerMove}
         onPointerUp={handleHeaderPointerUp}
-        className="flex items-center justify-between gap-1.5 border-b border-slate-800/80 pb-1.5 cursor-grab active:cursor-grabbing select-none"
+        className="flex items-center justify-between gap-1 border-b border-slate-800/80 pb-1 cursor-grab active:cursor-grabbing select-none"
       >
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="material-symbols-outlined text-slate-400 text-xs">drag_indicator</span>
-          <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/40 text-blue-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0">
+          <span className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/40 text-blue-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
             LIVE POLL
           </span>
 
           {isRevealed ? (
-            <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold shrink-0">
-              ✓ Result Published
+            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] font-bold shrink-0">
+              Result
             </span>
           ) : isTimeUp ? (
-            <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[10px] font-bold shrink-0">
-              Time Expired
+            <span className="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[9px] font-bold shrink-0">
+              Expired
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[10px] font-mono font-bold shrink-0">
+            <span className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[9px] font-mono font-bold shrink-0">
               ⏳ {remainingSec}s
             </span>
           )}
         </div>
 
-        {/* Local X close button only available after voting or once ended/revealed */}
-        {canLocalDismiss && onDismiss && (
+        {/* Action buttons: Minimize and Dismiss */}
+        <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onDismiss();
+              setIsMinimized(true);
             }}
-            className="w-5 h-5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center cursor-pointer shrink-0 ml-1"
-            title="Dismiss overlay"
+            className="w-5 h-5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center cursor-pointer shrink-0"
+            title="Minimize poll to floating pill"
           >
-            <span className="material-symbols-outlined text-xs">close</span>
+            <span className="material-symbols-outlined text-xs">minimize</span>
           </button>
-        )}
+          {onDismiss && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!hasSubmitted && !isRevealed && !isTimeUp) {
+                  setIsMinimized(true);
+                } else {
+                  onDismiss();
+                }
+              }}
+              className="w-5 h-5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition flex items-center justify-center cursor-pointer shrink-0"
+              title="Close"
+            >
+              <span className="material-symbols-outlined text-xs">close</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Question Text */}
       {poll.questionText && (
-        <p className="text-xs font-semibold text-slate-100 line-clamp-2 px-0.5 leading-snug">
+        <p className="text-[11px] font-semibold text-slate-100 line-clamp-2 px-0.5 leading-tight">
           {poll.questionText}
         </p>
       )}
@@ -278,7 +324,7 @@ export function VideoPollOverlay({
       {/* Answer Feedback Banner on Reveal */}
       {isRevealed && (
         <div
-          className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center justify-between transition-all duration-300 ${
+          className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center justify-between transition-all ${
             mySelection === poll.correctOption
               ? "bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 shadow-sm"
               : mySelection
@@ -286,40 +332,42 @@ export function VideoPollOverlay({
               : "bg-slate-800/80 border border-slate-700 text-slate-300"
           }`}
         >
-          <span className="flex items-center gap-1.5 truncate text-[11px]">
+          <span className="flex items-center gap-1 truncate">
             <span className="material-symbols-outlined text-xs">
               {mySelection === poll.correctOption ? "check_circle" : mySelection ? "cancel" : "info"}
             </span>
             {mySelection === poll.correctOption
-              ? "Correct Answer!"
+              ? "Correct!"
               : mySelection
-              ? `Incorrect (You chose ${mySelection})`
+              ? `Incorrect (Chose ${mySelection})`
               : "Results Published"}
           </span>
           {poll.correctOption && (
-            <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-black text-[10px] shrink-0">
-              Correct: Option {poll.correctOption}
+            <span className="px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 font-black text-[9px] shrink-0">
+              Ans: {poll.correctOption}
             </span>
           )}
         </div>
       )}
 
-      {/* Options Layout - Vertical on Portrait, 2x2 Grid on Landscape */}
-      <div className={`grid ${isLandscape ? "grid-cols-2" : "grid-cols-1"} gap-1.5`}>
+      {/* Options List */}
+      <div className="grid grid-cols-1 gap-1.5">
         {poll.options.map((opt) => {
-          const isSelected = mySelection === opt.key;
+          const isSelected = (mySelection || pendingSelection) === opt.key;
+          const isConfirmed = mySelection === opt.key;
           const isCorrect = isRevealed && poll.correctOption === opt.key;
-          const isWrong = isRevealed && isSelected && poll.correctOption !== opt.key;
+          const isWrong = isRevealed && isConfirmed && poll.correctOption !== opt.key;
           const percentage = optionPercentages[opt.key];
 
-          // STRICT: Neutral state before submission. No green before reveal.
           let btnStyle = "bg-[#141828] border-slate-800 text-slate-200 hover:border-blue-500/60 hover:bg-[#1a2035] cursor-pointer";
           if (isCorrect) {
             btnStyle = "border-emerald-500 bg-emerald-950/80 text-emerald-100 ring-1 ring-emerald-500/60 cursor-default";
           } else if (isWrong) {
             btnStyle = "border-rose-500 bg-rose-950/80 text-rose-200 ring-1 ring-rose-500/60 cursor-default";
-          } else if (isSelected) {
+          } else if (isConfirmed) {
             btnStyle = "border-blue-500 bg-blue-950/90 text-white shadow ring-2 ring-blue-500/60 cursor-default";
+          } else if (isSelected) {
+            btnStyle = "border-blue-400 bg-blue-900/50 text-white ring-1 ring-blue-400";
           } else if (hasSubmitted || isTimeUp || isRevealed) {
             btnStyle = "bg-[#141828]/60 border-slate-800/60 text-slate-400 cursor-default";
           }
@@ -332,9 +380,11 @@ export function VideoPollOverlay({
               style={{ touchAction: "manipulation", pointerEvents: "auto" }}
               onClick={(e) => {
                 e.stopPropagation();
-                handleVoteClick(opt.key);
+                if (!hasSubmitted && !isRevealed && !isTimeUp) {
+                  setPendingSelection(opt.key);
+                }
               }}
-              className={`relative overflow-hidden min-h-[34px] px-2.5 py-1 rounded-xl border text-left font-medium transition-all active:scale-95 disabled:pointer-events-none flex items-center justify-between gap-2 ${btnStyle}`}
+              className={`relative overflow-hidden min-h-[30px] px-2 py-1 rounded-xl border text-left font-medium transition-all active:scale-95 disabled:pointer-events-none flex items-center justify-between gap-1.5 ${btnStyle}`}
             >
               {/* Vote Percentage progress bar when revealed */}
               {isRevealed && percentage !== undefined && (
@@ -346,31 +396,31 @@ export function VideoPollOverlay({
                 />
               )}
 
-              <div className="relative z-10 flex items-center gap-2 min-w-0">
+              <div className="relative z-10 flex items-center gap-1.5 min-w-0">
                 <span
-                  className={`w-5 h-5 rounded-md flex items-center justify-center font-mono font-black text-[11px] shrink-0 ${
+                  className={`w-4 h-4 rounded flex items-center justify-center font-mono font-black text-[10px] shrink-0 ${
                     isCorrect
                       ? "bg-emerald-500 text-slate-950"
                       : isWrong
                       ? "bg-rose-500 text-white"
-                      : isSelected
+                      : isConfirmed || isSelected
                       ? "bg-blue-600 text-white"
                       : "bg-slate-800 text-slate-300 border border-slate-700"
                   }`}
                 >
                   {opt.key}
                 </span>
-                <span className="text-xs font-semibold truncate leading-none">
+                <span className="text-[11px] font-semibold truncate leading-none">
                   {opt.label !== opt.key ? opt.label : `Option ${opt.key}`}
                 </span>
               </div>
 
               {isRevealed && percentage !== undefined ? (
-                <span className="relative z-10 text-[11px] font-mono font-bold text-slate-200 shrink-0">
-                  {percentage}% {pollCounts?.[opt.key] !== undefined && `(${pollCounts[opt.key]})`}
+                <span className="relative z-10 text-[10px] font-mono font-bold text-slate-200 shrink-0">
+                  {percentage}%
                 </span>
-              ) : isSelected ? (
-                <span className="material-symbols-outlined text-sm text-blue-400 shrink-0">
+              ) : isConfirmed ? (
+                <span className="material-symbols-outlined text-xs text-blue-400 shrink-0">
                   check_circle
                 </span>
               ) : null}
@@ -379,24 +429,50 @@ export function VideoPollOverlay({
         })}
       </div>
 
+      {/* Submit Button (Step 2 of selection flow) */}
+      {!hasSubmitted && !isRevealed && !isTimeUp && (
+        <button
+          type="button"
+          disabled={!pendingSelection || voting}
+          onClick={handleConfirmSubmit}
+          className={`w-full py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md ${
+            pendingSelection && !voting
+              ? "bg-blue-600 hover:bg-blue-500 text-white active:scale-95 cursor-pointer"
+              : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
+          }`}
+        >
+          {voting ? (
+            <>
+              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span>Submitting…</span>
+            </>
+          ) : (
+            <>
+              <span className="material-symbols-outlined text-sm">send</span>
+              <span>Submit Answer {pendingSelection ? `(${pendingSelection})` : ""}</span>
+            </>
+          )}
+        </button>
+      )}
+
       {/* Footer Status Message */}
-      <div className="flex items-center justify-between text-[10px] text-slate-400 px-0.5 pt-0.5">
+      <div className="flex items-center justify-between text-[9px] text-slate-400 px-0.5 pt-0.5">
         {hasSubmitted && !isRevealed ? (
           <span className="text-blue-400 font-medium flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">check</span>
-            Response submitted ({mySelection}) · Waiting for results
+            Submitted ({mySelection}) · Awaiting result
           </span>
         ) : isRevealed ? (
           <span className="text-slate-300 font-medium">
-            Total Responses: {totalVotes}
+            Votes: {totalVotes}
           </span>
         ) : isTimeUp ? (
           <span className="text-rose-400 font-medium">
-            Time is up. Submissions closed.
+            Time expired
           </span>
         ) : (
           <span className="text-slate-400">
-            Select one option to submit your vote
+            Tap option then Submit
           </span>
         )}
 

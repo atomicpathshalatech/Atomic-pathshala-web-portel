@@ -2215,71 +2215,13 @@ export class CanvasEngine {
   }
 
   public loadObjects(objects: StrokeObject[]): void {
-    // Check if objects are from legacy unnormalized coordinate system (e.g. max coords < 1250)
-    let maxX = 0;
-    let maxY = 0;
-    for (const obj of objects) {
-      for (const p of representativePoints(obj)) {
-        if (p.x > maxX) maxX = p.x;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
-
-    // If strokes were created in legacy ~1000x560 canvas, scale them up to VIRTUAL 1920x1080
-    if (objects.length > 0 && maxX > 0 && maxX < 1250 && maxY < 750) {
-      const scaleX = VIRTUAL_WIDTH / 1000;
-      const scaleY = VIRTUAL_HEIGHT / 562.5;
-      this.objects = objects.map((obj) => {
-        if (obj.type === "stroke") {
-          return {
-            ...obj,
-            points: obj.points.map((p) => ({
-              ...p,
-              x: p.x * scaleX,
-              y: p.y * scaleY,
-            })),
-          };
-        } else if (obj.type === "text") {
-          // Text objects didn't exist when the legacy ~1000x560 format was
-          // in use, so this branch is currently unreachable in practice —
-          // handled anyway so the map stays exhaustive and type-safe.
-          return {
-            ...obj,
-            position: { x: obj.position.x * scaleX, y: obj.position.y * scaleY },
-            size: obj.size * scaleX,
-            width: obj.width * scaleX,
-            height: obj.height * scaleY,
-          };
-        } else if (obj.type === "raster") {
-          // Raster (bucket-fill patch) objects are newer than this legacy
-          // format too — unreachable in practice, handled for exhaustiveness.
-          return {
-            ...obj,
-            x: obj.x * scaleX,
-            y: obj.y * scaleY,
-            width: obj.width * scaleX,
-            height: obj.height * scaleY,
-          };
-        } else {
-          return {
-            ...obj,
-            start: { x: obj.start.x * scaleX, y: obj.start.y * scaleY },
-            end: { x: obj.end.x * scaleX, y: obj.end.y * scaleY },
-          };
-        }
-      });
-    } else {
-      this.objects = objects;
-    }
-
+    // Virtual coordinates are consistently normalized to 1920x1080 across all slides.
+    // Avoid dynamic scaling heuristics that previously distorted strokes drawn within top-left bounds.
+    this.objects = Array.isArray(objects) ? [...objects] : [];
     this.undoStack = [];
     this.redoStack = [];
     this.selectedIds.clear();
     this.renderBase();
-    // A page can load with an already-fading highlighter still on it (e.g.
-    // a student's board syncing mid-fade, or switching back to a page that
-    // has one) - this is what makes the fade/eventual-removal visible on
-    // every viewer, not just the one who drew it.
     this.startFadeLoopIfNeeded();
   }
 

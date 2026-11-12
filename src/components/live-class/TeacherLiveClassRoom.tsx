@@ -1848,26 +1848,42 @@ export function TeacherLiveClassRoom({
   async function switchToPage(pageNumber: number) {
     if (!wbSession || !engineRef.current) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    await flushAutosave();
-    pendingObjectsRef.current = null;
-    pendingPageIdRef.current = null;
-    // latestPagesRef, not this render's wbSession: an undo can switch slides
-    // right after another step changed them.
+
+    // 1. Optimistic snapshot: save current slide strokes to memory immediately
+    const currentEngine = engineRef.current;
+    const currentOutPageId = enginePageIdRef.current;
+    if (currentOutPageId && currentEngine) {
+      const currentObjs = currentEngine.getObjects();
+      latestPagesRef.current = latestPagesRef.current.map((p) =>
+        p.id === currentOutPageId ? { ...p, objects: currentObjs } : p
+      );
+      setWbSession((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          pages: prev.pages.map((p) => (p.id === currentOutPageId ? { ...p, objects: currentObjs } : p)),
+        };
+      });
+    }
+
     const target = latestPagesRef.current.find((p) => p.pageNumber === pageNumber);
     if (!target) return;
-    try {
-      await patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber });
-      activePageNumberRef.current = pageNumber;
-      setWbSession((prev) => (prev ? { ...prev, activePageNumber: pageNumber } : prev));
-      showPageInEngine(target, getHydratedObjects(wbSession.id, target.id, target.objects));
-    } catch (err) {
-      // Was previously silent apart from the generic "offline" indicator -
-      // logged now so a stale/ended-session 409 (or any other switchToPage
-      // failure) is actually diagnosable instead of just looking like
-      // "Next/Prev doesn't work".
+
+    // 2. Instant optimistic render (0ms freeze)
+    activePageNumberRef.current = pageNumber;
+    setWbSession((prev) => (prev ? { ...prev, activePageNumber: pageNumber } : prev));
+    showPageInEngine(target, getHydratedObjects(wbSession.id, target.id, target.objects));
+
+    // 3. Background persist without blocking UI navigation
+    flushAutosave().catch((err) => console.warn("[flushAutosave_bg_warn]", err));
+    pendingObjectsRef.current = null;
+    pendingPageIdRef.current = null;
+
+    patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber }).catch((err) => {
       console.error("[switchToPage_error]", pageNumber, err);
       setSaveState("offline");
-    }
+    });
+  }
   }
 
   /** Slides after a new one was put in: the server's order, keeping what this tab already holds for each slide. */
@@ -4224,67 +4240,7 @@ export function TeacherLiveClassRoom({
                 }
               />
 
-              {/* Quick Hover Controls for Teacher */}
-              <div className="absolute top-2 left-2 flex items-center gap-1 opacity-0 group-hover/cam:opacity-100 transition shadow z-50">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFloatCamSize(180);
-                    setFloatCamPos((pos) => clampToStage(pos.x, pos.y, 180));
-                    try { localStorage.setItem("atomic_teacher_floating_cam_size", "180"); } catch {}
-                  }}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                    floatCamSize <= 200 ? "bg-blue-600 text-white" : "bg-black/75 text-slate-300 hover:text-white"
-                  }`}
-                  title="Small size (180px)"
-                >
-                  S
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFloatCamSize(260);
-                    setFloatCamPos((pos) => clampToStage(pos.x, pos.y, 260));
-                    try { localStorage.setItem("atomic_teacher_floating_cam_size", "260"); } catch {}
-                  }}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                    floatCamSize > 200 && floatCamSize <= 300 ? "bg-blue-600 text-white" : "bg-black/75 text-slate-300 hover:text-white"
-                  }`}
-                  title="Medium size (260px)"
-                >
-                  M
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFloatCamSize(340);
-                    setFloatCamPos((pos) => clampToStage(pos.x, pos.y, 340));
-                    try { localStorage.setItem("atomic_teacher_floating_cam_size", "340"); } catch {}
-                  }}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                    floatCamSize > 300 ? "bg-blue-600 text-white" : "bg-black/75 text-slate-300 hover:text-white"
-                  }`}
-                  title="Large size (340px)"
-                >
-                  L
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleChromaKey();
-                  }}
-                  className={`p-1 rounded text-xs transition ${
-                    chromaKeyEnabled ? "bg-emerald-600 text-white" : "bg-black/75 text-slate-300 hover:text-white"
-                  }`}
-                  title="Toggle Chroma Key (Green Screen Removal)"
-                >
-                  <span className="material-symbols-outlined text-xs">filter_vintage</span>
-                </button>
-              </div>
+              {/* Clean Camera Preview: S/M/L buttons removed from face */}
 
               {/* Top Right Controls: Hide Camera (Ctrl+X) and Dock to Sidebar */}
               <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/cam:opacity-100 transition shadow z-50">
@@ -4493,15 +4449,15 @@ export function TeacherLiveClassRoom({
               }}
             />
             {openPopup === "pen" && (
-              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-xl p-3 shadow-2xl w-[21rem] flex flex-col gap-2.5 text-white">
-                {/* Header (Screenshot 3) */}
-                <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-blue-400 text-base">
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#141622] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-60 flex flex-col gap-2.5 text-white">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-[#2d2e3b]/80 pb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-blue-400 text-sm">
                       {PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
                     </span>
-                    <h3 className="text-sm font-bold text-gray-100">
-                      {PEN_STYLES.find((s) => s.id === penStyle)?.label || "Hard-tipped"} pen
+                    <h3 className="text-xs font-bold text-gray-100">
+                      {PEN_STYLES.find((s) => s.id === penStyle)?.label || "Pen"} Tool
                     </h3>
                   </div>
                   <button
@@ -4509,46 +4465,39 @@ export function TeacherLiveClassRoom({
                     onClick={() => setOpenPopup(null)}
                     className="text-gray-400 hover:text-white transition"
                   >
-                    <span className="material-symbols-outlined text-lg">close</span>
+                    <span className="material-symbols-outlined text-sm">close</span>
                   </button>
                 </div>
 
-                {/* Thickness Slider with Live Dot & Fine-tip Presets */}
-                <div className="bg-[#10111a] border border-[#242634] rounded-lg p-2 flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-2.5">
-                    <span className="text-[11px] text-gray-300 font-medium">Thickness</span>
+                {/* Thickness Slider with Presets */}
+                <div className="bg-[#0e101a] border border-[#242634] rounded-xl p-2 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-gray-400 font-semibold">Width</span>
                     <input
                       type="range"
-                      min={0.3}
-                      max={10}
+                      min={0.5}
+                      max={8}
                       step={0.1}
                       value={size}
                       onChange={(e) => setSize(Number(e.target.value))}
-                      className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
+                      className="flex-1 accent-blue-500 h-1 bg-gray-700 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-mono font-bold text-gray-200 w-10 text-right">{size.toFixed(1)}px</span>
-                    <div className="w-8 h-8 rounded-full bg-[#1b1c28] border border-[#2d2e3b] flex items-center justify-center shrink-0">
-                      <div
-                        className="rounded-full transition-all"
-                        style={{
-                          width: Math.max(2, Math.min(20, size * 2.5)),
-                          height: Math.max(2, Math.min(20, size * 2.5)),
-                          backgroundColor: color,
-                        }}
-                      />
-                    </div>
+                    <span className="text-[10px] font-mono font-bold text-gray-200 w-8 text-right">{size.toFixed(1)}px</span>
+                    <div
+                      className="w-3.5 h-3.5 rounded-full border border-white/30 shrink-0"
+                      style={{ backgroundColor: color }}
+                    />
                   </div>
-                  <div className="flex items-center gap-1.5 pt-1 border-t border-[#242634]/60">
-                    <span className="text-[10px] text-gray-400 font-semibold mr-1">Presets:</span>
-                    {[0.5, 0.8, 1.5, 3.0].map((sz) => (
+                  <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#242634]/60">
+                    {[1.0, 1.8, 3.0, 5.0].map((sz) => (
                       <button
                         key={sz}
                         type="button"
                         onClick={() => setSize(sz)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition ${
-                          Math.abs(size - sz) < 0.05
+                        className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold transition ${
+                          Math.abs(size - sz) < 0.1
                             ? "bg-blue-600 text-white"
-                            : "bg-[#1b1c28] text-gray-400 hover:text-white hover:bg-gray-700"
+                            : "bg-[#1b1c28] text-gray-400 hover:text-white"
                         }`}
                       >
                         {sz}px
@@ -4557,55 +4506,13 @@ export function TeacherLiveClassRoom({
                   </div>
                 </div>
 
-                {/* Split: Pen Styles (Left) & Color Palette 3x4 Grid (Right) (Screenshot 3) */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {/* Left: Pen Styles */}
-                  <div className="bg-[#10111a] border border-[#242634] rounded-lg p-2 flex flex-col gap-1.5">
-                    <span className="text-[11px] font-semibold text-gray-400">Pen Styles</span>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {PEN_STYLES.map((ps) => (
-                        <button
-                          key={ps.id}
-                          type="button"
-                          onClick={() => setPenStyle(ps.id)}
-                          className={`flex flex-col items-center justify-center p-1.5 rounded-lg border text-[10px] transition gap-0.5 ${
-                            penStyle === ps.id
-                              ? "bg-blue-600/20 border-blue-500 text-white font-semibold"
-                              : "bg-[#161722] border-[#2d2e3b] text-gray-400 hover:text-gray-200 hover:border-gray-600"
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-base">{ps.icon}</span>
-                          <span>{ps.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Right: 3x4 Color Grid (Screenshot 3) */}
-                  <div className="bg-[#10111a] border border-[#242634] rounded-lg p-2 flex flex-col justify-between">
-                    <div>
-                      <span className="text-[11px] font-semibold text-gray-400 block mb-1.5 text-center">Color</span>
-                      <div className="grid grid-cols-4 gap-1.5 place-items-center">
-                        {PEN_PALETTE_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => setColor(c)}
-                            className={`w-6 h-6 rounded-lg border shadow-md transition transform hover:scale-110 ${
-                              color.toLowerCase() === c.toLowerCase()
-                                ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-[#10111a] border-white"
-                                : "border-transparent"
-                            }`}
-                            style={{ backgroundColor: c }}
-                            title={c}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <label className="mt-2 flex items-center justify-center gap-1.5 py-1 rounded-lg border border-[#2d2e3b] bg-[#161722] hover:bg-[#202130] text-xs text-gray-300 font-medium cursor-pointer transition">
-                      <span className="material-symbols-outlined text-sm text-blue-400">colorize</span>
-                      Custom
+                {/* Color Swatches Grid */}
+                <div className="bg-[#0e101a] border border-[#242634] rounded-xl p-2 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-gray-400">Color</span>
+                    <label className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer">
+                      <span className="material-symbols-outlined text-xs">colorize</span>
+                      <span>Custom</span>
                       <input
                         type="color"
                         value={color}
@@ -4614,6 +4521,41 @@ export function TeacherLiveClassRoom({
                       />
                     </label>
                   </div>
+                  <div className="grid grid-cols-6 gap-1 place-items-center">
+                    {PEN_PALETTE_COLORS.slice(0, 12).map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setColor(c)}
+                        className={`w-5 h-5 rounded-md border transition transform hover:scale-110 ${
+                          color.toLowerCase() === c.toLowerCase()
+                            ? "ring-2 ring-blue-500 border-white"
+                            : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: c }}
+                        title={c}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pen Style selector */}
+                <div className="grid grid-cols-4 gap-1">
+                  {PEN_STYLES.map((ps) => (
+                    <button
+                      key={ps.id}
+                      type="button"
+                      onClick={() => setPenStyle(ps.id)}
+                      className={`flex flex-col items-center justify-center py-1 px-0.5 rounded-lg border text-[9px] transition ${
+                        penStyle === ps.id
+                          ? "bg-blue-600/30 border-blue-500 text-white font-bold"
+                          : "bg-[#0e101a] border-[#2d2e3b] text-gray-400 hover:text-gray-200"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">{ps.icon}</span>
+                      <span className="truncate max-w-[45px]">{ps.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
