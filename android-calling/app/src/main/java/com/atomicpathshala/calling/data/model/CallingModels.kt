@@ -36,6 +36,18 @@ data class HeartbeatRequest(
     @SerializedName("sim2Carrier") val sim2Carrier: String?
 )
 
+data class HeartbeatResponse(
+    @SerializedName("timestamp") val timestamp: String?,
+    @SerializedName("pendingCall") val pendingCall: PendingCallData?
+)
+
+data class PendingCallData(
+    @SerializedName("requestId") val requestId: String,
+    @SerializedName("phone") val phone: String,
+    @SerializedName("studentName") val studentName: String?,
+    @SerializedName("preferredSim") val preferredSim: String?
+)
+
 data class CallEventRequest(
     @SerializedName("status") val status: String, // DELIVERED, DIALER_OPENED, CALLING, COMPLETED, FAILED
     @SerializedName("durationSeconds") val durationSeconds: Int? = null,

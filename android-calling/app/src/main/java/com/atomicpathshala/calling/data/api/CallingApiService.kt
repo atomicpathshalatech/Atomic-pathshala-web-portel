@@ -20,7 +20,7 @@ interface CallingApiService {
     suspend fun sendHeartbeat(
         @Path("id") deviceId: String,
         @Body request: HeartbeatRequest
-    ): Response<ApiResponse<Any>>
+    ): Response<ApiResponse<HeartbeatResponse>>
 
     @POST("api/calling/request/{id}/event")
     suspend fun postCallEvent(

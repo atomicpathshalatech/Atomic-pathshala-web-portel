@@ -28,9 +28,12 @@ import androidx.core.content.ContextCompat
 import com.atomicpathshala.calling.data.api.ApiClient
 import com.atomicpathshala.calling.data.model.DeviceRegisterRequest
 import com.atomicpathshala.calling.data.model.HeartbeatRequest
+import com.atomicpathshala.calling.telephony.CallDispatcher
 import com.atomicpathshala.calling.telephony.SimManager
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -106,6 +109,52 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var statusText by remember { mutableStateOf("Online & Listening for CRM calls") }
+
+    val callDispatcher = remember { CallDispatcher(context) }
+    var lastHandledRequestId by remember { mutableStateOf("") }
+
+    // Automatic Live Heartbeat & Instant Call Dispatch Loop (every 2.5 seconds)
+    LaunchedEffect(isPaired, deviceId, serverUrl) {
+        if (!isPaired || deviceId.isBlank()) return@LaunchedEffect
+        while (isActive) {
+            try {
+                val api = ApiClient.getService(serverUrl)
+                val bm = context.getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager
+                val battery = bm?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 88
+
+                val response = api.sendHeartbeat(
+                    deviceId = deviceId,
+                    request = HeartbeatRequest(
+                        fcmToken = null,
+                        batteryLevel = battery,
+                        networkType = "CELLULAR",
+                        sim1Carrier = sims.firstOrNull()?.carrierName,
+                        sim2Carrier = sims.getOrNull(1)?.carrierName
+                    )
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val pending = response.body()?.data?.pendingCall
+                    if (pending != null && pending.requestId != lastHandledRequestId) {
+                        lastHandledRequestId = pending.requestId
+                        statusText = "Placing cellular call to ${pending.studentName ?: pending.phone}..."
+                        callDispatcher.dispatchCall(
+                            serverUrl = serverUrl,
+                            requestId = pending.requestId,
+                            phoneNumber = pending.phone,
+                            studentName = pending.studentName ?: "Student",
+                            preferredSim = pending.preferredSim
+                        )
+                    } else if (!statusText.startsWith("Placing")) {
+                        statusText = "Online & Listening for CRM calls"
+                    }
+                }
+            } catch (e: Exception) {
+                // Background retry
+            }
+            delay(2500)
+        }
+    }
 
     Scaffold(
         topBar = {
