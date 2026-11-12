@@ -33,7 +33,24 @@ object ApiClient {
     private var retrofit: Retrofit? = null
 
     fun getService(baseUrl: String): CallingApiService {
-        val formattedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val cleanUrl: String = try {
+            var u = baseUrl.trim()
+            if (u.startsWith("atp://")) {
+                u = "https://" + u.removePrefix("atp://")
+            }
+            if (!u.startsWith("http://") && !u.startsWith("https://")) {
+                u = "https://$u"
+            }
+            val formatted = if (u.endsWith("/")) u else "$u/"
+            val uri = java.net.URI(formatted)
+            if (uri.host.isNullOrBlank() || !uri.host.contains(".")) {
+                "https://ap.atomicpathshala.in/"
+            } else {
+                formatted
+            }
+        } catch (e: Exception) {
+            "https://ap.atomicpathshala.in/"
+        }
         
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
@@ -46,7 +63,7 @@ object ApiClient {
             .build()
 
         retrofit = Retrofit.Builder()
-            .baseUrl(formattedUrl)
+            .baseUrl(cleanUrl)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

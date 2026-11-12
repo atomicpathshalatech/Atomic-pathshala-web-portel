@@ -1,9 +1,9 @@
 import React from "react";
-import { renderFormattedChatMessage } from "../src/components/live-class/MessagesPanel";
+import { renderFormattedChatMessage, isAllowedYouTubeEmojiHost } from "../src/components/live-class/MessagesPanel";
 
-function testCustomEmojiRendering() {
+function testCustomEmojiRenderingAndDataFlow() {
   console.log("=================================================");
-  console.log("🧪 CUSTOM YOUTUBE EMOJI RENDERING TEST SUITE");
+  console.log("🧪 CUSTOM YOUTUBE EMOJI DATA FLOW & HOST POLICY TEST");
   console.log("=================================================\n");
 
   let passed = 0;
@@ -27,7 +27,24 @@ function testCustomEmojiRendering() {
     "Test 1: Standard shortcodes (:thumbsup:, :fire:) map to Unicode emojis"
   );
 
-  // 2. Custom YouTube Emoji with valid HTTPS image URL
+  // 2. Allowed Official YouTube Host Policy Verification
+  assert(
+    isAllowedYouTubeEmojiHost("https://yt3.ggpht.com/a/custom_atom.png") &&
+    isAllowedYouTubeEmojiHost("https://yt4.ggpht.com/badges/star.png") &&
+    isAllowedYouTubeEmojiHost("https://lh3.googleusercontent.com/ytc/abc.png") &&
+    isAllowedYouTubeEmojiHost("https://youtube.com/img/emoji.png"),
+    "Test 2: Allowed official YouTube & Google image hosts accepted"
+  );
+
+  // 3. Disallowed Hosts / Non-HTTPS URLs Rejected
+  assert(
+    !isAllowedYouTubeEmojiHost("https://unauthorized-cdn.com/fake.png") &&
+    !isAllowedYouTubeEmojiHost("http://yt3.ggpht.com/insecure.png") &&
+    !isAllowedYouTubeEmojiHost("javascript:alert(1)"),
+    "Test 3: Non-HTTPS and unauthorized third-party hosts rejected"
+  );
+
+  // 4. Custom YouTube Emoji with valid HTTPS image URL
   const customList = [
     {
       shortcut: ":atom_badge:",
@@ -38,7 +55,7 @@ function testCustomEmojiRendering() {
   const customRes = renderFormattedChatMessage("Great work :atom_badge: keep it up!", customList);
   assert(
     Array.isArray(customRes) && customRes.length >= 3,
-    "Test 2: Message with custom emoji tokenized correctly preserving text before and after"
+    "Test 4: Message with custom emoji tokenized correctly preserving text before and after"
   );
 
   const imgElement = (customRes as any[]).find((el) => el?.type === "img");
@@ -46,38 +63,72 @@ function testCustomEmojiRendering() {
     imgElement &&
     imgElement.props.src === "https://yt3.ggpht.com/custom_atom_badge.png" &&
     imgElement.props.alt === ":atom_badge:",
-    "Test 3: Custom emoji rendered as safe <img> tag with exact URL and alt text"
+    "Test 5: Custom emoji rendered as safe <img> tag with exact URL and alt text"
   );
 
-  // 3. Multiple Custom Emojis in a single message
+  // 5. Multiple Custom Emojis in a single message
   const multiCustomList = [
     { shortcut: ":atom_badge:", url: "https://yt3.ggpht.com/atom.png" },
-    { shortcut: ":star_student:", url: "https://yt3.ggpht.com/star.png" },
+    { shortcut: ":star_student:", url: "https://yt4.ggpht.com/star.png" },
   ];
   const multiRes = renderFormattedChatMessage(":atom_badge: Congratulations :star_student: to all!", multiCustomList);
   const imgElements = (multiRes as any[]).filter((el) => el?.type === "img");
   assert(
     imgElements.length === 2 &&
     imgElements[0].props.src === "https://yt3.ggpht.com/atom.png" &&
-    imgElements[1].props.src === "https://yt3.ggpht.com/star.png",
-    "Test 4: Multiple custom emojis in single message rendered in exact order"
+    imgElements[1].props.src === "https://yt4.ggpht.com/star.png",
+    "Test 6: Multiple custom emojis in single message rendered in exact order"
   );
 
-  // 4. Insecure / Malformed URLs fallback safely to text (XSS defense)
-  const insecureList = [
-    { shortcut: ":hack:", url: "javascript:alert(1)" },
-    { shortcut: ":fake:", url: "http://insecure.com/fake.png" }, // non-https
-  ];
-  const insecureRes = renderFormattedChatMessage("Testing :hack: and :fake:", insecureList as any);
-  // Should reject non-https URLs and fallback to standard text
-  const insecureImgs = Array.isArray(insecureRes) ? (insecureRes as any[]).filter((el) => el?.type === "img") : [];
+  // 6. Pinned Message Rendering
+  const pinnedMessage = {
+    id: "msg_pinned_1",
+    body: "📌 Pinned: Welcome to Atomic Pathshala! :atom_badge:",
+    pinned: true,
+  };
+  const pinnedRes = renderFormattedChatMessage(pinnedMessage.body, customList);
+  const pinnedImg = (pinnedRes as any[]).find((el) => el?.type === "img");
   assert(
-    insecureImgs.length === 0,
-    "Test 5: Malformed or non-https URLs safely rejected without rendering unsafe elements"
+    Boolean(pinnedImg && pinnedImg.props.src === "https://yt3.ggpht.com/custom_atom_badge.png"),
+    "Test 7: Pinned message renders custom emojis identically to normal messages"
+  );
+
+  // 7. Real YouTube Data API v3 Shaped Fixture Simulation
+  // Demonstrates that YouTube Live Chat API v3 returns displayMessage as text
+  const realApiV3Item = {
+    kind: "youtube#liveChatMessage",
+    etag: "etag123",
+    id: "LCC.Cg0KC3Rlc3RNZXNzYWdl",
+    snippet: {
+      type: "textMessageEvent",
+      liveChatId: "liveChat123",
+      authorChannelId: "UC123456789",
+      publishedAt: "2026-11-13T00:00:00.000Z",
+      hasDisplayContent: true,
+      displayMessage: "Physics doubt solved! :fire: :custom_badge:",
+      textMessageDetails: {
+        messageText: "Physics doubt solved! :fire: :custom_badge:",
+      },
+    },
+    authorDetails: {
+      channelId: "UC123456789",
+      displayName: "Atomic Student",
+      profileImageUrl: "https://yt3.ggpht.com/ytc/student.png",
+      isChatOwner: false,
+      isChatSponsor: true,
+      isChatModerator: false,
+    },
+  };
+
+  // Upstream YouTube API does not provide custom emoji URLs; when metadata is absent:
+  const apiFormatted = renderFormattedChatMessage(realApiV3Item.snippet.displayMessage);
+  assert(
+    typeof apiFormatted === "string" && apiFormatted.includes("🔥") && apiFormatted.includes(":custom_badge:"),
+    "Test 8: Real YouTube API v3 text-only payload cleanly maps standard emojis and preserves unmapped shortcodes"
   );
 
   console.log(`\nEmoji Results: ${passed} PASSED | ${failed} FAILED`);
   if (failed > 0) process.exit(1);
 }
 
-testCustomEmojiRendering();
+testCustomEmojiRenderingAndDataFlow();

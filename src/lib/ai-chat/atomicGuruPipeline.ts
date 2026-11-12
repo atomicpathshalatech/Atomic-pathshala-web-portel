@@ -510,7 +510,11 @@ export async function finalizeQuizAttempt({
   // Register daily activity and award XP
   await registerDailyActivity(userId).catch(() => {});
   const xpGained = correctCount * 10 + wrongCount * 2;
-  await awardXp(userId, xpGained).catch(() => {});
+  await awardXp(userId, xpGained, {
+    sourceId: attempt.id || (updatedAttempt as any)?.id,
+    activityName: "CORRECT_ANSWER",
+    metadata: { quizId: attempt.quizId, correctCount, wrongCount },
+  }).catch(() => {});
 
   return {
     attempt: updatedAttempt,

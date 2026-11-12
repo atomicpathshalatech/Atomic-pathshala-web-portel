@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type XpEntry = { studentId: string; name: string; xp: number; level: number; rank: number; percentile: number };
 type TestEntry = { studentId: string; name: string; score: number; rank: number; percentile: number };
 
-type XpResponse = { window: "7d" | "all"; topLearners: XpEntry[]; me: XpEntry };
+type XpResponse = { window: "7d" | "all"; batchId: string | null; batches: { id: string; name: string }[]; topLearners: XpEntry[]; me: XpEntry };
 type TestResponse = {
   window: "7d" | "all";
   topLearners: TestEntry[];
@@ -59,6 +59,7 @@ function initials(name: string) {
 export function LeaderboardBoard() {
   const [board, setBoard] = useState<"xp" | "tests">("xp");
   const [window_, setWindow] = useState<"all" | "7d">("all");
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [xpData, setXpData] = useState<XpResponse | null>(null);
   const [testData, setTestData] = useState<TestResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,7 +71,7 @@ export function LeaderboardBoard() {
     setError(null);
     const url =
       board === "xp"
-        ? `/api/student/leaderboard?window=${window_}`
+        ? `/api/student/leaderboard?window=${window_}${selectedBatchId ? `&batchId=${selectedBatchId}` : ""}`
         : `/api/student/leaderboard/tests?window=${window_}`;
     fetch(url)
       .then((res) => {
@@ -91,7 +92,7 @@ export function LeaderboardBoard() {
     return () => {
       cancelled = true;
     };
-  }, [board, window_]);
+  }, [board, window_, selectedBatchId]);
 
   const data = board === "xp" ? xpData : testData;
   const me = board === "xp" ? xpData?.me ?? null : testData?.me ?? null;
@@ -148,6 +149,38 @@ export function LeaderboardBoard() {
         ))}
       </div>
 
+      
+      {/* Batch scope selector */}
+      {board === "xp" && xpData?.batches && xpData.batches.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mr-1">Batch:</span>
+          <button
+            type="button"
+            onClick={() => setSelectedBatchId(null)}
+            className={`px-3 py-1 rounded-full text-label-sm font-label-sm transition-colors ${
+              selectedBatchId === null
+                ? "bg-primary text-on-primary font-bold shadow-sm"
+                : "bg-surface-container-lowest text-on-surface-variant border border-outline-variant/30"
+            }`}
+          >
+            All Batches (Global)
+          </button>
+          {xpData.batches.map((batch) => (
+            <button
+              key={batch.id}
+              type="button"
+              onClick={() => setSelectedBatchId(batch.id)}
+              className={`px-3 py-1 rounded-full text-label-sm font-label-sm transition-colors ${
+                selectedBatchId === batch.id
+                  ? "bg-primary text-on-primary font-bold shadow-sm"
+                  : "bg-surface-container-lowest text-on-surface-variant border border-outline-variant/30"
+              }`}
+            >
+              {batch.name}
+            </button>
+          ))}
+        </div>
+      )}
       {error && (
         <div className="glass-card rounded-2xl p-6 text-center text-error font-body-sm">{error}</div>
       )}

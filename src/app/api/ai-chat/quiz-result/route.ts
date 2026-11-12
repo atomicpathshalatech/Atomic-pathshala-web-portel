@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     for (const result of body.results) {
       if (!result.subject || typeof result.maxScore !== "number" || result.maxScore <= 0) continue;
 
-      await prisma.testAttempt.create({
+      const attempt = await prisma.testAttempt.create({
         data: {
           userId: user.id,
           testName: body.testName,
@@ -45,7 +45,11 @@ export async function POST(request: Request) {
       });
 
       const scorePercent = Math.max(0, Math.min(100, (result.score / result.maxScore) * 100));
-      await awardXp(user.id, xpForQuizResult(scorePercent));
+      await awardXp(user.id, xpForQuizResult(scorePercent), {
+        sourceId: attempt.id,
+        activityName: "CORRECT_ANSWER",
+        metadata: { testName: body.testName, subject: result.subject, scorePercent },
+      });
     }
 
     await registerDailyActivity(user.id);

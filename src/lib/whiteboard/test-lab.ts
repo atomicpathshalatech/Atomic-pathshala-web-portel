@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { allocateEmployeeCode } from "@/lib/id-card/admin";
 
 export const TEST_BATCH_CODE = "WB-TEST-LAB";
 
@@ -26,7 +27,7 @@ export async function getOrCreateTestLab(userId: string) {
     teacher = await prisma.teacher.create({
       data: {
         userId,
-        employeeCode: `WBTEST-${userId.slice(0, 10)}`,
+        employeeCode: await allocateEmployeeCode().catch(() => `EMP-${Date.now().toString().slice(-8)}`),
         department: "Whiteboard Test Lab",
         subjects: [],
         bio: `Auto-created so ${user?.name ?? "this admin"} can use the Whiteboard Test Lab.`,

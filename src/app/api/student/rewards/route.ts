@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
 import { STORE_ITEMS } from "@/lib/gamification/store-items";
+import { redeemRewardItemXp } from "@/lib/gamification/xp-engine";
 
 const redeemSchema = z.object({
   itemId: z.string().min(1),
@@ -69,10 +70,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Deduct XP and log redemption
-    const newXp = student.xp - item.costXp;
-    
-    // If student redeemed Streak Freeze / Repair, restore their active streak to their longest streak
+    // Deduct XP and log redemption using centralized engine
+    const { remainingXp } = await redeemRewardItemXp({
+      studentId: student.id,
+      itemId: item.id,
+      itemTitle: item.title,
+      costXp: item.costXp,
+      userId: session.user.id,
+    });
+
     let streakUpdateData: { currentStreakDays?: number; lastActivityDate?: Date } = {};
     let customMessage = `Successfully unlocked "${item.title}"!`;
 
@@ -86,37 +92,32 @@ export async function POST(req: NextRequest) {
         currentStreakDays: restoredStreak,
         lastActivityDate: new Date(),
       };
+      await prisma.student.update({
+        where: { id: student.id },
+        data: streakUpdateData,
+      });
       customMessage = `🔥 Streak Freeze Shield Activated! Your study streak has been restored to ${restoredStreak} Days.`;
     }
 
-    await prisma.$transaction([
-      prisma.student.update({
-        where: { id: student.id },
-        data: {
-          xp: newXp,
-          ...streakUpdateData,
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: "REWARD_REDEEMED",
+        entityType: "RewardItem",
+        entityId: item.id,
+        metadata: {
+          itemTitle: item.title,
+          costXp: item.costXp,
+          remainingXp,
+          streakRestored: streakUpdateData.currentStreakDays ?? null,
         },
-      }),
-      prisma.auditLog.create({
-        data: {
-          userId: session.user.id,
-          action: "REWARD_REDEEMED",
-          entityType: "RewardItem",
-          entityId: item.id,
-          metadata: {
-            itemTitle: item.title,
-            costXp: item.costXp,
-            remainingXp: newXp,
-            streakRestored: streakUpdateData.currentStreakDays ?? null,
-          },
-        },
-      }),
-    ]);
+      },
+    });
 
     return NextResponse.json({
       success: true,
       message: customMessage,
-      data: { remainingXp: newXp, item, restoredStreak: streakUpdateData.currentStreakDays },
+      data: { remainingXp, item, restoredStreak: streakUpdateData.currentStreakDays },
     });
   } catch {
     return NextResponse.json({ success: false, error: "Redemption failed. Please try again." }, { status: 500 });

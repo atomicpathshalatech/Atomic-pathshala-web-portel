@@ -387,8 +387,8 @@ export function QuestionFullReviewWorkspace({
       const status =
         workflowAction === "APPROVE" ? "APPROVED" : workflowAction === "REQUEST_CHANGES" ? "REJECTED" : "REWORK";
 
-      const res = await fetch(`/api/team/questions/${question.id}/status`, {
-        method: "PATCH",
+      const res = await fetch(`/api/team/questions/${question.id}/review`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           stage,

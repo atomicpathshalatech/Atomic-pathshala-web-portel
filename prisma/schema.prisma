@@ -187,6 +187,9 @@ model User {
   callingDevicesAssigned CallingDevice[]        @relation("CallingDeviceAssignedUser")
   callingRequestsRequested CallingRequest[]     @relation("CallingRequestRequester")
   callingDeviceAssignments CallingDeviceAssignment[]
+  xpAdjustmentsMade       XPAdjustment[]        @relation("XPAdjustmentAdmin")
+  xpRuleVersionsCreated   XPRuleVersion[]       @relation("XPRuleVersionCreator")
+  xpAuditLogsPerformed    XPAuditLog[]          @relation("XPAuditLogAdmin")
 
   @@index([roleId])
   @@index([status])
@@ -287,6 +290,9 @@ model Student {
   lectureIssueReports LectureIssueReport[]
   lectureNotes        LectureNote[]
   xpEvents         XPEvent[]
+  xpTransactions   XPTransaction[]
+  xpAdjustments    XPAdjustment[]
+  xpActivityEvents XPActivityEvent[]
   whatsAppContacts WhatsAppContact[]
   crmLeads         CRMLead[]
   user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -349,7 +355,186 @@ enum XPReason {
   DAILY_LOGIN_STREAK
   DOUBT_RESOLVED
   LECTURE_COMPLETED
+  MANUAL_ADJUSTMENT
+  REWARD_REDEMPTION
+  RANK_MILESTONE
   OTHER
+}
+
+enum XPTransactionStatus {
+  SUCCESSFUL
+  PENDING
+  FAILED
+  REVERSED
+}
+
+enum XPRewardCategory {
+  DAILY_LOGIN
+  LIVE_CLASS_ATTENDANCE
+  RECORDED_LECTURE
+  LIVE_CLASS_PARTICIPATION
+  DPP_COMPLETION
+  QUESTION_PRACTICE
+  CORRECT_ANSWER
+  TEST_SUBMISSION
+  TEST_PERFORMANCE
+  DAILY_STUDY_STREAK
+  WEEKLY_STUDY_STREAK
+  DOUBT_PARTICIPATION
+  ASSIGNMENT_COMPLETION
+  ACHIEVEMENT_UNLOCK
+  RANK_MILESTONE
+  MANUAL_ADJUSTMENT
+  REWARD_REDEMPTION
+  OTHER
+}
+
+enum XPFrequencyLimit {
+  UNLIMITED
+  ONCE_PER_DAY
+  ONCE_PER_WEEK
+  ONCE_PER_EVENT
+  ONCE_LIFETIME
+}
+
+model XPRewardRule {
+  id                    String            @id @default(cuid())
+  activityName          String            @unique
+  displayLabel          String
+  description           String?
+  category              XPRewardCategory
+  xpPoints              Int
+  triggerEvent          String
+  eligibilityConditions Json?
+  frequencyLimit        XPFrequencyLimit  @default(UNLIMITED)
+  dailyLimit            Int?
+  weeklyLimit           Int?
+  maxRewardsLifetime    Int?
+  effectiveStartDate    DateTime?
+  effectiveEndDate      DateTime?
+  isActive              Boolean           @default(true)
+  version               Int               @default(1)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  versions              XPRuleVersion[]
+  transactions          XPTransaction[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("xp_reward_rules")
+}
+
+model XPRuleVersion {
+  id                    String            @id @default(cuid())
+  ruleId                String
+  version               Int
+  displayLabel          String
+  xpPoints              Int
+  category              XPRewardCategory
+  eligibilityConditions Json?
+  frequencyLimit        XPFrequencyLimit
+  dailyLimit            Int?
+  weeklyLimit           Int?
+  maxRewardsLifetime    Int?
+  isActive              Boolean
+  changeReason          String?
+  createdById           String?
+  createdAt             DateTime          @default(now())
+
+  rule                  XPRewardRule      @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  createdBy             User?             @relation("XPRuleVersionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([ruleId, version])
+  @@index([ruleId])
+  @@map("xp_rule_versions")
+}
+
+model XPTransaction {
+  id              String              @id @default(cuid())
+  studentId       String
+  amount          Int
+  reason          XPReason            @default(OTHER)
+  status          XPTransactionStatus @default(SUCCESSFUL)
+  activity        String
+  rewardLabel     String
+  idempotencyKey  String?             @unique
+  ruleId          String?
+  ruleVersion     Int?
+  failureReason   String?
+  balanceBefore   Int
+  balanceAfter    Int
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  student         Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  rule            XPRewardRule?       @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  adjustment      XPAdjustment?
+
+  @@index([studentId, createdAt])
+  @@index([createdAt])
+  @@index([status])
+  @@index([ruleId])
+  @@index([activity])
+  @@map("xp_transactions")
+}
+
+model XPAdjustment {
+  id              String        @id @default(cuid())
+  transactionId   String        @unique
+  studentId       String
+  amount          Int
+  reason          String
+  previousBalance Int
+  updatedBalance  Int
+  adminId         String
+  createdAt       DateTime      @default(now())
+
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  admin           User          @relation("XPAdjustmentAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  transaction     XPTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([adminId])
+  @@map("xp_adjustments")
+}
+
+model XPActivityEvent {
+  id             String    @id @default(cuid())
+  studentId      String
+  activityType   String
+  sourceEntityId String?
+  idempotencyKey String    @unique
+  payload        Json?
+  processed      Boolean   @default(false)
+  transactionId  String?
+  error          String?
+  createdAt      DateTime  @default(now())
+
+  student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, activityType])
+  @@index([createdAt])
+  @@map("xp_activity_events")
+}
+
+model XPAuditLog {
+  id           String    @id @default(cuid())
+  action       String
+  entityType   String
+  entityId     String
+  adminId      String
+  details      Json?
+  ipAddress    String?
+  createdAt    DateTime  @default(now())
+
+  admin        User      @relation("XPAuditLogAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("xp_audit_logs")
 }
 
 model Teacher {

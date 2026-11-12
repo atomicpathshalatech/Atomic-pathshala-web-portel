@@ -171,6 +171,7 @@ export const PERMISSIONS = {
 
   // Faculty Leaderboard
   LEADERBOARD_READ: "leaderboard.read",
+  GAMIFICATION_MANAGE: "gamification.manage",
 
   // User Management & RBAC Administration
   USER_READ: "admin.user.read",

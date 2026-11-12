@@ -127,14 +127,6 @@ export function IdCardWorkspace({ loaded }: { loaded: LoadedCard }) {
               <PhotoVisibilityToggle kind={loaded.kind} initial={loaded.card.showPhotoPublicly} />
             </div>
 
-            {loaded.context.rankSource && (
-              <p className="border-t border-outline-variant/30 pt-4 text-xs text-on-surface-variant">
-                <span className="font-semibold text-on-surface">Test Rank</span> on your card is your rank in your latest test on Atomic
-                Pathshala ({loaded.context.rankSource}). It updates by itself as more students submit and as you take new tests. It is
-                not an official NEET All India Rank.
-              </p>
-            )}
-
             <p className="border-t border-outline-variant/30 pt-4 text-xs text-on-surface-variant">
               Everything on the card comes from your profile and updates by itself. To correct your name, date of birth
               {loaded.kind === "TEAM" ? ", designation, department or joining date" : ", course or batch"}, please contact the office.

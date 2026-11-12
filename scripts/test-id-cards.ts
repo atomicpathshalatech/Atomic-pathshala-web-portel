@@ -148,10 +148,10 @@ test("all text is escaped", () => {
   assert.ok(html.includes(escapeHtml(`<script>alert("x")</script>`)));
   assert.ok(!html.includes(`a"onerror`));
 });
-test("no rank badge without a rank; badge when there is one", () => {
+test("no rank badge is rendered on card; name area stays spacious", () => {
   assert.ok(!renderIdCardHtml(card, { mode: "screen", logoSrc: "x" }).includes('class="abs rank"'));
   const ranked = renderIdCardHtml({ ...card, rank: { title: "Test Rank", value: "#12", sub: "of 340" } }, { mode: "screen", logoSrc: "x" });
-  assert.ok(ranked.includes('class="abs rank"') && ranked.includes("#12") && !/AIR|All India/i.test(ranked));
+  assert.ok(!ranked.includes('class="abs rank"'));
 });
 test("pdf mode is CR80 size; signature image used when given", () => {
   const html = renderIdCardHtml(card, { mode: "pdf", logoSrc: "x", signatureSrc: "data:image/png;base64,AAA" });

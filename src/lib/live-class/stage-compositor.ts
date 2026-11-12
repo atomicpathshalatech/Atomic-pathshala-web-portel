@@ -729,7 +729,8 @@ export class StageCompositor {
   /** Everything drawn above the board and camera. */
   private drawOverlays() {
     this.drawCallTiles();
-    if (this.sources.poll) drawPollCard(this.ctx, this.sources.poll, this.width, this.height);
+    // Poll card is not burned into the canvas video so the board display remains 100% clean
+    // if (this.sources.poll) drawPollCard(this.ctx, this.sources.poll, this.width, this.height);
     this.drawChannelMark();
   }
 

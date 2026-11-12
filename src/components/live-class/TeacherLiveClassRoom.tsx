@@ -1239,6 +1239,7 @@ export function TeacherLiveClassRoom({
             });
           }
           setWbSession(sess);
+          if ((sess as any)?.lastPageSwitchSeq) pageSwitchSeqRef.current = Math.max(pageSwitchSeqRef.current, (sess as any).lastPageSwitchSeq);
           if (
             sess?.livePhase === "ENDING" ||
             sess?.livePhase === "ENDED" ||
@@ -1882,7 +1883,7 @@ export function TeacherLiveClassRoom({
     pendingPageIdRef.current = null;
 
     const seq = ++pageSwitchSeqRef.current;
-    patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber })
+    patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber, pageSwitchSeq: seq })
       .then(() => {
         if (seq === pageSwitchSeqRef.current) {
           setSaveState("saved");

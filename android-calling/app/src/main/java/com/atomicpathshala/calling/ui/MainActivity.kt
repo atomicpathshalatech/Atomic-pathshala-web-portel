@@ -120,11 +120,33 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
     var lastHandledRequestId by remember { mutableStateOf("") }
 
     // In-App Direct Auto-Update System
-    val currentVersionCode = 2
-    val currentVersionName = "1.0.1"
+    val currentVersionCode = 3
+    val currentVersionName = "1.0.2"
     var availableUpdate by remember { mutableStateOf<VersionInfo?>(null) }
     var updateProgress by remember { mutableStateOf<Int?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
+
+    fun normalizeServerUrl(raw: String?): String {
+        val s = (raw ?: "").trim()
+        if (s.isBlank()) return "https://ap.atomicpathshala.in"
+        var clean = s
+        if (clean.startsWith("atp://")) {
+            clean = "https://" + clean.removePrefix("atp://")
+        }
+        if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+            clean = "https://$clean"
+        }
+        return try {
+            val uri = java.net.URI(clean)
+            if (uri.host.isNullOrBlank() || !uri.host.contains(".")) {
+                "https://ap.atomicpathshala.in"
+            } else {
+                clean.trimEnd('/')
+            }
+        } catch (e: Exception) {
+            "https://ap.atomicpathshala.in"
+        }
+    }
 
     val startUpdateDownload: (String) -> Unit = { downloadUrl ->
         updateProgress = 0
@@ -137,13 +159,13 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
     }
 
     LaunchedEffect(serverUrl) {
-        val upd = AppUpdater.checkForUpdate(serverUrl, currentVersionCode)
+        val upd = AppUpdater.checkForUpdate(normalizeServerUrl(serverUrl), currentVersionCode)
         availableUpdate = upd
     }
 
     val performPairing: (String, String) -> Unit = { codeToUse, serverToUse ->
         val trimmedCode = codeToUse.trim()
-        val trimmedServer = serverToUse.trim().ifBlank { "https://ap.atomicpathshala.in" }
+        val trimmedServer = normalizeServerUrl(serverToUse)
         if (trimmedCode.length != 6) {
             errorMessage = "Please enter or scan a valid 6-digit PIN"
         } else {
@@ -531,26 +553,40 @@ fun CallingMainScreen(context: Context, onRequestPermissions: () -> Unit) {
                         onCodeScanned = { rawCode ->
                             showQrScanner = false
                             try {
-                                if (rawCode.trim().startsWith("{")) {
-                                    val json = org.json.JSONObject(rawCode)
+                                val trimmed = rawCode.trim()
+                                if (trimmed.startsWith("{")) {
+                                    val json = org.json.JSONObject(trimmed)
                                     val code = json.optString("pairingCode", "")
                                     val sUrl = json.optString("serverUrl", "")
                                     val finalCode = if (code.isNotBlank()) code else inputCode
-                                    val finalServer = if (sUrl.isNotBlank()) sUrl else inputServer
+                                    val finalServer = normalizeServerUrl(if (sUrl.isNotBlank()) sUrl else inputServer)
                                     inputCode = finalCode
                                     inputServer = finalServer
                                     performPairing(finalCode, finalServer)
                                 } else {
-                                    val digits = rawCode.filter { it.isDigit() }.take(6)
-                                    if (digits.length == 6) {
+                                    // Match 6 digits anywhere in the barcode
+                                    val regexMatch = Regex("""\b\d{6}\b""").find(trimmed)
+                                    if (regexMatch != null) {
+                                        val digits = regexMatch.value
                                         inputCode = digits
-                                        performPairing(digits, inputServer)
+                                        val finalServer = normalizeServerUrl(inputServer)
+                                        inputServer = finalServer
+                                        performPairing(digits, finalServer)
                                     } else {
-                                        inputCode = rawCode.take(6)
+                                        val digits = trimmed.filter { it.isDigit() }.take(6)
+                                        if (digits.length == 6) {
+                                            inputCode = digits
+                                            val finalServer = normalizeServerUrl(inputServer)
+                                            inputServer = finalServer
+                                            performPairing(digits, finalServer)
+                                        } else {
+                                            inputCode = trimmed.take(6)
+                                            errorMessage = "Scanned barcode did not contain a valid 6-digit PIN. Please enter PIN manually."
+                                        }
                                     }
                                 }
                             } catch (e: Exception) {
-                                inputCode = rawCode.take(6)
+                                errorMessage = "Barcode scanning error: ${e.message}"
                             }
                         }
                     )

@@ -1,3 +1,4 @@
+import { validateAndSetSessionPageSwitchSeq, getSessionPageSwitchSeq } from "@/lib/whiteboard/session-sequence";
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -25,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         include: { pages: { orderBy: { pageNumber: "asc" } }, batchSchedule: { select: { endsAt: true } } },
       });
       if (!wbSession) return apiError("Whiteboard session not found", 404);
-      return apiSuccess({ whiteboardSession: { ...wbSession, endsAt: wbSession.batchSchedule.endsAt }, role: access.role });
+      return apiSuccess({ whiteboardSession: { ...wbSession, endsAt: wbSession.batchSchedule.endsAt, lastPageSwitchSeq: getSessionPageSwitchSeq(params.id) }, role: access.role });
     }
 
     // This endpoint still only ever hands students session status, not
@@ -76,6 +77,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const input = whiteboardSessionPatchSchema.parse(await request.json());
 
     if (input.activePageNumber !== undefined) {
+      if (input.pageSwitchSeq !== undefined) {
+        const seqCheck = validateAndSetSessionPageSwitchSeq(params.id, input.pageSwitchSeq);
+        if (!seqCheck.ok) {
+          return apiError(
+            `Stale page switch request rejected. Incoming sequence (${input.pageSwitchSeq}) is older than current accepted sequence (${seqCheck.currentSeq}).`,
+            409
+          );
+        }
+      }
+
       const pageExists = await prisma.whiteboardPage.findUnique({
         where: {
           sessionId_pageNumber: { sessionId: params.id, pageNumber: input.activePageNumber },

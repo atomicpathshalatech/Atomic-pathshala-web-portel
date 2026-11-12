@@ -98,7 +98,11 @@ export async function POST(request: Request) {
 
     await registerDailyActivity(user.id);
     const xpGained = body.correct * 10 + body.wrong * 2;
-    await awardXp(user.id, xpGained);
+    await awardXp(user.id, xpGained, {
+      sourceId: attempt.id,
+      activityName: "CORRECT_ANSWER",
+      metadata: { quizId: body.quizId, correct: body.correct, wrong: body.wrong },
+    });
 
     return NextResponse.json({ attempt }, { status: 201 });
   } catch (error) {

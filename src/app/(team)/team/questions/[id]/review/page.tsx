@@ -54,6 +54,15 @@ export default async function QuestionReviewPage({
 
   if (!question) notFound();
 
+  const isAssignAdmin =
+    (await hasPermission(session.user.id, PERMISSIONS.QUESTION_ASSIGN)) ||
+    (await hasPermission(session.user.id, PERMISSIONS.QUESTION_APPROVE));
+
+  // Security & Data Isolation: teachers can only review questions assigned to them
+  if (!isAssignAdmin && question.assignedToId && question.assignedToId !== session.user.id) {
+    redirect("/team/my-question-bank");
+  }
+
   // Questions that look like this one (Question QC → Duplicate questions).
   const duplicatePairs = await prisma.questionDuplicateCandidate.findMany({
     where: { OR: [{ questionAId: question.id }, { questionBId: question.id }] },

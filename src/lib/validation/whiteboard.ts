@@ -7,6 +7,7 @@ export const whiteboardSessionStartSchema = z.object({
 export const whiteboardSessionPatchSchema = z
   .object({
     activePageNumber: z.number().int().positive().optional(),
+    pageSwitchSeq: z.number().int().min(0).optional(),
     title: z.string().min(1, "Title cannot be empty").max(200).optional(),
     chatEnabled: z.boolean().optional(),
     handRaiseEnabled: z.boolean().optional(),

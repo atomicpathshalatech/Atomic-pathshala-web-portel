@@ -23,8 +23,8 @@ export type IdCardModel = {
   /** Student: the enrollment number pill under the name. */
   enrollmentNumber: string | null;
   rows: IdCardRow[];
-  /** Student: internal test rank badge, only when a real rank exists. */
-  rank: { title: string; value: string; sub: string | null } | null;
+  /** Deprecated / removed from card layout. */
+  rank?: { title: string; value: string; sub: string | null } | null;
   verifyUrl: string;
   qrSvg: string;
   revoked: boolean;
@@ -104,13 +104,6 @@ export function renderIdCardHtml(card: IdCardModel, opts: RenderOptions): string
     ? `<div class="badge" style="font-size:${badgeFs}px">${icon("cap", "bi")}<span>${escapeHtml(card.badge)}</span></div>`
     : "";
 
-  const rank = card.rank
-    ? `<div class="abs rank" title="${escapeHtml(card.rank.sub ?? "")}">
-        <svg class="rank-bg" viewBox="0 0 60 70" aria-hidden="true"><defs><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset=".55" stop-color="#fbbf24"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><path d="M30 1 57 9v24c0 17-11.5 29-27 36C14.5 62 3 50 3 33V9z" fill="url(#gold)" stroke="#fff7d6" stroke-width="1.6"/></svg>
-        <div class="rank-in"><span class="rt">${escapeHtml(card.rank.title)}</span><span class="rn">${escapeHtml(card.rank.value)}</span>${card.rank.sub ? `<span class="rs">${escapeHtml(card.rank.sub)}</span>` : ""}</div>
-      </div>`
-    : "";
-
   const signature = opts.signatureSrc
     ? `<img class="sig-img" src="${escapeHtml(opts.signatureSrc)}" alt="" />`
     : `<div class="sig-script"><span>${escapeHtml(signatory)}</span><svg class="sig-flourish" viewBox="0 0 120 16" aria-hidden="true"><path d="M4 11 C 30 4, 62 15, 88 8 S 112 3, 117 6" fill="none" stroke="#13235c" stroke-width="1.3" stroke-linecap="round"/></svg></div>`;
@@ -144,8 +137,8 @@ ${pdf ? `html, body { width: 2.125in; height: 3.37in; overflow: hidden; backgrou
 .photo { left: 38px; top: 140px; width: 106px; height: 132px; border-radius: 13px; padding: 3px; background: #fff; border: 2.5px solid #1d4ed8; box-shadow: 0 5px 12px rgba(15,58,158,.2); }
 .photo img { width: 100%; height: 100%; object-fit: cover; border-radius: 9px; display: block; background: #e2e8f0; }
 .nophoto { width: 100%; height: 100%; border-radius: 9px; background: repeating-linear-gradient(45deg,#f1f5f9,#f1f5f9 6px,#e2e8f0 6px,#e2e8f0 12px); color: #64748b; font-size: 9px; font-weight: 600; display: flex; align-items: center; justify-content: center; text-align: center; }
-.who { left: 154px; right: 12px; top: ${isStudent && card.rank ? 196 : 146}px; height: ${isStudent && card.rank ? 80 : 126}px; display: flex; flex-direction: column; justify-content: center; }
-.name { font-weight: 700; color: #0a1f5c; line-height: 1.12; letter-spacing: -.3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.who { left: 154px; right: 12px; top: 138px; height: 134px; display: flex; flex-direction: column; justify-content: center; }
+.name { font-weight: 700; color: #0a1f5c; line-height: 1.18; letter-spacing: -.3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; padding-bottom: 2px; }
 .bar { width: 38px; height: 3px; border-radius: 2px; background: #0a2463; margin: 5px 0 8px; }
 .badge { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; max-width: 100%; padding: 4px 10px 4px 8px; border-radius: 999px; background: linear-gradient(135deg, #1d4ed8, #0f3a9e); color: #fff; font-weight: 600; line-height: 1.2; box-shadow: 0 2px 5px rgba(29,78,216,.3); }
 .badge span { overflow-wrap: anywhere; }
@@ -153,12 +146,6 @@ ${pdf ? `html, body { width: 2.125in; height: 3.37in; overflow: hidden; backgrou
 .pill { align-self: flex-start; max-width: 100%; display: flex; flex-direction: column; padding: 3px 9px 4px; border-radius: 8px; background: #dbeafe; border: 1px solid #bfdbfe; }
 .pl { font-size: 7.4px; font-weight: 500; color: #1e3a8a; }
 .pv { font-size: 11.6px; font-weight: 700; color: #0a1f5c; letter-spacing: .3px; line-height: 1.15; }
-.rank { right: 12px; top: 120px; width: 62px; height: 72px; }
-.rank-bg { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(146,64,14,.35)); }
-.rank-in { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 6px 6px; color: #422006; text-align: center; }
-.rt { font-size: 7.2px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; line-height: 1; }
-.rn { font-size: ${card.rank && card.rank.value.length > 4 ? 13 : 16}px; font-weight: 800; line-height: 1.1; }
-.rs { font-size: 6.6px; font-weight: 600; line-height: 1; }
 .lower { left: 30px; right: 12px; top: ${isStudent ? 280 : 290}px; bottom: 22px; display: flex; flex-direction: column; justify-content: space-between; }
 .info { display: grid; grid-template-columns: 1fr ${qrCol}px; column-gap: 8px; }
 .rows { min-width: 0; }
@@ -202,7 +189,6 @@ ${pdf ? `html, body { width: 2.125in; height: 3.37in; overflow: hidden; backgrou
   <div class="abs brand"><div class="bn">Atomic Pathshala</div><div class="bt">Learn &nbsp;•&nbsp; Explore &nbsp;•&nbsp; Excel</div></div>
   <div class="abs side"><span>${label}</span></div>
   <div class="abs photo">${photo}</div>
-  ${rank}
   <div class="abs who"><div class="name" style="font-size:${nameFs}px">${escapeHtml(card.name)}</div><div class="bar"></div>${identity}</div>
   <div class="abs lower">
     <div class="info"><div class="rows">${rows}</div><div class="qr"><div class="q">${card.qrSvg}</div><p>Scan to Verify<br/>Profile</p></div></div>

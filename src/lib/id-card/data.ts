@@ -189,7 +189,7 @@ export async function loadStudentCard(where: { userId: string } | { studentId: s
       badge: null,
       enrollmentNumber: formatEnrollmentNumber(student.enrollmentNumber),
       rows,
-      rank: rank ? { title: "Test Rank", value: `#${rank.rank}`, sub: `of ${rank.total}` } : null,
+      rank: null,
       verifyUrl,
       qrSvg: qrSvg(verifyUrl),
       revoked: card.status === "REVOKED",

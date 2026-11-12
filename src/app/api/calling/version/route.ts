@@ -10,12 +10,12 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     success: true,
     data: {
-      versionCode: 3,
-      versionName: "1.0.2",
+      versionCode: 4,
+      versionName: "1.0.3",
       minSupportedVersionCode: 1,
       apkUrl: `${baseUrl}/downloads/AtomicCalling.apk`,
       downloadUrl: `${baseUrl}/downloads/AtomicCalling.apk`,
-      releaseNotes: "In-app 1-click auto update, QR code camera scan, and real-time SIM sync.",
+      releaseNotes: "Critical fix: QR barcode scanner URL scheme normalization, automatic server detection, and real-time SIM sync.",
       publishedAt: new Date().toISOString(),
     },
   });

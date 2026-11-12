@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, hasPermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
@@ -20,6 +20,15 @@ export async function POST(
       include: { translations: true },
     });
     if (!question) return apiError("Question not found", 404);
+
+    const isAssignAdmin =
+      (await hasPermission(session.user.id, PERMISSIONS.QUESTION_ASSIGN)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.QUESTION_APPROVE));
+
+    // Security: Only assigned teacher or admin can review this question
+    if (!isAssignAdmin && question.assignedToId && question.assignedToId !== session.user.id) {
+      return apiError("Forbidden: You can only review questions assigned to you.", 403);
+    }
 
     const body = await request.json();
     const { stage, action, notes } = body;
@@ -60,6 +69,14 @@ export async function POST(
             review1At: now,
             review1Notes: notes?.trim() || null,
             review2Status: "PENDING",
+            ...(question.assignedToId
+              ? {
+                  correctionStatus: "COMPLETED",
+                  correctionSubmittedAt: now,
+                  correctionSubmittedById: session.user.id,
+                  correctionNotes: notes?.trim() || question.correctionNotes,
+                }
+              : {}),
           },
         });
 
@@ -83,6 +100,14 @@ export async function POST(
             review1At: now,
             review1Notes: notes?.trim() || null,
             isPublished: false,
+            ...(question.assignedToId
+              ? {
+                  correctionStatus: action === "REJECT" ? "REJECTED" : "REWORK",
+                  correctionSubmittedAt: now,
+                  correctionSubmittedById: session.user.id,
+                  correctionNotes: notes?.trim() || question.correctionNotes,
+                }
+              : {}),
           },
         });
 

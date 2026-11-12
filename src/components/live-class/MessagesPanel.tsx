@@ -160,6 +160,23 @@ export type CustomEmojiItem = {
   label?: string;
 };
 
+export function isAllowedYouTubeEmojiHost(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host === "yt3.ggpht.com" ||
+      host === "yt4.ggpht.com" ||
+      host.endsWith(".googleusercontent.com") ||
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function renderFormattedChatMessage(
   body: string,
   customEmojis?: CustomEmojiItem[]
@@ -173,7 +190,7 @@ export function renderFormattedChatMessage(
   }
 
   const validEmojis = customEmojis.filter((e) => {
-    return e.shortcut && typeof e.url === "string" && e.url.startsWith("https://");
+    return Boolean(e.shortcut && typeof e.url === "string" && isAllowedYouTubeEmojiHost(e.url));
   });
 
   if (validEmojis.length === 0) {

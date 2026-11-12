@@ -1,4 +1,5 @@
 import { getPrisma } from "@/lib/ai-chat/prisma";
+import { awardActivityXp } from "@/lib/gamification/xp-engine";
 
 const prisma = getPrisma();
 
@@ -16,28 +17,48 @@ function isYesterday(previous: Date, now: Date) {
   return isSameCalendarDay(previous, yesterday);
 }
 
-export async function awardXp(userId: string, amount: number) {
+export async function awardXp(
+  userId: string,
+  amount: number,
+  options?: { sourceId?: string; activityName?: string; idempotencyKey?: string; metadata?: Record<string, any> }
+) {
   if (amount <= 0) return;
-  await prisma.userProfile.update({
-    where: { userId },
-    data: { xp: { increment: Math.round(amount) } },
-  });
-  // The leaderboard ranks the student XP (lib/gamification/xp) — Atomic
-  // Guru quizzes count there too, not only in this profile XP.
+
+  try {
+    await prisma.userProfile.update({
+      where: { userId },
+      data: { xp: { increment: Math.round(amount) } },
+    });
+  } catch (err) {
+    // User profile may not exist yet in test/seed environments
+  }
+
   try {
     const student = await prisma.student.findUnique({ where: { userId }, select: { id: true } });
     if (student) {
-      const { awardXp: awardStudentXp } = await import("@/lib/gamification/xp");
-      await awardStudentXp(student.id, Math.round(amount), "QUIZ_CORRECT_ANSWER");
+      const activityName = options?.activityName || "CORRECT_ANSWER";
+      const sourceEntityId = options?.sourceId || `quiz_${Date.now()}`;
+      const idempotencyKey =
+        options?.idempotencyKey ||
+        (options?.sourceId ? `${activityName}:${options.sourceId}:${student.id}` : undefined);
+
+      await awardActivityXp({
+        studentId: student.id,
+        activityName,
+        sourceEntityId,
+        idempotencyKey,
+        payload: {
+          userId,
+          ...(options?.metadata || {}),
+        },
+        customXp: Math.round(amount),
+      });
     }
   } catch (err) {
     console.warn("[ai-chat] student XP not awarded:", err);
   }
 }
 
-// Call once per meaningful activity (chat message, quiz submit). Awards the
-// "first activity of the day" bonus and updates streak counters. Safe to call
-// multiple times per day — only the first call each day has any effect.
 export async function registerDailyActivity(userId: string) {
   const profile = await prisma.userProfile.findUnique({ where: { userId } });
   if (!profile) return;
@@ -62,6 +83,23 @@ export async function registerDailyActivity(userId: string) {
       xp: { increment: 5 },
     },
   });
+
+  // Award student daily login XP through centralized engine (ONCE_PER_DAY)
+  try {
+    const student = await prisma.student.findUnique({ where: { userId }, select: { id: true } });
+    if (student) {
+      const todayStr = now.toISOString().split("T")[0];
+      await awardActivityXp({
+        studentId: student.id,
+        activityName: "DAILY_LOGIN",
+        sourceEntityId: todayStr,
+        idempotencyKey: `DAILY_LOGIN:${todayStr}:${student.id}`,
+        payload: { userId, loginDate: todayStr },
+      });
+    }
+  } catch (err) {
+    console.warn("[ai-chat] daily login student XP award failed:", err);
+  }
 }
 
 export function xpForQuizResult(scorePercent: number) {
