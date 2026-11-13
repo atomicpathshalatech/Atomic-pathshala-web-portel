@@ -8,6 +8,8 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { QuestionFullReviewWorkspace } from "@/components/team-portal/QuestionFullReviewWorkspace";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Question Review & AI Audit Workspace | Atomic Pathshala",
 };
@@ -44,6 +46,13 @@ export default async function QuestionReviewPage({
       editedBy: { select: { name: true } },
       review1By: { select: { name: true } },
       review2By: { select: { name: true } },
+      assignedTo: { select: { id: true, name: true, email: true } },
+      assignedBy: { select: { id: true, name: true } },
+      versions: {
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        include: { editedBy: { select: { name: true, email: true } } },
+      },
       _count: { select: { sectionLinks: true, dppLinks: true, reports: true, bookmarks: true, answers: true, collectionItems: true } },
       auditLogs: {
         orderBy: { createdAt: "desc" },

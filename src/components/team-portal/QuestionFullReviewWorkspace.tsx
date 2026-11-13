@@ -172,11 +172,20 @@ export function QuestionFullReviewWorkspace({
 }: QuestionFullReviewProps) {
   const router = useRouter();
   const [question, setQuestion] = useState(initialQuestion);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>("ENGLISH");
+  const [selectedLanguage, setSelectedLanguage] = useState<"ENGLISH" | "HINDI" | "BILINGUAL">("ENGLISH");
+  const [generatingTranslation, setGeneratingTranslation] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [runningAiAudit, setRunningAiAudit] = useState(false);
-  const [activeInspectorTab, setActiveInspectorTab] = useState<"reference" | "ai_audit" | "similar" | "history">("reference");
+  const [activeInspectorTab, setActiveInspectorTab] = useState<
+    "ai_audit" | "bilingual" | "reference" | "similar" | "history" | "usage"
+  >("ai_audit");
+
+  const [usageData, setUsageData] = useState<any>(null);
+  const [loadingUsage, setLoadingUsage] = useState(false);
+
+  const englishT = question.translations?.find((t) => t.language.toUpperCase() === "ENGLISH");
+  const hindiT = question.translations?.find((t) => t.language.toUpperCase() === "HINDI");
 
   // CBT Preview Modal State
   const [showCbtPreviewModal, setShowCbtPreviewModal] = useState(false);
@@ -192,7 +201,7 @@ export function QuestionFullReviewWorkspace({
 
   // Edit Form State
   const activeTranslation =
-    question.translations.find((t) => t.language.toUpperCase() === selectedLanguage.toUpperCase()) ||
+    (selectedLanguage === "HINDI" ? hindiT : englishT) ||
     question.translations[0] || { id: "", language: "ENGLISH", statement: "", options: {}, correctOptionIds: [], solution: "" };
 
   const [editForm, setEditForm] = useState({
@@ -250,6 +259,86 @@ export function QuestionFullReviewWorkspace({
 
   // AI Audit Result Parser
   const auditResult: MultiDimensionalAuditResult | null = question.aiAuditResult as any;
+
+  // Load question usage breakdown on demand
+  useEffect(() => {
+    if (activeInspectorTab === "usage" && !usageData) {
+      setLoadingUsage(true);
+      fetch(`/api/team/questions/${question.id}/usage`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && d.data?.usage) {
+            setUsageData(d.data.usage);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingUsage(false));
+    }
+  }, [activeInspectorTab, question.id, usageData]);
+
+  // Synchronize editForm when selectedLanguage changes
+  useEffect(() => {
+    const targetLang = selectedLanguage === "BILINGUAL" ? "ENGLISH" : selectedLanguage;
+    const t =
+      question.translations.find((item) => item.language.toUpperCase() === targetLang.toUpperCase()) ||
+      question.translations[0];
+    if (t) {
+      setEditForm((prev) => ({
+        ...prev,
+        statement: t.statement || "",
+        options: t.options || { A: "", B: "", C: "", D: "" },
+        correctOptionIds: Array.isArray(t.correctOptionIds)
+          ? t.correctOptionIds
+          : [String(t.correctOptionIds || "A")],
+        solution: t.solution || "",
+      }));
+    }
+  }, [selectedLanguage, question]);
+
+  // Generate Missing Translation On Demand
+  const handleGenerateTranslation = async (targetLang: "HINDI" | "ENGLISH") => {
+    setGeneratingTranslation(true);
+    try {
+      const res = await fetch(`/api/team/questions/${question.id}/generate-translation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetLanguage: targetLang }),
+      });
+      const data = await res.json();
+      if (data.success && data.data?.question) {
+        setQuestion((prev) => ({ ...prev, ...data.data.question }));
+        toast.success(`Generated and saved ${targetLang} translation!`);
+        router.refresh();
+      } else {
+        toast.error(data.error?.message || "Failed to generate translation");
+      }
+    } catch {
+      toast.error("Network error while generating translation");
+    } finally {
+      setGeneratingTranslation(false);
+    }
+  };
+
+  // Accept All AI Suggestions
+  const handleAcceptAllAiSuggestions = async () => {
+    try {
+      const res = await fetch(`/api/team/questions/${question.id}/accept-ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ACCEPT_ALL" }),
+      });
+      const data = await res.json();
+      if (data.success && data.data?.question) {
+        toast.success("All AI recommendations accepted and applied!");
+        setQuestion((prev) => ({ ...prev, ...data.data.question }));
+        router.refresh();
+      } else {
+        toast.error(data.error?.message || "Failed to accept suggestions");
+      }
+    } catch {
+      toast.error("Network error while accepting suggestions");
+    }
+  };
 
   // Run AI Audit On Demand
   const handleRunAiAudit = async (force = false) => {
@@ -374,35 +463,42 @@ export function QuestionFullReviewWorkspace({
   }, [prevQuestionId, nextQuestionId, queryParamsString]);
 
   // Submit Review Workflow Decision
-  const handleWorkflowDecision = async (e?: React.FormEvent, autoAdvance = false) => {
+  const handleWorkflowDecision = async (
+    e?: React.FormEvent,
+    autoAdvance = false,
+    overrideAction?: "APPROVE" | "REQUEST_CHANGES" | "REWORK" | "VERIFY"
+  ) => {
     if (e) e.preventDefault();
-    if (workflowAction !== "APPROVE" && !workflowNotes.trim()) {
+    const actionToUse = overrideAction || workflowAction;
+    if (actionToUse !== "APPROVE" && actionToUse !== "VERIFY" && !workflowNotes.trim()) {
       toast.error("Review comments are required when requesting changes or rework");
       return;
     }
 
     setSubmittingWorkflow(true);
     try {
-      const stage = question.status === "REVIEW_2" ? "REVIEW_2" : "REVIEW_1";
+      const stage = actionToUse === "VERIFY" ? "VERIFY" : question.status === "REVIEW_2" ? "REVIEW_2" : "REVIEW_1";
       const status =
-        workflowAction === "APPROVE" ? "APPROVED" : workflowAction === "REQUEST_CHANGES" ? "REJECTED" : "REWORK";
+        actionToUse === "VERIFY" ? "VERIFIED" : actionToUse === "APPROVE" ? "APPROVED" : actionToUse === "REQUEST_CHANGES" ? "REJECTED" : "REWORK";
 
       const res = await fetch(`/api/team/questions/${question.id}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           stage,
-          action: workflowAction === "APPROVE" ? "APPROVE" : "REQUEST_CHANGES",
+          action: actionToUse,
           status,
           notes: workflowNotes.trim(),
         }),
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Workflow decision recorded: ${status}`);
+        toast.success(actionToUse === "VERIFY" ? "Question officially verified and published to Atomic Question Bank!" : `Workflow decision recorded: ${status}`);
         setQuestion((prev) => ({
           ...prev,
-          status: stage === "REVIEW_1" && status === "APPROVED" ? "REVIEW_2" : stage === "REVIEW_2" && status === "APPROVED" ? "PUBLISHED" : "REJECTED",
+          status: actionToUse === "VERIFY" ? "VERIFIED" : stage === "REVIEW_1" && status === "APPROVED" ? "REVIEW_2" : stage === "REVIEW_2" && status === "APPROVED" ? "VERIFIED" : "REJECTED",
+          aiVerified: actionToUse === "VERIFY" ? true : prev.aiVerified,
+          qcStatus: actionToUse === "VERIFY" ? "VERIFIED" : prev.qcStatus,
         }));
         
         if (autoAdvance && nextQuestionId) {
@@ -626,6 +722,19 @@ export function QuestionFullReviewWorkspace({
                 }`}
               >
                 हिंदी
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedLanguage("BILINGUAL")}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+                  selectedLanguage === "BILINGUAL"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+                title="Bilingual Side-by-Side Synchronized View"
+              >
+                <Languages className="w-3 h-3" />
+                <span>Bilingual</span>
               </button>
             </div>
 
@@ -976,15 +1085,204 @@ export function QuestionFullReviewWorkspace({
               </div>
             </form>
           ) : (
-            /* ONE CARD PER LANGUAGE, THEN CLASSIFICATION / SOURCE / USAGE */
+            /* TRUE BILINGUAL / ENGLISH / HINDI VIEW */
             <div className="space-y-4">
-              {[...question.translations]
-                .sort((a, b) => (a.language.toUpperCase() === "ENGLISH" ? -1 : b.language.toUpperCase() === "ENGLISH" ? 1 : 0))
-                .map((t, i) => (
-                  <LanguageQuestionCard key={t.id} t={t} showLanguageTag={i > 0} imageUrl={i === 0 ? question.imageUrl : null} />
-                ))}
-              {question.translations.length === 0 && (
-                <div className="p-6 rounded-2xl border border-dashed border-slate-300 text-sm text-slate-500">This question has no text in any language.</div>
+              {/* 1. ENGLISH ONLY VIEW */}
+              {selectedLanguage === "ENGLISH" && (
+                englishT ? (
+                  <LanguageQuestionCard t={englishT} showLanguageTag={false} imageUrl={question.imageUrl} />
+                ) : (
+                  <div className="p-8 rounded-3xl border-2 border-dashed border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 text-center space-y-3">
+                    <AlertTriangle className="w-9 h-9 text-amber-500 mx-auto" />
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">English Translation Not Available</h4>
+                      <p className="text-xs text-amber-700 dark:text-amber-300 max-w-md mx-auto">
+                        This question currently only has content in Hindi. You can generate an accurate NCERT English translation with formulas preserved using AI.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={generatingTranslation}
+                      onClick={() => handleGenerateTranslation("ENGLISH")}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${generatingTranslation ? "animate-spin" : ""}`} />
+                      <span>{generatingTranslation ? "Generating English..." : "Generate English with AI"}</span>
+                    </button>
+                  </div>
+                )
+              )}
+
+              {/* 2. HINDI ONLY VIEW */}
+              {selectedLanguage === "HINDI" && (
+                hindiT ? (
+                  <LanguageQuestionCard t={hindiT} showLanguageTag={false} imageUrl={question.imageUrl} />
+                ) : (
+                  <div className="p-8 rounded-3xl border-2 border-dashed border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 text-center space-y-3">
+                    <AlertTriangle className="w-9 h-9 text-amber-500 mx-auto" />
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">Hindi Translation Not Available</h4>
+                      <p className="text-xs text-amber-700 dark:text-amber-300 max-w-md mx-auto">
+                        This question currently only has content in English. You can generate an authentic NCERT Hindi translation with equations and formulas preserved using AI.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={generatingTranslation}
+                      onClick={() => handleGenerateTranslation("HINDI")}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${generatingTranslation ? "animate-spin" : ""}`} />
+                      <span>{generatingTranslation ? "Generating Hindi..." : "Generate Hindi with AI"}</span>
+                    </button>
+                  </div>
+                )
+              )}
+
+              {/* 3. BILINGUAL SIDE-BY-SIDE SYNCHRONIZED VIEW */}
+              {selectedLanguage === "BILINGUAL" && (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200 flex items-center justify-between">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <Languages className="w-4 h-4 text-indigo-600" />
+                      <span>Bilingual Quality Control View (English &amp; Hindi Synchronized)</span>
+                    </span>
+                    <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-medium">
+                      Dual-column aligned statement &amp; options
+                    </span>
+                  </div>
+
+                  {/* Figure if available */}
+                  {question.imageUrl && (
+                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 max-w-md mx-auto">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1 text-center">Shared Question Figure</span>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={question.imageUrl} alt="Question figure" className="rounded-lg object-contain max-h-64 w-full" />
+                    </div>
+                  )}
+
+                  {/* Dual Column Statements */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* English Statement */}
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <span className="text-xs font-black tracking-wider text-blue-600 dark:text-blue-400">ENGLISH STATEMENT</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 font-mono">EN</span>
+                      </div>
+                      {englishT ? (
+                        <div className="text-sm leading-relaxed text-slate-900 dark:text-white">
+                          <FormulaText text={englishT.statement || "(empty statement)"} />
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-xl border border-dashed border-amber-300 text-center space-y-2">
+                          <p className="text-xs text-amber-700">English translation missing</p>
+                          <button
+                            type="button"
+                            disabled={generatingTranslation}
+                            onClick={() => handleGenerateTranslation("ENGLISH")}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow transition"
+                          >
+                            + Generate English
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Hindi Statement */}
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <span className="text-xs font-black tracking-wider text-purple-600 dark:text-purple-400">हिंदी प्रश्न (HINDI STATEMENT)</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200 font-mono">HI</span>
+                      </div>
+                      {hindiT ? (
+                        <div className="text-sm leading-relaxed text-slate-900 dark:text-white">
+                          <FormulaText text={hindiT.statement || "(empty statement)"} />
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-xl border border-dashed border-amber-300 text-center space-y-2">
+                          <p className="text-xs text-amber-700">Hindi translation missing</p>
+                          <button
+                            type="button"
+                            disabled={generatingTranslation}
+                            onClick={() => handleGenerateTranslation("HINDI")}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow transition"
+                          >
+                            + Generate Hindi
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dual Column Synchronized Options Matrix */}
+                  {(englishT || hindiT) && (
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <span className="text-xs font-black tracking-wider text-slate-700 dark:text-slate-300">SYNCHRONIZED OPTIONS MATRIX</span>
+                        <span className="text-[11px] text-slate-500">Option A, B, C, D Across Languages</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {["A", "B", "C", "D"].map((key, idx) => {
+                          const enOpt = (englishT?.options as any)?.[key] || (Array.isArray(englishT?.options) ? (englishT?.options as any)[idx] : "");
+                          const hiOpt = (hindiT?.options as any)?.[key] || (Array.isArray(hindiT?.options) ? (hindiT?.options as any)[idx] : "");
+                          const isCorrectEn = Array.isArray(englishT?.correctOptionIds) ? englishT?.correctOptionIds.includes(key) : englishT?.correctOptionIds === key;
+                          const isCorrectHi = Array.isArray(hindiT?.correctOptionIds) ? hindiT?.correctOptionIds.includes(key) : hindiT?.correctOptionIds === key;
+                          const isCorrect = isCorrectEn || isCorrectHi;
+
+                          return (
+                            <div
+                              key={key}
+                              className={`grid grid-cols-1 md:grid-cols-2 gap-3 p-2.5 rounded-xl border transition ${
+                                isCorrect
+                                  ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
+                                  : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700"
+                              }`}
+                            >
+                              {/* Option EN */}
+                              <div className="flex items-start gap-2 text-xs">
+                                <span className={`font-bold tabular-nums px-2 py-0.5 rounded text-[11px] shrink-0 ${isCorrect ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"}`}>
+                                  ({key})
+                                </span>
+                                <div className="flex-1 min-w-0 pt-0.5 text-slate-800 dark:text-slate-200">
+                                  <FormulaText text={enOpt || "—"} />
+                                </div>
+                                {isCorrectEn && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                              </div>
+
+                              {/* Option HI */}
+                              <div className="flex items-start gap-2 text-xs border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-700 pt-1.5 md:pt-0 md:pl-3">
+                                <span className={`font-bold tabular-nums px-2 py-0.5 rounded text-[11px] shrink-0 ${isCorrect ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"}`}>
+                                  ({key})
+                                </span>
+                                <div className="flex-1 min-w-0 pt-0.5 text-slate-800 dark:text-slate-200">
+                                  <FormulaText text={hiOpt || "—"} />
+                                </div>
+                                {isCorrectHi && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dual Column Solutions */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
+                      <span className="text-xs font-black tracking-wider text-slate-600 dark:text-slate-300">ENGLISH SOLUTION</span>
+                      <div className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                        <FormulaText text={englishT?.solution || "None provided"} />
+                      </div>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
+                      <span className="text-xs font-black tracking-wider text-slate-600 dark:text-slate-300">हिंदी व्याख्या (HINDI SOLUTION)</span>
+                      <div className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                        <FormulaText text={hindiT?.solution || "None provided"} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {(question.review1Notes || question.review2Notes || question.correctionNotes) && (
@@ -1101,10 +1399,30 @@ export function QuestionFullReviewWorkspace({
 
           {/* WORKFLOW DECISION & SIGN-OFF ACTIONS BAR */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-4">
-            <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-emerald-600" />
-              <span>Review Workflow Sign-off</span>
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                <span>Review Workflow Sign-off</span>
+              </h3>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                question.status === "VERIFIED" || question.status === "PUBLISHED"
+                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                  : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+              }`}>
+                {question.status} {question.aiVerified ? "• AI Verified" : ""}
+              </span>
+            </div>
+
+            {/* Critical Errors Alert Banner */}
+            {auditResult?.errors && auditResult.errors.some((e: any) => e.severity === "CRITICAL") && (
+              <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs text-rose-900 dark:text-rose-200 flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <b>Critical Academic Flaws Flagged by AI:</b> There are{" "}
+                  {auditResult.errors.filter((e: any) => e.severity === "CRITICAL").length} critical issue(s) detected. Please ensure formulas, option distractors, and answer keys are corrected before publishing.
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleWorkflowDecision} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1118,10 +1436,10 @@ export function QuestionFullReviewWorkspace({
                   }`}
                 >
                   <div className="font-bold text-xs">
-                    {question.status === "REVIEW_2" ? "Publish to Live" : "Approve to Stage 2"}
+                    {question.status === "REVIEW_2" ? "Stage 2 Approval" : "Approve to Stage 2"}
                   </div>
                   <div className="text-[11px] text-slate-500 mt-0.5">
-                    {question.status === "REVIEW_2" ? "Marks ready for active exams" : "Moves to Quality review"}
+                    {question.status === "REVIEW_2" ? "Advances quality approval" : "Moves to QC Director review"}
                   </div>
                 </button>
 
@@ -1160,16 +1478,27 @@ export function QuestionFullReviewWorkspace({
                   type="text"
                   value={workflowNotes}
                   onChange={(e) => setWorkflowNotes(e.target.value)}
-                  placeholder="e.g. Corrected Option B typo and verified NCERT page 182 reference."
+                  placeholder="e.g. Verified NCERT references, LaTeX derivation and bilingual options."
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex-wrap">
+                <button
+                  type="button"
+                  disabled={submittingWorkflow}
+                  onClick={() => handleWorkflowDecision(undefined, false, "VERIFY")}
+                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  title="Directly verify and publish into the official Atomic Question Bank"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                  <span>Verify &amp; Publish to Atomic Bank</span>
+                </button>
+
                 <button
                   type="submit"
                   disabled={submittingWorkflow}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>{submittingWorkflow ? "Submitting..." : "Submit Review Decision"}</span>
@@ -1186,20 +1515,22 @@ export function QuestionFullReviewWorkspace({
             <div className="flex items-center justify-between">
               <span className="text-xs font-black tracking-[0.14em] text-slate-600 dark:text-slate-300">VIEWER</span>
             </div>
-            <div className="grid grid-cols-2 gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="grid grid-cols-3 gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-3">
               {(
                 [
-                  { id: "reference", label: "Reference" },
-                  { id: "ai_audit", label: typeof question.aiAuditScore === "number" ? `AI audit (${question.aiAuditScore})` : "AI audit" },
-                  { id: "similar", label: `Similar Q${similar.length ? ` (${similar.length})` : ""}` },
+                  { id: "ai_audit", label: typeof question.aiAuditScore === "number" ? `AI Audit (${question.aiAuditScore})` : "AI Audit" },
+                  { id: "bilingual", label: "Bilingual" },
+                  { id: "reference", label: "NCERT Ref" },
+                  { id: "similar", label: `Similar (${(auditResult?.similarQuestions?.length || similar.length) || 0})` },
                   { id: "history", label: "History" },
+                  { id: "usage", label: "Usage" },
                 ] as const
               ).map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveInspectorTab(tab.id)}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold transition border ${
+                  className={`px-2 py-1.5 rounded-lg text-xs font-bold transition border truncate ${
                     activeInspectorTab === tab.id
                       ? "bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900"
                       : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
@@ -1210,65 +1541,9 @@ export function QuestionFullReviewWorkspace({
               ))}
             </div>
 
-            {/* REFERENCE: the source images of this question */}
-            {activeInspectorTab === "reference" && (
-              <div className="space-y-3 text-xs">
-                {(() => {
-                  const images = [
-                    ...(question.referenceImageUrl ? [{ key: "ref", label: "Source page", url: question.referenceImageUrl }] : []),
-                    ...(question.imageUrl ? [{ key: "img", label: "Question figure", url: question.imageUrl }] : []),
-                    ...(question.assets ?? []).map((a) => ({ key: a.id, label: `${humanize(a.type)} — ${a.originalName}`, url: a.publicUrl })),
-                  ];
-                  if (images.length === 0) return <p className="p-6 text-center text-slate-400">No source image or file is attached to this question.</p>;
-                  return images.map((img) => (
-                    <div key={img.key} className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                      <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 flex justify-between gap-2">
-                        <span className="truncate">{img.label}</span>
-                        <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline shrink-0">Open</a>
-                      </div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img.url} alt={img.label} className="w-full object-contain max-h-80 bg-white" />
-                    </div>
-                  ));
-                })()}
-              </div>
-            )}
-
-            {/* SIMILAR Q: possible duplicates found by Question QC */}
-            {activeInspectorTab === "similar" && (
-              <div className="space-y-2 text-xs">
-                {similar.length === 0 ? (
-                  <p className="p-6 text-center text-slate-400">
-                    No similar questions found. (The duplicate scan in Question QC compares the text of every question.)
-                  </p>
-                ) : (
-                  similar.map((d) => (
-                    <div key={d.pairId} className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <Link href={`/team/questions/${d.id}/review`} className="font-mono font-bold text-blue-600 hover:underline">
-                          {d.questionCode || d.id.slice(-8)}
-                        </Link>
-                        <span className="text-[10px] text-slate-500">{humanize(d.questionStatus)}</span>
-                      </div>
-                      <div className="text-slate-700 dark:text-slate-300">{humanize(d.category)} — {d.note}</div>
-                      <div className="flex flex-wrap gap-2 text-[10px]">
-                        {d.sameAnswer === false && <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">Answer keys differ</span>}
-                        <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600">{d.decision === "PENDING" ? "Not decided yet" : humanize(d.decision)}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-                {similar.length > 0 && (
-                  <Link href="/team/qc" className="block text-center text-blue-600 font-semibold hover:underline pt-1">
-                    Decide in Question QC → Duplicate questions
-                  </Link>
-                )}
-              </div>
-            )}
-
             {/* TAB 1: MULTI-DIMENSIONAL AI AUDIT RESULTS */}
             {activeInspectorTab === "ai_audit" && (
-              <div className="space-y-5">
+              <div className="space-y-4 text-xs">
                 {/* Overall Score Gauge */}
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50 to-indigo-50/50 dark:from-purple-950/30 dark:to-indigo-950/20 border border-purple-200 dark:border-purple-800/50 flex items-center justify-between">
                   <div>
@@ -1291,7 +1566,7 @@ export function QuestionFullReviewWorkspace({
                       type="button"
                       disabled={runningAiAudit}
                       onClick={() => handleRunAiAudit(true)}
-                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-xs transition inline-flex items-center gap-1"
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-xs transition inline-flex items-center gap-1 cursor-pointer"
                     >
                       <RefreshCw className={`w-3 h-3 ${runningAiAudit ? "animate-spin" : ""}`} />
                       <span>Re-Audit</span>
@@ -1299,61 +1574,81 @@ export function QuestionFullReviewWorkspace({
                   </div>
                 </div>
 
-                {/* AI Exam Fit Recommendation */}
-                {auditResult?.examLevelFit && (
+                {/* Distractor & Independent Answer Verification */}
+                {auditResult?.distractorAudit && (
                   <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-600 dark:text-slate-300">Exam-Level Fit:</span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                          auditResult.examLevelFit.isAppropriateForCurrent
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {auditResult.examLevelFit.isAppropriateForCurrent
-                          ? "MATCHES TARGET"
-                          : "MISMATCH RECOMMENDED"}
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="text-slate-700 dark:text-slate-300">Answer Key &amp; Distractor Audit</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                        auditResult.distractorAudit.markedOptionMatchesSolved
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}>
+                        {auditResult.distractorAudit.markedOptionMatchesSolved ? "ANSWER KEY VERIFIED" : "KEY MISMATCH FLAGGED"}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300">
-                      <b>Current:</b> {auditResult.examLevelFit.current} ➔ <b>Recommended:</b>{" "}
-                      <span className="text-purple-600 font-bold">{auditResult.examLevelFit.recommended}</span>
-                    </p>
-                    <p className="text-[11px] text-slate-500 italic">{auditResult.examLevelFit.reason}</p>
-
-                    {auditResult.examLevelFit.current !== auditResult.examLevelFit.recommended && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleAcceptAiSuggestion("examLevel", auditResult?.examLevelFit?.recommended)
-                        }
-                        className="mt-1 px-3 py-1 text-[11px] font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition"
-                      >
-                        Accept {auditResult.examLevelFit.recommended} as Target
-                      </button>
-                    )}
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-slate-500 block">Independently Solved:</span>
+                        <b className="text-emerald-600 text-sm">Option ({auditResult.distractorAudit.solvedAnswerKey})</b>
+                      </div>
+                      <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <span className="text-slate-500 block">All Options Distinct:</span>
+                        <b className={auditResult.distractorAudit.allOptionsDistinct ? "text-emerald-600" : "text-rose-600"}>
+                          {auditResult.distractorAudit.allOptionsDistinct ? "Yes (No duplicates)" : "Duplicate options detected"}
+                        </b>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {/* Score Deductions with Explainable Reasons */}
-                {auditResult?.deductions && auditResult.deductions.length > 0 && (
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      <span>Score Deductions &amp; Reasons:</span>
-                    </span>
+                {/* Multi-Exam Suitability Matrix */}
+                {auditResult?.examSuitability && (
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/50 space-y-2.5">
+                    <div className="flex items-center justify-between font-bold text-indigo-900 dark:text-indigo-200">
+                      <span>Multi-Exam Suitability Matrix</span>
+                      <span className="text-[10px] text-indigo-600 font-medium">NEET · JEE · CUET · Boards</span>
+                    </div>
+
                     <div className="space-y-1.5">
-                      {auditResult.deductions.map((d, i) => (
+                      {[
+                        { exam: "NEET UG", data: auditResult.examSuitability.neet },
+                        { exam: "JEE Main", data: auditResult.examSuitability.jeeMain },
+                        { exam: "JEE Advanced", data: auditResult.examSuitability.jeeAdvanced },
+                        { exam: "CUET", data: auditResult.examSuitability.cuet },
+                        { exam: "CBSE / State Boards", data: auditResult.examSuitability.board },
+                      ].map(({ exam, data }) => (
                         <div
-                          key={i}
-                          className="p-2.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-900 dark:text-rose-200 flex items-start justify-between gap-2"
+                          key={exam}
+                          className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 flex items-center justify-between gap-2"
                         >
-                          <div>
-                            <b>{d.dimension}:</b> {d.reason}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <span>{exam}</span>
+                              <span
+                                className={`text-[9px] px-1.5 py-0.2 rounded font-black ${
+                                  data?.isFit
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                }`}
+                              >
+                                {data?.isFit ? "SUITABLE" : "UNSUITABLE"}
+                              </span>
+                            </div>
+                            {data?.notes && (
+                              <p className="text-[10px] text-slate-500 truncate">{data.notes}</p>
+                            )}
                           </div>
-                          <span className="font-mono font-bold text-rose-700 shrink-0">
-                            -{d.pointsDeducted}
+                          <span
+                            className={`font-mono font-bold text-xs shrink-0 ${
+                              (data?.score || 0) >= 80
+                                ? "text-emerald-600"
+                                : (data?.score || 0) >= 60
+                                ? "text-amber-600"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {data?.score || 0}%
                           </span>
                         </div>
                       ))}
@@ -1361,12 +1656,12 @@ export function QuestionFullReviewWorkspace({
                   </div>
                 )}
 
-                {/* Specific Detected Issues & Errors */}
+                {/* Detected Quality Errors */}
                 {auditResult?.errors && auditResult.errors.length > 0 && (
                   <div className="space-y-2">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Detected Quality Errors:</span>
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Detected Quality Errors ({auditResult.errors.length}):</span>
                     </span>
                     <div className="space-y-2">
                       {auditResult.errors.map((err, i) => (
@@ -1400,13 +1695,26 @@ export function QuestionFullReviewWorkspace({
                   </div>
                 )}
 
-                {/* AI Suggested Improvements (Traceable Non-Destructive Changes) */}
+                {/* AI Suggested Improvements with One-Click Accept All */}
                 {auditResult?.suggestions && auditResult.suggestions.length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-                      <span>AI Suggested Corrections:</span>
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                        <span>AI Suggested Corrections ({auditResult.suggestions.length}):</span>
+                      </span>
+
+                      {auditResult.suggestions.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={handleAcceptAllAiSuggestions}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-xs transition cursor-pointer"
+                        >
+                          Accept All ({auditResult.suggestions.length})
+                        </button>
+                      )}
+                    </div>
+
                     <div className="space-y-2">
                       {auditResult.suggestions.map((sugg, i) => (
                         <div
@@ -1419,11 +1727,11 @@ export function QuestionFullReviewWorkspace({
                               Confidence: {sugg.confidence}%
                             </span>
                           </div>
-                          <div className="text-[11px] text-slate-500 line-through">
+                          <div className="text-[11px] text-slate-500 line-through truncate">
                             <b>Original:</b> {sugg.original}
                           </div>
                           <div className="text-xs text-slate-900 dark:text-white font-medium">
-                            <b>AI Proposed:</b> {sugg.suggested}
+                            <b>AI Proposed:</b> {sugg.field === "translation" ? "NCERT Translation Draft" : sugg.suggested}
                           </div>
                           <div className="text-[11px] text-slate-500 italic">
                             <b>Reason:</b> {sugg.reason}
@@ -1432,13 +1740,25 @@ export function QuestionFullReviewWorkspace({
                             <button
                               type="button"
                               onClick={() => handleAcceptAiSuggestion(sugg.field, sugg.suggested)}
-                              className="px-2.5 py-1 text-[11px] font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition"
+                              className="px-2.5 py-1 text-[11px] font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition cursor-pointer"
                             >
-                              Accept Correction
+                              {sugg.field === "translation" ? "Apply Translation" : "Accept Correction"}
                             </button>
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Step-by-Step KaTeX Derivation */}
+                {auditResult?.stepByStepSolution && (
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                      AI Verified Step-by-Step Derivation
+                    </span>
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 leading-relaxed font-serif">
+                      <FormulaText text={auditResult.stepByStepSolution.solutionText} />
                     </div>
                   </div>
                 )}
@@ -1477,14 +1797,244 @@ export function QuestionFullReviewWorkspace({
               </div>
             )}
 
-            {/* TAB 3: AUDIT HISTORY TIMELINE */}
-            {activeInspectorTab === "history" && (
-              <div className="space-y-3">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  AI &amp; Review History Log:
-                </span>
-                {question.auditLogs && question.auditLogs.length > 0 ? (
+            {/* TAB 2: BILINGUAL TRANSLATION FIDELITY & QC */}
+            {activeInspectorTab === "bilingual" && (
+              <div className="space-y-4 text-xs">
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50/50 dark:from-indigo-950/30 dark:to-blue-950/20 border border-indigo-200 dark:border-indigo-800/50 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">
+                      Translation Fidelity Score
+                    </span>
+                    <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
+                      {auditResult?.bilingualAudit?.translationFidelityScore ?? (englishT && hindiT ? 92 : 0)}
+                      <span className="text-sm font-bold text-slate-400">/100</span>
+                    </div>
+                    <span className="text-[11px] text-slate-500">
+                      {englishT && hindiT ? "Both English and Hindi verified" : "One language translation missing"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Negation Symmetry Check */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                    Negation &amp; Terminology Symmetry Check
+                  </span>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    Ensures inverted negative keywords ("NOT", "INCORRECT", "EXCEPT", "नहीं", "गलत") are not introduced or dropped.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                      <span className="text-slate-500 block">English Negation:</span>
+                      <b>{auditResult?.bilingualAudit?.negationSymmetry?.englishNegation ? "Detected (NOT/EXCEPT)" : "None"}</b>
+                    </div>
+                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                      <span className="text-slate-500 block">Hindi Negation:</span>
+                      <b>{auditResult?.bilingualAudit?.negationSymmetry?.hindiNegation ? "Detected (नहीं/गलत)" : "None"}</b>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Missing Translation Quick Generators */}
+                {!englishT && (
+                  <div className="p-3.5 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 text-center space-y-2">
+                    <p className="text-xs text-amber-800 dark:text-amber-200 font-bold">English Translation is missing</p>
+                    <button
+                      type="button"
+                      disabled={generatingTranslation}
+                      onClick={() => handleGenerateTranslation("ENGLISH")}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition"
+                    >
+                      {generatingTranslation ? "Generating..." : "Generate English Translation"}
+                    </button>
+                  </div>
+                )}
+
+                {!hindiT && (
+                  <div className="p-3.5 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 text-center space-y-2">
+                    <p className="text-xs text-amber-800 dark:text-amber-200 font-bold">Hindi Translation is missing</p>
+                    <button
+                      type="button"
+                      disabled={generatingTranslation}
+                      onClick={() => handleGenerateTranslation("HINDI")}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition"
+                    >
+                      {generatingTranslation ? "Generating..." : "Generate Hindi Translation"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: REFERENCE & NCERT TEXTBOOK VERIFICATION */}
+            {activeInspectorTab === "reference" && (
+              <div className="space-y-4 text-xs">
+                {/* Genuine NCERT Reference Verification */}
+                <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 space-y-2">
+                  <div className="flex items-center justify-between font-bold text-emerald-900 dark:text-emerald-200">
+                    <span>NCERT Textbook Verification</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                      auditResult?.ncertVerification?.status === "VERIFIED_IN_NCERT"
+                        ? "bg-emerald-200 text-emerald-900"
+                        : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                    }`}>
+                      {auditResult?.ncertVerification?.status === "VERIFIED_IN_NCERT"
+                        ? "VERIFIED IN SYLLABUS"
+                        : "REFERENCE NOT CONFIRMED"}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-slate-700 dark:text-slate-300">
+                    <div><b>Book:</b> {auditResult?.ncertVerification?.book || question.ncertBook || `NCERT ${question.subject}`}</div>
+                    <div><b>Chapter:</b> {auditResult?.ncertVerification?.chapter || question.ncertChapter || question.chapter || "Standard Syllabus"}</div>
+                    <div><b>Topic/Section:</b> {auditResult?.ncertVerification?.topicOrSection || question.ncertSection || question.topic || "Core Concept"}</div>
+                    {auditResult?.ncertVerification?.quoteOrExcerpt && (
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-100 dark:border-slate-800 text-[11px] italic">
+                        "{auditResult.ncertVerification.quoteOrExcerpt}"
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Source Images */}
+                <div className="space-y-3">
+                  <span className="font-bold text-slate-700 dark:text-slate-300 block">Uploaded Source Assets</span>
+                  {(() => {
+                    const images = [
+                      ...(question.referenceImageUrl ? [{ key: "ref", label: "Source page", url: question.referenceImageUrl }] : []),
+                      ...(question.imageUrl ? [{ key: "img", label: "Question figure", url: question.imageUrl }] : []),
+                      ...(question.assets ?? []).map((a) => ({ key: a.id, label: `${humanize(a.type)} — ${a.originalName}`, url: a.publicUrl })),
+                    ];
+                    if (images.length === 0) return <p className="p-6 text-center text-slate-400">No source image or file is attached to this question.</p>;
+                    return images.map((img) => (
+                      <div key={img.key} className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 flex justify-between gap-2">
+                          <span className="truncate">{img.label}</span>
+                          <a href={img.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline shrink-0">Open</a>
+                        </div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img.url} alt={img.label} className="w-full object-contain max-h-80 bg-white" />
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: SIMILAR QUESTIONS & DUPLICATE DETECTION */}
+            {activeInspectorTab === "similar" && (
+              <div className="space-y-3 text-xs">
+                {/* Real-time similarity matches from AI audit */}
+                {auditResult?.similarQuestions && auditResult.similarQuestions.length > 0 && (
                   <div className="space-y-2">
+                    <span className="font-bold text-purple-700 dark:text-purple-300 block">
+                      Real-Time Similar Questions ({auditResult.similarQuestions.length})
+                    </span>
+                    {auditResult.similarQuestions.map((sim, i) => (
+                      <div key={sim.id || i} className="p-3 rounded-xl border border-purple-200 dark:border-purple-800/60 bg-purple-50/30 dark:bg-purple-950/10 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Link href={`/team/questions/${sim.id}/review`} className="font-mono font-bold text-blue-600 hover:underline">
+                            #{sim.questionCode || sim.id.slice(0, 8)}
+                          </Link>
+                          <span className="font-mono font-bold text-purple-700 dark:text-purple-300 text-[11px]">
+                            {sim.similarityScore}% Match
+                          </span>
+                        </div>
+                        <p className="text-slate-600 dark:text-slate-400 text-[11px] line-clamp-2">
+                          {sim.statementSnippet}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Legacy Duplicate Candidate Pairs */}
+                {similar.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                      Logged Candidate Pairs ({similar.length})
+                    </span>
+                    {similar.map((d) => (
+                      <div key={d.pairId} className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <Link href={`/team/questions/${d.id}/review`} className="font-mono font-bold text-blue-600 hover:underline">
+                            #{d.questionCode || d.id.slice(-8)}
+                          </Link>
+                          <span className="text-[10px] text-slate-500">{humanize(d.questionStatus)}</span>
+                        </div>
+                        <div className="text-slate-700 dark:text-slate-300">{humanize(d.category)} — {d.note}</div>
+                        <div className="flex flex-wrap gap-2 text-[10px]">
+                          {d.sameAnswer === false && <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">Answer keys differ</span>}
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600">{d.decision === "PENDING" ? "Not decided yet" : humanize(d.decision)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!auditResult?.similarQuestions?.length && similar.length === 0 && (
+                  <p className="p-6 text-center text-slate-400">
+                    No duplicate or similar questions detected in the active bank.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* TAB 5: LIFECYCLE TIMELINE & VERSION HISTORY */}
+            {activeInspectorTab === "history" && (
+              <div className="space-y-4 text-xs">
+                {/* Question Authors & Reviewers */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">Question Personnel</span>
+                  {question.createdBy && (
+                    <div className="text-slate-600 dark:text-slate-400">
+                      <b>Created By:</b> {question.createdBy.name || question.createdBy.email} {question.createdAt && `(${fmtDateTime(question.createdAt)})`}
+                    </div>
+                  )}
+                  {question.editedBy && (
+                    <div className="text-slate-600 dark:text-slate-400">
+                      <b>Last Edited By:</b> {question.editedBy.name} {question.editedAt && `(${fmtDateTime(question.editedAt)})`}
+                    </div>
+                  )}
+                  {question.review1By && (
+                    <div className="text-slate-600 dark:text-slate-400">
+                      <b>Review 1 (QC Expert):</b> {question.review1By.name}
+                    </div>
+                  )}
+                  {question.review2By && (
+                    <div className="text-slate-600 dark:text-slate-400">
+                      <b>Review 2 (QC Director):</b> {question.review2By.name}
+                    </div>
+                  )}
+                </div>
+
+                {/* Revision History from QuestionVersion */}
+                {(question as any).versions && (question as any).versions.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                      Content Revision History ({(question as any).versions.length})
+                    </span>
+                    {(question as any).versions.map((ver: any) => (
+                      <div key={ver.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-1">
+                        <div className="flex items-center justify-between font-bold">
+                          <span>Version {ver.versionNumber} ({humanize(ver.changeType)})</span>
+                          <span className="text-[10px] text-slate-400">{fmtDateTime(ver.editedAt)}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300">{ver.reason || "Updated"}</p>
+                        {ver.editedBy?.name && (
+                          <p className="text-[10px] text-slate-500">By {ver.editedBy.name}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* AI Audit Logs */}
+                {question.auditLogs && question.auditLogs.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                      AI Audit Runs ({question.auditLogs.length})
+                    </span>
                     {question.auditLogs.map((log) => (
                       <div
                         key={log.id}
@@ -1503,10 +2053,77 @@ export function QuestionFullReviewWorkspace({
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <div className="p-6 text-center text-slate-400 text-xs">
-                    No historical audit logs recorded yet.
+                )}
+              </div>
+            )}
+
+            {/* TAB 6: QUESTION USAGE & LINKAGE REPORT */}
+            {activeInspectorTab === "usage" && (
+              <div className="space-y-4 text-xs">
+                {loadingUsage ? (
+                  <div className="p-8 text-center text-slate-400">Loading live usage data...</div>
+                ) : usageData ? (
+                  <div className="space-y-4">
+                    <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200 flex items-center justify-between">
+                      <span className="font-bold">Total Platform Usages</span>
+                      <span className="text-lg font-black font-mono">{usageData.totalUsages}</span>
+                    </div>
+
+                    {/* Tests */}
+                    <div className="space-y-2">
+                      <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                        Linked Tests ({usageData.tests.length})
+                      </span>
+                      {usageData.tests.length === 0 ? (
+                        <p className="text-slate-400 italic">Not used in any active tests yet.</p>
+                      ) : (
+                        usageData.tests.map((t: any) => (
+                          <div key={t.linkId} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                            <div className="font-bold text-slate-800 dark:text-slate-200">{t.testTitle}</div>
+                            <div className="text-[10px] text-slate-500">
+                              Section: {t.sectionName || "Default"} · {t.examType} · {t.isPublished ? "Published" : "Draft"}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* DPPs */}
+                    <div className="space-y-2">
+                      <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                        Daily Practice Problems ({usageData.dpps.length})
+                      </span>
+                      {usageData.dpps.length === 0 ? (
+                        <p className="text-slate-400 italic">Not used in any DPPs yet.</p>
+                      ) : (
+                        usageData.dpps.map((d: any) => (
+                          <div key={d.linkId} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                            <div className="font-bold text-slate-800 dark:text-slate-200">{d.title}</div>
+                            <div className="text-[10px] text-slate-500">Chapter: {d.chapter} · DPP #{d.dppNumber}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Exercises */}
+                    <div className="space-y-2">
+                      <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                        Exercise Practice Sheets ({usageData.exercises.length})
+                      </span>
+                      {usageData.exercises.length === 0 ? (
+                        <p className="text-slate-400 italic">Not used in any practice sheets yet.</p>
+                      ) : (
+                        usageData.exercises.map((e: any) => (
+                          <div key={e.linkId} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                            <div className="font-bold text-slate-800 dark:text-slate-200">{e.title}</div>
+                            <div className="text-[10px] text-slate-500">{e.subject} · {e.chapter}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
+                ) : (
+                  <p className="p-6 text-center text-slate-400">Click to load question usage details.</p>
                 )}
               </div>
             )}

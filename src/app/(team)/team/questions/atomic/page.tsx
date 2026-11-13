@@ -51,7 +51,7 @@ export default async function AtomicQuestionBankPage({
 
   const groups = await prisma.question.groupBy({
     by: ["subject", "chapter", "topic"],
-    where: { status: "PUBLISHED" },
+    where: { status: { in: ["PUBLISHED", "VERIFIED"] } },
     _count: { _all: true },
   });
 
@@ -103,7 +103,7 @@ export default async function AtomicQuestionBankPage({
     subject && chapter
       ? await prisma.question.findMany({
           where: {
-            status: "PUBLISHED",
+            status: { in: ["PUBLISHED", "VERIFIED"] },
             AND: [chapterQuestionWhere(subject, chapter)],
             ...(topic ? (topic === "General" ? { OR: [{ topic: null }, { topic: "" }] } : { topic: { equals: topic, mode: "insensitive" as const } }) : {}),
           },
