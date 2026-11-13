@@ -6,6 +6,8 @@ import { requirePermission, hasPermission, UnauthorizedError } from "@/lib/rbac/
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -32,8 +34,8 @@ export async function POST(
 
     const body = await request.json();
     const { stage, action, notes } = body;
-    // stage: "SUBMIT_TO_REVIEW_1" | "REVIEW_1" | "REVIEW_2"
-    // action: "APPROVE" | "REJECT" | "REQUEST_CHANGES"
+    // stage: "SUBMIT_TO_REVIEW_1" | "REVIEW_1" | "REVIEW_2" | "VERIFY"
+    // action: "APPROVE" | "REJECT" | "REQUEST_CHANGES" | "VERIFY"
 
     const now = new Date();
 
@@ -125,6 +127,40 @@ export async function POST(
       }
     }
 
+    if (stage === "VERIFY" || action === "VERIFY") {
+      const updated = await prisma.question.update({
+        where: { id: params.id },
+        data: {
+          status: "VERIFIED",
+          review2Status: "APPROVED",
+          review2ById: session.user.id,
+          review2At: now,
+          review2Notes: notes?.trim() || null,
+          qcStatus: "VERIFIED",
+          qcReviewedAt: now,
+          aiVerified: true,
+          isPublished: true,
+          publishedAt: now,
+          publishedById: session.user.id,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: "QUESTION_QC_DIRECTOR_VERIFIED",
+          entityType: "Question",
+          entityId: params.id,
+          metadata: { notes },
+        },
+      });
+
+      return apiSuccess({
+        question: updated,
+        message: "Question officially verified and published to Atomic Question Bank",
+      });
+    }
+
     if (stage === "REVIEW_2") {
       if (action === "APPROVE") {
         // Enforce: Review 1 must already be approved
@@ -135,11 +171,14 @@ export async function POST(
         const updated = await prisma.question.update({
           where: { id: params.id },
           data: {
-            status: "PUBLISHED",
+            status: "VERIFIED",
             review2Status: "APPROVED",
             review2ById: session.user.id,
             review2At: now,
             review2Notes: notes?.trim() || null,
+            qcStatus: "VERIFIED",
+            qcReviewedAt: now,
+            aiVerified: true,
             isPublished: true,
             publishedAt: now,
             publishedById: session.user.id,
@@ -149,13 +188,16 @@ export async function POST(
         await prisma.auditLog.create({
           data: {
             userId: session.user.id,
-            action: "QUESTION_REVIEW_2_APPROVED_PUBLISHED",
+            action: "QUESTION_REVIEW_2_APPROVED_VERIFIED",
             entityType: "Question",
             entityId: params.id,
           },
         });
 
-        return apiSuccess({ question: updated });
+        return apiSuccess({
+          question: updated,
+          message: "Question verified and published to Atomic Question Bank",
+        });
       } else {
         const updated = await prisma.question.update({
           where: { id: params.id },

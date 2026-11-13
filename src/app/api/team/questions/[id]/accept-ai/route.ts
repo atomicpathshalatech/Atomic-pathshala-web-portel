@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     await requirePermission(session.user.id, PERMISSIONS.QUESTION_UPDATE);
 
     const body = await req.json();
-    const { field, value, language = "ENGLISH" } = body;
+    const { field, value, language = "ENGLISH", action } = body;
 
     const question = await prisma.question.findUnique({
       where: { id: params.id },
@@ -27,16 +27,170 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return apiError("Question not found", 404);
     }
 
+    const now = new Date();
+
+    // 1. Snapshot previous state into QuestionVersion before modifying
+    try {
+      await prisma.questionVersion.create({
+        data: {
+          questionId: question.id,
+          versionNumber: question.version || 1,
+          editedById: session.user.id,
+          editedAt: now,
+          reason: action === "ACCEPT_ALL" ? "Accepted all AI suggestions" : `Accepted AI suggestion for ${field}`,
+          changeType: "AI_SUGGESTION_APPLIED",
+          snapshot: {
+            subject: question.subject,
+            chapter: question.chapter,
+            topic: question.topic,
+            subTopic: question.subTopic,
+            difficulty: question.difficulty,
+            type: question.type,
+            examLevel: question.examLevel,
+            translations: question.translations,
+          },
+        },
+      });
+    } catch (verErr) {
+      console.warn("[AcceptAI] Could not create version snapshot:", verErr);
+    }
+
+    // 2. Handle ACCEPT_ALL action
+    if (action === "ACCEPT_ALL") {
+      const auditResult: any = question.aiAuditResult;
+      const suggestions: any[] = auditResult?.suggestions || [];
+
+      const updateData: any = {
+        editedById: session.user.id,
+        editedAt: now,
+        lastHumanEditedAt: now,
+        lastHumanEditedById: session.user.id,
+        version: { increment: 1 },
+      };
+
+      for (const sugg of suggestions) {
+        if (sugg.field === "difficulty") updateData.difficulty = sugg.suggested;
+        if (sugg.field === "examLevel") updateData.examLevel = sugg.suggested;
+        if (sugg.field === "topic") updateData.topic = sugg.suggested;
+        if (sugg.field === "subTopic") updateData.subTopic = sugg.suggested;
+        if (sugg.field === "microConcept") updateData.microConcept = sugg.suggested;
+        if (sugg.field === "type") updateData.type = sugg.suggested;
+
+        if (sugg.field === "translation") {
+          try {
+            const draft = typeof sugg.suggested === "string" ? JSON.parse(sugg.suggested) : sugg.suggested;
+            const targetLang = (draft.language || "HINDI").toUpperCase();
+            const existingT = question.translations.find((t) => t.language.toUpperCase() === targetLang);
+
+            if (existingT) {
+              await prisma.questionTranslation.update({
+                where: { id: existingT.id },
+                data: {
+                  statement: draft.statement || existingT.statement,
+                  options: draft.options || existingT.options,
+                  solution: draft.solution || existingT.solution,
+                },
+              });
+            } else {
+              await prisma.questionTranslation.create({
+                data: {
+                  questionId: question.id,
+                  language: targetLang,
+                  statement: draft.statement || "",
+                  options: draft.options || {},
+                  correctOptionIds: question.translations[0]?.correctOptionIds || ["A"],
+                  solution: draft.solution || "",
+                },
+              });
+            }
+          } catch (tErr) {
+            console.warn("[AcceptAI] Error applying draft translation:", tErr);
+          }
+        }
+      }
+
+      // Clear applied suggestions
+      if (auditResult) {
+        auditResult.suggestions = [];
+        updateData.aiAuditResult = auditResult;
+      }
+
+      const updated = await prisma.question.update({
+        where: { id: params.id },
+        data: updateData,
+        include: { translations: true },
+      });
+
+      return apiSuccess({
+        question: updated,
+        message: "Successfully accepted all AI suggestions",
+      });
+    }
+
+    // 3. Handle Translation acceptance
+    if (field === "translation") {
+      try {
+        const draft = typeof value === "string" ? JSON.parse(value) : value;
+        const targetLang = (draft.language || language || "HINDI").toUpperCase();
+        const existingT = question.translations.find((t) => t.language.toUpperCase() === targetLang);
+
+        if (existingT) {
+          await prisma.questionTranslation.update({
+            where: { id: existingT.id },
+            data: {
+              statement: draft.statement || existingT.statement,
+              options: draft.options || existingT.options,
+              solution: draft.solution || existingT.solution,
+            },
+          });
+        } else {
+          await prisma.questionTranslation.create({
+            data: {
+              questionId: question.id,
+              language: targetLang,
+              statement: draft.statement || "",
+              options: draft.options || {},
+              correctOptionIds: question.translations[0]?.correctOptionIds || ["A"],
+              solution: draft.solution || "",
+            },
+          });
+        }
+
+        // Remove translation suggestion from list
+        const auditResult: any = question.aiAuditResult;
+        if (auditResult && Array.isArray(auditResult.suggestions)) {
+          auditResult.suggestions = auditResult.suggestions.filter((s: any) => s.field !== "translation");
+          await prisma.question.update({
+            where: { id: params.id },
+            data: { aiAuditResult: auditResult },
+          });
+        }
+
+        const updated = await prisma.question.findUnique({
+          where: { id: params.id },
+          include: { translations: true },
+        });
+
+        return apiSuccess({
+          question: updated,
+          message: `Successfully accepted and saved ${targetLang} translation`,
+        });
+      } catch (err: any) {
+        return apiError(`Failed to apply translation: ${err.message}`, 400);
+      }
+    }
+
     const primaryT =
       question.translations.find((t) => t.language.toUpperCase() === language.toUpperCase()) ||
       question.translations[0];
 
     const updateData: any = {
       editedById: session.user.id,
-      editedAt: new Date(),
-      lastHumanEditedAt: new Date(),
+      editedAt: now,
+      lastHumanEditedAt: now,
       lastHumanEditedById: session.user.id,
       needsReaudit: true, // Content changed by reviewer -> needs re-audit eligibility
+      version: { increment: 1 },
     };
 
     if (field === "difficulty") {
