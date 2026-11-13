@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { NotificationFeed } from "@/components/student/NotificationFeed";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Notifications | Atomic Pathshala",
 };

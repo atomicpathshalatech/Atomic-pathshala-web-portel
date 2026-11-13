@@ -49,7 +49,7 @@ export default async function QuestionReviewPage({
       assignedTo: { select: { id: true, name: true, email: true } },
       assignedBy: { select: { id: true, name: true } },
       versions: {
-        orderBy: { createdAt: "desc" },
+        orderBy: { versionNumber: "desc" },
         take: 20,
         include: { editedBy: { select: { name: true, email: true } } },
       },
