@@ -45,6 +45,7 @@ function closeStage() {
 function openStage({ stagePath, job, preloadPath }) {
   const win = new BrowserWindow({
     show: false,
+    skipTaskbar: true,
     width: 1920,
     height: 1080,
     useContentSize: true,

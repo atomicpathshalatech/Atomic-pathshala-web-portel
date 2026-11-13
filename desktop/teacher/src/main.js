@@ -19,7 +19,7 @@
  *   - every IPC call re-checks that it came from the trusted origin.
  */
 
-const { app, BrowserWindow, ipcMain, session, shell, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, session, shell, Menu, nativeImage } = require("electron");
 const path = require("node:path");
 const { appUrl, isTrustedUrl } = require("./config");
 const { registerEncoderIpc } = require("./encoder-ipc");
@@ -96,6 +96,11 @@ function hardenSession(ses) {
 
 function createWindow() {
   const start = SMOKE_UNTRUSTED ? "data:text/html,<h1>untrusted</h1>" : new URL(process.env.ATOMIC_START_PATH || "/team", appUrl()).toString();
+  const iconPath = process.platform === "win32"
+    ? path.join(__dirname, "icon.ico")
+    : path.join(__dirname, "icon.png");
+  const winIcon = nativeImage.createFromPath(iconPath);
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -103,7 +108,7 @@ function createWindow() {
     minHeight: 700,
     show: !SMOKE || SMOKE_MINIMIZE,
     title: "Atomic Pathshala",
-    icon: path.join(__dirname, "icon.png"),
+    icon: !winIcon.isEmpty() ? winIcon : path.join(__dirname, "icon.png"),
     backgroundColor: "#0b0d14",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
