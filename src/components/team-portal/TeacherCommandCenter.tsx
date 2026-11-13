@@ -149,14 +149,14 @@ export function TeacherCommandCenter({ data }: { data: CommandCenterData }) {
       </section>
 
       {/* Alerts */}
-      {data.alerts.length > 0 && (
+      {(data?.alerts?.length || 0) > 0 && (
         <section className="space-y-2">
           <h2 className="font-headline-md text-headline-md text-on-surface flex items-center gap-2">
             <span className="material-symbols-outlined text-primary">notifications_active</span>
             Alerts
           </h2>
           <div className="space-y-2">
-            {data.alerts.map((a, i) => {
+            {(data?.alerts || []).map((a, i) => {
               const style = ALERT_STYLE[a.level];
               return (
                 <div key={i} className={`rounded-xl border p-3 flex items-center gap-3 ${style.classes}`}>
@@ -217,7 +217,7 @@ export function TeacherCommandCenter({ data }: { data: CommandCenterData }) {
       </section>
 
       {/* Batches */}
-      {data.batches.length > 0 && (
+      {(data?.batches?.length || 0) > 0 && (
         <section className="space-y-3">
           <h2 className="font-headline-md text-headline-md text-on-surface">My Batches</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-gutter">
@@ -256,7 +256,7 @@ export function TeacherCommandCenter({ data }: { data: CommandCenterData }) {
       )}
 
       {/* Chapter Intelligence */}
-      {data.chapters.length > 0 && (
+      {(data?.chapters?.length || 0) > 0 && (
         <section className="space-y-3">
           <h2 className="font-headline-md text-headline-md text-on-surface">Chapter Intelligence</h2>
           <div className="glass-card rounded-xl overflow-hidden overflow-x-auto">
@@ -291,7 +291,7 @@ export function TeacherCommandCenter({ data }: { data: CommandCenterData }) {
       )}
 
       {/* Lecture Analytics */}
-      {data.lectures.length > 0 && (
+      {(data?.lectures?.length || 0) > 0 && (
         <section className="space-y-3">
           <h2 className="font-headline-md text-headline-md text-on-surface">Lecture Analytics</h2>
           <div className="glass-card rounded-xl overflow-hidden overflow-x-auto">
@@ -330,9 +330,9 @@ export function TeacherCommandCenter({ data }: { data: CommandCenterData }) {
               </tbody>
             </table>
           </div>
-          {data.lectures.length > 25 && (
+          {(data?.lectures?.length || 0) > 25 && (
             <p className="text-label-sm text-on-surface-variant">
-              Showing 25 of {data.lectures.length} lectures.{" "}
+              Showing 25 of {data?.lectures?.length} lectures.{" "}
               <Link href="/team/lectures" className="text-primary hover:underline">
                 View all
               </Link>
@@ -401,9 +401,9 @@ export function TeacherCommandCenter({ data }: { data: CommandCenterData }) {
               <p className="text-[10px] text-on-surface-variant uppercase tracking-wide">Attempts</p>
             </div>
           </div>
-          {data.tests.recent.length > 0 && (
+          {(data?.tests?.recent?.length || 0) > 0 && (
             <ul className="space-y-1.5">
-              {data.tests.recent.slice(0, 5).map((t) => (
+              {(data?.tests?.recent || []).slice(0, 5).map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2 text-label-sm">
                   <span className="text-on-surface truncate">{t.name}</span>
                   <span className="text-on-surface-variant shrink-0">
@@ -420,7 +420,7 @@ export function TeacherCommandCenter({ data }: { data: CommandCenterData }) {
       </div>
 
       {/* Content Gaps */}
-      {data.contentGaps.length > 0 && (
+      {(data?.contentGaps?.length || 0) > 0 && (
         <section className="glass-card rounded-2xl p-6 space-y-3">
           <h2 className="font-headline-md text-headline-md text-on-surface flex items-center gap-2">
             <span className="material-symbols-outlined text-primary">construction</span>

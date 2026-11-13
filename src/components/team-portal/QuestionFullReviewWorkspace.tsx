@@ -521,9 +521,9 @@ export function QuestionFullReviewWorkspace({
 
   // Find adjacent siblings for the carousel navigator (up to 3 before, current, up to 4 after)
   const currentSiblingIdx = siblingQuestions.findIndex((s) => s.id === question.id);
-  const visibleSiblings = siblingQuestions.slice(
+  const visibleSiblings = (siblingQuestions || []).slice(
     Math.max(0, currentSiblingIdx - 3),
-    Math.min(siblingQuestions.length, currentSiblingIdx + 5)
+    Math.min((siblingQuestions || []).length, currentSiblingIdx + 5)
   );
 
   return (
@@ -767,7 +767,7 @@ export function QuestionFullReviewWorkspace({
         </div>
 
         {/* Row 2: Sequential Questions Quick Strip / Carousel */}
-        {siblingQuestions.length > 1 && (
+        {(siblingQuestions || []).length > 1 && (
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 overflow-x-auto">
             <div className="flex items-center gap-2 text-xs text-slate-500 font-bold shrink-0">
               <ListOrdered className="w-3.5 h-3.5 text-blue-600" />
@@ -827,7 +827,7 @@ export function QuestionFullReviewWorkspace({
         )}
 
         {/* Expanded All Questions Grid Drawer */}
-        {showAllQuestionsDrawer && siblingQuestions.length > 0 && (
+        {showAllQuestionsDrawer && (siblingQuestions || []).length > 0 && (
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3 animate-in fade-in">
             <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
               <span>All {totalCount} Questions in Current Review Queue</span>
@@ -1419,7 +1419,7 @@ export function QuestionFullReviewWorkspace({
                 <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                 <div>
                   <b>Critical Academic Flaws Flagged by AI:</b> There are{" "}
-                  {auditResult.errors.filter((e: any) => e.severity === "CRITICAL").length} critical issue(s) detected. Please ensure formulas, option distractors, and answer keys are corrected before publishing.
+                  {(auditResult?.errors || []).filter((e: any) => e.severity === "CRITICAL").length} critical issue(s) detected. Please ensure formulas, option distractors, and answer keys are corrected before publishing.
                 </div>
               </div>
             )}
@@ -1521,7 +1521,7 @@ export function QuestionFullReviewWorkspace({
                   { id: "ai_audit", label: typeof question.aiAuditScore === "number" ? `AI Audit (${question.aiAuditScore})` : "AI Audit" },
                   { id: "bilingual", label: "Bilingual" },
                   { id: "reference", label: "NCERT Ref" },
-                  { id: "similar", label: `Similar (${(auditResult?.similarQuestions?.length || similar.length) || 0})` },
+                  { id: "similar", label: `Similar (${(auditResult?.similarQuestions?.length || (similar || []).length) || 0})` },
                   { id: "history", label: "History" },
                   { id: "usage", label: "Usage" },
                 ] as const
@@ -1661,7 +1661,7 @@ export function QuestionFullReviewWorkspace({
                   <div className="space-y-2">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                       <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
-                      <span>Detected Quality Errors ({auditResult.errors.length}):</span>
+                      <span>Detected Quality Errors ({auditResult?.errors?.length || 0}):</span>
                     </span>
                     <div className="space-y-2">
                       {auditResult.errors.map((err, i) => (
@@ -1701,16 +1701,16 @@ export function QuestionFullReviewWorkspace({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
                         <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-                        <span>AI Suggested Corrections ({auditResult.suggestions.length}):</span>
+                        <span>AI Suggested Corrections ({auditResult?.suggestions?.length || 0}):</span>
                       </span>
 
-                      {auditResult.suggestions.length > 1 && (
+                      {(auditResult?.suggestions?.length || 0) > 1 && (
                         <button
                           type="button"
                           onClick={handleAcceptAllAiSuggestions}
                           className="px-2.5 py-1 text-[11px] font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-xs transition cursor-pointer"
                         >
-                          Accept All ({auditResult.suggestions.length})
+                          Accept All ({auditResult?.suggestions?.length || 0})
                         </button>
                       )}
                     </div>
@@ -1949,12 +1949,12 @@ export function QuestionFullReviewWorkspace({
                 )}
 
                 {/* Legacy Duplicate Candidate Pairs */}
-                {similar.length > 0 && (
+                {(similar || []).length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                      Logged Candidate Pairs ({similar.length})
+                      Logged Candidate Pairs ({(similar || []).length})
                     </span>
-                    {similar.map((d) => (
+                    {(similar || []).map((d) => (
                       <div key={d.pairId} className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
                         <div className="flex items-center justify-between gap-2">
                           <Link href={`/team/questions/${d.id}/review`} className="font-mono font-bold text-blue-600 hover:underline">
@@ -1972,7 +1972,7 @@ export function QuestionFullReviewWorkspace({
                   </div>
                 )}
 
-                {!auditResult?.similarQuestions?.length && similar.length === 0 && (
+                {!auditResult?.similarQuestions?.length && (!similar || similar.length === 0) && (
                   <p className="p-6 text-center text-slate-400">
                     No duplicate or similar questions detected in the active bank.
                   </p>
@@ -2072,12 +2072,12 @@ export function QuestionFullReviewWorkspace({
                     {/* Tests */}
                     <div className="space-y-2">
                       <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                        Linked Tests ({usageData.tests.length})
+                        Linked Tests ({(usageData?.tests || []).length})
                       </span>
-                      {usageData.tests.length === 0 ? (
+                      {(!usageData?.tests || usageData.tests.length === 0) ? (
                         <p className="text-slate-400 italic">Not used in any active tests yet.</p>
                       ) : (
-                        usageData.tests.map((t: any) => (
+                        (usageData.tests || []).map((t: any) => (
                           <div key={t.linkId} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
                             <div className="font-bold text-slate-800 dark:text-slate-200">{t.testTitle}</div>
                             <div className="text-[10px] text-slate-500">
@@ -2091,12 +2091,12 @@ export function QuestionFullReviewWorkspace({
                     {/* DPPs */}
                     <div className="space-y-2">
                       <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                        Daily Practice Problems ({usageData.dpps.length})
+                        Daily Practice Problems ({(usageData?.dpps || []).length})
                       </span>
-                      {usageData.dpps.length === 0 ? (
+                      {(!usageData?.dpps || usageData.dpps.length === 0) ? (
                         <p className="text-slate-400 italic">Not used in any DPPs yet.</p>
                       ) : (
-                        usageData.dpps.map((d: any) => (
+                        (usageData.dpps || []).map((d: any) => (
                           <div key={d.linkId} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
                             <div className="font-bold text-slate-800 dark:text-slate-200">{d.title}</div>
                             <div className="text-[10px] text-slate-500">Chapter: {d.chapter} · DPP #{d.dppNumber}</div>
@@ -2108,12 +2108,12 @@ export function QuestionFullReviewWorkspace({
                     {/* Exercises */}
                     <div className="space-y-2">
                       <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                        Exercise Practice Sheets ({usageData.exercises.length})
+                        Exercise Practice Sheets ({(usageData?.exercises || []).length})
                       </span>
-                      {usageData.exercises.length === 0 ? (
+                      {(!usageData?.exercises || usageData.exercises.length === 0) ? (
                         <p className="text-slate-400 italic">Not used in any practice sheets yet.</p>
                       ) : (
-                        usageData.exercises.map((e: any) => (
+                        (usageData.exercises || []).map((e: any) => (
                           <div key={e.linkId} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
                             <div className="font-bold text-slate-800 dark:text-slate-200">{e.title}</div>
                             <div className="text-[10px] text-slate-500">{e.subject} · {e.chapter}</div>

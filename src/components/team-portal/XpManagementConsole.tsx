@@ -140,9 +140,9 @@ export function XpManagementConsole() {
     try {
       const res = await fetch("/api/admin/gamification/xp/dashboard");
       const json = await res.json();
-      if (json.success) {
-        setStats(json.data.stats);
-        setRecentTx(json.data.recentTransactions);
+      if (json.success && json.data) {
+        setStats(json.data.stats || null);
+        setRecentTx(Array.isArray(json.data.recentTransactions) ? json.data.recentTransactions : []);
       } else {
         toast.error(json.error || "Failed to load dashboard metrics");
       }
@@ -159,8 +159,8 @@ export function XpManagementConsole() {
     try {
       const res = await fetch("/api/admin/gamification/xp/rules");
       const json = await res.json();
-      if (json.success) {
-        setRules(json.data.rules);
+      if (json.success && json.data) {
+        setRules(Array.isArray(json.data.rules) ? json.data.rules : []);
       } else {
         toast.error(json.error || "Failed to load reward rules");
       }
@@ -179,10 +179,10 @@ export function XpManagementConsole() {
       if (search) query.append("search", search);
       const res = await fetch(`/api/admin/gamification/xp/students?${query.toString()}`);
       const json = await res.json();
-      if (json.success) {
-        setStudents(json.data.students);
-        setStudentTotalPages(json.data.pagination.totalPages);
-        setStudentPage(json.data.pagination.page);
+      if (json.success && json.data) {
+        setStudents(Array.isArray(json.data.students) ? json.data.students : []);
+        setStudentTotalPages(json.data.pagination?.totalPages || 1);
+        setStudentPage(json.data.pagination?.page || 1);
       } else {
         toast.error(json.error || "Failed to load students");
       }
@@ -203,11 +203,11 @@ export function XpManagementConsole() {
       if (activity) query.append("activity", activity);
       const res = await fetch(`/api/admin/gamification/xp/transactions?${query.toString()}`);
       const json = await res.json();
-      if (json.success) {
-        setTransactions(json.data.transactions);
-        setActivityOptions(json.data.activities || []);
-        setLedgerTotalPages(json.data.pagination.totalPages);
-        setLedgerPage(json.data.pagination.page);
+      if (json.success && json.data) {
+        setTransactions(Array.isArray(json.data.transactions) ? json.data.transactions : []);
+        setActivityOptions(Array.isArray(json.data.activities) ? json.data.activities : []);
+        setLedgerTotalPages(json.data.pagination?.totalPages || 1);
+        setLedgerPage(json.data.pagination?.page || 1);
       } else {
         toast.error(json.error || "Failed to load ledger transactions");
       }
@@ -603,7 +603,7 @@ export function XpManagementConsole() {
                       </td>
                     </tr>
                   ))}
-                  {recentTx.length === 0 && (
+                  {(!recentTx || recentTx.length === 0) && (
                     <tr>
                       <td colSpan={6} className="py-8 text-center text-on-surface-variant">
                         No transactions recorded yet.
@@ -628,12 +628,12 @@ export function XpManagementConsole() {
               </p>
             </div>
             <span className="text-xs font-semibold px-3 py-1 rounded-full bg-surface border border-outline-variant/30 text-on-surface-variant">
-              {rules.length} Rules Configured
+              {(rules || []).length} Rules Configured
             </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {rules.map((rule) => (
+            {(rules || []).map((rule) => (
               <div
                 key={rule.id}
                 className={`glass-card rounded-2xl p-5 border transition flex flex-col justify-between ${
@@ -755,7 +755,7 @@ export function XpManagementConsole() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/20">
-                  {students.map((student) => (
+                  {(students || []).map((student) => (
                     <tr key={student.id} className="hover:bg-surface-container-high/40 transition">
                       <td className="py-3 px-4 font-bold text-on-surface">
                         <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs">
@@ -803,7 +803,7 @@ export function XpManagementConsole() {
                       </td>
                     </tr>
                   ))}
-                  {students.length === 0 && !loading && (
+                  {(!students || students.length === 0) && !loading && (
                     <tr>
                       <td colSpan={7} className="py-12 text-center text-on-surface-variant">
                         No students found matching your criteria.
@@ -911,7 +911,7 @@ export function XpManagementConsole() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/20 font-mono text-xs">
-                  {transactions.map((tx) => (
+                  {(transactions || []).map((tx) => (
                     <tr key={tx.id} className="hover:bg-surface-container-high/40 transition">
                       <td className="py-3 px-3 text-on-surface-variant font-mono text-[11px] truncate max-w-[120px]">
                         {tx.id}
@@ -963,7 +963,7 @@ export function XpManagementConsole() {
                       </td>
                     </tr>
                   ))}
-                  {transactions.length === 0 && !loading && (
+                  {(!transactions || transactions.length === 0) && !loading && (
                     <tr>
                       <td colSpan={7} className="py-12 text-center text-on-surface-variant font-sans">
                         No transactions found matching criteria.

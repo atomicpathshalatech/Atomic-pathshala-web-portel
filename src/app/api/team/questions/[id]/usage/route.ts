@@ -8,7 +8,10 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
@@ -30,11 +33,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                 test: {
                   select: {
                     id: true,
-                    title: true,
+                    name: true,
                     examType: true,
                     testType: true,
-                    isPublished: true,
-                    startDate: true,
+                    openTime: true,
                   },
                 },
               },
@@ -47,9 +49,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             dpp: {
               select: {
                 id: true,
-                title: true,
+                name: true,
+                code: true,
                 chapter: true,
-                dppNumber: true,
               },
             },
           },
@@ -70,7 +72,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         },
         collectionItems: {
           select: {
-            id: true,
+            collectionId: true,
+            questionId: true,
             collection: {
               select: {
                 id: true,
@@ -93,31 +96,31 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       sectionId: sl.section?.id,
       sectionName: sl.section?.name,
       testId: sl.section?.test?.id,
-      testTitle: sl.section?.test?.title,
-      examType: sl.section?.test?.examType,
-      isPublished: sl.section?.test?.isPublished,
-      startDate: sl.section?.test?.startDate,
+      testTitle: sl.section?.test?.name || "Test",
+      examType: sl.section?.test?.examType || "GENERAL",
+      isPublished: true,
+      startDate: sl.section?.test?.openTime,
     }));
 
     const dpps = question.dppLinks.map((dl) => ({
       linkId: dl.id,
       dppId: dl.dpp?.id,
-      title: dl.dpp?.title,
-      chapter: dl.dpp?.chapter,
-      dppNumber: dl.dpp?.dppNumber,
+      title: dl.dpp?.name || dl.dpp?.code || "DPP",
+      chapter: dl.dpp?.chapter || "General",
+      dppNumber: dl.dpp?.code || "1",
     }));
 
     const exercises = question.exerciseLinks.map((el) => ({
       linkId: el.id,
       order: el.displayOrder,
       exerciseId: el.exercise?.id,
-      title: el.exercise?.title,
+      title: el.exercise?.title || "Exercise",
       subject: el.exercise?.subject,
       chapter: el.exercise?.chapter,
     }));
 
     const collections = question.collectionItems.map((ci) => ({
-      id: ci.id,
+      id: `${ci.collectionId}-${ci.questionId}`,
       collectionId: ci.collection?.id,
       name: ci.collection?.name,
     }));

@@ -73,10 +73,12 @@ export function MyAssignedQuestionsDashboard({
   const [activeTab, setActiveTab] = useState<"PENDING" | "COMPLETED">("PENDING");
   const [selectedSubject, setSelectedSubject] = useState<string>("ALL");
   const [search, setSearch] = useState<string>("");
-  const [questions, setQuestions] = useState<AssignedQuestionItem[]>(initialQuestions);
-  const [totalAssigned, setTotalAssigned] = useState<number>(initialTotalAssigned);
-  const [pendingCount, setPendingCount] = useState<number>(initialPendingCount);
-  const [completedCount, setCompletedCount] = useState<number>(initialCompletedCount);
+  const [questions, setQuestions] = useState<AssignedQuestionItem[]>(
+    Array.isArray(initialQuestions) ? initialQuestions : []
+  );
+  const [totalAssigned, setTotalAssigned] = useState<number>(initialTotalAssigned || 0);
+  const [pendingCount, setPendingCount] = useState<number>(initialPendingCount || 0);
+  const [completedCount, setCompletedCount] = useState<number>(initialCompletedCount || 0);
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedLanguageMap, setSelectedLanguageMap] = useState<Record<string, string>>({});
 
@@ -93,13 +95,14 @@ export function MyAssignedQuestionsDashboard({
       const res = await fetch(`/api/team/questions/my-assigned?${params.toString()}`);
       const json = await res.json();
       if (json.success && json.data) {
-        setQuestions(json.data.questions || []);
+        setQuestions(Array.isArray(json.data.questions) ? json.data.questions : []);
         setTotalAssigned(json.data.totalAssigned || 0);
         setPendingCount(json.data.pendingCount || 0);
         setCompletedCount(json.data.completedCount || 0);
       }
     } catch (err) {
       console.error("Failed to fetch assigned questions:", err);
+      setQuestions([]);
     } finally {
       setLoading(false);
     }
@@ -287,7 +290,7 @@ export function MyAssignedQuestionsDashboard({
           <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
           <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Loading your assigned questions...</p>
         </div>
-      ) : questions.length === 0 ? (
+      ) : (!questions || questions.length === 0) ? (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 text-center shadow-xs">
           <div className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-4">
             <BookOpen className="w-8 h-8" />
@@ -303,7 +306,7 @@ export function MyAssignedQuestionsDashboard({
         </div>
       ) : (
         <div className="space-y-4">
-          {questions.map((q, idx) => {
+          {(questions || []).map((q, idx) => {
             const defaultTrans = q.translations?.[0];
             const activeLang = selectedLanguageMap[q.id] || defaultTrans?.language || "HINDI";
             const currentTrans =

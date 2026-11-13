@@ -28,14 +28,14 @@ const SEGMENT_LABEL: Record<Broadcast["segmentType"], string> = {
 
 export function BroadcastManager({
   canSend,
-  batches,
-  initialBroadcasts,
+  batches = [],
+  initialBroadcasts = [],
 }: {
   canSend: boolean;
-  batches: Batch[];
-  initialBroadcasts: Broadcast[];
+  batches?: Batch[];
+  initialBroadcasts?: Broadcast[];
 }) {
-  const [broadcasts, setBroadcasts] = useState(initialBroadcasts);
+  const [broadcasts, setBroadcasts] = useState<Broadcast[]>(Array.isArray(initialBroadcasts) ? initialBroadcasts : []);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -253,13 +253,13 @@ export function BroadcastManager({
         </form>
       )}
 
-      {broadcasts.length === 0 ? (
+      {(!broadcasts || broadcasts.length === 0) ? (
         <div className="glass-card rounded-2xl p-12 text-center text-on-surface-variant font-body-md">
           No broadcasts sent yet.
         </div>
       ) : (
         <div className="glass-card rounded-2xl divide-y divide-outline-variant/20">
-          {broadcasts.map((b) => (
+          {(broadcasts || []).map((b) => (
             <div key={b.id} className="p-5 space-y-1">
               <div className="flex items-center justify-between gap-4">
                 <p className="font-label-lg text-label-lg text-on-surface font-semibold">{b.title}</p>

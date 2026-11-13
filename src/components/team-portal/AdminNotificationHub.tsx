@@ -104,7 +104,7 @@ export function AdminNotificationHub({
     try {
       const res = await fetch("/api/team/notifications/analytics");
       const json = await res.json();
-      if (json.success) setStats(json.stats);
+      if (json.success) setStats(json.stats || json.data?.stats || null);
     } catch {
       // ignore
     } finally {
@@ -118,9 +118,14 @@ export function AdminNotificationHub({
     try {
       const res = await fetch("/api/team/notifications/scheduled");
       const json = await res.json();
-      if (json.success) setScheduledJobs(json.scheduled);
+      const list = Array.isArray(json.scheduled)
+        ? json.scheduled
+        : Array.isArray(json.data?.scheduled)
+        ? json.data.scheduled
+        : [];
+      if (json.success) setScheduledJobs(list);
     } catch {
-      // ignore
+      setScheduledJobs([]);
     } finally {
       setLoadingScheduled(false);
     }
@@ -132,9 +137,14 @@ export function AdminNotificationHub({
     try {
       const res = await fetch("/api/team/notifications/rules");
       const json = await res.json();
-      if (json.success) setRules(json.rules);
+      const list = Array.isArray(json.rules)
+        ? json.rules
+        : Array.isArray(json.data?.rules)
+        ? json.data.rules
+        : [];
+      if (json.success) setRules(list);
     } catch {
-      // ignore
+      setRules([]);
     } finally {
       setLoadingRules(false);
     }
@@ -152,12 +162,17 @@ export function AdminNotificationHub({
       const res = await fetch(`/api/team/notifications/logs?${params.toString()}`);
       const json = await res.json();
       if (json.success) {
-        setLogs(json.logs);
-        setLogPage(json.page);
-        setTotalLogPages(json.totalPages);
+        const list = Array.isArray(json.logs)
+          ? json.logs
+          : Array.isArray(json.data?.logs)
+          ? json.data.logs
+          : [];
+        setLogs(list);
+        setLogPage(json.page || json.data?.page || 1);
+        setTotalLogPages(json.totalPages || json.data?.totalPages || 1);
       }
     } catch {
-      // ignore
+      setLogs([]);
     } finally {
       setLoadingLogs(false);
     }
@@ -169,9 +184,14 @@ export function AdminNotificationHub({
     try {
       const res = await fetch("/api/team/notifications/quiz");
       const json = await res.json();
-      if (json.success) setQuizTests(json.tests);
+      const list = Array.isArray(json.tests)
+        ? json.tests
+        : Array.isArray(json.data?.tests)
+        ? json.data.tests
+        : [];
+      if (json.success) setQuizTests(list);
     } catch {
-      // ignore
+      setQuizTests([]);
     } finally {
       setLoadingQuizTests(false);
     }
@@ -1102,7 +1122,7 @@ export function AdminNotificationHub({
 
           {loadingScheduled ? (
             <p className="text-xs text-slate-400 py-8 text-center">Loading scheduled queue...</p>
-          ) : scheduledJobs.length === 0 ? (
+          ) : (!scheduledJobs || scheduledJobs.length === 0) ? (
             <div className="text-center py-12 space-y-2">
               <span className="material-symbols-outlined text-4xl text-slate-300">event_available</span>
               <p className="text-sm font-semibold text-slate-600">No pending scheduled notifications.</p>
@@ -1124,7 +1144,7 @@ export function AdminNotificationHub({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {scheduledJobs.map((job) => {
+                  {(scheduledJobs || []).map((job) => {
                     const payload = job.payload || {};
                     const isPending = job.status === "PENDING";
                     const isProcessing = job.status === "PROCESSING";
@@ -1195,7 +1215,7 @@ export function AdminNotificationHub({
 
           {loadingQuizTests ? (
             <p className="text-xs text-slate-400 py-8 text-center">Loading test series...</p>
-          ) : quizTests.length === 0 ? (
+          ) : (!quizTests || quizTests.length === 0) ? (
             <div className="text-center py-10 space-y-2">
               <span className="material-symbols-outlined text-4xl text-slate-300">quiz</span>
               <p className="text-sm font-semibold text-slate-600">No tests found.</p>
@@ -1213,7 +1233,7 @@ export function AdminNotificationHub({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {quizTests.map((test) => (
+                  {(quizTests || []).map((test) => (
                     <tr key={test.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3 px-3 font-bold text-slate-900">{test.name}</td>
                       <td className="py-3 px-3 text-slate-600">
@@ -1412,7 +1432,7 @@ export function AdminNotificationHub({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {rules.map((rule) => (
+                  {(rules || []).map((rule) => (
                     <tr key={rule.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3 px-3 font-mono font-bold text-slate-900">
                         {rule.eventType}
@@ -1539,7 +1559,7 @@ export function AdminNotificationHub({
 
           {loadingLogs ? (
             <p className="text-xs text-slate-400 py-10 text-center">Loading audit logs...</p>
-          ) : logs.length === 0 ? (
+          ) : (!logs || logs.length === 0) ? (
             <div className="text-center py-12 space-y-2">
               <span className="material-symbols-outlined text-4xl text-slate-300">manage_search</span>
               <p className="text-sm font-semibold text-slate-600">No delivery logs found matching filter.</p>
@@ -1558,7 +1578,7 @@ export function AdminNotificationHub({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {logs.map((log) => {
+                  {(logs || []).map((log) => {
                     const notif = log.notification || {};
                     const isClicked = log.status === "CLICKED";
                     const isFailed = log.status === "FAILED";
