@@ -52,7 +52,11 @@ function getFirebaseAdmin(): App | null {
  */
 export async function sendPushToTokens(
   tokens: string[],
-  payload: NotificationPayload
+  payload: NotificationPayload,
+  options?: {
+    tokenUserMap?: Map<string, string>;
+    notificationIdMap?: Map<string, string>;
+  }
 ): Promise<PushResult> {
   const result: PushResult = {
     successCount: 0,
@@ -64,11 +68,40 @@ export async function sendPushToTokens(
     return result;
   }
 
+  // Determine appropriate Android Notification Channel ID based on event and category
+  let channelId = "atomic_pathshala_main";
+  const eventType = payload.data?.eventType || "";
+  const category = (payload.category as string) || payload.data?.category || "";
+
+  if (
+    eventType === "CLASS_REMINDER_15_MIN" ||
+    eventType === "CLASS_STARTED" ||
+    eventType === "LIVE_CLASS_STARTED"
+  ) {
+    channelId = "class_reminders";
+  } else if (eventType.startsWith("CLASS_")) {
+    channelId = "class_updates";
+  } else if (eventType.startsWith("TEST_")) {
+    channelId = "test_reminders";
+  } else if (payload.priority === "urgent" || category === "SYSTEM") {
+    channelId = "important_announcements";
+  } else if (category === "STUDY_MATERIAL" || category === "MOTIVATION") {
+    channelId = "general_updates";
+  }
+
+  const isHighPriority =
+    payload.priority === "high" ||
+    payload.priority === "urgent" ||
+    channelId === "class_reminders" ||
+    channelId === "class_updates" ||
+    channelId === "test_reminders" ||
+    channelId === "important_announcements";
+
   const app = getFirebaseAdmin();
 
   if (!app || !isFirebaseConfigured) {
     console.info(
-      `[FCM Push Simulated] To ${tokens.length} tokens | Title: "${payload.title}" | Body: "${payload.body}" | Link: "${payload.deepLink || ""}"`
+      `[FCM Push Simulated] To ${tokens.length} tokens | Channel: ${channelId} | Title: "${payload.title}" | Body: "${payload.body}" | Link: "${payload.deepLink || ""}"`
     );
     result.successCount = tokens.length;
     return result;
@@ -94,14 +127,22 @@ export async function sendPushToTokens(
           body: payload.body,
           deepLink: payload.deepLink || "",
           click_action: payload.deepLink || "",
+          channelId,
           metadata: payload.metadata ? JSON.stringify(payload.metadata) : "{}",
         },
         android: {
-          priority: payload.priority === "normal" ? "normal" : "high",
+          priority: isHighPriority ? "high" : "normal",
           notification: {
-            channelId: "atomic_pathshala_main",
+            channelId,
+            icon: "ic_notification",
+            color: "#2563EB",
             sound: "default",
+            defaultVibrateTimings: true,
+            defaultSound: true,
+            priority: isHighPriority ? "max" : "high",
+            visibility: "public",
             clickAction: payload.deepLink || "",
+            imageUrl: payload.image || undefined,
           },
         },
         webpush: {
@@ -114,21 +155,53 @@ export async function sendPushToTokens(
       result.successCount += response.successCount;
       result.failureCount += response.failureCount;
 
-      // Check for bad/expired tokens to deactivate
-      response.responses.forEach((resp: any, idx: number) => {
-        if (!resp.success && resp.error) {
+      // Check each token response to record audit delivery and de-activate bad tokens
+      for (let idx = 0; idx < response.responses.length; idx++) {
+        const resp: any = response.responses[idx];
+        const badToken = chunk[idx];
+        const userId = badToken ? options?.tokenUserMap?.get(badToken) : undefined;
+        const notificationId = badToken ? options?.notificationIdMap?.get(badToken) : undefined;
+
+        if (resp.success) {
+          if (userId && notificationId) {
+            prisma.notificationDelivery
+              .create({
+                data: {
+                  notificationId,
+                  userId,
+                  channel: "FCM",
+                  status: "FCM_ACCEPTED",
+                  deliveredAt: new Date(),
+                },
+              })
+              .catch(() => {});
+          }
+        } else if (resp.error) {
           const code = resp.error.code;
           if (
             code === "messaging/invalid-registration-token" ||
             code === "messaging/registration-token-not-registered"
           ) {
-            const badToken = chunk[idx];
             if (badToken) {
               result.invalidTokens.push(badToken);
             }
           }
+
+          if (userId && notificationId) {
+            prisma.notificationDelivery
+              .create({
+                data: {
+                  notificationId,
+                  userId,
+                  channel: "FCM",
+                  status: "FAILED",
+                  errorMessage: resp.error.message || code || "FCM Delivery Failed",
+                },
+              })
+              .catch(() => {});
+          }
         }
-      });
+      }
     } catch (chunkError) {
       console.error("[FCM_MULTICAST_ERROR]", chunkError);
       result.failureCount += chunk.length;

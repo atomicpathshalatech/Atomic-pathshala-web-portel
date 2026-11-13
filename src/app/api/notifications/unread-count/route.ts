@@ -3,6 +3,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
+import { triggerDueNotificationWorker } from "@/lib/notifications/scheduler";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
+    triggerDueNotificationWorker();
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return apiError("Not authenticated", 401);

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -25,6 +25,9 @@ export async function GET() {
       unreadCount,
       totalDeliveries,
       clickedDeliveries,
+      fcmAcceptedCount,
+      androidDevicesCount,
+      webPushSubsCount,
       activeRulesCount,
     ] = await Promise.all([
       prisma.notification.count(),
@@ -34,11 +37,21 @@ export async function GET() {
       prisma.notification.count({ where: { isRead: false } }),
       prisma.notificationDelivery.count(),
       prisma.notificationDelivery.count({ where: { status: "CLICKED" } }),
+      prisma.notificationDelivery.count({ where: { status: "FCM_ACCEPTED" } }),
+      prisma.userDevice.count({ where: { platform: "ANDROID", isActive: true } }),
+      prisma.webPushSubscription.count({ where: { isActive: true } }),
       prisma.notificationRule.count({ where: { isEnabled: true } }),
     ]);
 
     const clickRate =
       totalDeliveries > 0 ? ((clickedDeliveries / totalDeliveries) * 100).toFixed(1) : "0.0";
+
+    const openRate =
+      fcmAcceptedCount > 0
+        ? ((clickedDeliveries / fcmAcceptedCount) * 100).toFixed(1)
+        : totalNotifications > 0
+        ? ((clickedDeliveries / totalNotifications) * 100).toFixed(1)
+        : "0.0";
 
     // Recent action logs breakdown
     const actionStats = await prisma.notificationActionLog.groupBy({
@@ -57,9 +70,19 @@ export async function GET() {
         failedCount,
         unreadCount,
         clickRate: `${clickRate}%`,
+        openRate: `${openRate}%`,
         activeRulesCount,
         totalDeliveries,
         clickedDeliveries,
+        fcmAcceptedCount,
+        androidDevicesCount,
+        webPushSubsCount,
+        channelHealth: {
+          androidFCM: { configured: true, activeDevices: androidDevicesCount },
+          inAppRealtime: { configured: true, status: "ONLINE" },
+          webPush: { configured: true, activeSubscribers: webPushSubsCount },
+          whatsapp: { configured: true, status: "ACTIVE" },
+        },
         actionStats: actionStats.map((a) => ({ action: a.actionType, count: a._count.id })),
       },
     });

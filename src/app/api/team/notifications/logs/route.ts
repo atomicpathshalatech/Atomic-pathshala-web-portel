@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -16,27 +16,44 @@ export async function GET(req: NextRequest) {
     const page = parseInt(req.nextUrl.searchParams.get("page") || "1", 10);
     const limit = 50;
     const skip = (page - 1) * limit;
+    const status = req.nextUrl.searchParams.get("status");
+    const channel = req.nextUrl.searchParams.get("channel");
+    const search = req.nextUrl.searchParams.get("search");
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (channel) where.channel = channel;
+    if (search) {
+      where.OR = [
+        { user: { name: { contains: search, mode: "insensitive" } } },
+        { user: { email: { contains: search, mode: "insensitive" } } },
+        { notification: { title: { contains: search, mode: "insensitive" } } },
+      ];
+    }
 
     const [logs, total] = await Promise.all([
       prisma.notificationDelivery.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
         include: {
-          user: { select: { id: true, name: true, email: true } },
+          user: { select: { id: true, name: true, email: true, phone: true } },
           notification: {
             select: {
               id: true,
               title: true,
+              body: true,
               type: true,
               category: true,
               priority: true,
               actionType: true,
+              deepLink: true,
             },
           },
         },
       }),
-      prisma.notificationDelivery.count(),
+      prisma.notificationDelivery.count({ where }),
     ]);
 
     return NextResponse.json({

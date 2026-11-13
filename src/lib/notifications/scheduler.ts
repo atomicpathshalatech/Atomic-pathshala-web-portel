@@ -261,6 +261,7 @@ export async function processDueNotifications(): Promise<{
         entityId: job.entityId || undefined,
         batchId: payload.batchId || (job.targetType === NotificationTargetType.BATCH ? job.targetId || undefined : undefined),
         courseId: payload.courseId,
+        recipientUserIds: payload.metadata?.recipientUserIds || undefined,
         title: payload.title,
         body: payload.body,
         deepLink: payload.deepLink,
@@ -301,4 +302,29 @@ export async function processDueNotifications(): Promise<{
   }
 
   return { processed, failed, skipped };
+}
+
+let lastWorkerRunTime = 0;
+const WORKER_THROTTLE_MS = 25_000; // Run at most once every 25 seconds across web traffic
+
+/**
+ * Lightweight, non-blocking background worker that ensures due scheduled notifications
+ * are executed promptly even if external cron intervals are infrequent.
+ */
+export function triggerDueNotificationWorker(): void {
+  const now = Date.now();
+  if (now - lastWorkerRunTime < WORKER_THROTTLE_MS) return;
+  lastWorkerRunTime = now;
+
+  processDueNotifications()
+    .then((res) => {
+      if (res.processed > 0 || res.failed > 0) {
+        console.log(
+          `[NotificationWorker] Due Jobs Executed: ${res.processed} processed, ${res.failed} failed, ${res.skipped} skipped`
+        );
+      }
+    })
+    .catch((err) => {
+      console.warn("[NotificationWorker Warning]", err);
+    });
 }

@@ -456,25 +456,44 @@ export async function triggerNotificationEvent(
         userId: { in: pushRecipients },
         isActive: true,
       },
-      select: { fcmToken: true },
+      select: { fcmToken: true, userId: true },
     });
 
     const tokens = devices.map((d) => d.fcmToken);
     if (tokens.length > 0) {
-      sendPushToTokens(tokens, {
-        title: input.title,
-        body: input.body,
-        deepLink: input.deepLink || input.actionUrl || "/",
-        priority: priority === NotificationPriority.HIGH || priority === NotificationPriority.URGENT ? "high" : "normal",
-        metadata: input.metadata,
-        data: {
-          eventType: input.eventType,
-          deepLink: input.deepLink || input.actionUrl || "",
-          entityId: input.entityId || "",
-          actionType: input.actionType || "",
+      const tokenUserMap = new Map<string, string>();
+      const notificationIdMap = new Map<string, string>();
+      const userNotifMap = new Map(createdNotifications.map((c) => [c.userId, c.id]));
+
+      for (const d of devices) {
+        tokenUserMap.set(d.fcmToken, d.userId);
+        const nId = userNotifMap.get(d.userId);
+        if (nId) notificationIdMap.set(d.fcmToken, nId);
+      }
+
+      sendPushToTokens(
+        tokens,
+        {
+          title: input.title,
+          body: input.body,
+          deepLink: input.deepLink || input.actionUrl || "/",
+          image: input.image || undefined,
           category,
+          priority:
+            priority === NotificationPriority.HIGH || priority === NotificationPriority.URGENT
+              ? "high"
+              : "normal",
+          metadata: input.metadata,
+          data: {
+            eventType: input.eventType,
+            deepLink: input.deepLink || input.actionUrl || "",
+            entityId: input.entityId || "",
+            actionType: input.actionType || "",
+            category,
+          },
         },
-      }).catch((fcmErr) => {
+        { tokenUserMap, notificationIdMap }
+      ).catch((fcmErr) => {
         console.error("[Engine FCM Push Error]", fcmErr);
       });
     }

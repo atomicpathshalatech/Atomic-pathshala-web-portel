@@ -14,6 +14,12 @@ public class AtomicFirebaseMessagingService extends MessagingService {
     private static final String TAG = "AtomicFloatingPoll";
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        AtomicNotificationChannels.createAllChannels(this);
+    }
+
+    @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
 

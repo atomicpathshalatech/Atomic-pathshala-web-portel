@@ -102,6 +102,70 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
 
+    // Central Notification Engine: Trigger TEST_RESCHEDULED and update 15m reminder
+    if (parsedOpenTime) {
+      try {
+        const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+        const { cancelScheduledNotifications, enqueueScheduledNotification } = await import("@/lib/notifications/scheduler");
+        const { NotificationType, NotificationCategory, NotificationPriority, NotificationTargetType } = await import("@/lib/notifications/types");
+
+        // Cancel old scheduled reminders
+        await cancelScheduledNotifications(NotificationType.TEST_REMINDER_15_MIN, updatedTest.id);
+        await cancelScheduledNotifications(NotificationType.TEST_STARTED, updatedTest.id);
+
+        const timeStr = parsedOpenTime.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
+        const dateStr = parsedOpenTime.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", month: "short", day: "numeric" });
+
+        // Trigger reschedule alert
+        await triggerNotificationEvent({
+          eventType: NotificationType.TEST_SCHEDULED,
+          category: NotificationCategory.TESTS,
+          priority: NotificationPriority.HIGH,
+          entityId: updatedTest.id,
+          testId: updatedTest.id,
+          title: `Test Rescheduled: ${updatedTest.name}`,
+          body: `Test "${updatedTest.name}" timing updated to ${dateStr} at ${timeStr}.`,
+          deepLink: `/test/${updatedTest.id}`,
+          actionType: "VIEW_TEST",
+          actionUrl: `/test/${updatedTest.id}`,
+          metadata: {
+            testId: updatedTest.id,
+            testName: updatedTest.name,
+            openTime: parsedOpenTime.toISOString(),
+          },
+        });
+
+        // Re-enqueue new 15m reminder
+        const now = new Date();
+        const reminderTime = new Date(parsedOpenTime.getTime() - 15 * 60 * 1000);
+        if (reminderTime.getTime() > now.getTime()) {
+          await enqueueScheduledNotification({
+            eventType: NotificationType.TEST_REMINDER_15_MIN,
+            entityId: updatedTest.id,
+            targetType: NotificationTargetType.USER,
+            payload: {
+              title: `Test starts in 15 minutes!`,
+              body: `${updatedTest.name} starts shortly. Ensure a quiet study environment.`,
+              deepLink: `/test/${updatedTest.id}`,
+              actionType: "VIEW_TEST",
+              actionUrl: `/test/${updatedTest.id}`,
+              category: NotificationCategory.TESTS,
+              priority: NotificationPriority.HIGH,
+              metadata: {
+                testId: updatedTest.id,
+                testName: updatedTest.name,
+                openTime: parsedOpenTime.toISOString(),
+              },
+            },
+            executeAt: reminderTime,
+            idempotencyKey: `test-reminder-15m:${updatedTest.id}:${parsedOpenTime.getTime()}`,
+          });
+        }
+      } catch (notifErr) {
+        console.warn("[TestRescheduleNotification Warning]", notifErr);
+      }
+    }
+
     return apiSuccess({
       test: updatedTest,
       message: "Test rescheduled successfully",

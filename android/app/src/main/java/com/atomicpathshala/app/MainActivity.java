@@ -68,6 +68,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(FloatingPollPlugin.class);
+        AtomicNotificationChannels.createAllChannels(this);
 
         final long start = SystemClock.uptimeMillis();
         SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> {

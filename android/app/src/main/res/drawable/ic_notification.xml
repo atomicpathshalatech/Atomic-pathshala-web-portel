@@ -1,0 +1,34 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Atomic Pathshala Atom Nucleus -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,12m-2.8,0a2.8,2.8 0 1,1 5.6,0a2.8,2.8 0 1,1 -5.6,0" />
+
+    <!-- Orbital Ring 1: Horizontal Ellipse -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:pathData="M3,12 C3,8.5 7,6 12,6 C17,6 21,8.5 21,12 C21,15.5 17,18 12,18 C7,18 3,15.5 3,12 Z" />
+
+    <!-- Orbital Ring 2: Diagonal 60 deg -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:pathData="M5.5,6.8 C7.5,4.3 11.2,4.8 15.5,7.3 C19.8,9.8 21.6,13.5 19.6,16 C17.6,18.5 13.9,18 9.6,15.5 C5.3,13 3.5,9.3 5.5,6.8 Z" />
+
+    <!-- Orbital Ring 3: Diagonal 120 deg -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:pathData="M18.5,6.8 C20.5,9.3 18.7,13 14.4,15.5 C10.1,18 6.4,18.5 4.4,16 C2.4,13.5 4.2,9.8 8.5,7.3 C12.8,4.8 16.5,4.3 18.5,6.8 Z" />
+</vector>
