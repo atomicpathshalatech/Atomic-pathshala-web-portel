@@ -33,11 +33,14 @@
  */
 
 import { SHAPE_DEFS, SHAPE_RENDERERS, FILLABLE_SHAPE_IDS } from "./shapes/registry";
+import { whiteboardPerf } from "../whiteboard/whiteboard-perf";
 
 export interface StrokePoint {
   x: number;
   y: number;
   pressure: number;
+  tiltX?: number;
+  tiltY?: number;
 }
 
 export interface FreehandObject {
@@ -607,21 +610,21 @@ export function floodFillImageData(
   return { minX, minY, maxX: maxX + 1, maxY: maxY + 1 };
 }
 
-/** How far each ink point moves toward the pointer (1 = raw, lower = smoother, more trailing). */
-const INK_SMOOTHING = 0.52;
-/** Points closer than this (virtual px) to the previous one are dropped. */
-const INK_MIN_STEP = 0.2;
-/**
- * Smoothing factor for one pointer step (1 = raw point, lower = smoother):
- * from INK_SMOOTHING for a barely-moving pen up to 0.9 for a fast one. `step`
- * is the distance from the last ink point to the pointer, in virtual px.
- */
+/** Velocity-adaptive smoothing: low latency (0.94) for fast strokes, jitter-free (0.78) for slow strokes. */
+const INK_SMOOTHING_BASE = 0.78;
+const INK_SMOOTHING_FAST = 0.94;
+/** Points closer than this (virtual px) to the previous one are dropped as redundant micro-noise. */
+const INK_MIN_STEP = 0.8;
+
+export function inkSmoothingFor(step: number): number {
+  const t = Math.min(1, Math.max(0, (step - 2) / 20));
+  return INK_SMOOTHING_BASE + (INK_SMOOTHING_FAST - INK_SMOOTHING_BASE) * t;
+}
+
 /**
  * A variable-width stroke drawn as ONE filled outline (like PowerPoint ink):
  * the left and right edges are offset from the centre line by half the width
- * at each point, joined with smooth curves and round ends. Drawing each
- * segment as its own line (the old way) left visible joints and a beaded,
- * broken look in pressure pens.
+ * at each point, joined with smooth curves and round ends.
  */
 export function fillVariableWidthStroke(
   ctx: CanvasRenderingContext2D,
@@ -664,6 +667,16 @@ export function fillVariableWidthStroke(
     const last = pts[pts.length - 1]!;
     ctx.lineTo(last.x, last.y);
   };
+  const edgeReverse = (pts: { x: number; y: number }[]) => {
+    const len = pts.length;
+    ctx.lineTo(pts[len - 1]!.x, pts[len - 1]!.y);
+    for (let i = len - 2; i > 0; i--) {
+      const p1 = pts[i]!;
+      const p2 = pts[i - 1]!;
+      ctx.quadraticCurveTo(p1.x, p1.y, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+    }
+    ctx.lineTo(pts[0]!.x, pts[0]!.y);
+  };
   const angle = (from: StrokePoint, to: StrokePoint) => Math.atan2(to.y - from.y, to.x - from.x);
   const endA = angle(points[n - 2]!, points[n - 1]!);
   const startA = angle(points[0]!, points[1]!);
@@ -671,7 +684,7 @@ export function fillVariableWidthStroke(
   edge(left, true);
   // Round end: from the left edge around the tip to the right edge.
   ctx.arc(points[n - 1]!.x, points[n - 1]!.y, half[n - 1]!, endA + Math.PI / 2, endA - Math.PI / 2, true);
-  edge(right.slice().reverse(), false);
+  edgeReverse(right);
   // Round start: from the right edge around the back to the left edge.
   ctx.arc(points[0]!.x, points[0]!.y, half[0]!, startA - Math.PI / 2, startA + Math.PI / 2, true);
   ctx.closePath();
@@ -682,11 +695,6 @@ export function fillVariableWidthStroke(
 function grain(i: number): number {
   const v = Math.sin(i * 12.9898) * 43758.5453;
   return v - Math.floor(v);
-}
-
-export function inkSmoothingFor(step: number): number {
-  const t = Math.min(1, Math.max(0, (step - 2) / 26));
-  return INK_SMOOTHING + (0.9 - INK_SMOOTHING) * t;
 }
 
 export class CanvasEngine {
@@ -850,6 +858,7 @@ export class CanvasEngine {
   private boundDown = this.onPointerDown.bind(this);
   private boundMove = this.onPointerMove.bind(this);
   private boundUp = this.onPointerUp.bind(this);
+  private boundCancel = this.onPointerCancel.bind(this);
 
   constructor(
     baseCanvas: HTMLCanvasElement,
@@ -879,8 +888,9 @@ export class CanvasEngine {
     el.addEventListener("pointerdown", this.boundDown);
     el.addEventListener("pointermove", this.boundMove);
     el.addEventListener("pointerup", this.boundUp);
-    el.addEventListener("pointercancel", this.boundUp);
-    el.addEventListener("pointerleave", this.boundUp);
+    el.addEventListener("pointercancel", this.boundCancel);
+    // Note: Do not attach pointerleave to boundUp. Pointer capture properly keeps
+    // drawing active even if stylus swiftly moves near canvas borders.
   }
 
   public destroy(): void {
@@ -888,8 +898,7 @@ export class CanvasEngine {
     el.removeEventListener("pointerdown", this.boundDown);
     el.removeEventListener("pointermove", this.boundMove);
     el.removeEventListener("pointerup", this.boundUp);
-    el.removeEventListener("pointercancel", this.boundUp);
-    el.removeEventListener("pointerleave", this.boundUp);
+    el.removeEventListener("pointercancel", this.boundCancel);
     if (this.laserRaf) cancelAnimationFrame(this.laserRaf);
     this.laserRaf = 0;
     this.laserActive = null;
@@ -912,9 +921,17 @@ export class CanvasEngine {
     const dpr = window.devicePixelRatio || 1;
     const width = this.activeCanvas.offsetWidth || 1;
     const height = this.activeCanvas.offsetHeight || 1;
+    const targetW = Math.max(1, Math.round(width * dpr));
+    const targetH = Math.max(1, Math.round(height * dpr));
+
+    // Avoid unnecessary reallocation of GPU canvas buffers if size hasn't changed
+    if (this.baseCanvas.width === targetW && this.baseCanvas.height === targetH) {
+      return;
+    }
+
     for (const canvas of [this.baseCanvas, this.activeCanvas]) {
-      canvas.width = Math.max(1, Math.round(width * dpr));
-      canvas.height = Math.max(1, Math.round(height * dpr));
+      canvas.width = targetW;
+      canvas.height = targetH;
     }
     this.dprScale = { x: (width * dpr) / VIRTUAL_WIDTH, y: (height * dpr) / VIRTUAL_HEIGHT };
     this.applyTransforms();
@@ -929,21 +946,39 @@ export class CanvasEngine {
     const rect = (this.isPointerDown && this.strokeRect) || this.activeCanvas.getBoundingClientRect();
     const relX = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
     const relY = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
+
+    // Stylus pressure:
+    // If stylus reports pressure > 0, use it.
+    // If stylus reports pressure === 0 (light contact), preserve last valid pressure or light threshold.
+    let pressure = 0.5;
+    if (e.pointerType === "pen") {
+      pressure = e.pressure && e.pressure > 0 ? e.pressure : (this.lastRawPoint?.pressure ?? 0.15);
+    } else if (e.pressure && e.pressure > 0) {
+      pressure = e.pressure;
+    }
+
     // Screen position on the board -> slide coordinates through the zoom/pan view.
     return {
       x: (relX * VIRTUAL_WIDTH - this.viewTx) / this.viewZoom,
       y: (relY * VIRTUAL_HEIGHT - this.viewTy) / this.viewZoom,
-      pressure: e.pressure && e.pressure > 0 ? e.pressure : 0.5,
+      pressure,
+      tiltX: e.tiltX !== undefined && e.tiltX !== 0 ? e.tiltX : undefined,
+      tiltY: e.tiltY !== undefined && e.tiltY !== 0 ? e.tiltY : undefined,
     };
   }
 
   private onPointerDown(e: PointerEvent): void {
-    // Palm rejection: If pen input is active, reject simultaneous accidental touch inputs
-    if (this.isPointerDown && this.activePointerType === "pen" && e.pointerType === "touch") {
+    // If a stylus touches down while a touch was captured (palm touching first),
+    // preemptively discard the touch artifact and switch capture to the pen!
+    if (this.isPointerDown && this.activePointerType === "touch" && e.pointerType === "pen") {
+      this.cancelActiveStroke();
+    } else if (this.isPointerDown && this.activePointerType === "pen" && e.pointerType === "touch") {
+      // Palm rejection: If pen input is active, reject simultaneous accidental touch inputs
       return;
     }
+
     // Palm rejection: reject broad touch blobs (e.g. resting palm or side of hand)
-    if (e.pointerType === "touch" && (e.width > 35 || e.height > 35)) {
+    if (e.pointerType === "touch" && (e.width > 28 || e.height > 28)) {
       return;
     }
 
@@ -1070,46 +1105,81 @@ export class CanvasEngine {
     }
   }
 
+  private onPointerCancel(e: PointerEvent): void {
+    if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
+    this.cancelActiveStroke();
+  }
+
+  public cancelActiveStroke(): void {
+    if (this.activePointerId !== null) {
+      try {
+        this.activeCanvas.releasePointerCapture(this.activePointerId);
+      } catch {}
+    }
+    this.isPointerDown = false;
+    this.activePointerId = null;
+    this.activePointerType = null;
+    this.activePoints = [];
+    whiteboardPerf.updateCounts(this.objects.length, 0);
+    this.predictedPoints = [];
+    this.lastRawPoint = null;
+    this.shapeStart = null;
+    this.shapeEnd = null;
+    this.lassoPath = null;
+    this.clearLayer(this.activeCtx);
+  }
+
   private onPointerMove(e: PointerEvent): void {
     if (!this.isPointerDown) return;
     if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
+
+    const startT = performance.now();
 
     if (this.laserActive) {
       const p = this.getPoint(e);
       this.laserActive.push({ x: p.x, y: p.y });
       this.onLaserUpdate?.(this.laserActive);
+      whiteboardPerf.recordPointerEvent(performance.now() - startT);
       return;
     }
 
     // Read high-frequency coalesced events from pen tablet if available
-    const events: PointerEvent[] = typeof (e as any).getCoalescedEvents === "function"
-      ? (e as any).getCoalescedEvents()
-      : [e];
+    let events: PointerEvent[] = [e];
+    if (typeof (e as any).getCoalescedEvents === "function") {
+      try {
+        const coalesced = (e as any).getCoalescedEvents();
+        if (Array.isArray(coalesced) && coalesced.length > 0) {
+          events = coalesced;
+        }
+      } catch {}
+    }
 
     for (const evt of events) {
       const pt = this.getPoint(evt);
 
       if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
-        // Ink smoothing: each point is eased toward the pointer instead of
-        // taken raw, so hand / mouse jitter does not show up as wobble in the
-        // line, and pressure is eased so the width does not pulse. The raw
-        // end point is added on pointer-up, so the stroke still ends exactly
-        // where the pen was lifted.
         this.lastRawPoint = pt;
         const last = this.activePoints[this.activePoints.length - 1];
         if (!last) {
           this.activePoints.push(pt);
           continue;
         }
-        // Velocity-aware: a slow, careful stroke (where hand jitter shows) is
-        // eased more; a fast stroke follows the pen closely so the line never
-        // lags behind the nib.
-        const k = inkSmoothingFor(Math.hypot(pt.x - last.x, pt.y - last.y));
+        const dist = Math.hypot(pt.x - last.x, pt.y - last.y);
+        if (dist < INK_MIN_STEP) continue;
+
+        const k = inkSmoothingFor(dist);
         const x = last.x + (pt.x - last.x) * k;
         const y = last.y + (pt.y - last.y) * k;
-        if (Math.hypot(x - last.x, y - last.y) < INK_MIN_STEP) continue;
         const lp = last.pressure ?? 0.5;
-        this.activePoints.push({ x, y, pressure: lp + ((pt.pressure ?? 0.5) - lp) * 0.3 });
+        const pressure = lp + (pt.pressure - lp) * 0.45;
+
+        this.activePoints.push({
+          x,
+          y,
+          pressure,
+          tiltX: pt.tiltX,
+          tiltY: pt.tiltY,
+        });
         continue;
       }
 
@@ -1151,10 +1221,6 @@ export class CanvasEngine {
             if (idx !== undefined && original) this.objects[idx] = translateObject(original, dx, dy);
           }
         }
-        // Deferred to the next animation frame (batches every coalesced
-        // event above into a single full-board redraw per frame) instead
-        // of a synchronous renderBase() per event - this was the main
-        // cause of a multi-object drag freezing the whole tab.
         this.scheduleBaseRender();
       }
     }
@@ -1162,7 +1228,6 @@ export class CanvasEngine {
     if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
       const predicted: PointerEvent[] =
         typeof (e as any).getPredictedEvents === "function" ? (e as any).getPredictedEvents() : [];
-      // At most a couple of predicted points, and only a short way ahead.
       this.predictedPoints = predicted
         .slice(0, 2)
         .map((evt) => this.getPoint(evt))
@@ -1180,6 +1245,9 @@ export class CanvasEngine {
     ) {
       this.scheduleActiveRender();
     }
+
+    whiteboardPerf.recordPointerEvent(performance.now() - startT);
+    whiteboardPerf.updateCounts(this.objects.length, this.activePoints.length);
   }
 
   private onPointerUp(e: PointerEvent): void {
@@ -1318,6 +1386,7 @@ export class CanvasEngine {
     }
 
     this.activePoints = [];
+    whiteboardPerf.updateCounts(this.objects.length, 0);
     this.dragOrigin = null;
     this.dragSnapshot = null;
     this.dragIndexById = null;
@@ -1333,7 +1402,8 @@ export class CanvasEngine {
   private scheduleActiveRender(): void {
     if (this.rafPending) return;
     this.rafPending = true;
-    requestAnimationFrame(() => {
+    const raf = typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame : (fn: () => void) => setTimeout(fn, 0);
+    raf(() => {
       this.rafPending = false;
       this.renderActiveStroke();
     });
@@ -1345,7 +1415,8 @@ export class CanvasEngine {
   private scheduleBaseRender(): void {
     if (this.baseRenderRafPending) return;
     this.baseRenderRafPending = true;
-    requestAnimationFrame(() => {
+    const raf = typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame : (fn: () => void) => setTimeout(fn, 0);
+    raf(() => {
       this.baseRenderRafPending = false;
       this.renderBase();
     });
@@ -1362,6 +1433,7 @@ export class CanvasEngine {
   }
 
   private renderActiveStroke(): void {
+    const t0 = performance.now();
     this.clearLayer(this.activeCtx);
 
     if (isShapeTool(this.currentTool)) {
@@ -1374,13 +1446,18 @@ export class CanvasEngine {
           end: this.shapeEnd,
         });
       }
+      whiteboardPerf.recordRenderDuration(performance.now() - t0);
       return;
     }
 
-    if (this.activePoints.length < 2) return;
+    if (this.activePoints.length < 2) {
+      whiteboardPerf.recordRenderDuration(performance.now() - t0);
+      return;
+    }
     const isHighlighter = this.currentTool === "highlighter" || this.currentTool === "highlighter-fade";
     const pts = this.predictedPoints.length ? this.activePoints.concat(this.predictedPoints) : this.activePoints;
     this.strokePath(this.activeCtx, pts, this.currentColor, this.inkSize(), isHighlighter, this.currentPenStyle);
+    whiteboardPerf.recordRenderDuration(performance.now() - t0);
   }
 
   private strokePath(
@@ -1497,6 +1574,10 @@ export class CanvasEngine {
       return;
     }
 
+    let activePathOpen = false;
+    let currentLineWidth = -1;
+    let currentAlpha = -1;
+
     for (let i = 0; i < points.length - 1; i++) {
       const p0 = i > 0 ? points[i - 1]! : points[0]!;
       const p1 = points[i]!;
@@ -1507,30 +1588,34 @@ export class CanvasEngine {
 
       let lineWidth: number;
       let alpha = 1;
-      if (penStyle === "fountain") {
-        lineWidth = Math.max(0.5, size * (0.3 + pressure * 1.5));
-      } else if (penStyle === "chisel") {
+      if (penStyle === "chisel") {
         const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-        lineWidth = Math.max(0.6, size * (0.4 + 1.6 * Math.abs(Math.sin(ang - CHISEL_NIB))));
+        lineWidth = Math.round(Math.max(0.6, size * (0.4 + 1.6 * Math.abs(Math.sin(ang - CHISEL_NIB)))) * 10) / 10;
       } else if (penStyle === "art") {
         lineWidth = Math.max(0.8, size * (1.0 + pressure * 1.2));
         alpha = 0.85;
       } else if (penStyle === "graphite") {
-        lineWidth = Math.max(0.4, size * (0.5 + pressure * 0.7));
-        // Fixed per segment: a fresh random value on every repaint made the
-        // line shimmer while it was being drawn.
-        alpha = 0.75 + 0.25 * grain(i);
+        lineWidth = Math.round(Math.max(0.4, size * (0.5 + pressure * 0.7)) * 10) / 10;
+        alpha = Math.round((0.75 + 0.25 * grain(i)) * 10) / 10;
       } else {
         lineWidth = Math.max(0.5, size);
       }
 
-      ctx.globalAlpha = alpha * extraAlpha;
-      ctx.beginPath();
-      ctx.moveTo(startPt.x, startPt.y);
+      const effAlpha = alpha * extraAlpha;
+      if (!activePathOpen || Math.abs(currentLineWidth - lineWidth) > 0.4 || Math.abs(currentAlpha - effAlpha) > 0.1) {
+        if (activePathOpen) ctx.stroke();
+        ctx.lineWidth = lineWidth;
+        ctx.globalAlpha = effAlpha;
+        currentLineWidth = lineWidth;
+        currentAlpha = effAlpha;
+        ctx.beginPath();
+        ctx.moveTo(startPt.x, startPt.y);
+        activePathOpen = true;
+      }
+
       ctx.quadraticCurveTo(p1.x, p1.y, endPt.x, endPt.y);
-      ctx.lineWidth = lineWidth;
-      ctx.stroke();
     }
+    if (activePathOpen) ctx.stroke();
     ctx.restore();
   }
 

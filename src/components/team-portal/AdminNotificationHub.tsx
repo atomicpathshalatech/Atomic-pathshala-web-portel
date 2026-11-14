@@ -280,7 +280,7 @@ export function AdminNotificationHub({
           actionType: customForm.actionType === "NONE" ? null : customForm.actionType,
           actionUrl: customForm.actionUrl.trim() || null,
           executeAt,
-          channel: customForm.sendPush ? "ALL_CHANNELS" : "IN_APP",
+          channel: customForm.sendPush ? "PUSH" : "IN_APP",
         }),
       });
 

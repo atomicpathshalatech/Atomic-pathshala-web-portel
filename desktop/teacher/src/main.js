@@ -21,6 +21,7 @@
 
 const { app, BrowserWindow, ipcMain, session, shell, Menu, nativeImage } = require("electron");
 const path = require("node:path");
+const fs = require("node:fs");
 const { appUrl, isTrustedUrl } = require("./config");
 const { registerEncoderIpc } = require("./encoder-ipc");
 const { registerStageIpc, closeStage } = require("./stage-window");
@@ -96,8 +97,10 @@ function hardenSession(ses) {
 
 function createWindow() {
   const start = SMOKE_UNTRUSTED ? "data:text/html,<h1>untrusted</h1>" : new URL(process.env.ATOMIC_START_PATH || "/team", appUrl()).toString();
+  const outsideIco = path.join(process.resourcesPath || "", "../icon.ico");
+  const localIco = path.join(__dirname, "icon.ico");
   const iconPath = process.platform === "win32"
-    ? path.join(__dirname, "icon.ico")
+    ? (fs.existsSync(outsideIco) ? outsideIco : localIco)
     : path.join(__dirname, "icon.png");
   const winIcon = nativeImage.createFromPath(iconPath);
 
@@ -122,6 +125,12 @@ function createWindow() {
       spellcheck: false,
     },
   });
+
+  if (process.platform === "win32" && !winIcon.isEmpty()) {
+    try {
+      mainWindow.setIcon(winIcon);
+    } catch {}
+  }
 
   const wc = mainWindow.webContents;
   wc.setWindowOpenHandler(({ url }) => {

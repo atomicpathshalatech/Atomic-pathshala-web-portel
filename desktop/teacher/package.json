@@ -22,7 +22,8 @@
     "appId": "in.atomicpathshala.teacher",
     "productName": "Atomic Pathshala",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "src/**/*",

@@ -48,6 +48,8 @@ import { ChromaKeyPanel } from "@/components/live-class/ChromaKeyPanel";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 import { TeacherPollCreationModal } from "@/components/live-class/TeacherPollCreationModal";
 import { TeacherPollControlPanel } from "@/components/live-class/TeacherPollControlPanel";
+import { WhiteboardDiagnosticsHUD } from "@/components/live-class/WhiteboardDiagnosticsHUD";
+import { whiteboardPerf } from "@/lib/whiteboard/whiteboard-perf";
 
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
 const DEFAULT_FLOAT_CAM_SIZE = 180;
@@ -350,6 +352,7 @@ export function TeacherLiveClassRoom({
   scheduledYoutubeUrl?: string | null;
 }) {
   const router = useRouter();
+  whiteboardPerf.recordReactRender();
   const containerRef = useRef<HTMLDivElement>(null);
   const baseCanvasRef = useRef<HTMLCanvasElement>(null);
   const activeCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -448,7 +451,13 @@ export function TeacherLiveClassRoom({
     fontSizePx: number;
     color: string;
   } | null>(null);
-  const [undoRedoTick, setUndoRedoTick] = useState(0);
+  const [canUndoRedo, setCanUndoRedo] = useState({ canUndo: false, canRedo: false });
+  const syncUndoRedoState = useCallback(() => {
+    const u = Boolean(boardHistoryRef.current?.canUndo || engineRef.current?.canUndo());
+    const r = Boolean(boardHistoryRef.current?.canRedo || engineRef.current?.canRedo());
+    setCanUndoRedo((prev) => (prev.canUndo === u && prev.canRedo === r ? prev : { canUndo: u, canRedo: r }));
+  }, []);
+  const setUndoRedoTick = useCallback(() => syncUndoRedoState(), [syncUndoRedoState]);
   const [zoom, setZoom] = useState(1);
   // Zoom enlarges only what is on the slide (its image + the ink), inside a
   // board frame that keeps its size: the ink through the canvas engine's view
@@ -1287,17 +1296,13 @@ export function TeacherLiveClassRoom({
         pendingPageIdRef.current = targetPageId;
         if (targetPageId) saveQueueRef.current?.markDirty(targetPageId, objects);
         postBoardToStageRef.current();
-        // The local backup copy is written by the save queue right before each
-        // save goes out (its send()) — writing it here as well turned the whole
-        // slide into text twice at every pen-up.
-        setSaveState("saving");
+        setSaveState((prev) => (prev === "saving" ? prev : "saving"));
         if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-        autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 50);
-        setUndoRedoTick((t) => t + 1);
+        autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 2500);
+        if (!canUndoRedo.canUndo) syncUndoRedoState();
       },
       (ids: string[]) => {
-        setSelectionCount(ids.length);
-        setUndoRedoTick((t) => t + 1);
+        setSelectionCount((prev) => (prev === ids.length ? prev : ids.length));
       }
     );
     engineRef.current = engine;
@@ -1366,7 +1371,10 @@ export function TeacherLiveClassRoom({
     // replaces the old synchronous syncSize() call that could run before
     // layout had finished). The student board mirror already uses this
     // same pattern for the same reason.
-    const ro = new ResizeObserver(() => engine.syncSize());
+    const ro = new ResizeObserver(() => {
+      canvasRectCacheRef.current = null;
+      engine.syncSize();
+    });
     ro.observe(baseCanvasRef.current);
 
     return () => {
@@ -1430,10 +1438,24 @@ export function TeacherLiveClassRoom({
     if (!wbSessionId) return;
     const queue = new BoardSaveQueue<StrokeObject>({
       send: async (pageId, objects, baseVersion) => {
+        const t0 = performance.now();
         const body = JSON.stringify({ objects, ...(baseVersion !== undefined && { baseVersion }) });
         try {
-          localStorage.setItem(`atomic_wb_backup_${wbSessionId}_${pageId}`, JSON.stringify(objects));
-          if (baseVersion !== undefined) localStorage.setItem(backupBaseKey(wbSessionId, pageId), String(baseVersion));
+          if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+            window.requestIdleCallback(() => {
+              try {
+                localStorage.setItem(`atomic_wb_backup_${wbSessionId}_${pageId}`, JSON.stringify(objects));
+                if (baseVersion !== undefined) localStorage.setItem(backupBaseKey(wbSessionId, pageId), String(baseVersion));
+              } catch {}
+            });
+          } else {
+            setTimeout(() => {
+              try {
+                localStorage.setItem(`atomic_wb_backup_${wbSessionId}_${pageId}`, JSON.stringify(objects));
+                if (baseVersion !== undefined) localStorage.setItem(backupBaseKey(wbSessionId, pageId), String(baseVersion));
+              } catch {}
+            }, 0);
+          }
         } catch {}
         const res = await fetch(`/api/whiteboard/sessions/${wbSessionId}/pages/${pageId}`, {
           method: "PATCH",
@@ -1447,17 +1469,28 @@ export function TeacherLiveClassRoom({
           keepalive: body.length < 20_000,
         });
         const json = await res.json().catch(() => null);
+        whiteboardPerf.updateAutosave(queue.unsavedPageIds.length, performance.now() - t0);
         if (res.ok && json?.success) return { ok: true, version: json.data.page.version };
         if (res.status === 409 && json?.details?.currentVersion != null) return { ok: false, conflictVersion: json.details.currentVersion };
         if (res.status === 404) return { ok: false, gone: true };
         if (res.status >= 500) throw new Error("save failed");
         return { ok: false };
       },
-      onSaved: (pageId, objects, version) =>
-        setWbSession((prev) =>
-          prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, objects, version } : pg)) } : prev
-        ),
-      onState: setSaveState,
+      onSaved: (pageId, objects, version) => {
+        latestPagesRef.current = latestPagesRef.current.map((pg) =>
+          pg.id === pageId ? { ...pg, objects, version } : pg
+        );
+        setWbSession((prev) => {
+          if (!prev) return prev;
+          const curr = prev.pages.find((pg) => pg.id === pageId);
+          if (curr && curr.version === version && curr.objects === objects) return prev;
+          return {
+            ...prev,
+            pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, objects, version } : pg)),
+          };
+        });
+      },
+      onState: (state) => setSaveState((prev) => (prev === state ? prev : state)),
       baseVersionOf: (pageId) => latestPagesRef.current.find((pg) => pg.id === pageId)?.version,
     });
     saveQueueRef.current = queue;
@@ -1552,8 +1585,14 @@ export function TeacherLiveClassRoom({
   // this whole room on every pointer move while the teacher was writing.
   const cursorRafPending = useRef(false);
   const latestCursorPos = useRef<{ x: number; y: number } | null>(null);
+  const canvasRectCacheRef = useRef<DOMRect | null>(null);
   const handleCanvasPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
+    // If stylus pen is writing, hide DOM cursor (the physical pen tip is already on screen)
+    if (e.pointerType === "pen" && e.buttons > 0) {
+      cursorRef.current?.move(null);
+      return;
+    }
+    const rect = canvasRectCacheRef.current || (canvasRectCacheRef.current = e.currentTarget.getBoundingClientRect());
     if (rect.width === 0 || rect.height === 0) return;
     const relX = (e.clientX - rect.left) / rect.width;
     const relY = (e.clientY - rect.top) / rect.height;
@@ -1567,6 +1606,7 @@ export function TeacherLiveClassRoom({
   }, []);
 
   const handleCanvasPointerLeave = useCallback(() => {
+    canvasRectCacheRef.current = null;
     latestCursorPos.current = null;
     cursorRef.current?.move(null);
   }, []);
@@ -4863,7 +4903,7 @@ export function TeacherLiveClassRoom({
           </button>
           <button
             type="button"
-            disabled={!boardHistoryRef.current.canUndo}
+            disabled={!canUndoRedo.canUndo}
             onClick={() => void stepBoardHistory("undo")}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
             title="Undo (Ctrl+Z)"
@@ -4872,7 +4912,7 @@ export function TeacherLiveClassRoom({
           </button>
           <button
             type="button"
-            disabled={!boardHistoryRef.current.canRedo}
+            disabled={!canUndoRedo.canRedo}
             onClick={() => void stepBoardHistory("redo")}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
             title="Redo (Ctrl+Y)"
@@ -5792,6 +5832,9 @@ export function TeacherLiveClassRoom({
           </div>
         </div>
       )}
+
+      {/* Development & Performance Diagnostic HUD (Ctrl+Shift+D) */}
+      <WhiteboardDiagnosticsHUD isTeacher={true} />
 
     </div>
   );

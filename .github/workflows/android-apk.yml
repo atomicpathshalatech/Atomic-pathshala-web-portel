@@ -4,25 +4,27 @@
 # Run it: GitHub → Actions → "Android APK" → Run workflow → enter the version.
 #
 # Repository secrets (Settings → Secrets and variables → Actions):
-#   Signing — needed for an APK that people install and later update:
+#   Signing — STRICTLY REQUIRED for production APKs to enable in-place updates:
 #     ANDROID_KEYSTORE_BASE64   the release key (.jks) as base64
 #     ANDROID_KEYSTORE_PASSWORD
 #     ANDROID_KEY_ALIAS
 #     ANDROID_KEY_PASSWORD
 #   Publishing (optional — otherwise upload the APK on Team → App Releases):
 #     CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME
-#
-# Without the signing secrets it still builds a debug APK (for testing only:
-# each debug build has a different key, so phones can't update one with the next).
+
 name: Android APK
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version shown to users (e.g. 1.0.0)"
+        description: "Version shown to users (e.g. 1.0.3)"
         required: true
-        default: "1.0.0"
+        default: "1.0.3"
+      version_code:
+        description: "Version code integer (optional, e.g. 10003; auto-increments if empty)"
+        required: false
+        default: ""
       notes:
         description: "What's new (optional)"
         required: false
@@ -36,96 +38,255 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js 22 (LTS required by Capacitor CLI)
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - name: Verify Node.js and Capacitor CLI
+        run: |
+          echo "Node version: $(node --version)"
+          echo "NPM version:  $(npm --version)"
+          npx cap --version
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
-      - name: Install packages
+      - name: Install dependencies
         # Only the Capacitor CLI and plugins are needed here; skip install scripts.
         run: npm ci --ignore-scripts
 
-      - name: Sync the web app into the Android project
+      - name: Sync web app into Android project
         run: npx cap sync android
 
-      - name: Set up the signing key
-        id: signing
+      - name: Validate release signing secrets
+        id: signing_check
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > android/atomic-release-key.jks
-            {
-              echo "storeFile=../atomic-release-key.jks"
-              echo "storePassword=$KEYSTORE_PASSWORD"
-              echo "keyAlias=$KEY_ALIAS"
-              echo "keyPassword=$KEY_PASSWORD"
-            } > android/keystore.properties
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::No signing secrets — building a debug APK for testing only."
-            echo "signed=false" >> "$GITHUB_OUTPUT"
+          MISSING=""
+          [ -z "$KEYSTORE_BASE64" ] && MISSING="$MISSING ANDROID_KEYSTORE_BASE64"
+          [ -z "$KEYSTORE_PASSWORD" ] && MISSING="$MISSING ANDROID_KEYSTORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ] && MISSING="$MISSING ANDROID_KEY_ALIAS"
+          [ -z "$KEY_PASSWORD" ] && MISSING="$MISSING ANDROID_KEY_PASSWORD"
+
+          if [ -n "$MISSING" ]; then
+            echo "::error::Production release signing secrets missing:$MISSING."
+            echo "::error::Production builds must use the permanent release keystore so existing users can update in-place."
+            echo "::error::Configure secrets in GitHub: Settings -> Secrets and variables -> Actions."
+            exit 1
           fi
 
-      - name: Build the APK
+          # Decode release keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > android/atomic-release-key.jks
+          if [ ! -s android/atomic-release-key.jks ]; then
+            echo "::error::Failed to decode ANDROID_KEYSTORE_BASE64 or keystore file is empty."
+            exit 1
+          fi
+
+          # Configure keystore.properties for Gradle
+          {
+            echo "storeFile=../atomic-release-key.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/keystore.properties
+          echo "Keystore and signing configuration successfully initialized."
+
+      - name: Resolve Version Code and Name
+        id: versioning
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          # Default previous baseline in production is versionCode 10002, versionName 1.0.2
+          VERSION_NAME="${INPUT_VERSION:-1.0.3}"
+
+          if [ -n "$INPUT_VERSION_CODE" ]; then
+            if ! [[ "$INPUT_VERSION_CODE" =~ ^[0-9]+$ ]]; then
+              echo "::error::version_code must be a positive integer, received: '$INPUT_VERSION_CODE'"
+              exit 1
+            fi
+            if [ "$INPUT_VERSION_CODE" -le 10002 ]; then
+              echo "::error::version_code ($INPUT_VERSION_CODE) must be strictly greater than previous production versionCode (10002)."
+              exit 1
+            fi
+            RESOLVED_CODE="$INPUT_VERSION_CODE"
+          else
+            # Monotonically increasing code: 10002 + github.run_number guarantees strict increase on every run
+            BASE_CODE=10002
+            RESOLVED_CODE=$(( BASE_CODE + GITHUB_RUN_NUMBER ))
+          fi
+
+          echo "Using versionName: $VERSION_NAME"
+          echo "Using versionCode: $RESOLVED_CODE"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$RESOLVED_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Build Signed Release APK
         working-directory: android
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION_NAME: ${{ steps.versioning.outputs.version_name }}
+          VERSION_CODE: ${{ steps.versioning.outputs.version_code }}
         run: |
           chmod +x gradlew
-          TASK=assembleDebug
-          [ "${{ steps.signing.outputs.signed }}" = "true" ] && TASK=assembleRelease
-          ./gradlew "$TASK" -PversionName="$VERSION" --no-daemon
-          APK=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
-          mkdir -p ../dist-apk
-          cp "$APK" "../dist-apk/Atomic-Pathshala-$VERSION.apk"
-          ls -l ../dist-apk
+          ./gradlew assembleRelease -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE" --no-daemon
 
-      - name: Remove the signing key from the runner
+      - name: Verify APK Integrity and Signatures
+        env:
+          VERSION_NAME: ${{ steps.versioning.outputs.version_name }}
+          VERSION_CODE: ${{ steps.versioning.outputs.version_code }}
+        run: |
+          # 1. Locate release APK
+          APK=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          if [ -z "$APK" ] || [ ! -f "$APK" ]; then
+            echo "::error::Release APK not found in android/app/build/outputs/apk/release"
+            exit 1
+          fi
+
+          SIZE=$(stat -c %s "$APK")
+          if [ "$SIZE" -le 1000000 ]; then
+            echo "::error::Generated APK is suspiciously small ($SIZE bytes)."
+            exit 1
+          fi
+          echo "Found release APK: $APK ($SIZE bytes)"
+
+          # 2. Locate Android SDK tools
+          APKSIGNER=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1)
+          AAPT=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name aapt -type f 2>/dev/null | sort -V | tail -n 1)
+
+          if [ -n "$APKSIGNER" ] && [ -x "$APKSIGNER" ]; then
+            echo "Verifying APK signing with apksigner ($APKSIGNER)..."
+            SIGN_OUTPUT=$("$APKSIGNER" verify --verbose --print-certs "$APK")
+            echo "$SIGN_OUTPUT"
+            if echo "$SIGN_OUTPUT" | grep -qi "Android Debug"; then
+              echo "::error::APK was signed with Android Debug certificate! Production APKs must use the permanent release key."
+              exit 1
+            fi
+            if ! echo "$SIGN_OUTPUT" | grep -q "Verified using v2 scheme (APK Signature Scheme v2): true"; then
+              echo "::error::APK does not have valid APK Signature Scheme v2."
+              exit 1
+            fi
+            echo "APK signature verification passed (Scheme v2 verified, Release key confirmed)."
+          else
+            echo "::warning::apksigner tool not found in SDK; skipped local signature schema check."
+          fi
+
+          if [ -n "$AAPT" ] && [ -x "$AAPT" ]; then
+            echo "Verifying package details with aapt ($AAPT)..."
+            BADGING=$("$AAPT" dump badging "$APK" | head -n 5)
+            echo "$BADGING"
+            if ! echo "$BADGING" | grep -q "name='com.atomicpathshala.app'"; then
+              echo "::error::APK package name does not match 'com.atomicpathshala.app'!"
+              exit 1
+            fi
+            if ! echo "$BADGING" | grep -q "versionCode='$VERSION_CODE'"; then
+              echo "::error::APK versionCode does not match expected $VERSION_CODE!"
+              exit 1
+            fi
+            echo "Package and version verification passed."
+          fi
+
+          # Prepare output artifact
+          mkdir -p dist-apk
+          TARGET_FILE="Atomic-Pathshala-$VERSION_NAME.apk"
+          cp "$APK" "dist-apk/$TARGET_FILE"
+          echo "apk_file=$TARGET_FILE" >> "$GITHUB_OUTPUT"
+          echo "apk_size=$SIZE" >> "$GITHUB_OUTPUT"
+          ls -lh dist-apk/
+
+      - name: Secure cleanup of signing keys
         if: always()
-        run: rm -f android/atomic-release-key.jks android/keystore.properties
+        run: |
+          rm -f android/atomic-release-key.jks android/keystore.properties
+          echo "Keystore and sensitive properties erased from runner."
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: Atomic-Pathshala-${{ inputs.version }}-apk
+          name: Atomic-Pathshala-${{ steps.versioning.outputs.version_name }}-apk
           path: dist-apk/*.apk
           retention-days: 30
 
-      - name: Publish to Download App
-        if: steps.signing.outputs.signed == 'true'
+      - name: Publish to Cloudflare R2 and Update latest.json
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-          VERSION: ${{ inputs.version }}
+          VERSION_NAME: ${{ steps.versioning.outputs.version_name }}
+          VERSION_CODE: ${{ steps.versioning.outputs.version_code }}
           NOTES: ${{ inputs.notes }}
         run: |
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$R2_BUCKET_NAME" ]; then
-            echo "::notice::Storage secrets not set — download the APK from this run's Artifacts and upload it on Team → App Releases."
+            echo "::notice::Storage secrets not configured — download the APK from Artifacts and publish via Team -> App Releases."
             exit 0
           fi
+
           ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          FILE="Atomic-Pathshala-$VERSION.apk"
+          FILE="Atomic-Pathshala-$VERSION_NAME.apk"
           KEY="apps/android/$FILE"
-          # The installer first, the manifest last: the portal must never point at a missing file.
-          aws s3 cp "dist-apk/$FILE" "s3://$R2_BUCKET_NAME/$KEY" --endpoint-url "$ENDPOINT" \
+          LOCAL_APK="dist-apk/$FILE"
+
+          if [ ! -f "$LOCAL_APK" ]; then
+            echo "::error::Local APK file $LOCAL_APK not found for publishing."
+            exit 1
+          fi
+
+          SIZE=$(stat -c %s "$LOCAL_APK")
+          echo "Uploading $FILE ($SIZE bytes) to R2 at $KEY..."
+
+          # Upload APK binary
+          aws s3 cp "$LOCAL_APK" "s3://$R2_BUCKET_NAME/$KEY" \
+            --endpoint-url "$ENDPOINT" \
             --content-type application/vnd.android.package-archive
-          SIZE=$(stat -c %s "dist-apk/$FILE")
-          jq -n --arg v "$VERSION" --arg k "$KEY" --arg f "$FILE" --argjson s "$SIZE" \
-                --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg n "$NOTES" \
-            '{platform:"android",version:$v,key:$k,fileName:$f,sizeBytes:$s,publishedAt:$t,notes:(if $n=="" then null else $n end)}' > latest.json
-          aws s3 cp latest.json "s3://$R2_BUCKET_NAME/apps/android/latest.json" --endpoint-url "$ENDPOINT" \
-            --content-type application/json --cache-control no-cache
-          echo "Published $FILE — Download App now serves v$VERSION."
+
+          # Verify uploaded APK exists in bucket before pointing manifest to it
+          REMOTE_CHECK=$(aws s3 ls "s3://$R2_BUCKET_NAME/$KEY" --endpoint-url "$ENDPOINT" || true)
+          if [ -z "$REMOTE_CHECK" ]; then
+            echo "::error::Uploaded APK could not be verified in R2 storage at s3://$R2_BUCKET_NAME/$KEY."
+            exit 1
+          fi
+          echo "Verified APK in R2: $REMOTE_CHECK"
+
+          # Atomically create and upload latest.json manifest
+          PUBLISHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          jq -n \
+            --arg p "android" \
+            --arg v "$VERSION_NAME" \
+            --argjson c "$VERSION_CODE" \
+            --arg k "$KEY" \
+            --arg f "$FILE" \
+            --argjson s "$SIZE" \
+            --arg t "$PUBLISHED_AT" \
+            --arg n "$NOTES" \
+            '{
+              platform: $p,
+              version: $v,
+              versionCode: $c,
+              key: $k,
+              fileName: $f,
+              sizeBytes: $s,
+              publishedAt: $t,
+              notes: (if $n=="" then null else $n end)
+            }' > latest.json
+
+          cat latest.json
+
+          aws s3 cp latest.json "s3://$R2_BUCKET_NAME/apps/android/latest.json" \
+            --endpoint-url "$ENDPOINT" \
+            --content-type application/json \
+            --cache-control no-cache
+
+          echo "Successfully published $FILE (version $VERSION_NAME, code $VERSION_CODE) to Download App."

@@ -1,6 +1,7 @@
 /**
  * Atomic Pathshala Contract & Legal Agreement Engine
- * Based on official EdTech Plus Educator Agreement & Indian Stamp Act standards
+ * Based on official EdTech Plus Educator Agreement & Indian Contract Act, 1872 standards.
+ * Compliant with Section 6.1 (No synthetic government e-Stamp generation).
  */
 
 export type ContractVariables = {
@@ -31,17 +32,32 @@ export type ContractVariables = {
   authorizedSignatoryDesignation: string;
   stampCertificateNo?: string;
   stampDutyAmount?: string;
+  stampState?: string;
 };
 
 export const DEFAULT_COMPANY_DETAILS = {
-  companyName: "Atomic Pathshala",
-  companyCin: "U80904UP2026PTC123456",
-  companyAddress: "Plot 42, Knowledge Park III, Institutional Area, Greater Noida, UP - 201308, India",
-  companyGstin: "07AAACA1234A1Z5",
-  companyPan: "AAACA1234A",
+  companyName: "ATOMIC PATHSHALA EDUCATION",
+  brandName: "Atomic Pathshala",
   authorizedSignatoryName: "Firoz Ali",
-  authorizedSignatoryDesignation: "Founder & Director",
+  authorizedSignatoryDesignation: "Founder & Proprietor",
+  companyAddress: "Rampur, Uttar Pradesh, India",
+  website: "https://atomicpathshala.in",
+  companyCin: "",
+  companyGstin: "",
+  companyPan: "",
 };
+
+export {
+  generateJoiningLetterId,
+  compileJoiningLetterText,
+  type JoiningLetterVariables,
+} from "../agreements/joining-letter-template";
+
+export {
+  generateServiceAgreementId,
+  compileServiceAgreementText,
+  type ServiceAgreementVariables,
+} from "../agreements/service-agreement-template";
 
 export function generateContractId(index: number = 1): string {
   const year = new Date().getFullYear();
@@ -50,23 +66,26 @@ export function generateContractId(index: number = 1): string {
 }
 
 export function compileContractAgreement(vars: ContractVariables): string {
+  const stampHeading = vars.stampCertificateNo
+    ? `
+[OFFICIAL CERTIFICATE ATTACHMENT: Authentic Government e-Stamp Certificate]
+Certificate Number : ${vars.stampCertificateNo}
+Issuing State      : ${vars.stampState || "Uttar Pradesh"}
+Stamp Duty Paid    : INR ${vars.stampDutyAmount || "100"} /-
+Reference Note     : Certificate PDF attached to this official agreement file.
+--------------------------------------------------------------------------------`
+    : `
+[STAMP DUTY: Subject to applicable State Stamp Act schedule. Certificate attached upon execution.]
+--------------------------------------------------------------------------------`;
+
   return `
 ================================================================================
-                    GOVERNMENT OF INDIA / STATE e-STAMP
-================================================================================
-Certificate No.             : ${vars.stampCertificateNo || `IN-UP${Date.now()}A`}
-Certificate Issued Date     : ${vars.effectiveDate}
-Account Reference           : NONACC/ atomic08/ NOIDA/ UP
-Unique Doc. Reference       : SUBIN-UPATOMIC0851509223708115W
-Purchased By                : ${vars.companyName}
-Description of Document     : Article 5(J) Agreement (Educator & Service Terms)
-First Party                 : ${vars.employeeName} ("Educator")
-Second Party                : ${vars.companyName}
-Stamp Duty Amount (Rs.)     : ${vars.stampDutyAmount || "500 (Five Hundred only)"}
-Contract ID                 : ${vars.contractId}
-================================================================================
-
                            PLUS EDUCATOR AGREEMENT
+                     ATOMIC PATHSHALA ENTERPRISE ACADEMY
+================================================================================
+Agreement Reference Number : ${vars.contractId}
+Date of Execution          : ${vars.effectiveDate}
+${stampHeading}
 
 This Plus Educator Agreement ("Agreement") is made and entered into on ${vars.effectiveDate} ("Effective Date").
 

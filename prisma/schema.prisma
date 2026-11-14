@@ -78,6 +78,7 @@ model User {
   allowedDeviceTypes     String[]       @default(["DESKTOP", "TABLET", "MOBILE"])
   maxActiveDevices       Int            @default(3)
   auditLogs              AuditLog[]
+  agreementsCreated      Agreement[]            @relation("AgreementCreatedByUser")
   userPermissionOverrides UserPermissionOverride[]
   accessRequests         AccessRequest[]
   doubtsResolved         Doubt[]        @relation("DoubtResolvedBy")
@@ -579,6 +580,7 @@ model Teacher {
   onboardingStatus OnboardingStatus  @default(PENDING_DOCUMENTS)
   rating           Float?
   contracts        Contract[]
+  agreements       Agreement[]
   penaltyRecords   PenaltyRecord[]
   documents        TeacherDocument[]
   whiteboardBoards WhiteboardBoard[]
@@ -2653,6 +2655,7 @@ enum ChapterStatus {
 // (draft vs. live), source schema's naming kept as-is.
 model Question {
   id            String       @id @default(cuid())
+  isStagedImport          Boolean?                  @default(false)
   subject       String
   chapter       String?
   topic         String?
@@ -5722,6 +5725,8 @@ model ExtractionJob {
 
 model ExtractedQuestion {
   id                   String        @id @default(cuid())
+  approvalStatus         String?
+  sectionHeader          String?
   jobId                String
   job                  ExtractionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
   questionIndex        Int           // Sequence index (1, 2, 3...)
@@ -8425,3 +8430,429 @@ model CallingActivityLog {
   @@map("calling_activity_logs")
 }
 
+
+
+// ============================================================================
+// ATOMIC PATHSHALA — CONTRACT & AGREEMENT MANAGEMENT SYSTEM (ENTERPRISE WORKFLOW)
+// ============================================================================
+
+enum AgreementStatus {
+  DRAFT
+  READY_FOR_STAMP
+  STAMP_PENDING
+  STAMP_ATTACHED
+  READY_TO_SEND
+  SENT_TO_EDUCATOR
+  EMAIL_DELIVERY_FAILED
+  DELIVERED_TO_EDUCATOR
+  VIEWED_BY_EDUCATOR
+  EDUCATOR_SIGNED
+  AWAITING_DIRECTOR_SIGNATURE
+  DIRECTOR_SIGNED
+  FULLY_EXECUTED
+  REJECTED
+  CORRECTION_REQUESTED
+  EXPIRED
+  VOIDED
+  SUPERSEDED
+}
+
+enum AgreementSignerType {
+  EDUCATOR
+  DIRECTOR
+  WITNESS
+}
+
+enum AgreementSignerStatus {
+  PENDING
+  INVITED
+  VIEWED
+  SIGNED
+  DECLINED
+}
+
+enum AgreementSignatureMethod {
+  ELECTRONIC_DRAWN
+  ELECTRONIC_TYPED
+  ELECTRONIC_UPLOADED
+  AADHAAR_ESIGN
+  DSC_TOKEN
+}
+
+enum AgreementStampVerificationStatus {
+  NOT_APPLICABLE
+  PENDING_UPLOAD
+  ATTACHED_UNVERIFIED
+  VERIFIED
+  REJECTED
+}
+
+enum AgreementInvitationStatus {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  REVOKED
+}
+
+enum AgreementEmailStatus {
+  QUEUED
+  SENDING
+  PROVIDER_ACCEPTED
+  DELIVERED
+  BOUNCED
+  REJECTED
+  FAILED
+  OPENED
+  LINK_CLICKED
+}
+
+enum EducatorDocumentType {
+  JOINING_LETTER
+  SERVICE_AGREEMENT
+}
+
+enum EducatorEngagementType {
+  FULL_TIME
+  PART_TIME
+  VISITING_FACULTY
+  INDEPENDENT_CONSULTANT
+  GUEST_EDUCATOR
+  CONTENT_CREATOR
+}
+
+model Agreement {
+  id                   String                  @id @default(cuid())
+  agreementNumber      String                  @unique
+  documentType         EducatorDocumentType    @default(SERVICE_AGREEMENT)
+  engagementType       EducatorEngagementType? @default(FULL_TIME)
+  title                String
+  educatorId           String
+  templateId           String?
+  currentVersionId     String?
+  status               AgreementStatus         @default(DRAFT)
+  effectiveDate        DateTime?
+  expiryDate           DateTime?
+  annualSalary         String?
+  monthlySalary        String?
+  teachingHoursMonthly String?
+  noticePeriodDays     String?
+  workLocation         String?
+  panNumber            String?
+  address              String?
+  assignedBatch        String?
+  teachingMedium       String?                 @default("English / Bilingual")
+  reportingAuthority   String?                 @default("Founder & Proprietor")
+  workingSchedule      String?
+  compensationType     String?                 @default("MONTHLY_REMUNERATION")
+  perLectureRate       String?
+  perHourRate          String?
+  doubtHoursMonthly    String?
+  academicSession      String?
+  specialConditions    String?                 @db.Text
+  annexureData         Json?
+  finalPdfPath         String?
+  finalPdfUrl          String?
+  finalPdfHash         String?
+  legacyContractId     String?
+  createdBy            String
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  educator             Teacher                 @relation(fields: [educatorId], references: [id], onDelete: Cascade)
+  createdByUser        User                    @relation("AgreementCreatedByUser", fields: [createdBy], references: [id])
+  versions             AgreementVersion[]
+  signers              AgreementSigner[]
+  invitations          AgreementInvitation[]
+  emailLogs            AgreementEmailLog[]
+  auditLogs            AgreementAuditLog[]
+  stamp                AgreementStamp?
+
+  @@index([educatorId])
+  @@index([status])
+  @@index([agreementNumber])
+  @@index([documentType])
+  @@map("agreements")
+}
+
+model OrganizationalPolicy {
+  id              String   @id @default(cuid())
+  policyCode      String   @unique // e.g. "POLICY_A", "POLICY_B"
+  title           String
+  description     String
+  detailedRules   String   @db.Text
+  version         String   @default("1.0")
+  effectiveDate   DateTime @default(now())
+  applicableTo    String[] @default(["ALL"])
+  acknowledgement Boolean  @default(true)
+  updatedBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("organizational_policies")
+}
+
+model AgreementVersion {
+  id               String               @id @default(cuid())
+  agreementId      String
+  versionNumber    Int                  @default(1)
+  originalPdfPath  String?
+  documentHash     String?
+  contentSnapshot  String               @db.Text
+  isLocked         Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+
+  agreement        Agreement            @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  signatures       AgreementSignature[]
+
+  @@unique([agreementId, versionNumber])
+  @@index([agreementId])
+  @@map("agreement_versions")
+}
+
+model AgreementSigner {
+  id               String               @id @default(cuid())
+  agreementId      String
+  signerType       AgreementSignerType
+  userId           String?
+  signerName       String
+  signerEmail      String
+  signingOrder     Int                  @default(1)
+  signatureMethod  AgreementSignatureMethod?
+  status           AgreementSignerStatus @default(PENDING)
+  signedAt         DateTime?
+
+  agreement        Agreement            @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  signatures       AgreementSignature[]
+  invitations      AgreementInvitation[]
+
+  @@index([agreementId])
+  @@index([signerEmail])
+  @@map("agreement_signers")
+}
+
+model AgreementSignature {
+  id                     String                    @id @default(cuid())
+  agreementVersionId     String
+  signerId               String
+  signatureMethod        AgreementSignatureMethod  @default(ELECTRONIC_TYPED)
+  signatureArtifactPath  String?
+  signatureDataUrl       String?                   @db.Text
+  providerReference      String?
+  certificateReference   String?
+  signerIp               String?
+  userAgent              String?
+  signedAt               DateTime                  @default(now())
+  documentHash           String?
+  verificationStatus     String                    @default("VALID")
+
+  version                AgreementVersion          @relation(fields: [agreementVersionId], references: [id], onDelete: Cascade)
+  signer                 AgreementSigner           @relation(fields: [signerId], references: [id], onDelete: Cascade)
+
+  @@index([agreementVersionId])
+  @@index([signerId])
+  @@map("agreement_signatures")
+}
+
+model AgreementStamp {
+  id                     String                           @id @default(cuid())
+  agreementId            String                           @unique
+  issuingState           String
+  certificateNumber      String
+  instrumentCategory     String                           @default("Article 5(J) Agreement")
+  stampDutyAmount        String
+  issueDate              DateTime
+  certificatePath        String?
+  certificateFileAssetId String?
+  verificationStatus     AgreementStampVerificationStatus @default(ATTACHED_UNVERIFIED)
+  verificationReference   String?
+  verificationDate       DateTime?
+  sourceOfVerification   String?
+  notes                  String?
+  createdAt              DateTime                         @default(now())
+  updatedAt              DateTime                         @updatedAt
+
+  agreement              Agreement                        @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@index([certificateNumber])
+  @@map("agreement_stamps")
+}
+
+model AgreementInvitation {
+  id           String                    @id @default(cuid())
+  agreementId  String
+  signerId     String
+  tokenHash    String                    @unique
+  otpHash      String?
+  otpExpiresAt DateTime?
+  expiresAt    DateTime
+  sentAt       DateTime                  @default(now())
+  consumedAt   DateTime?
+  status       AgreementInvitationStatus @default(ACTIVE)
+
+  agreement    Agreement                 @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  signer       AgreementSigner           @relation(fields: [signerId], references: [id], onDelete: Cascade)
+
+  @@index([agreementId])
+  @@index([tokenHash])
+  @@map("agreement_invitations")
+}
+
+model AgreementEmailLog {
+  id                String               @id @default(cuid())
+  agreementId       String
+  recipient         String
+  emailType         String
+  providerMessageId String?
+  status            AgreementEmailStatus @default(QUEUED)
+  errorCode         String?
+  errorMessage      String?
+  metadata          Json?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime             @default(now())
+
+  agreement         Agreement            @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@index([agreementId])
+  @@index([recipient])
+  @@index([status])
+  @@map("agreement_email_logs")
+}
+
+model AgreementAuditLog {
+  id          String    @id @default(cuid())
+  agreementId String
+  actorId     String?
+  actorName   String?
+  actorEmail  String?
+  actorIp     String?
+  eventType   String
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  agreement   Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@index([agreementId])
+  @@index([eventType])
+  @@map("agreement_audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// EMPLOYEE IDENTITY & QR PUBLIC VERIFICATION SYSTEM
+// -----------------------------------------------------------------------------
+
+enum EmployeeEmploymentType {
+  FULL_TIME
+  PART_TIME
+  VISITING_FACULTY
+  INDEPENDENT_CONSULTANT
+  INTERN
+  CONTRACT
+}
+
+enum EmployeeEmploymentStatus {
+  ACTIVE
+  INACTIVE
+  FORMER
+  TERMINATED
+}
+
+enum EmployeeVerificationStatus {
+  VERIFIED
+  REVOKED
+  SUSPENDED
+}
+
+enum EmployeeCertificateType {
+  EXPERIENCE_CERTIFICATE
+  EMPLOYMENT_VERIFICATION
+  RELIEVING_LETTER
+  JOINING_LETTER
+}
+
+enum EmployeeCertificateStatus {
+  ACTIVE
+  REVOKED
+}
+
+model Employee {
+  id                 String                     @id @default(cuid())
+  employeeId         String                     @unique // "AP-EMP-YYYY-0001"
+  name               String
+  photoUrl           String?
+  designation        String
+  department         String
+  dateOfJoining      DateTime
+  employmentType     EmployeeEmploymentType     @default(FULL_TIME)
+  assignedBatch      String?
+  workLocation       String                     @default("Rampur, Uttar Pradesh, India")
+  status             EmployeeEmploymentStatus   @default(ACTIVE)
+  lastWorkingDate    DateTime?
+  verificationStatus EmployeeVerificationStatus @default(VERIFIED)
+  verificationToken  String                     @unique // unguessable fallback token
+  qrCodeDataUrl      String?                    @db.Text
+  email              String?
+  phone              String?
+  userId             String?
+  teacherId          String?
+  notes              String?                    @db.Text
+  createdById        String?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  certificates       EmployeeCertificate[]
+  verificationLogs   EmployeeVerificationLog[]
+
+  @@index([status])
+  @@index([department])
+  @@index([employeeId])
+  @@map("employees")
+}
+
+model EmployeeCertificate {
+  id                  String                    @id @default(cuid())
+  certificateNumber   String                    @unique // "AP-EXP-2026-0001", etc.
+  certificateType     EmployeeCertificateType
+  employeeId          String
+  issueDate           DateTime                  @default(now())
+  issuedBy            String                    @default("Firoz Ali")
+  issuedByDesignation String                    @default("Founder & Proprietor")
+  contentSnapshot     String                    @db.Text
+  pdfUrl              String?
+  pdfHash             String?
+  verificationToken   String                    @unique
+  qrCodeDataUrl       String?                   @db.Text
+  status              EmployeeCertificateStatus @default(ACTIVE)
+  revocationReason    String?
+  createdById         String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  employee            Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  verificationLogs    EmployeeVerificationLog[]
+
+  @@index([employeeId])
+  @@index([certificateType])
+  @@index([certificateNumber])
+  @@map("employee_certificates")
+}
+
+model EmployeeVerificationLog {
+  id               String   @id @default(cuid())
+  employeeId       String?
+  certificateId    String?
+  verificationType String   // "EMPLOYEE_QR_SCAN" | "CERTIFICATE_QR_SCAN" | "DIRECT_LOOKUP"
+  lookupIdentifier String   // ID or token passed in URL
+  resultStatus     String   // "VERIFIED_ACTIVE" | "VERIFIED_FORMER" | "INACTIVE" | "REVOKED" | "INVALID"
+  ipAddress        String?
+  userAgent        String?
+  scannedAt        DateTime @default(now())
+
+  employee         Employee?            @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  certificate      EmployeeCertificate? @relation(fields: [certificateId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId])
+  @@index([certificateId])
+  @@index([scannedAt])
+  @@map("employee_verification_logs")
+}

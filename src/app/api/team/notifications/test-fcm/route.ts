@@ -43,10 +43,28 @@ export async function GET(req: NextRequest) {
         key = key.slice(1, -1).trim();
       }
       key = key.replace(/\\\\n/g, "\n").replace(/\\n/g, "\n").replace(/\r/g, "");
-      if (!key.includes("-----BEGIN")) {
-        key = `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----`;
+
+      // If it already has PEM headers, ensure newlines
+      if (key.includes("-----BEGIN")) {
+        // Strip headers to clean inner base64
+        const match = key.match(/-----BEGIN[^-]+-----\s*([\s\S]+?)\s*-----END[^-]+-----/);
+        if (match && match[1]) {
+          key = match[1].replace(/\s+/g, "");
+        }
       }
-      return key;
+
+      // Remove any non-base64 preamble before the PKCS#8 "MII" header (like rogue 'n' from truncated '\n')
+      const miiIndex = key.indexOf("MII");
+      if (miiIndex !== -1) {
+        key = key.slice(miiIndex);
+      }
+
+      // Remove any trailing non-base64 characters
+      const cleanBase64 = key.replace(/[^A-Za-z0-9+/=]/g, "");
+
+      // Split into 64-char lines standard PEM
+      const lines = cleanBase64.match(/.{1,64}/g) || [cleanBase64];
+      return `-----BEGIN PRIVATE KEY-----\n${lines.join("\n")}\n-----END PRIVATE KEY-----\n`;
     }
 
     let initError = null;
@@ -119,7 +137,7 @@ export async function GET(req: NextRequest) {
           successCount: res.successCount,
           failureCount: res.failureCount,
           responses: res.responses.map((r, i) => ({
-            tokenPrefix: tokens[i].slice(0, 15),
+            tokenPrefix: (tokens[i] || "").slice(0, 15),
             success: r.success,
             messageId: r.messageId,
             error: r.error

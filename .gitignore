@@ -28,3 +28,20 @@ scratch/
 *.dump
 *.sql.gz
 *.zip
+
+
+# Temporary extraction dumps, crops & scratch images
+ch*_crops/
+ch*_page_images/
+ncr_crops/
+ncr_page_images/
+race_crops/
+race_page_images/
+*_dump.txt
+*_parsed.json
+*_clean.json
+*_uploaded_figures.json
+*_candidate_figures.json
+ncr_raw_text.json
+race_raw_text.json
+class-notes-preview.html

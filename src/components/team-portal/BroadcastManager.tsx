@@ -44,7 +44,7 @@ export function BroadcastManager({
   const [body, setBody] = useState("");
   const [segmentType, setSegmentType] = useState<Broadcast["segmentType"]>("ALL");
   const [segmentValue, setSegmentValue] = useState("");
-  const [channel, setChannel] = useState<"IN_APP" | "WHATSAPP" | "EMAIL" | "ALL_CHANNELS">("ALL_CHANNELS");
+  const [channel, setChannel] = useState<"PUSH" | "IN_APP" | "WHATSAPP" | "EMAIL" | "ALL_CHANNELS">("PUSH");
 
   async function sendBroadcast(e: React.FormEvent) {
     e.preventDefault();
@@ -88,7 +88,7 @@ export function BroadcastManager({
       setBody("");
       setSegmentType("ALL");
       setSegmentValue("");
-      setChannel("ALL_CHANNELS");
+      setChannel("PUSH");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -227,9 +227,10 @@ export function BroadcastManager({
                 onChange={(e) => setChannel(e.target.value as any)}
                 className="w-full rounded-xl border border-outline-variant/40 bg-surface px-4 py-2.5 font-body-md text-body-md outline-none focus:ring-2 focus:ring-primary font-semibold text-primary"
               >
-                <option value="ALL_CHANNELS">⚡ All Channels (In-App + WhatsApp + Email)</option>
-                <option value="WHATSAPP">💬 WhatsApp Only</option>
+                <option value="PUSH">📱 Mobile Push + In-App Notification (Recommended)</option>
+                <option value="ALL_CHANNELS">⚡ All Channels (Push + In-App + Email + WhatsApp)</option>
                 <option value="IN_APP">🔔 In-App Notification Only</option>
+                <option value="WHATSAPP">💬 WhatsApp Only</option>
                 <option value="EMAIL">📧 Email Only</option>
               </select>
             </div>

@@ -17,10 +17,28 @@ function getFirebaseAdmin(): App | null {
 
   if (projectId && clientEmail && privateKey) {
     try {
-      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-        privateKey = privateKey.slice(1, -1);
+      let key = privateKey.trim();
+      if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+        key = key.slice(1, -1).trim();
       }
-      privateKey = privateKey.replace(/\\n/g, "\n");
+      key = key.replace(/\\\\n/g, "\n").replace(/\\n/g, "\n").replace(/\r/g, "");
+
+      if (key.includes("-----BEGIN")) {
+        const match = key.match(/-----BEGIN[^-]+-----\s*([\s\S]+?)\s*-----END[^-]+-----/);
+        if (match && match[1]) {
+          key = match[1].replace(/\s+/g, "");
+        }
+      }
+
+      // Remove any non-base64 preamble before the PKCS#8 "MII" header (e.g. rogue 'n' from truncated '\n')
+      const miiIndex = key.indexOf("MII");
+      if (miiIndex !== -1) {
+        key = key.slice(miiIndex);
+      }
+
+      const cleanBase64 = key.replace(/[^A-Za-z0-9+/=]/g, "");
+      const lines = cleanBase64.match(/.{1,64}/g) || [cleanBase64];
+      const pemKey = `-----BEGIN PRIVATE KEY-----\n${lines.join("\n")}\n-----END PRIVATE KEY-----\n`;
 
       const existingApps = getApps();
       if (!existingApps.length) {
@@ -28,7 +46,7 @@ function getFirebaseAdmin(): App | null {
           credential: cert({
             projectId,
             clientEmail,
-            privateKey,
+            privateKey: pemKey,
           }),
         });
       } else {

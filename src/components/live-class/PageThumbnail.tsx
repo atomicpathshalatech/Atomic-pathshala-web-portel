@@ -50,8 +50,21 @@ export const PageThumbnail = React.memo(
   (prev, next) => {
     if (prev.background !== next.background) return false;
     if (prev.objects === next.objects) return true;
-    if ((prev.objects?.length ?? 0) !== (next.objects?.length ?? 0)) return false;
-    // Fast comparison when same length
-    return JSON.stringify(prev.objects) === JSON.stringify(next.objects);
+    const prevLen = prev.objects?.length ?? 0;
+    const nextLen = next.objects?.length ?? 0;
+    if (prevLen !== nextLen) return false;
+    if (prevLen === 0) return true;
+
+    // Fast O(1) comparison avoiding expensive JSON.stringify on large vector arrays
+    const lastPrev = prev.objects[prevLen - 1];
+    const lastNext = next.objects[nextLen - 1];
+    if (lastPrev !== lastNext) {
+      if (!lastPrev || !lastNext) return false;
+      if (lastPrev.id !== lastNext.id) return false;
+      if (lastPrev.type === "stroke" && lastNext.type === "stroke") {
+        if (lastPrev.points.length !== lastNext.points.length) return false;
+      }
+    }
+    return true;
   }
 );

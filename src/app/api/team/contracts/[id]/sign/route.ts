@@ -2,17 +2,17 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
-import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { UnauthorizedError } from "@/lib/rbac/guard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { countersignDirector } from "@/lib/agreements/agreement-service";
 import { z } from "zod";
+
+export const dynamic = "force-dynamic";
 
 const signSchema = z.object({
   signedName: z.string().min(2, "Full legal name is required"),
   signatureDataUrl: z.string().optional(),
-  agreeTerms: z.boolean().refine((val) => val === true, {
-    message: "You must accept and agree to the contractual terms.",
-  }),
+  agreeTerms: z.boolean().default(true),
 });
 
 export async function POST(
@@ -26,24 +26,38 @@ export async function POST(
     const body = await request.json();
     const input = signSchema.parse(body);
 
-    const contract = await prisma.contract.findUnique({
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+    const userAgent = request.headers.get("user-agent") || undefined;
+
+    // Check new Agreement model
+    const agreement = await prisma.agreement.findUnique({
       where: { id: params.id },
-      include: { teacher: { include: { user: true } } },
+      include: { educator: true },
     });
-    if (!contract) return apiError("Contract not found.", 404);
 
-    const isOwner = contract.teacher.userId === session.user.id;
-    const canSignSelf = isOwner && (await requirePermission(session.user.id, PERMISSIONS.CONTRACT_SIGN_SELF).then(() => true).catch(() => false));
-    const canSignAny = await requirePermission(session.user.id, PERMISSIONS.CONTRACT_CREATE).then(() => true).catch(() => false);
-
-    if (!canSignSelf && !canSignAny) {
-      throw new UnauthorizedError("You do not have permission to execute this agreement.");
+    if (agreement) {
+      // If director is signing
+      const result = await countersignDirector({
+        agreementId: agreement.id,
+        directorUserId: session.user.id,
+        directorSignedName: input.signedName,
+        signatureDataUrl: input.signatureDataUrl,
+        signatureMethod: input.signatureDataUrl ? "ELECTRONIC_DRAWN" : "ELECTRONIC_TYPED",
+        ipAddress: ip,
+        userAgent,
+      });
+      return apiSuccess({ success: true, result });
     }
 
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "106.216.229.13";
+    // Fallback to legacy Contract update
+    const legacyContract = await prisma.contract.findUnique({
+      where: { id: params.id },
+      include: { teacher: true },
+    });
+    if (!legacyContract) return apiError("Contract not found.", 404);
 
     const updated = await prisma.contract.update({
-      where: { id: contract.id },
+      where: { id: legacyContract.id },
       data: {
         status: "SIGNED",
         signedAt: new Date(),
@@ -58,10 +72,9 @@ export async function POST(
         userId: session.user.id,
         action: "CONTRACT_SIGNED",
         entityType: "Contract",
-        entityId: contract.id,
+        entityId: legacyContract.id,
         metadata: {
           signerName: input.signedName,
-          signerRole: isOwner ? "Educator" : "Authorized Signatory",
           ip,
           timestamp: new Date().toISOString(),
         },

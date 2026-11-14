@@ -42,7 +42,7 @@ async function testRealWhiteboardEngineAndConcurrency() {
 
   const initialStroke: StrokeObject = {
     id: "stroke-init-1",
-    type: "pen",
+    type: "stroke",
     tool: "pen",
     color: "#2563eb",
     size: 4,
@@ -160,11 +160,11 @@ async function testRealWhiteboardEngineAndConcurrency() {
   const p2Saved = savedPages.get("page-2");
 
   assert(
-    p1Saved !== undefined && p1Saved.objects.length === 2 && p1Saved.objects[1].id === "stroke-p1-v2",
+    Boolean(p1Saved && p1Saved.objects.length === 2 && p1Saved.objects[1]?.id === "stroke-p1-v2"),
     "Test 3.1: SaveQueue preserved newest in-flight edits through network retry & version conflict"
   );
   assert(
-    p2Saved !== undefined && p2Saved.objects[0].id === "stroke-p2-v1",
+    Boolean(p2Saved && p2Saved.objects[0]?.id === "stroke-p2-v1"),
     "Test 3.2: Rapid slide navigation strokes for page-2 persisted without cross-page overwrite"
   );
 

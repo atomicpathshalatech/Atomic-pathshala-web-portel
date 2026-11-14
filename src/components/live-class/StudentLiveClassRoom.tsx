@@ -176,10 +176,19 @@ const StudentWhiteboardMirror = forwardRef<WhiteboardMirrorHandle, {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const lastLoadedLenRef = useRef<number>(-1);
+  const lastLoadedIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (engineRef.current) {
       engineRef.current.syncSize();
-      engineRef.current.loadObjects(objects);
+      const len = objects?.length ?? 0;
+      const lastId = len > 0 ? objects[len - 1]?.id ?? null : null;
+      if (len !== lastLoadedLenRef.current || lastId !== lastLoadedIdRef.current) {
+        lastLoadedLenRef.current = len;
+        lastLoadedIdRef.current = lastId;
+        engineRef.current.loadObjects(objects);
+      }
     }
   }, [mirrorDim, objects]);
 

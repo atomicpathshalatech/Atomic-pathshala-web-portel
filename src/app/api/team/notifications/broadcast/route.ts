@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     });
 
     // If WhatsApp/Email channel was requested, also trigger external dispatch
-    if (input.channel === "WHATSAPP" || input.channel === "ALL_CHANNELS") {
+    if (input.channel === "WHATSAPP" || input.channel === "EMAIL" || input.channel === "ALL_CHANNELS") {
       for (const userId of recipientUserIds.slice(0, 100)) {
         await dispatchNotification({
           userId,
