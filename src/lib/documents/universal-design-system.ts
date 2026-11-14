@@ -95,19 +95,57 @@ export function cleanWinAnsi(text: string): string {
 }
 
 /**
- * 1. Draw Thin Professional Royal Blue Page Border
+ * 1. Draw Thin Professional Royal Blue Page Border with Corner Geometric Accents
  */
 export function drawDocumentBorder(page: PDFPage) {
   const { width, height } = page.getSize();
-  const inset = 24; // 24 pt from page edges
+
+  // Top-left geometric corner accents
+  page.drawSvgPath(`M 0 ${height} L 56 ${height} L 0 ${height - 56} Z`, {
+    color: BRAND_COLORS.royalBlue,
+  });
+  page.drawSvgPath(`M 0 ${height - 24} L 32 ${height} L 46 ${height} L 0 ${height - 46} Z`, {
+    color: BRAND_COLORS.navyBlue,
+  });
+
+  // Bottom-right geometric corner accents
+  page.drawSvgPath(`M ${width} 0 L ${width - 56} 0 L ${width} 56 Z`, {
+    color: BRAND_COLORS.royalBlue,
+  });
+  page.drawSvgPath(`M ${width} 24 L ${width - 32} 0 L ${width - 46} 0 L ${width} 46 Z`, {
+    color: BRAND_COLORS.navyBlue,
+  });
+
+  // Top-right subtle accent
+  page.drawSvgPath(`M ${width} ${height} L ${width - 35} ${height} L ${width} ${height - 35} Z`, {
+    color: BRAND_COLORS.accentBlue,
+  });
+
+  // Bottom-left subtle accent
+  page.drawSvgPath(`M 0 0 L 35 0 L 0 35 Z`, {
+    color: BRAND_COLORS.accentBlue,
+  });
+
+  // Outer thin border
+  const inset1 = 16;
   page.drawRectangle({
-    x: inset,
-    y: inset,
-    width: width - inset * 2,
-    height: height - inset * 2,
-    borderWidth: 0.75,
+    x: inset1,
+    y: inset1,
+    width: width - inset1 * 2,
+    height: height - inset1 * 2,
+    borderWidth: 0.9,
     borderColor: BRAND_COLORS.royalBlue,
-    color: undefined, // transparent fill
+  });
+
+  // Inner thin border
+  const inset2 = 20;
+  page.drawRectangle({
+    x: inset2,
+    y: inset2,
+    width: width - inset2 * 2,
+    height: height - inset2 * 2,
+    borderWidth: 0.5,
+    borderColor: BRAND_COLORS.navyBlue,
   });
 }
 
@@ -251,7 +289,7 @@ export function drawDocumentHeader(
 }
 
 /**
- * 4. Draw Document Title
+ * 4. Draw Document Title (Clean Navy Bold Text with Clean Underline Accent, NO solid background)
  */
 export function drawDocumentTitle(
   page: PDFPage,
@@ -261,7 +299,7 @@ export function drawDocumentTitle(
 ): number {
   const { width } = page.getSize();
   const cleanTitleStr = cleanWinAnsi(title);
-  const titleSize = 13.5;
+  const titleSize = 14;
   const titleWidth = fonts.timesBold.widthOfTextAtSize(cleanTitleStr, titleSize);
 
   page.drawText(cleanTitleStr, {
@@ -272,15 +310,17 @@ export function drawDocumentTitle(
     color: BRAND_COLORS.navyBlue,
   });
 
-  // Underline accent
+  // Clean horizontal line drawn beneath it
+  const lineY = startY - 7;
+  const lineExtend = 36;
   page.drawLine({
-    start: { x: (width - titleWidth) / 2 - 12, y: startY - 5 },
-    end: { x: (width + titleWidth) / 2 + 12, y: startY - 5 },
-    thickness: 1,
-    color: BRAND_COLORS.accentBlue,
+    start: { x: (width - titleWidth) / 2 - lineExtend, y: lineY },
+    end: { x: (width + titleWidth) / 2 + lineExtend, y: lineY },
+    thickness: 1.2,
+    color: BRAND_COLORS.royalBlue,
   });
 
-  return startY - 24;
+  return startY - 26;
 }
 
 /**
@@ -293,9 +333,14 @@ export function drawDocumentFooter(
   totalPages: number,
   docTypeTag: string
 ) {
+  // Single-page certificates already have the complete institutional footer
+  if (totalPages <= 1) {
+    return;
+  }
+
   const { width } = page.getSize();
   const marginX = 44;
-  const footerY = 36;
+  const footerY = 28;
 
   page.drawLine({
     start: { x: marginX, y: footerY + 12 },
@@ -348,29 +393,33 @@ export async function drawUnifiedVerificationAndSignatory(
   const boxHeight = 100;
   const boxY = options.y - boxHeight;
 
-  // Background Box
+  // 1. Enclosing verification card with thin border
   page.drawRectangle({
     x: marginX,
     y: boxY,
     width: usableWidth,
     height: boxHeight,
-    color: BRAND_COLORS.cardBg,
+    color: rgb(1, 1, 1),
     borderColor: BRAND_COLORS.borderLight,
     borderWidth: 0.8,
   });
 
-  // Embed QR Code on the left
+  // 2. Embed QR Code on the left
+  const qrX = marginX + 14;
+  const qrY = boxY + 22;
+  const qrSize = 60;
   let qrDrawn = false;
+
   if (options.qrCodeDataUrl) {
     try {
       const qrBase64 = options.qrCodeDataUrl.replace(/^data:image\/\w+;base64,/, "");
       const qrBuffer = Buffer.from(qrBase64, "base64");
       const qrImg = await pdfDoc.embedPng(qrBuffer);
       page.drawImage(qrImg, {
-        x: marginX + 10,
-        y: boxY + 10,
-        width: 80,
-        height: 80,
+        x: qrX,
+        y: qrY,
+        width: qrSize,
+        height: qrSize,
       });
       qrDrawn = true;
     } catch (e) {
@@ -378,120 +427,166 @@ export async function drawUnifiedVerificationAndSignatory(
     }
   }
 
-  const textLeft = qrDrawn ? marginX + 100 : marginX + 16;
+  // "SCAN TO VERIFY" badge beneath QR Code
+  const badgeWidth = qrSize + 8;
+  const badgeHeight = 13;
+  const badgeX = qrX - 4;
+  const badgeY = boxY + 6;
+  page.drawRectangle({
+    x: badgeX,
+    y: badgeY,
+    width: badgeWidth,
+    height: badgeHeight,
+    color: BRAND_COLORS.royalBlue,
+  });
 
-  // Left Verification Text
-  page.drawText("OFFICIAL VERIFICATION QR", {
+  const badgeText = "SCAN TO VERIFY";
+  const badgeTextW = fonts.timesBold.widthOfTextAtSize(badgeText, 6);
+  page.drawText(badgeText, {
+    x: badgeX + (badgeWidth - badgeTextW) / 2,
+    y: badgeY + 3.5,
+    size: 6,
+    font: fonts.timesBold,
+    color: rgb(1, 1, 1),
+  });
+
+  // Text next to QR Code
+  const textLeft = qrDrawn ? marginX + 90 : marginX + 16;
+
+  page.drawText("Verify this certificate at", {
     x: textLeft,
-    y: boxY + boxHeight - 20,
+    y: boxY + boxHeight - 25,
+    size: 9.5,
+    font: fonts.timesBold,
+    color: BRAND_COLORS.navyBlue,
+  });
+
+  // Light blue pill badge for URL
+  const pillY = boxY + boxHeight - 48;
+  const pillW = 155;
+  const pillH = 18;
+  page.drawRectangle({
+    x: textLeft,
+    y: pillY,
+    width: pillW,
+    height: pillH,
+    color: rgb(0.92, 0.96, 1),
+    borderColor: rgb(0.72, 0.84, 0.98),
+    borderWidth: 0.6,
+  });
+
+  const verifyDomain = "ap.atomicpathshala.in/verify";
+  const domainW = fonts.timesBold.widthOfTextAtSize(verifyDomain, 8.5);
+  page.drawText(verifyDomain, {
+    x: textLeft + (pillW - domainW) / 2,
+    y: pillY + 5,
+    size: 8.5,
+    font: fonts.timesBold,
+    color: BRAND_COLORS.royalBlue,
+  });
+
+  page.drawText(cleanWinAnsi(`Certificate ID: ${options.documentId}`), {
+    x: textLeft,
+    y: boxY + 18,
     size: 8,
     font: fonts.timesBold,
     color: BRAND_COLORS.navyBlue,
   });
 
-  page.drawText("Scan with any camera or smartphone to verify the authenticity", {
-    x: textLeft,
-    y: boxY + boxHeight - 33,
-    size: 7.5,
-    font: fonts.timesRoman,
-    color: BRAND_COLORS.mutedText,
+  // 3. Vertical Dividing Line
+  const midX = marginX + usableWidth * 0.58;
+  page.drawLine({
+    start: { x: midX, y: boxY + 10 },
+    end: { x: midX, y: boxY + boxHeight - 10 },
+    thickness: 0.8,
+    color: BRAND_COLORS.borderLight,
   });
 
-  page.drawText("of this credential directly on the official institutional portal:", {
-    x: textLeft,
-    y: boxY + boxHeight - 44,
-    size: 7.5,
-    font: fonts.timesRoman,
-    color: BRAND_COLORS.mutedText,
-  });
-
-  const verifyUrl = cleanWinAnsi(options.verificationUrl || `https://atomicpathshala.in/verify/${options.documentId}`);
-  page.drawText(verifyUrl, {
-    x: textLeft,
-    y: boxY + boxHeight - 56,
-    size: 7.5,
-    font: fonts.timesBold,
-    color: BRAND_COLORS.royalBlue,
-  });
-
-  page.drawText(cleanWinAnsi(`Doc ID: ${options.documentId} * Issued: ${options.issueDateStr}`), {
-    x: textLeft,
-    y: boxY + boxHeight - 70,
-    size: 7,
-    font: fonts.timesItalic,
-    color: BRAND_COLORS.mutedText,
-  });
-
-  page.drawText("[VERIFIED INSTITUTIONAL RECORD]", {
-    x: textLeft,
-    y: boxY + boxHeight - 84,
-    size: 7,
-    font: fonts.timesBold,
-    color: BRAND_COLORS.successGreen,
-  });
-
-  // Right Signatory Block
-  const sigX = width - marginX - 165;
-
-  page.drawText("AUTHORIZED SIGNATORY", {
-    x: sigX,
-    y: boxY + boxHeight - 18,
-    size: 7.5,
-    font: fonts.timesBold,
-    color: BRAND_COLORS.navyBlue,
-  });
-
+  // 4. Right Signatory Block (Universal Official Handwritten Signature)
+  const sigBlockX = midX + 32;
   const sigImg = options.signatureImg !== undefined ? options.signatureImg : await loadBrandSignature(pdfDoc);
+
   if (sigImg) {
-    // Official ID-Card matching signature
     page.drawImage(sigImg, {
-      x: sigX,
+      x: sigBlockX,
       y: boxY + boxHeight - 50,
-      width: 96,
-      height: 30,
+      width: 110,
+      height: 38,
     });
   } else {
-    // Calligraphic script fallback
     page.drawText("Firoz Ali", {
-      x: sigX,
+      x: sigBlockX + 12,
       y: boxY + boxHeight - 44,
-      size: 18,
+      size: 20,
       font: fonts.timesItalic,
       color: BRAND_COLORS.navyBlue,
     });
   }
 
-  page.drawText("FIROZ ALI", {
-    x: sigX,
-    y: boxY + boxHeight - 58,
-    size: 8.5,
+  page.drawText("Firoz Ali", {
+    x: sigBlockX + 22,
+    y: boxY + boxHeight - 64,
+    size: 11,
     font: fonts.timesBold,
     color: BRAND_COLORS.navyBlue,
   });
 
-  page.drawText("Founder and Director", {
-    x: sigX,
-    y: boxY + boxHeight - 69,
-    size: 7.5,
+  page.drawText("Founder & Director", {
+    x: sigBlockX + 10,
+    y: boxY + boxHeight - 77,
+    size: 9,
     font: fonts.timesRoman,
     color: BRAND_COLORS.bodyText,
   });
 
-  page.drawText("ATOMIC PATHSHALA EDUCATION", {
-    x: sigX,
-    y: boxY + boxHeight - 79,
-    size: 7,
-    font: fonts.timesBold,
-    color: BRAND_COLORS.mutedText,
+  // 5. Bottom Institutional Footer (Underneath the box)
+  const lineY = boxY - 14;
+  page.drawLine({
+    start: { x: marginX + 24, y: lineY },
+    end: { x: width - marginX - 24, y: lineY },
+    thickness: 0.8,
+    color: BRAND_COLORS.borderLight,
   });
 
-  page.drawText("Rampur, Uttar Pradesh, India", {
-    x: sigX,
-    y: boxY + boxHeight - 89,
-    size: 6.5,
-    font: fonts.timesRoman,
-    color: BRAND_COLORS.mutedText,
+  const instName = "ATOMIC PATHSHALA EDUCATION";
+  const instNameW = fonts.timesBold.widthOfTextAtSize(instName, 11);
+  page.drawText(instName, {
+    x: (width - instNameW) / 2,
+    y: boxY - 29,
+    size: 11,
+    font: fonts.timesBold,
+    color: BRAND_COLORS.navyBlue,
   });
+
+  const webUrl = "atomicpathshala.in";
+  const webUrlW = fonts.timesRoman.widthOfTextAtSize(webUrl, 8.5);
+  const decoLineW = 42;
+  const textY = boxY - 42;
+  const decoLineY = boxY - 39;
+
+  page.drawLine({
+    start: { x: (width - webUrlW) / 2 - decoLineW - 8, y: decoLineY },
+    end: { x: (width - webUrlW) / 2 - 8, y: decoLineY },
+    thickness: 0.6,
+    color: BRAND_COLORS.accentBlue,
+  });
+
+  page.drawText(webUrl, {
+    x: (width - webUrlW) / 2,
+    y: textY,
+    size: 8.5,
+    font: fonts.timesRoman,
+    color: BRAND_COLORS.navyBlue,
+  });
+
+  page.drawLine({
+    start: { x: (width + webUrlW) / 2 + 8, y: decoLineY },
+    end: { x: (width + webUrlW) / 2 + decoLineW + 8, y: decoLineY },
+    thickness: 0.6,
+    color: BRAND_COLORS.accentBlue,
+  });
+
+  return boxY - 50;
 
   return boxY;
 }

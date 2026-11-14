@@ -745,20 +745,58 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
     color: rgb(0.25, 0.3, 0.38),
   });
 
-  // Founder and Director Calligraphic Signature
-  signPage.drawText("Firoz Ali", {
-    x: box2X + 16,
-    y: sigAreaY + 12,
-    size: 21,
-    font: timesItalic,
-    color: rgb(0.04, 0.15, 0.4),
-  });
-  signPage.drawLine({
-    start: { x: box2X + 14, y: sigAreaY + 6 },
-    end: { x: box2X + colWidth - 14, y: sigAreaY + 6 },
-    thickness: 0.75,
-    color: rgb(0.8, 0.84, 0.9),
-  });
+  // Founder and Director Signature (Universal handwritten signature image from public/brand/signature.png or passed dataUrl)
+  let directorSigDrawn = false;
+  const dirSigData = input.directorSignatureDataUrl || undefined;
+  if (dirSigData && dirSigData.length > 2000) {
+    try {
+      const base64Data = dirSigData.replace(/^data:image\/\w+;base64,/, "");
+      const sigImgBuffer = Buffer.from(base64Data, "base64");
+      const sigImg = await pdfDoc.embedPng(sigImgBuffer).catch(async () => {
+        return await pdfDoc.embedJpg(sigImgBuffer);
+      });
+      signPage.drawImage(sigImg, {
+        x: box2X + 16,
+        y: sigAreaY,
+        width: 130,
+        height: 40,
+      });
+      directorSigDrawn = true;
+    } catch {}
+  }
+
+  if (!directorSigDrawn) {
+    // Load universal approved brand signature from disk (public/brand/signature.png)
+    try {
+      const brandSigPath = path.join(process.cwd(), "public", "brand", "signature.png");
+      if (fs.existsSync(brandSigPath)) {
+        const sigImg = await pdfDoc.embedPng(fs.readFileSync(brandSigPath));
+        signPage.drawImage(sigImg, {
+          x: box2X + 16,
+          y: sigAreaY,
+          width: 130,
+          height: 40,
+        });
+        directorSigDrawn = true;
+      }
+    } catch {}
+  }
+
+  if (!directorSigDrawn) {
+    signPage.drawText("Firoz Ali", {
+      x: box2X + 16,
+      y: sigAreaY + 12,
+      size: 21,
+      font: timesItalic,
+      color: rgb(0.04, 0.15, 0.4),
+    });
+    signPage.drawLine({
+      start: { x: box2X + 14, y: sigAreaY + 6 },
+      end: { x: box2X + colWidth - 14, y: sigAreaY + 6 },
+      thickness: 0.75,
+      color: rgb(0.8, 0.84, 0.9),
+    });
+  }
 
   signPage.drawText(`[VERIFIED] Countersigned: Firoz Ali (Founder and Director)`, {
     x: box2X + 12,

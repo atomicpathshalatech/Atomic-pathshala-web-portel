@@ -248,7 +248,7 @@ export async function buildJoiningConfirmationPdf(
   currentY = drawWrappedText(page, fonts.timesRoman, ackText, marginX, currentY, usableWidth, 8.5, 12, BRAND_COLORS.mutedText);
 
   // 9. Dual Verification Block & Signatory
-  const footerBoxY = 145;
+  const footerBoxY = 168;
   await drawUnifiedVerificationAndSignatory(pdfDoc, page, fonts, {
     y: footerBoxY,
     qrCodeDataUrl: vars.qrCodeDataUrl,

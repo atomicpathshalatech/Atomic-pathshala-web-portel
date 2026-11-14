@@ -198,7 +198,7 @@ export async function buildRelievingLetterPdf(
   currentY = drawParagraph(page, fonts.timesRoman, closingText, marginX, currentY, usableWidth, 9, 13);
 
   // 8. Dual Verification Block & Signatory
-  const footerBoxY = 145;
+  const footerBoxY = 168;
   await drawUnifiedVerificationAndSignatory(pdfDoc, page, fonts, {
     y: footerBoxY,
     qrCodeDataUrl: vars.qrCodeDataUrl,

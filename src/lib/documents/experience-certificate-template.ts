@@ -58,10 +58,17 @@ export async function buildExperienceCertificatePdf(
   // 4. Document Title
   currentY = drawDocumentTitle(page, fonts, "EXPERIENCE CERTIFICATE", currentY);
 
-  // 5. Salutation: TO WHOMSOEVER IT MAY CONCERN
+  // 5. Salutation: TO WHOMSOEVER IT MAY CONCERN with side rules
   currentY -= 14;
   const whomText = "TO WHOMSOEVER IT MAY CONCERN";
   const whomWidth = fonts.timesBold.widthOfTextAtSize(whomText, 11);
+  const ruleLen = 45;
+  page.drawLine({
+    start: { x: (page.getSize().width - whomWidth) / 2 - ruleLen - 12, y: currentY + 3.5 },
+    end: { x: (page.getSize().width - whomWidth) / 2 - 12, y: currentY + 3.5 },
+    thickness: 0.8,
+    color: BRAND_COLORS.navyBlue,
+  });
   page.drawText(whomText, {
     x: (page.getSize().width - whomWidth) / 2,
     y: currentY,
@@ -69,38 +76,43 @@ export async function buildExperienceCertificatePdf(
     font: fonts.timesBold,
     color: BRAND_COLORS.navyBlue,
   });
+  page.drawLine({
+    start: { x: (page.getSize().width + whomWidth) / 2 + 12, y: currentY + 3.5 },
+    end: { x: (page.getSize().width + whomWidth) / 2 + ruleLen + 12, y: currentY + 3.5 },
+    thickness: 0.8,
+    color: BRAND_COLORS.navyBlue,
+  });
 
-  currentY -= 24;
+  currentY -= 26;
 
-  // 6. Professional Certification Body Paragraphs
-  const p1 = `This is to officially certify that ${vars.employeeName} (Employee Reference ID: ${vars.employeeId}) was engaged with ATOMIC PATHSHALA EDUCATION, operating under the brand name Atomic Pathshala, having its academic and administrative headquarters at Rampur, Uttar Pradesh, India.`;
-  currentY = drawParagraph(page, fonts.timesRoman, p1, marginX, currentY, usableWidth, 10, 15);
-
-  currentY -= 12;
-  const p2 = `During their tenure spanning from ${vars.startDateStr} to ${vars.endDateStr}, ${vars.employeeName} served with commendable pedagogical excellence, dedication, and professionalism as ${vars.designation} in the Department of ${vars.department}.`;
-  currentY = drawParagraph(page, fonts.timesRoman, p2, marginX, currentY, usableWidth, 10, 15);
-
-  currentY -= 12;
-  const remarks = vars.conductRemarks || "Their professional conduct, character, and pedagogical integrity were found to be exemplary throughout their engagement.";
-  const p3 = `Throughout their service, they exhibited high academic rigor, structured classroom delivery aligned with national competitive benchmarks (NEET / JEE), and active mentorship towards student conceptual growth. ${remarks}`;
-  currentY = drawParagraph(page, fonts.timesRoman, p3, marginX, currentY, usableWidth, 10, 15);
+  // 6. Professional Certification Body Paragraphs (Clean NCERT / Universal pattern)
+  const p1 = `This is to certify that ${vars.employeeName} (Employee ID: ${vars.employeeId}) was associated with Atomic Pathshala as a ${vars.designation} in the Department of ${vars.department}.`;
+  currentY = drawParagraph(page, fonts.timesRoman, p1, marginX, currentY, usableWidth, 10, 16);
 
   currentY -= 12;
-  const p4 = `We extend our sincere appreciation to ${vars.employeeName} for their valuable academic contributions to the institution and wish them the very best in all their future academic and professional endeavors.`;
-  currentY = drawParagraph(page, fonts.timesRoman, p4, marginX, currentY, usableWidth, 10, 15);
+  const p2 = `The individual worked with our organization from ${vars.startDateStr} to ${vars.endDateStr}.`;
+  currentY = drawParagraph(page, fonts.timesRoman, p2, marginX, currentY, usableWidth, 10, 16);
 
-  currentY -= 14;
-  const issueLine = `Issued on this ${vars.issueDateStr} at Rampur, Uttar Pradesh, India under official institutional authority.`;
+  currentY -= 12;
+  const remarks = vars.conductRemarks || "During this period, they demonstrated strong subject expertise, effective teaching practices, academic leadership and a high level of professional commitment.";
+  currentY = drawParagraph(page, fonts.timesRoman, remarks, marginX, currentY, usableWidth, 10, 16);
+
+  currentY -= 12;
+  const p4 = `We appreciate their valuable contribution to Atomic Pathshala and wish them success in their future endeavors.`;
+  currentY = drawParagraph(page, fonts.timesRoman, p4, marginX, currentY, usableWidth, 10, 16);
+
+  currentY -= 16;
+  const issueLine = `Issued on ${vars.issueDateStr}.`;
   page.drawText(cleanWinAnsi(issueLine), {
     x: marginX,
     y: currentY,
-    size: 8.5,
-    font: fonts.timesItalic,
-    color: BRAND_COLORS.mutedText,
+    size: 9.5,
+    font: fonts.timesBold,
+    color: BRAND_COLORS.navyBlue,
   });
 
-  // 7. Dual Verification Block & Signatory
-  const footerBoxY = 145;
+  // 7. Dual Verification Block & Signatory (Matching approved pattern)
+  const footerBoxY = 168;
   await drawUnifiedVerificationAndSignatory(pdfDoc, page, fonts, {
     y: footerBoxY,
     qrCodeDataUrl: vars.qrCodeDataUrl,

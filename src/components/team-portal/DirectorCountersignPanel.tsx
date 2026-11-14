@@ -25,14 +25,144 @@ export function DirectorCountersignPanel({
   const [sendingInvite, setSendingInvite] = useState(false);
 
   // Countersigning state
-  const [mode, setMode] = useState<"type" | "draw">("type");
+  const [mode, setMode] = useState<"official" | "upload" | "draw" | "type">("official");
   const [directorName, setDirectorName] = useState("Firoz Ali");
+  const [uploadedSignatureUrl, setUploadedSignatureUrl] = useState<string | null>(null);
+  const [processingImage, setProcessingImage] = useState(false);
   const [submittingSign, setSubmittingSign] = useState(false);
 
-  // Canvas
+  // Canvas & File Input Refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
+
+  function handleSignatureFileUpload(file: File) {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload a valid image file (JPG, PNG, WEBP).");
+      return;
+    }
+    setProcessingImage(true);
+    const reader = new FileReader();
+    reader.onerror = () => {
+      toast.error("Failed to read image file.");
+      setProcessingImage(false);
+    };
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => {
+        toast.error("Failed to decode image.");
+        setProcessingImage(false);
+      };
+      img.onload = () => {
+        const maxDim = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+          toast.error("Canvas context unavailable.");
+          setProcessingImage(false);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+
+        let borderSum = 0;
+        let samples = 0;
+        const step = Math.max(1, Math.floor(w / 30));
+        for (let x = 0; x < w; x += step) {
+          const topIdx = x * 4;
+          borderSum += 0.299 * data[topIdx] + 0.587 * data[topIdx + 1] + 0.114 * data[topIdx + 2];
+          const botIdx = ((h - 1) * w + x) * 4;
+          borderSum += 0.299 * data[botIdx] + 0.587 * data[botIdx + 1] + 0.114 * data[botIdx + 2];
+          samples += 2;
+        }
+        const paperBrightness = samples > 0 ? borderSum / samples : 240;
+        const thresholdHigh = Math.max(160, Math.min(245, paperBrightness - 15));
+        const thresholdLow = Math.max(60, thresholdHigh - 65);
+
+        let minX = w;
+        let minY = h;
+        let maxX = 0;
+        let maxY = 0;
+        let inkPixels = 0;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+          const idx = i / 4;
+          const x = idx % w;
+          const y = Math.floor(idx / w);
+
+          if (brightness >= thresholdHigh) {
+            data[i + 3] = 0;
+          } else if (brightness > thresholdLow) {
+            const ratio = (thresholdHigh - brightness) / (thresholdHigh - thresholdLow);
+            data[i + 3] = Math.round(255 * Math.pow(ratio, 1.15));
+            data[i] = Math.round(r * 0.7);
+            data[i + 1] = Math.round(g * 0.7);
+            data[i + 2] = Math.round(b * 0.85);
+            if (data[i + 3] > 30) {
+              inkPixels++;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          } else {
+            data[i + 3] = 255;
+            data[i] = Math.min(r, 25);
+            data[i + 1] = Math.min(g, 45);
+            data[i + 2] = Math.min(b, 90);
+            inkPixels++;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+
+        if (inkPixels > 10 && minX < maxX && minY < maxY) {
+          const pad = 16;
+          const cx = Math.max(0, minX - pad);
+          const cy = Math.max(0, minY - pad);
+          const cw = Math.min(w - cx, maxX - minX + pad * 2);
+          const ch = Math.min(h - cy, maxY - minY + pad * 2);
+          const cropCanvas = document.createElement("canvas");
+          cropCanvas.width = cw;
+          cropCanvas.height = ch;
+          const cropCtx = cropCanvas.getContext("2d");
+          if (cropCtx) {
+            cropCtx.drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch);
+            setUploadedSignatureUrl(cropCanvas.toDataURL("image/png"));
+            setProcessingImage(false);
+            return;
+          }
+        }
+        setUploadedSignatureUrl(canvas.toDataURL("image/png"));
+        setProcessingImage(false);
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  }
 
   // Rejection modal
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -120,12 +250,27 @@ export function DirectorCountersignPanel({
     }
 
     let signatureDataUrl: string | undefined;
-    if (mode === "draw") {
+    let signatureMethod: "ELECTRONIC_DRAWN" | "ELECTRONIC_TYPED" | "ELECTRONIC_UPLOADED" = "ELECTRONIC_UPLOADED";
+
+    if (mode === "official") {
+      signatureMethod = "ELECTRONIC_UPLOADED";
+      signatureDataUrl = undefined; // Backend embeds public/brand/signature.png
+    } else if (mode === "upload") {
+      if (!uploadedSignatureUrl) {
+        toast.error("Please upload a photo of your signature first.");
+        return;
+      }
+      signatureDataUrl = uploadedSignatureUrl;
+      signatureMethod = "ELECTRONIC_UPLOADED";
+    } else if (mode === "draw") {
       if (!hasDrawn || !canvasRef.current) {
         toast.error("Please draw your signature in the canvas.");
         return;
       }
       signatureDataUrl = canvasRef.current.toDataURL("image/png");
+      signatureMethod = "ELECTRONIC_DRAWN";
+    } else {
+      signatureMethod = "ELECTRONIC_TYPED";
     }
 
     setSubmittingSign(true);
@@ -136,7 +281,7 @@ export function DirectorCountersignPanel({
         body: JSON.stringify({
           directorSignedName: directorName.trim(),
           signatureDataUrl,
-          signatureMethod: mode === "draw" ? "ELECTRONIC_DRAWN" : "ELECTRONIC_TYPED",
+          signatureMethod,
         }),
       });
 
@@ -316,28 +461,167 @@ export function DirectorCountersignPanel({
         </div>
 
         {/* Mode Switcher */}
-        <div className="flex items-center gap-2 p-1 bg-surface-container-high rounded-xl max-w-xs">
+        <div className="flex items-center gap-1.5 p-1 bg-surface-container-high rounded-xl max-w-xl">
           <button
             type="button"
-            onClick={() => setMode("type")}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-              mode === "type" ? "bg-surface text-primary shadow-xs" : "text-on-surface-variant hover:text-on-surface"
+            onClick={() => setMode("official")}
+            className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all text-center ${
+              mode === "official" ? "bg-surface text-primary shadow-xs" : "text-on-surface-variant hover:text-on-surface"
             }`}
           >
-            Type Legal Name
+            Official Universal Sign
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("upload")}
+            className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all text-center ${
+              mode === "upload" ? "bg-surface text-primary shadow-xs" : "text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            Upload Sign (PNG)
           </button>
           <button
             type="button"
             onClick={() => setMode("draw")}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all text-center ${
               mode === "draw" ? "bg-surface text-primary shadow-xs" : "text-on-surface-variant hover:text-on-surface"
             }`}
           >
             Draw Signature
           </button>
+          <button
+            type="button"
+            onClick={() => setMode("type")}
+            className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all text-center ${
+              mode === "type" ? "bg-surface text-primary shadow-xs" : "text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            Type Legal Name
+          </button>
         </div>
 
-        {mode === "type" ? (
+        {/* Mode 1: Official Saved Universal Sign */}
+        {mode === "official" && (
+          <div className="p-4 rounded-2xl bg-surface-container-lowest border border-primary/25 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-on-surface">Universal Handwritten Signature</span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs">verified</span> ID Card Approved Signature
+              </span>
+            </div>
+            <div className="bg-white rounded-xl p-3 border border-outline-variant/30 flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/signature.png" alt="Official Signature" className="h-16 object-contain filter drop-shadow-sm" />
+            </div>
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              This will directly seal your verified handwritten signature (<strong>Firoz Ali</strong>, Founder and Director) onto the executed bilateral contract.
+            </p>
+          </div>
+        )}
+
+        {/* Mode 2: Upload Signature Mode */}
+        {mode === "upload" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs text-on-surface-variant">
+              <span>Upload photo/scan of handwritten signature on paper:</span>
+              {uploadedSignatureUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadedSignatureUrl(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="text-rose-600 hover:underline font-semibold"
+                >
+                  Clear &amp; Re-upload
+                </button>
+              )}
+            </div>
+
+            {!uploadedSignatureUrl ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-primary/30 hover:border-primary bg-surface-container-lowest rounded-2xl p-6 text-center cursor-pointer transition-all space-y-3"
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleSignatureFileUpload(file);
+                  }}
+                  className="hidden"
+                />
+                {processingImage ? (
+                  <div className="py-4 space-y-2">
+                    <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-xs font-bold text-primary">
+                      Processing &amp; converting to transparent PNG...
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                      <span className="material-symbols-outlined text-2xl">cloud_upload</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-on-surface">Click to upload signature photo</p>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        White paper background is automatically converted to transparent PNG
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div
+                  className="border-2 border-emerald-400/80 rounded-2xl p-4 bg-white shadow-inner flex items-center justify-center min-h-[140px]"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(45deg, #f1f5f9 25%, transparent 25%), linear-gradient(-45deg, #f1f5f9 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f1f5f9 75%), linear-gradient(-45deg, transparent 75%, #f1f5f9 75%)",
+                    backgroundSize: "16px 16px",
+                    backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={uploadedSignatureUrl}
+                    alt="Transparent Signature"
+                    className="max-h-28 max-w-full object-contain filter drop-shadow-sm"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-emerald-700 font-medium px-1">
+                  <span className="flex items-center gap-1 font-bold">
+                    <span className="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
+                    White background removed &bull; Transparent PNG ready
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-primary hover:underline font-bold"
+                  >
+                    Choose Different Photo
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleSignatureFileUpload(file);
+                    }}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mode 3: Type Mode */}
+        {mode === "type" && (
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-on-surface">
               Authorized Signatory Full Legal Name
@@ -349,7 +633,10 @@ export function DirectorCountersignPanel({
               className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-lowest py-3 px-4 text-xl outline-none focus:ring-2 focus:ring-primary font-serif italic text-primary font-bold"
             />
           </div>
-        ) : (
+        )}
+
+        {/* Mode 4: Draw Mode */}
+        {mode === "draw" && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-on-surface-variant">
               <span>Draw your signature in the box:</span>
@@ -385,7 +672,12 @@ export function DirectorCountersignPanel({
           </span>
           <button
             type="button"
-            disabled={submittingSign || (mode === "draw" && !hasDrawn)}
+            disabled={
+              submittingSign ||
+              (mode === "draw" && !hasDrawn) ||
+              (mode === "upload" && !uploadedSignatureUrl) ||
+              (mode === "type" && !directorName.trim())
+            }
             onClick={handleCountersign}
             className="px-7 py-3 rounded-2xl bg-primary text-on-primary font-bold text-xs shadow-lg hover:opacity-90 active:scale-95 transition flex items-center gap-2 disabled:opacity-50"
           >
