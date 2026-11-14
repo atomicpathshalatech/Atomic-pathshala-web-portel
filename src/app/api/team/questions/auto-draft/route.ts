@@ -57,6 +57,9 @@ export async function POST(request: NextRequest) {
       solutionImageUrl,
       source = "DIRECT_OCR",
       tags = "",
+      testSectionId,
+      order,
+      slotNumber,
     } = body;
 
     const resolvedCorrect = Array.isArray(correctAnswer)
@@ -143,6 +146,52 @@ export async function POST(request: NextRequest) {
                 createdById: session.user.id,
               },
             }).catch(() => null);
+          }
+        }
+
+        if (testSectionId) {
+          try {
+            const resolvedOrder =
+              typeof order === "number" && order > 0
+                ? order
+                : typeof slotNumber === "number" && slotNumber > 0
+                ? slotNumber
+                : null;
+            if (resolvedOrder) {
+              const existingAtSlot = await prisma.sectionQuestion.findUnique({
+                where: {
+                  sectionId_order: {
+                    sectionId: testSectionId,
+                    order: resolvedOrder,
+                  },
+                },
+              });
+              if (existingAtSlot) {
+                if (existingAtSlot.questionId !== updated.id) {
+                  await prisma.sectionQuestion.update({
+                    where: { id: existingAtSlot.id },
+                    data: { questionId: updated.id },
+                  });
+                }
+              } else {
+                await prisma.sectionQuestion.upsert({
+                  where: {
+                    sectionId_questionId: {
+                      sectionId: testSectionId,
+                      questionId: updated.id,
+                    },
+                  },
+                  update: { order: resolvedOrder },
+                  create: {
+                    sectionId: testSectionId,
+                    questionId: updated.id,
+                    order: resolvedOrder,
+                  },
+                });
+              }
+            }
+          } catch (linkErr) {
+            console.warn("[auto-draft] Link section question warning:", linkErr);
           }
         }
 
@@ -262,6 +311,52 @@ export async function POST(request: NextRequest) {
           createdById: session.user.id,
         },
       }).catch(() => null);
+    }
+
+    if (testSectionId) {
+      try {
+        const resolvedOrder =
+          typeof order === "number" && order > 0
+            ? order
+            : typeof slotNumber === "number" && slotNumber > 0
+            ? slotNumber
+            : null;
+        if (resolvedOrder) {
+          const existingAtSlot = await prisma.sectionQuestion.findUnique({
+            where: {
+              sectionId_order: {
+                sectionId: testSectionId,
+                order: resolvedOrder,
+              },
+            },
+          });
+          if (existingAtSlot) {
+            if (existingAtSlot.questionId !== created.id) {
+              await prisma.sectionQuestion.update({
+                where: { id: existingAtSlot.id },
+                data: { questionId: created.id },
+              });
+            }
+          } else {
+            await prisma.sectionQuestion.upsert({
+              where: {
+                sectionId_questionId: {
+                  sectionId: testSectionId,
+                  questionId: created.id,
+                },
+              },
+              update: { order: resolvedOrder },
+              create: {
+                sectionId: testSectionId,
+                questionId: created.id,
+                order: resolvedOrder,
+              },
+            });
+          }
+        }
+      } catch (linkErr) {
+        console.warn("[auto-draft] Link created question to section warning:", linkErr);
+      }
     }
 
     return apiSuccess({

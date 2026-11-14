@@ -373,22 +373,56 @@ export async function POST(request: NextRequest) {
             ? order
             : typeof slotNumber === "number" && slotNumber > 0
             ? slotNumber
-            : (await tx.sectionQuestion.count({ where: { sectionId: testSectionId } })) + 1;
+            : null;
+
+        let resolvedOrder = targetSecOrder;
+        if (!resolvedOrder) {
+          const maxAgg = await tx.sectionQuestion.aggregate({
+            where: { sectionId: testSectionId },
+            _max: { order: true },
+          });
+          resolvedOrder = (maxAgg._max.order ?? 0) + 1;
+        }
 
         // Same check as above, now that no other save can link at the same time.
-        const dup = await findInTest(tx, testId, { fingerprint, exceptQuestionId: question.id, exceptSlot: { sectionId: testSectionId, order: targetSecOrder } });
+        const dup = await findInTest(tx, testId, { fingerprint, exceptQuestionId: question.id, exceptSlot: { sectionId: testSectionId, order: resolvedOrder } });
         if (dup) return { dup };
 
         const existingAtSlot = await tx.sectionQuestion.findUnique({
           where: {
             sectionId_order: {
               sectionId: testSectionId,
-              order: targetSecOrder,
+              order: resolvedOrder,
             },
           },
         });
 
         if (existingAtSlot) {
+          if (existingAtSlot.questionId === question.id) {
+            return { link: existingAtSlot };
+          }
+          if (!targetSecOrder) {
+            const maxAgg = await tx.sectionQuestion.aggregate({
+              where: { sectionId: testSectionId },
+              _max: { order: true },
+            });
+            resolvedOrder = (maxAgg._max.order ?? 0) + 1;
+            return {
+              link: await tx.sectionQuestion.create({
+                data: {
+                  sectionId: testSectionId,
+                  questionId: question.id,
+                  order: resolvedOrder,
+                },
+              }),
+            };
+          }
+          const existingQuestionSecLink = await tx.sectionQuestion.findFirst({
+            where: { sectionId: testSectionId, questionId: question.id },
+          });
+          if (existingQuestionSecLink && existingQuestionSecLink.id !== existingAtSlot.id) {
+            await tx.sectionQuestion.delete({ where: { id: existingQuestionSecLink.id } });
+          }
           return { link: await tx.sectionQuestion.update({
             where: { id: existingAtSlot.id },
             data: {
@@ -404,12 +438,12 @@ export async function POST(request: NextRequest) {
               },
             },
             update: {
-              order: targetSecOrder,
+              order: resolvedOrder,
             },
             create: {
               sectionId: testSectionId,
               questionId: question.id,
-              order: targetSecOrder,
+              order: resolvedOrder,
             },
           }) };
       });
@@ -734,8 +768,15 @@ export async function PUT(request: NextRequest) {
           ? slotNumber
           : null;
 
-      const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
-      const finalOrder = targetSecOrder ?? (secCount + 1);
+      let resolvedOrder = targetSecOrder;
+      if (!resolvedOrder) {
+        const maxAgg = await prisma.sectionQuestion.aggregate({
+          where: { sectionId: testSectionId },
+          _max: { order: true },
+        });
+        resolvedOrder = (maxAgg._max.order ?? 0) + 1;
+      }
+      const finalOrder = resolvedOrder;
 
       // Check if slot order is already occupied in this section
       const existingAtSlot = await prisma.sectionQuestion.findUnique({
@@ -756,14 +797,30 @@ export async function PUT(request: NextRequest) {
       });
 
       if (existingAtSlot && existingAtSlot.questionId !== questionId) {
-        // If this question had another link in the section, remove it first to avoid collision
-        if (existingQuestionSecLink && existingQuestionSecLink.id !== existingAtSlot.id) {
-          await prisma.sectionQuestion.delete({ where: { id: existingQuestionSecLink.id } });
+        if (!targetSecOrder) {
+          // No explicit slot targeted: do not overwrite existing! Append at max + 1
+          const maxAgg = await prisma.sectionQuestion.aggregate({
+            where: { sectionId: testSectionId },
+            _max: { order: true },
+          });
+          const appendOrder = (maxAgg._max.order ?? 0) + 1;
+          sectionQuestion = await prisma.sectionQuestion.create({
+            data: {
+              sectionId: testSectionId,
+              questionId,
+              order: appendOrder,
+            },
+          });
+        } else {
+          // If this question had another link in the section, remove it first to avoid collision
+          if (existingQuestionSecLink && existingQuestionSecLink.id !== existingAtSlot.id) {
+            await prisma.sectionQuestion.delete({ where: { id: existingQuestionSecLink.id } });
+          }
+          sectionQuestion = await prisma.sectionQuestion.update({
+            where: { id: existingAtSlot.id },
+            data: { questionId },
+          });
         }
-        sectionQuestion = await prisma.sectionQuestion.update({
-          where: { id: existingAtSlot.id },
-          data: { questionId },
-        });
       } else if (existingQuestionSecLink) {
         sectionQuestion = await prisma.sectionQuestion.update({
           where: { id: existingQuestionSecLink.id },

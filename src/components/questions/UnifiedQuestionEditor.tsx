@@ -672,6 +672,9 @@ export function UnifiedQuestionEditor({
           figureUrl: diagramUrl || null,
           solutionImageUrl: solutionImageUrl || undefined,
           source,
+          testSectionId,
+          order,
+          slotNumber,
         }),
       });
       const json = await res.json();
