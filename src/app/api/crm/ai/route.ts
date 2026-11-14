@@ -5,7 +5,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
 import { getLeadById } from "@/lib/crm/crm-service";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { aiProviderGateway } from "@/lib/ai-gateway";
 import { z } from "zod";
 
 const aiRequestSchema = z.object({
@@ -33,21 +33,7 @@ export async function POST(req: NextRequest) {
     const lead = await getLeadById(leadId);
     if (!lead) throw new Error("Lead not found");
 
-    const genAI = getGeminiClient();
-
-    // Default heuristic fallbacks if AI provider is unavailable
-    if (!genAI) {
-      return apiSuccess({
-        action,
-        insight: getHeuristicInsight(action, lead),
-        conversionProbability: Math.min(95, Math.max(15, lead.score + 5)),
-        source: "rule_engine",
-      });
-    }
-
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
       const prompt = `
 You are an expert EdTech Admissions & CRM Specialist for "Atomic Pathshala" (NEET & JEE Coaching Institute).
 Context of Lead:
@@ -71,14 +57,17 @@ Rules:
 - If summarize: Give 3 bullet points summarizing intent, friction points, and recommended next action.
 `;
 
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const result = await aiProviderGateway.generateContent(prompt, {
+        workload: "CRM_ANALYSIS",
+        complexity: "LOW_COST",
+        userId: session.user.id,
+      });
 
       return apiSuccess({
         action,
-        insight: text,
+        insight: result.data,
         conversionProbability: Math.min(95, Math.max(15, lead.score + 5)),
-        source: "gemini_1.5_flash",
+        source: result.modelUsed,
       });
     } catch (aiError) {
       console.warn("[CRM_AI_FALLBACK_TRIGGERED]", aiError);

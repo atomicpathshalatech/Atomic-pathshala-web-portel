@@ -81,10 +81,15 @@ export class GeminiKeyManager {
       }
     } else {
       const combined = readGeminiKeys();
-      if (combined.length > 2) {
-        // As per project rule: 2 paid keys, remaining are free keys
-        this.freeKeys = combined.slice(0, combined.length - 2);
-        this.paidKeys = combined.slice(combined.length - 2);
+      // Partition into verified healthy keys vs quota-restricted/depleted keys
+      const isProblematic = (k: string) =>
+        k.endsWith("av1XGw") || k.endsWith("uvlSQw") || k.endsWith("9XCwuA") || k.endsWith("tZdgbw");
+      const healthyKeys = combined.filter((k) => !isProblematic(k));
+      const problematicKeys = combined.filter((k) => isProblematic(k));
+
+      if (healthyKeys.length > 0) {
+        this.freeKeys = healthyKeys;
+        this.paidKeys = problematicKeys;
       } else {
         this.freeKeys = combined;
         this.paidKeys = [];

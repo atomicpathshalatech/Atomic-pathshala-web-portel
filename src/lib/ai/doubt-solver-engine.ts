@@ -1,5 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GEMINI_TEXT_MODELS, LightGoogleGenerativeAI, classifyGeminiFailure, isKeyDead, readGeminiKeys, usableKeys, usableModels } from "@/lib/ai/gemini-models";
+import { aiProviderGateway } from "@/lib/ai-gateway";
+import { parseAiJson } from "@/lib/ai/latex-json";
 
 export type QuestionCategory =
   | "CONCEPTUAL"
@@ -132,9 +132,6 @@ You MUST output a valid, parseable JSON object matching this schema strictly (no
 }`;
 
 export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtSolution> {
-  const keys = getGeminiApiKeys();
-  const modelNames = usableModels(GEMINI_TEXT_MODELS);
-
   // Format conversation history for multi-turn context
   let conversationContext = "";
   if (input.history && input.history.length > 0) {
@@ -146,96 +143,60 @@ export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtS
       "\n\n### Current Student Question:\n";
   }
 
-  const promptText = `${conversationContext}${input.questionText}${
+  const promptText = `${SYSTEM_PROMPT}\n\n${conversationContext}${input.questionText}${
     input.subject ? `\n(Subject Context: ${input.subject})` : ""
-  }`;
+  }\n\nSTRICT REQUIREMENT: Respond ONLY with valid, unescaped JSON conforming to the schema above.`;
 
-  let lastError: any = null;
+  try {
+    const parts: any[] = [{ text: promptText }];
 
-  for (const modelName of modelNames) {
-    for (let i = 0; i < keys.length; i++) {
-      const apiKey = keys[i]!;
-      if (isKeyDead(apiKey) && keys.some((k) => !isKeyDead(k))) continue;
-      try {
-        const genAI = new LightGoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          systemInstruction: SYSTEM_PROMPT,
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.25,
-            maxOutputTokens: 4096,
+    // Attach image if base64 or URL provided
+    if (input.imageBase64) {
+      const match = input.imageBase64.match(/^data:([a-zA-Z0-9/+-]+);base64,(.+)$/);
+      if (match) {
+        parts.push({
+          inlineData: {
+            mimeType: match[1] || "image/png",
+            data: match[2],
           },
         });
-
-        // Content parts (text + optional image)
-        const parts: any[] = [{ text: promptText }];
-
-        // Attach image if base64 or URL provided
-        if (input.imageBase64) {
-          const match = input.imageBase64.match(/^data:([a-zA-Z0-9/+-]+);base64,(.+)$/);
-          if (match) {
-            parts.push({
-              inlineData: {
-                mimeType: match[1] || "image/png",
-                data: match[2],
-              },
-            });
-          }
-        } else if (input.imageUrl && input.imageUrl.startsWith("data:")) {
-          const match = input.imageUrl.match(/^data:([a-zA-Z0-9/+-]+);base64,(.+)$/);
-          if (match) {
-            parts.push({
-              inlineData: {
-                mimeType: match[1] || "image/png",
-                data: match[2],
-              },
-            });
-          }
-        }
-
-        const result = await model.generateContent(parts);
-        const rawJson = result.response.text().trim();
-
-        const cleanedJson = rawJson
-          .replace(/^```json\s*/i, "")
-          .replace(/^```\s*/i, "")
-          .replace(/\s*```$/, "")
-          .trim();
-
-        let parsed: AiDoubtSolution;
-        try {
-          parsed = JSON.parse(cleanedJson);
-        } catch {
-          // LLM outputs unescaped LaTeX like \text, \times, \alpha inside JSON strings
-          const fixedJson = cleanedJson.replace(/\\(?!(["\\/bfnrt]|u[0-9a-fA-F]{4}))/g, "\\\\");
-          parsed = JSON.parse(fixedJson);
-        }
-
-        // Sanitize response to ensure direct answer and explanation are non-empty
-        if (!parsed.directAnswer && parsed.explanation) {
-          parsed.directAnswer = parsed.explanation.slice(0, 140);
-        } else if (!parsed.explanation && parsed.directAnswer) {
-          parsed.explanation = parsed.directAnswer;
-        }
-
-        return parsed;
-      } catch (err: any) {
-        lastError = err;
-        console.warn(
-          `[DoubtSolverEngine] Key ${i} failed on ${modelName}:`,
-          err.message?.slice(0, 120)
-        );
-        // A retired model fails for every key — go to the next model. (A
-        // blocked key is remembered and skipped from now on.)
-        if (classifyGeminiFailure(err, apiKey, modelName) === "next-model" && /404|no longer available|not found/i.test(String(err?.message))) break;
+      }
+    } else if (input.imageUrl && input.imageUrl.startsWith("data:")) {
+      const match = input.imageUrl.match(/^data:([a-zA-Z0-9/+-]+);base64,(.+)$/);
+      if (match) {
+        parts.push({
+          inlineData: {
+            mimeType: match[1] || "image/png",
+            data: match[2],
+          },
+        });
       }
     }
-  }
 
-  // Graceful fallback if Gemini API is unreachable or rate-limited
-  console.error("[DoubtSolverEngine] All Gemini attempts failed:", lastError);
-  return generateFallbackDoubtSolution(input.questionText, input.subject);
+    const result = await aiProviderGateway.generateContent(parts, {
+      workload: "AI_TUTOR",
+      priority: 1, // Highest priority for interactive doubt solving
+      complexity: "BALANCED",
+      maxTokens: 4096,
+      temperature: 0.25,
+      cacheTtlMs: 300_000, // Cache identical questions for 5 minutes
+    });
+
+    const parsed = parseAiJson<AiDoubtSolution>(result.data);
+
+    // Sanitize response to ensure direct answer and explanation are non-empty
+    if (!parsed.directAnswer && parsed.explanation) {
+      parsed.directAnswer = parsed.explanation.slice(0, 140);
+    } else if (!parsed.explanation && parsed.directAnswer) {
+      parsed.explanation = parsed.directAnswer;
+    }
+
+    return parsed;
+  } catch (err: any) {
+    console.error("[DoubtSolverEngine] Gateway failed:", err?.message || err);
+    return generateFallbackDoubtSolution(input.questionText, input.subject);
+  }
+}
 }
 
 /**

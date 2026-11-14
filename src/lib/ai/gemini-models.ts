@@ -13,16 +13,22 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const GEMINI_TEXT_MODELS = [
-  "gemini-3.6-flash",
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
-  "gemini-3.5-flash",
-  "gemini-3-flash-preview",
   "gemini-3.1-flash-lite",
+  "gemini-3-flash-preview",
+  "gemini-flash-lite-latest",
+  "gemini-flash-latest",
+  "gemini-3.6-flash",
+  "gemini-3.7-flash",
+  "gemini-3.5-flash-lite",
 ] as const;
 
 /** A fast model for small, simple jobs (translation checks, short replies). */
-export const GEMINI_FAST_MODELS = ["gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-flash-lite-latest", "gemini-3.8-flash"] as const;
+export const GEMINI_FAST_MODELS = [
+  "gemini-3.1-flash-lite",
+  "gemini-flash-lite-latest",
+  "gemini-3.5-flash-lite",
+  "gemini-3-flash-preview",
+] as const;
 
 const DEAD_KEY_MS = 6 * 60 * 60 * 1000;
 const RETIRED_MODEL_MS = 24 * 60 * 60 * 1000;
@@ -62,7 +68,11 @@ export function isDeadKeyError(err: unknown): boolean {
     // plain error, so a quiz stopped at the first such key instead of moving
     // on to the keys that still work — every quiz failed.
     m.includes("[402") ||
-    m.includes("prepayment credits are depleted")
+    m.includes("prepayment credits are depleted") ||
+    m.includes('quota_limit_value":"0"') ||
+    m.includes("quota_limit_value: '0'") ||
+    m.includes("consumer: 'projects/401168136295'") ||
+    m.includes("consumer: 'projects/239005724824'")
   );
 }
 
@@ -125,8 +135,12 @@ export function usableModels(models: readonly string[] = GEMINI_TEXT_MODELS): st
   return ordered.length ? ordered : [...models];
 }
 
-/** The keys without ones found to be blocked/invalid. Never empty if keys exist. */
+/** The keys without ones found to be blocked/invalid or zero-quota. Never empty if keys exist. */
 export function usableKeys(keys: string[]): string[] {
+  const isProblematic = (k: string) =>
+    k.endsWith("av1XGw") || k.endsWith("uvlSQw") || k.endsWith("9XCwuA") || k.endsWith("tZdgbw");
+  const healthy = keys.filter((k) => !isKeyDead(k) && !isProblematic(k));
+  if (healthy.length > 0) return healthy;
   const live = keys.filter((k) => !isKeyDead(k));
   return live.length ? live : keys;
 }
@@ -153,6 +167,30 @@ export function classifyGeminiFailure(err: unknown, key: string, model: string):
  * "invalid authentication credentials" on every request.
  */
 export function readGeminiKeys(): string[] {
+  if (!process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEYS) {
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      for (const envFile of [".env.local", ".env.production", ".env"]) {
+        const p = path.join(process.cwd(), envFile);
+        if (fs.existsSync(p)) {
+          const content = fs.readFileSync(p, "utf-8");
+          for (const line of content.split("\n")) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith("#")) continue;
+            const idx = trimmed.indexOf("=");
+            if (idx !== -1) {
+              const k = trimmed.slice(0, idx).trim();
+              const v = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, "");
+              if (k.startsWith("GEMINI_") && !process.env[k]) {
+                process.env[k] = v;
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  }
   const raw = [process.env.GEMINI_API_KEYS, process.env.GEMINI_API_KEY]
     .filter(Boolean)
     .join(",")
