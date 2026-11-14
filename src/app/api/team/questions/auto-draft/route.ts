@@ -151,6 +151,7 @@ export async function POST(request: NextRequest) {
 
         if (testSectionId) {
           try {
+            const sec = await prisma.section.findUnique({ where: { id: testSectionId }, select: { testId: true } });
             const resolvedOrder =
               typeof order === "number" && order > 0
                 ? order
@@ -183,6 +184,7 @@ export async function POST(request: NextRequest) {
                   },
                   update: { order: resolvedOrder },
                   create: {
+                    testId: sec?.testId ?? null,
                     sectionId: testSectionId,
                     questionId: updated.id,
                     order: resolvedOrder,

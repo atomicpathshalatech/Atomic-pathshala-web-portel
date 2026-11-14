@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Layers, Plus, Sparkles, CheckCircle2, ArrowRight, Download, Share2 } from "lucide-react";
+import { Layers, Plus, Sparkles, CheckCircle2, ArrowRight, Download, Share2, ShieldCheck } from "lucide-react";
 import { TemplateBuilder } from "@/components/team-portal/TemplateBuilder";
 import { TemplateSummaryCard } from "@/components/team-portal/TemplateSummaryCard";
 import { PublishTestButton } from "@/components/team-portal/PublishTestButton";
@@ -17,6 +17,7 @@ interface TestDetailClientProps {
     durationMin: number;
     correctMarks: number;
     status: string;
+    auditStatus?: string | null;
     templateId: string | null;
     template?: {
       id: string;
@@ -87,6 +88,11 @@ export function TestDetailClient({ test, isDraft, canPublish, opensAt = null }: 
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900">{test.name}</h1>
+            {test.auditStatus && (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">
+                Audit: {test.auditStatus}
+              </span>
+            )}
             {test.status && test.status !== "DRAFT" && (
               <span
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
@@ -121,6 +127,15 @@ export function TestDetailClient({ test, isDraft, canPublish, opensAt = null }: 
               </button>
             }
           />
+
+                    <Link
+            href={`/team/tests/${test.id}/report`}
+            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+            title="View Quality Audit, Duplicate Detection and NEET Pattern Analysis"
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-600" />
+            Audit & Report
+          </Link>
 
           <TestPdfDownloadModal
             testId={test.id}

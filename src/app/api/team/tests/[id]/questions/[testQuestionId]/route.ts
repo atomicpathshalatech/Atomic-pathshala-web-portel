@@ -37,6 +37,16 @@ export async function DELETE(
     });
     if (deleted.count === 0) return apiError("Question not found on this test", 404);
 
+    await prisma.test.update({
+      where: { id: params.id },
+      data: { auditStatus: "OUTDATED" },
+    }).catch(() => null);
+
+    await prisma.testAuditReport.updateMany({
+      where: { testId: params.id, status: "COMPLETED" },
+      data: { status: "OUTDATED" },
+    }).catch(() => null);
+
     return apiSuccess({ removed: true });
   } catch (error) {
     return handleApiError(error);

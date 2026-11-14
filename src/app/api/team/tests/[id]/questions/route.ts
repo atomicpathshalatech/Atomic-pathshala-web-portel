@@ -6,7 +6,7 @@ import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
 import { getOrCreateDefaultSection, listTestSectionQuestions, nextSectionQuestionOrder } from "@/lib/test-engine/sections";
-import { contentFingerprint, testContents, withTestLock } from "@/lib/tests/test-question-guard";
+import { contentFingerprint, testContents, withTestLock, type DuplicateDetailPayload } from "@/lib/tests/test-question-guard";
 import { testQuestionsAddSchema } from "@/lib/validation/test";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { testLockedReason } from "@/lib/tests/scheduled-publish";
@@ -30,11 +30,8 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
 /**
  * Bulk-adds questions from the Question Bank into the test's single default
- * "General" section. Only published questions are accepted — a question
- * still awaiting review hasn't cleared the workflow the rest of this
- * codebase already enforces (see Question.isPublished / QUESTION_VERIFY),
- * so letting one slip into a real test would bypass that safeguard. Any
- * rejected ids are reported back, not silently dropped.
+ * "General" section. Only published questions are accepted.
+ * Enforces transactional idempotency and returns structured duplicate information.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -45,7 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const test = await getTestOr404(params.id);
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
-    // Questions can be added and corrected until the test's set time (it stays a draft until then).
+
     const locked = testLockedReason(test);
     if (locked) return apiError(locked, 409);
 
@@ -66,35 +63,72 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const foundCodes = new Set(candidates.map((q) => q.questionCode).filter(Boolean));
     const missing = input.questionIds.filter((id) => !foundIds.has(id) && !foundCodes.has(id));
 
-    // A test holds each question once — in any section — and the same
-    // question saved under two ids counts as one. Under the test's lock, so
-    // two adds at the same moment cannot both get in.
-    const { alreadyAdded, toAdd } = await withTestLock(prisma, params.id, async (tx) => {
+    // A test holds each question once — in any section.
+    // Under the test's lock, transactional insertion with testId ensures DB uniqueness.
+    const { duplicateDetailsList, alreadyAdded, toAdd } = await withTestLock(prisma, params.id, async (tx) => {
       const held = await testContents(tx, params.id);
+      const duplicateDetailsList: DuplicateDetailPayload[] = [];
       const alreadyAdded: string[] = [];
       const toAdd: typeof candidates = [];
+
       for (const q of candidates) {
         const en = q.translations.find((t) => t.language === "ENGLISH") ?? q.translations[0];
         const fp = q.contentFingerprint ?? contentFingerprint(en?.statement, en?.options);
-        if (held.ids.has(q.id) || (fp && held.fingerprints.has(fp))) {
+
+        const existingById = held.ids.has(q.id);
+        const existingByFp = fp ? held.fingerprints.has(fp) : false;
+
+        if (existingById || existingByFp) {
+          const detail = held.details.get(q.id) || (fp ? held.details.get(fp) : undefined);
           alreadyAdded.push(q.questionCode || q.id);
+          duplicateDetailsList.push({
+            message: existingById
+              ? "Duplicate Question Detected: This question is already included in this test."
+              : "Duplicate Question Detected: An identical question is already included in this test.",
+            questionId: q.id,
+            questionCode: q.questionCode,
+            assignedQuestionNumber: detail ? `Q${detail.order}` : "Existing",
+            section: detail?.section || section.name,
+            subject: q.subject || detail?.subject || "General",
+            chapter: q.chapter || detail?.chapter || "General",
+            addedAt: detail?.addedAt ? detail.addedAt.toISOString() : null,
+            kind: existingById ? "id" : "content",
+          });
           continue;
         }
+
         held.ids.add(q.id);
         if (fp) held.fingerprints.add(fp);
         toAdd.push(q);
       }
+
       if (toAdd.length > 0) {
         let nextOrder = await nextSectionQuestionOrder(section.id, tx);
         await tx.sectionQuestion.createMany({
-          data: toAdd.map((q) => ({ sectionId: section.id, questionId: q.id, order: nextOrder++ })),
+          data: toAdd.map((q) => ({
+            testId: params.id,
+            sectionId: section.id,
+            questionId: q.id,
+            order: nextOrder++,
+          })),
+        });
+
+        // Mark any prior test audit reports as OUTDATED
+        await tx.test.update({
+          where: { id: params.id },
+          data: { auditStatus: "OUTDATED" },
+        });
+
+        await tx.testAuditReport.updateMany({
+          where: { testId: params.id, status: "COMPLETED" },
+          data: { status: "OUTDATED" },
         });
       }
-      return { alreadyAdded, toAdd };
+
+      return { duplicateDetailsList, alreadyAdded, toAdd };
     });
 
     if (toAdd.length > 0) {
-
       await prisma.auditLog.create({
         data: {
           userId: session.user.id,
@@ -106,9 +140,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       });
     }
 
+    // If single addition was requested and it's a duplicate, return 409 with rich details
+    if (toAdd.length === 0 && duplicateDetailsList.length === 1 && input.questionIds.length === 1) {
+      const dup = duplicateDetailsList[0];
+      return apiError(
+        `${dup.message} (${dup.assignedQuestionNumber} in ${dup.section}, Chapter: ${dup.chapter})`,
+        409,
+        dup
+      );
+    }
+
     return apiSuccess({
       added: toAdd.length,
-      rejected: { missing, notVerified: [], alreadyAdded },
+      rejected: {
+        missing,
+        notVerified: [],
+        alreadyAdded,
+        duplicates: duplicateDetailsList,
+      },
     });
   } catch (error) {
     return handleApiError(error);

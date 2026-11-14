@@ -410,6 +410,7 @@ export async function POST(request: NextRequest) {
             return {
               link: await tx.sectionQuestion.create({
                 data: {
+                  testId,
                   sectionId: testSectionId,
                   questionId: question.id,
                   order: resolvedOrder,
@@ -441,6 +442,7 @@ export async function POST(request: NextRequest) {
               order: resolvedOrder,
             },
             create: {
+              testId,
               sectionId: testSectionId,
               questionId: question.id,
               order: resolvedOrder,
@@ -761,6 +763,8 @@ export async function PUT(request: NextRequest) {
 
     // Link to Test Section if requested
     if (testSectionId) {
+      const sec = await prisma.section.findUnique({ where: { id: testSectionId }, select: { testId: true } });
+      const targetTestId = testId || sec?.testId;
       const targetSecOrder =
         typeof order === "number" && order > 0
           ? order
@@ -806,6 +810,7 @@ export async function PUT(request: NextRequest) {
           const appendOrder = (maxAgg._max.order ?? 0) + 1;
           sectionQuestion = await prisma.sectionQuestion.create({
             data: {
+              testId: targetTestId,
               sectionId: testSectionId,
               questionId,
               order: appendOrder,
@@ -829,6 +834,7 @@ export async function PUT(request: NextRequest) {
       } else {
         sectionQuestion = await prisma.sectionQuestion.create({
           data: {
+            testId: targetTestId,
             sectionId: testSectionId,
             questionId,
             order: finalOrder,

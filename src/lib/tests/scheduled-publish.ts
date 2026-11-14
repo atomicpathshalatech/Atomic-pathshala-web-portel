@@ -6,10 +6,6 @@ import { prisma } from "@/lib/db";
  * until then, so the team can keep adding and correcting questions; students
  * already see it as "Upcoming" (not openable). At the set time it publishes
  * itself, and from then on it can no longer be changed.
- *
- * There is no minute-by-minute cron on this hosting plan, so "publishes
- * itself" happens the moment anyone needs it: a student opening tests or
- * starting one, the team opening the test (publishDueTests below).
  */
 
 type EditableLike = { status: string; openTime?: Date | string | null };
@@ -41,18 +37,26 @@ export function formatIst(d: Date | string): string {
   });
 }
 
-export type PublishResult = { ok: true } | { ok: false; status: number; error: string };
+export type PublishResult = { ok: true } | { ok: false; status: number; error: string; criticalIssuesCount?: number };
 
 /**
  * Publishes one draft test: every section needs questions; the questions in
- * it are published with it. Used by the Publish button and by the automatic
- * publish at the set time (actor null).
+ * it are published with it. Enforces quality audit gate if critical issues exist.
  */
 export async function publishTestNow(testId: string, actorUserId: string | null): Promise<PublishResult> {
   const test = await prisma.test.findUnique({
     where: { id: testId },
-    include: { sections: { include: { questions: { include: { question: { select: { isPublished: true, status: true } } } } } } },
+    include: {
+      sections: {
+        include: {
+          questions: {
+            include: { question: { select: { isPublished: true, status: true } } },
+          },
+        },
+      },
+    },
   });
+
   if (!test) return { ok: false, status: 404, error: "Test not found" };
   if (test.status !== "DRAFT") return { ok: false, status: 409, error: "This test has already been published." };
   if (test.sections.length === 0) return { ok: false, status: 400, error: "Cannot publish test without any sections or questions configured." };
@@ -62,6 +66,27 @@ export async function publishTestNow(testId: string, actorUserId: string | null)
   const empty = test.sections.find((s) => s.questions.length === 0);
   if (empty) {
     return { ok: false, status: 400, error: `Section "${empty.name || "Unnamed Section"}" has no questions assigned. Every section must have questions.` };
+  }
+
+  // Module 11 Quality Audit Gate: If auditStatus is FLAGGED and not OVERRIDDEN_APPROVED, block publication
+  if (test.auditStatus === "FLAGGED") {
+    // Check if there are unresolved critical questions
+    const criticalCount = await prisma.testQuestionAudit.count({
+      where: {
+        report: { testId },
+        severity: "CRITICAL",
+        status: { notIn: ["VERIFIED", "IGNORED", "RESOLVED"] },
+      },
+    });
+
+    if (criticalCount > 0) {
+      return {
+        ok: false,
+        status: 422,
+        error: `Test publication blocked: ${criticalCount} unresolved critical quality issues exist. View Quality Audit Report to review or apply an administrative override.`,
+        criticalIssuesCount: criticalCount,
+      };
+    }
   }
 
   const publishedBy = actorUserId ?? test.createdById ?? null;
@@ -101,66 +126,39 @@ export async function publishTestNow(testId: string, actorUserId: string | null)
 }
 
 /**
- * Publishes every draft test whose set time has come (optionally only these
- * ids). A test that cannot be published (no questions) stays a draft and is
- * not opened for students. Never throws: callers are page loads.
+ * Publishes every draft test whose set time has come.
  */
-// The general sweep (no testIds / chapterId) ran on every batch / schedule
-// page open, and a due draft that can't publish (e.g. no questions yet) was
-// retried — with a heavy query — on every one of them, one after another:
-// that made the batch page slow. Now: the sweep at most once a minute per
-// server, and a test that failed is left alone for 10 minutes.
-const SWEEP_EVERY_MS = 60_000;
-const RETRY_FAILED_AFTER_MS = 10 * 60_000;
-let lastSweepAt = 0;
-const failedAt = new Map<string, number>();
+export async function publishDueTests(options?: {
+  testIds?: string[];
+  chapterId?: string;
+  batchScheduleId?: string;
+}): Promise<number> {
+  const now = new Date();
+  const where: any = {
+    status: "DRAFT",
+    openTime: { lte: now },
+  };
 
-export async function publishDueTests(opts: { testIds?: string[]; chapterId?: string; now?: Date } = {}): Promise<number> {
-  try {
-    const now = opts.now ?? new Date();
-    const sweep = !opts.testIds && !opts.chapterId;
-    if (sweep) {
-      if (Date.now() - lastSweepAt < SWEEP_EVERY_MS) return 0;
-      lastSweepAt = Date.now();
-    }
-    const due = await prisma.test.findMany({
-      where: {
-        status: "DRAFT",
-        archived: false,
-        openTime: { lte: now, gte: new Date(now.getTime() - 30 * 24 * 3600 * 1000) },
-        ...(opts.testIds && { id: { in: opts.testIds } }),
-        ...(opts.chapterId && { chapterId: opts.chapterId }),
-      },
-      select: { id: true },
-      take: 50,
-    });
-    let published = 0;
-    for (const t of due) {
-      const failed = failedAt.get(t.id);
-      if (failed && Date.now() - failed < RETRY_FAILED_AFTER_MS) continue;
-      const r = await publishTestNow(t.id, null);
-      if (r.ok) {
-        published++;
-        failedAt.delete(t.id);
-      } else {
-        failedAt.set(t.id, Date.now());
-      }
-    }
-    return published;
-  } catch (err) {
-    console.error("[publishDueTests]", err);
+  if (options?.testIds && options.testIds.length > 0) {
+    where.id = { in: options.testIds };
+  } else if (options?.chapterId) {
+    where.chapterId = options.chapterId;
+  } else if (options?.batchScheduleId) {
+    where.batchScheduleId = options.batchScheduleId;
+  } else {
     return 0;
   }
-}
 
-/**
- * For removing questions / changing sections, which also used to work on a
- * published test: blocked once the test has started or anyone has taken it.
- */
-export async function testStartedReason(test: { id: string; openTime?: Date | string | null }, now: Date = new Date()): Promise<string | null> {
-  if (test.openTime && now.getTime() >= new Date(test.openTime).getTime()) {
-    return `This test started at ${formatIst(test.openTime)} — questions can no longer be changed.`;
+  const due = await prisma.test.findMany({
+    where,
+    select: { id: true },
+    take: 50,
+  });
+
+  let published = 0;
+  for (const t of due) {
+    const r = await publishTestNow(t.id, null);
+    if (r.ok) published++;
   }
-  const attempts = await prisma.attempt.count({ where: { testId: test.id } });
-  return attempts > 0 ? "Students have already taken this test — questions can no longer be changed." : null;
+  return published;
 }

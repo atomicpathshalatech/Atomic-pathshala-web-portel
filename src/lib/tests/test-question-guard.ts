@@ -9,7 +9,23 @@ export type TestDuplicate = {
   questionCode: string | null;
   section: string;
   order: number;
+  subject?: string | null;
+  chapter?: string | null;
+  createdAt?: Date | null;
   /** "id": the very same question; "content": the same question saved again under another id. */
+  kind: "id" | "content";
+};
+
+/** Detailed payload returned to frontend and logs */
+export type DuplicateDetailPayload = {
+  message: string;
+  questionId: string;
+  questionCode: string | null;
+  assignedQuestionNumber: string;
+  section: string;
+  subject: string;
+  chapter: string;
+  addedAt: string | null;
   kind: "id" | "content";
 };
 
@@ -30,8 +46,6 @@ export function contentFingerprint(statement: string | null | undefined, options
  * Is this question already in the test — in any section, any slot? A test
  * holds each question once: the same question id, or the same question
  * (statement + options) saved again as a new question.
- * `exceptSlot` / `exceptSectionQuestionId`: the slot being filled or replaced,
- * which does not count; `exceptQuestionId`: the question being saved.
  */
 export async function findInTest(
   db: Db,
@@ -47,7 +61,9 @@ export async function findInTest(
   }
 ): Promise<TestDuplicate | null> {
   const links = await db.sectionQuestion.findMany({
-    where: { section: { testId } },
+    where: {
+      OR: [{ testId }, { section: { testId } }],
+    },
     select: {
       id: true,
       order: true,
@@ -56,35 +72,71 @@ export async function findInTest(
       section: { select: { name: true } },
       question: {
         select: {
+          id: true,
+          createdAt: true,
           questionCode: true,
+          subject: true,
+          chapter: true,
           contentFingerprint: true,
           translations: { select: { language: true, statement: true, options: true } },
         },
       },
     },
   });
+
   for (const l of links) {
     if (l.id === q.exceptSectionQuestionId || l.questionId === q.exceptQuestionId) continue;
     if (q.exceptSlot && l.sectionId === q.exceptSlot.sectionId && l.order === q.exceptSlot.order) continue;
-    const where = { questionId: l.questionId, questionCode: l.question.questionCode, section: l.section.name, order: l.order };
+    
+    const where: TestDuplicate = {
+      questionId: l.questionId,
+      questionCode: l.question.questionCode,
+      section: l.section.name,
+      order: l.order,
+      subject: l.question.subject,
+      chapter: l.question.chapter,
+      createdAt: l.question.createdAt,
+      kind: "id",
+    };
+
     if (q.questionId && l.questionId === q.questionId) {
       if (l.sectionId === q.movingWithin) continue;
       return { ...where, kind: "id" };
     }
+    
     if (!q.fingerprint) continue;
     const en = l.question.translations.find((t) => t.language === "ENGLISH") ?? l.question.translations[0];
     const theirs = contentFingerprint(en?.statement, en?.options);
-    if (l.question.contentFingerprint === q.fingerprint || theirs === q.fingerprint) return { ...where, kind: "content" };
+    if (l.question.contentFingerprint === q.fingerprint || theirs === q.fingerprint) {
+      return { ...where, kind: "content" };
+    }
   }
   return null;
 }
 
 /** The message shown when a question is already in the test. */
-export function duplicateMessage(d: TestDuplicate) {
+export function duplicateMessage(d: TestDuplicate): string {
   const at = `${d.section} Q${d.order}${d.questionCode ? ` (${d.questionCode})` : ""}`;
   return d.kind === "id"
-    ? `This question is already in this test at ${at}. A question can be used only once in a test.`
-    : `The same question is already in this test at ${at}. A question can be used only once in a test.`;
+    ? `Duplicate Question Detected: This question is already included in this test at ${at}.`
+    : `Duplicate Question Detected: An identical question is already included in this test at ${at}.`;
+}
+
+/** Structured duplicate information meeting Module 1 requirements */
+export function duplicateDetails(d: TestDuplicate): DuplicateDetailPayload {
+  return {
+    message: d.kind === "id"
+      ? "Duplicate Question Detected: This question is already included in this test."
+      : "Duplicate Question Detected: An identical question is already included in this test.",
+    questionId: d.questionId,
+    questionCode: d.questionCode,
+    assignedQuestionNumber: `Q${d.order}`,
+    section: d.section,
+    subject: d.subject || "General",
+    chapter: d.chapter || "General",
+    addedAt: d.createdAt ? d.createdAt.toISOString() : null,
+    kind: d.kind,
+  };
 }
 
 /**
@@ -102,22 +154,57 @@ export async function withTestLock<T>(db: PrismaClient, testId: string, fn: (tx:
 }
 
 /** What a test already holds: its question ids and content fingerprints. */
-export async function testContents(db: Db, testId: string): Promise<{ ids: Set<string>; fingerprints: Set<string> }> {
+export async function testContents(db: Db, testId: string): Promise<{
+  ids: Set<string>;
+  fingerprints: Set<string>;
+  details: Map<string, { order: number; section: string; subject: string | null; chapter: string | null; addedAt: Date }>;
+}> {
   const links = await db.sectionQuestion.findMany({
-    where: { section: { testId } },
+    where: { OR: [{ testId }, { section: { testId } }] },
     select: {
       questionId: true,
-      question: { select: { contentFingerprint: true, translations: { select: { language: true, statement: true, options: true } } } },
+      order: true,
+      section: { select: { name: true } },
+      question: {
+        select: {
+          id: true,
+          createdAt: true,
+          questionCode: true,
+          subject: true,
+          chapter: true,
+          contentFingerprint: true,
+          translations: { select: { language: true, statement: true, options: true } },
+        },
+      },
     },
   });
+
   const ids = new Set<string>();
   const fingerprints = new Set<string>();
+  const details = new Map<string, { order: number; section: string; subject: string | null; chapter: string | null; addedAt: Date }>();
+
   for (const l of links) {
     ids.add(l.questionId);
+    details.set(l.questionId, {
+      order: l.order,
+      section: l.section.name,
+      subject: l.question.subject,
+      chapter: l.question.chapter,
+      addedAt: l.question.createdAt,
+    });
     if (l.question.contentFingerprint) fingerprints.add(l.question.contentFingerprint);
     const en = l.question.translations.find((t) => t.language === "ENGLISH") ?? l.question.translations[0];
     const fp = contentFingerprint(en?.statement, en?.options);
-    if (fp) fingerprints.add(fp);
+    if (fp) {
+      fingerprints.add(fp);
+      details.set(fp, {
+        order: l.order,
+        section: l.section.name,
+        subject: l.question.subject,
+        chapter: l.question.chapter,
+        addedAt: l.question.createdAt,
+      });
+    }
   }
-  return { ids, fingerprints };
+  return { ids, fingerprints, details };
 }

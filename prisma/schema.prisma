@@ -113,6 +113,7 @@ model User {
 
   // --- Test Portal integration (imported from Atomic Test Portal) --------
   createdTests           Test[]            @relation("TestCreatedBy")
+  testAuditLogs          TestAuditLog[]
   createdTestTemplates   TestTemplate[]    @relation("TestTemplateCreatedBy")
   createdDpps            Dpp[]             @relation("DppCreatedBy")
   chapterReviews         ChapterReview[]   @relation("ChapterReviewActor")
@@ -1120,19 +1121,24 @@ model Test {
   instructions           String?
   status                 TestStatus   @default(DRAFT)
   archived               Boolean      @default(false)
+  lastAuditReportId      String?
+  auditStatus            String?      @default("NOT_AUDITED")
   createdById            String?
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
 
-  testSeries    TestSeries?    @relation(fields: [testSeriesId], references: [id])
-  batchSchedule BatchSchedule? @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
-  chapter       Chapter?       @relation(fields: [chapterId], references: [id], onDelete: SetNull)
-  template      TestTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  createdBy     User?          @relation("TestCreatedBy", fields: [createdById], references: [id])
-  sections      Section[]
-  attempts      Attempt[]
-  reattempts    TestReattempt[]
-  exercises     Exercise[]
+  testSeries       TestSeries?       @relation(fields: [testSeriesId], references: [id])
+  batchSchedule    BatchSchedule?    @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
+  chapter          Chapter?          @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  template         TestTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdBy        User?             @relation("TestCreatedBy", fields: [createdById], references: [id])
+  sections         Section[]
+  sectionQuestions SectionQuestion[]
+  reports          TestAuditReport[]
+  auditLogs        TestAuditLog[]
+  attempts         Attempt[]
+  reattempts       TestReattempt[]
+  exercises        Exercise[]
 
   @@index([status])
   @@index([chapterId])
@@ -1160,6 +1166,7 @@ model Section {
 
 model SectionQuestion {
   id                    String   @id @default(cuid())
+  testId                String?
   sectionId             String
   questionId            String
   order                 Int      @default(0)
@@ -1167,11 +1174,14 @@ model SectionQuestion {
   negativeMarksOverride Float?
   reviewStatus          String   @default("PENDING")
 
+  test     Test?    @relation(fields: [testId], references: [id], onDelete: Cascade)
   section  Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id])
 
   @@unique([sectionId, questionId])
   @@unique([sectionId, order])
+  @@unique([testId, questionId])
+  @@index([testId])
   @@index([sectionId])
   @@map("section_questions")
 }
@@ -2764,6 +2774,7 @@ model Question {
   qcCorrections         QcCorrection[]
   reviewAudits          QuestionReviewAudit[]
   collectionItems       QuestionCollectionItem[]
+  testQuestionAudits    TestQuestionAudit[]
   pyqOccurrences        PyqOccurrence[]
   moduleItems           QuestionModuleItem[]
   exerciseLinks         ExerciseQuestion[]
@@ -8871,4 +8882,90 @@ model EmployeeLegacyIdMapping {
   @@index([previousId])
   @@index([newEmployeeId])
   @@map("employee_legacy_id_mappings")
+}
+
+
+model TestAuditReport {
+  id                String              @id @default(cuid())
+  testId            String
+  test              Test                @relation(fields: [testId], references: [id], onDelete: Cascade)
+  reportVersion     Int                 @default(1)
+  engineVersion     String              @default("1.0.0")
+  status            String              @default("COMPLETED")
+  overallScore      Float               @default(100)
+  scoreBreakdown    Json?
+  neetAlignment     String?
+  metrics           Json?
+  summary           Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  questionAudits    TestQuestionAudit[]
+  auditLogs         TestAuditLog[]
+
+  @@index([testId])
+  @@index([status])
+  @@map("test_audit_reports")
+}
+
+model TestQuestionAudit {
+  id                 String            @id @default(cuid())
+  reportId           String
+  report             TestAuditReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  questionId         String
+  question           Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  questionNumber     Int
+  sectionName        String?
+  subject            String?
+  chapter            String?
+  qualityScore       Float             @default(100)
+  severity           String            @default("PASSED")
+  status             String            @default("AUDITED")
+  difficulty         String?
+  difficultyScore    Float?
+  difficultyReason   String?
+  answerValid        Boolean           @default(true)
+  answerNotes        String?
+  diagramRequired    Boolean           @default(false)
+  diagramPresent     Boolean           @default(false)
+  diagramStatus      String?
+  duplicateType      String?
+  duplicateMatchId   String?
+  similarityScore    Float?
+  similarityReason   String?
+  issues             Json?
+  ncertReference     String?
+  verifiedBy         String?
+  verifiedAt         DateTime?
+  adminActionNotes   String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([reportId, questionId])
+  @@index([reportId])
+  @@index([questionId])
+  @@index([severity])
+  @@index([status])
+  @@map("test_question_audits")
+}
+
+model TestAuditLog {
+  id         String           @id @default(cuid())
+  testId     String
+  test       Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  reportId   String?
+  report     TestAuditReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  questionId String?
+  userId     String?
+  user       User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  severity   String?
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime         @default(now())
+
+  @@index([testId])
+  @@index([reportId])
+  @@index([action])
+  @@map("test_audit_logs")
 }
