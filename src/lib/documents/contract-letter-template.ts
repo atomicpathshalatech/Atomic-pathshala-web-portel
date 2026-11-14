@@ -16,6 +16,7 @@ import {
   UniversalFonts,
   embedUniversalFonts,
   loadBrandLogo,
+  loadBrandSignature,
   drawDocumentBorder,
   drawBrandWatermark,
   drawDocumentHeader,
@@ -76,6 +77,7 @@ export async function buildContractLetterPdf(
   const pdfDoc = await PDFDocument.create();
   const fonts = await embedUniversalFonts(pdfDoc);
   const logoImg = await loadBrandLogo(pdfDoc);
+  const signatureImg = await loadBrandSignature(pdfDoc);
 
   const pageWidth = 595.28;
   const pageHeight = 841.89;
@@ -458,23 +460,32 @@ export async function buildContractLetterPdf(
 
   currentPage.drawText("FIRST PARTY (PLATFORM OWNER)", {
     x: box1X + 10,
-    y: sigBoxY + sigBoxHeight - 16,
+    y: sigBoxY + sigBoxHeight - 14,
     size: 7.5,
     font: fonts.timesBold,
     color: BRAND_COLORS.navyBlue,
   });
 
-  currentPage.drawText("Firoz Ali", {
-    x: box1X + 10,
-    y: sigBoxY + sigBoxHeight - 38,
-    size: 16,
-    font: fonts.timesItalic,
-    color: BRAND_COLORS.navyBlue,
-  });
+  if (signatureImg) {
+    currentPage.drawImage(signatureImg, {
+      x: box1X + 10,
+      y: sigBoxY + sigBoxHeight - 44,
+      width: 86,
+      height: 27,
+    });
+  } else {
+    currentPage.drawText("Firoz Ali", {
+      x: box1X + 10,
+      y: sigBoxY + sigBoxHeight - 38,
+      size: 16,
+      font: fonts.timesItalic,
+      color: BRAND_COLORS.navyBlue,
+    });
+  }
 
   currentPage.drawText("FIROZ ALI - Founder & Director", {
     x: box1X + 10,
-    y: sigBoxY + sigBoxHeight - 52,
+    y: sigBoxY + sigBoxHeight - 54,
     size: 8,
     font: fonts.timesBold,
     color: BRAND_COLORS.navyBlue,
@@ -482,7 +493,7 @@ export async function buildContractLetterPdf(
 
   currentPage.drawText("ATOMIC PATHSHALA EDUCATION", {
     x: box1X + 10,
-    y: sigBoxY + sigBoxHeight - 64,
+    y: sigBoxY + sigBoxHeight - 65,
     size: 7.5,
     font: fonts.timesRoman,
     color: BRAND_COLORS.mutedText,

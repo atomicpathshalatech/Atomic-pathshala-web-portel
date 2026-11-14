@@ -141,7 +141,18 @@ export async function buildJoiningConfirmationPdf(
 
   const col1X = marginX + 10;
   const col2X = marginX + usableWidth / 2 + 10;
+  const maxValWidth = usableWidth / 2 - 118;
   let rowY = currentY - 14;
+
+  function fitText(text: string, font: PDFFont, size: number, maxW: number): string {
+    const clean = cleanWinAnsi(text);
+    if (font.widthOfTextAtSize(clean, size) <= maxW) return clean;
+    let s = clean;
+    while (s.length > 3 && font.widthOfTextAtSize(s + "...", size) > maxW) {
+      s = s.slice(0, -1);
+    }
+    return s + "...";
+  }
 
   for (let i = 0; i < summaryItems.length; i += 2) {
     const item1 = summaryItems[i];
@@ -155,7 +166,7 @@ export async function buildJoiningConfirmationPdf(
         font: fonts.timesBold,
         color: BRAND_COLORS.mutedText,
       });
-      page.drawText(cleanWinAnsi(item1.value), {
+      page.drawText(fitText(item1.value, fonts.timesRoman, 7.5, maxValWidth), {
         x: col1X + 105,
         y: rowY,
         size: 7.5,
@@ -172,7 +183,7 @@ export async function buildJoiningConfirmationPdf(
         font: fonts.timesBold,
         color: BRAND_COLORS.mutedText,
       });
-      page.drawText(cleanWinAnsi(item2.value), {
+      page.drawText(fitText(item2.value, fonts.timesRoman, 7.5, maxValWidth), {
         x: col2X + 105,
         y: rowY,
         size: 7.5,

@@ -65,6 +65,24 @@ export async function loadBrandLogo(pdfDoc: PDFDocument): Promise<PDFImage | nul
   return null;
 }
 
+export async function loadBrandSignature(pdfDoc: PDFDocument): Promise<PDFImage | null> {
+  try {
+    const candidates = [
+      path.join(process.cwd(), "public", "brand", "signature.png"),
+      path.join(process.cwd(), "public", "signature.png"),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        const buffer = fs.readFileSync(p);
+        return await pdfDoc.embedPng(buffer);
+      }
+    }
+  } catch (err) {
+    console.warn("[universal-design-system] Could not embed signature image:", err);
+  }
+  return null;
+}
+
 export function cleanWinAnsi(text: string): string {
   if (!text) return "";
   return text
@@ -321,6 +339,7 @@ export async function drawUnifiedVerificationAndSignatory(
     verificationUrl?: string;
     documentId: string;
     issueDateStr: string;
+    signatureImg?: PDFImage | null;
   }
 ): Promise<number> {
   const { width } = page.getSize();
@@ -416,49 +435,60 @@ export async function drawUnifiedVerificationAndSignatory(
 
   page.drawText("AUTHORIZED SIGNATORY", {
     x: sigX,
-    y: boxY + boxHeight - 20,
+    y: boxY + boxHeight - 18,
     size: 7.5,
     font: fonts.timesBold,
     color: BRAND_COLORS.navyBlue,
   });
 
-  // Calligraphic script
-  page.drawText("Firoz Ali", {
-    x: sigX,
-    y: boxY + boxHeight - 44,
-    size: 18,
-    font: fonts.timesItalic,
-    color: BRAND_COLORS.navyBlue,
-  });
+  const sigImg = options.signatureImg !== undefined ? options.signatureImg : await loadBrandSignature(pdfDoc);
+  if (sigImg) {
+    // Official ID-Card matching signature
+    page.drawImage(sigImg, {
+      x: sigX,
+      y: boxY + boxHeight - 50,
+      width: 96,
+      height: 30,
+    });
+  } else {
+    // Calligraphic script fallback
+    page.drawText("Firoz Ali", {
+      x: sigX,
+      y: boxY + boxHeight - 44,
+      size: 18,
+      font: fonts.timesItalic,
+      color: BRAND_COLORS.navyBlue,
+    });
+  }
 
   page.drawText("FIROZ ALI", {
     x: sigX,
-    y: boxY + boxHeight - 56,
-    size: 9,
+    y: boxY + boxHeight - 58,
+    size: 8.5,
     font: fonts.timesBold,
     color: BRAND_COLORS.navyBlue,
   });
 
-  page.drawText("Founder & Director", {
+  page.drawText("Founder and Director", {
     x: sigX,
-    y: boxY + boxHeight - 67,
-    size: 8,
+    y: boxY + boxHeight - 69,
+    size: 7.5,
     font: fonts.timesRoman,
     color: BRAND_COLORS.bodyText,
   });
 
   page.drawText("ATOMIC PATHSHALA EDUCATION", {
     x: sigX,
-    y: boxY + boxHeight - 78,
-    size: 7.5,
+    y: boxY + boxHeight - 79,
+    size: 7,
     font: fonts.timesBold,
     color: BRAND_COLORS.mutedText,
   });
 
   page.drawText("Rampur, Uttar Pradesh, India", {
     x: sigX,
-    y: boxY + boxHeight - 88,
-    size: 7,
+    y: boxY + boxHeight - 89,
+    size: 6.5,
     font: fonts.timesRoman,
     color: BRAND_COLORS.mutedText,
   });
