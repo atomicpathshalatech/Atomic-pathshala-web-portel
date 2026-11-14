@@ -2,18 +2,18 @@
 
 import React, { useEffect, useState } from "react";
 import {
-  FiCpu,
-  FiServer,
-  FiActivity,
-  FiDollarSign,
-  FiCheckCircle,
-  FiAlertTriangle,
-  FiRefreshCw,
-  FiLayers,
-  FiZap,
-  FiShield,
-  FiPlay,
-} from "react-icons/fi";
+  Cpu,
+  Server,
+  Activity,
+  DollarSign,
+  CheckCircle,
+  AlertTriangle,
+  RefreshCw,
+  Layers,
+  Zap,
+  Shield,
+  Play,
+} from "lucide-react";
 
 interface ProjectData {
   id: string;
@@ -174,7 +174,7 @@ export default function AICenterPage() {
         <div>
           <div className="flex items-center gap-3">
             <span className="p-2.5 rounded-xl bg-blue-600 text-white shadow-sm">
-              <FiCpu className="w-6 h-6" />
+              <Cpu className="w-6 h-6" />
             </span>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -193,7 +193,7 @@ export default function AICenterPage() {
             disabled={loading}
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 shadow-sm transition"
           >
-            <FiRefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`} />
             Refresh Telemetry
           </button>
           <button
@@ -215,11 +215,11 @@ export default function AICenterPage() {
               {projects.filter((p) => p.isHealthy && p.enabled).length} / {projects.length}
             </h3>
             <p className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
-              <FiCheckCircle className="w-3.5 h-3.5" /> High availability ready
+              <CheckCircle className="w-3.5 h-3.5" /> High availability ready
             </p>
           </div>
           <span className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <FiServer className="w-6 h-6" />
+            <Server className="w-6 h-6" />
           </span>
         </div>
 
@@ -235,7 +235,7 @@ export default function AICenterPage() {
             </p>
           </div>
           <span className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-            <FiActivity className="w-6 h-6" />
+            <Activity className="w-6 h-6" />
           </span>
         </div>
 
@@ -245,11 +245,11 @@ export default function AICenterPage() {
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cache Hits / Saved</p>
             <h3 className="text-2xl font-bold text-slate-900 mt-1">{cache?.hits ?? 0} hits</h3>
             <p className="text-xs text-indigo-600 font-medium mt-1 flex items-center gap-1">
-              <FiZap className="w-3.5 h-3.5" /> {cache?.tokensSaved?.toLocaleString() ?? 0} tokens saved
+              <Zap className="w-3.5 h-3.5" /> {cache?.tokensSaved?.toLocaleString() ?? 0} tokens saved
             </p>
           </div>
           <span className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
-            <FiZap className="w-6 h-6" />
+            <Zap className="w-6 h-6" />
           </span>
         </div>
 
@@ -265,7 +265,7 @@ export default function AICenterPage() {
             </p>
           </div>
           <span className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-            <FiLayers className="w-6 h-6" />
+            <Layers className="w-6 h-6" />
           </span>
         </div>
       </div>
@@ -413,7 +413,7 @@ export default function AICenterPage() {
                     disabled={testingProject === proj.id}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold transition"
                   >
-                    <FiPlay className="w-3 h-3 text-blue-600" />
+                    <Play className="w-3 h-3 text-blue-600" />
                     {testingProject === proj.id ? "Pinging..." : "Test Ping"}
                   </button>
                 </div>
@@ -612,7 +612,7 @@ export default function AICenterPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
             <div className="border border-slate-200 rounded-xl p-5 space-y-3 bg-slate-50/50">
               <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <FiShield className="text-blue-600" /> 1. Link Payment Method in Google AI Studio
+                <Shield className="text-blue-600" /> 1. Link Payment Method in Google AI Studio
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 Free-tier keys have an absolute daily cap (often 20 to 50 requests per day) and 15 RPM.
@@ -628,7 +628,7 @@ export default function AICenterPage() {
 
             <div className="border border-slate-200 rounded-xl p-5 space-y-3 bg-slate-50/50">
               <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <FiAlertTriangle className="text-amber-600" /> 2. Resolving Zero-Quota Projects (`quota_limit_value: 0`)
+                <AlertTriangle className="text-amber-600" /> 2. Resolving Zero-Quota Projects (`quota_limit_value: 0`)
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 If an API key returns <code>quota_limit_value: 0</code> (e.g. project numbers 401168136295 and 239005724824):

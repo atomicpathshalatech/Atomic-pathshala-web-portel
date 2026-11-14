@@ -197,7 +197,6 @@ export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtS
     return generateFallbackDoubtSolution(input.questionText, input.subject);
   }
 }
-}
 
 /**
  * Intelligent local fallback when network or API limits are hit,
