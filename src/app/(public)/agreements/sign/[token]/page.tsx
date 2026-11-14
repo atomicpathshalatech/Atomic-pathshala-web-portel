@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef, use } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 
 type AgreementData = {
@@ -32,10 +33,30 @@ type SignerData = {
 export default function EducatorSigningPage({
   params,
 }: {
-  params: Promise<{ token: string }>;
+  params?: { token?: string } | Promise<{ token?: string }>;
 }) {
-  const resolvedParams = use(params);
-  const token = resolvedParams.token;
+  const routeParams = useParams();
+  const [token, setToken] = useState<string>(() => {
+    if (params && "token" in params && typeof params.token === "string") {
+      return params.token;
+    }
+    if (routeParams?.token) {
+      return Array.isArray(routeParams.token) ? routeParams.token[0] : routeParams.token;
+    }
+    return "";
+  });
+
+  useEffect(() => {
+    if (!token) {
+      if (routeParams?.token) {
+        setToken(Array.isArray(routeParams.token) ? routeParams.token[0] : routeParams.token);
+      } else if (params && typeof (params as any).then === "function") {
+        (params as Promise<{ token?: string }>).then((p) => {
+          if (p?.token) setToken(p.token);
+        });
+      }
+    }
+  }, [params, routeParams, token]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +76,7 @@ export default function EducatorSigningPage({
   const [hasDrawn, setHasDrawn] = useState(false);
 
   useEffect(() => {
+    if (!token) return;
     async function loadAgreement() {
       try {
         const res = await fetch(`/api/agreements/sign/${token}`);
