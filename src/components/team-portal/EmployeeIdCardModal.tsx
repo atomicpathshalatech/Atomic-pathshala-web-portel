@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
 
 interface EmployeeIdCardModalProps {
   isOpen: boolean;
@@ -26,31 +27,63 @@ export function EmployeeIdCardModal({
   onClose,
   employee,
 }: EmployeeIdCardModalProps) {
-  const [activeSide, setActiveSide] = useState<"front" | "back">("front");
+  const [cardData, setCardData] = useState<{
+    html: string;
+    verifyUrl: string;
+    pdfUrl: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !employee) return;
+    setLoading(true);
+    setError(null);
+    setCardData(null);
+
+    fetch(`/api/team/employees/${employee.id}/id-card?format=json`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Failed to load ID card");
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.html) {
+          setCardData(data);
+        } else {
+          throw new Error("Invalid ID card data received");
+        }
+      })
+      .catch((err) => {
+        console.error("[EmployeeIdCardModal] Load error:", err);
+        setError(err.message || "Failed to load official ID card");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [isOpen, employee]);
 
   if (!isOpen || !employee) return null;
-
-  const dojFormatted = new Date(employee.dateOfJoining).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 
   const pdfUrl = `/api/team/employees/${employee.id}/id-card`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-        {/* Header */}
+      <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]">
+        {/* Modal Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-[#0a2463] to-[#1e3a8a] text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center font-bold text-white">
+            <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center font-bold text-white text-base">
               🪪
             </div>
             <div>
-              <h2 className="text-base font-black tracking-tight">Official Employee ID Card</h2>
+              <h2 className="text-base font-black tracking-tight">
+                Official Atomic Pathshala ID Card
+              </h2>
               <p className="text-xs text-blue-200">
-                CR80 Printable Specification • {employee.employeeId}
+                CR80 Plastic Card Specification • {employee.name} ({employee.employeeId})
               </p>
             </div>
           </div>
@@ -63,167 +96,97 @@ export function EmployeeIdCardModal({
           </button>
         </div>
 
-        {/* Card Side Toggle */}
-        <div className="px-6 pt-4 flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveSide("front")}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-              activeSide === "front"
-                ? "bg-[#0a2463] text-white shadow-md"
-                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
-            }`}
-          >
-            Card Front
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSide("back")}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-              activeSide === "back"
-                ? "bg-[#0a2463] text-white shadow-md"
-                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
-            }`}
-          >
-            Card Back (QR & Auth)
-          </button>
+        {/* Card Body & Preview Area */}
+        <div className="p-6 flex-1 overflow-y-auto flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-950/60 min-h-[460px]">
+          {loading ? (
+            <div className="w-[324px] h-[480px] rounded-[22px] border-2 border-dashed border-[#1d4ed8]/40 bg-white dark:bg-slate-900 flex flex-col items-center justify-center text-center p-6 gap-3">
+              <span className="material-symbols-outlined text-[44px] text-[#0a2463] animate-spin">
+                sync
+              </span>
+              <p className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                Loading Official ID Card...
+              </p>
+              <p className="text-xs text-slate-500">
+                Rendering live corporate typography, vector QR code & signatures.
+              </p>
+            </div>
+          ) : error ? (
+            <div className="p-6 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-center space-y-2 max-w-sm">
+              <p className="font-bold text-sm">Could not load ID Card</p>
+              <p className="text-xs">{error}</p>
+              <Link
+                href={`/team/id-cards?tab=team&q=${encodeURIComponent(employee.name)}`}
+                className="inline-block px-3 py-1.5 rounded-lg bg-[#0a2463] text-white text-xs font-bold mt-2"
+              >
+                Open in ID Cards Management
+              </Link>
+            </div>
+          ) : cardData?.html ? (
+            <div className="space-y-3 flex flex-col items-center">
+              {/* Authentic CR80 Preview in isolated iframe */}
+              <div
+                className="rounded-[22px] shadow-[0_20px_45px_-12px_rgba(10,36,99,0.45)] overflow-hidden bg-white border border-slate-200"
+                style={{ width: 324, height: 514 }}
+              >
+                <iframe
+                  title="Atomic Pathshala Official ID Card"
+                  srcDoc={cardData.html}
+                  sandbox=""
+                  scrolling="no"
+                  className="border-0 block"
+                  style={{ width: 324, height: 514 }}
+                />
+              </div>
+
+              <span className="text-[11px] font-semibold text-slate-500">
+                Official single-instance ID Card registered with Atomic Pathshala
+              </span>
+            </div>
+          ) : null}
         </div>
 
-        {/* ID Card Visual Preview Area */}
-        <div className="p-6 flex items-center justify-center bg-slate-100 dark:bg-slate-950/60">
-          <div className="w-[340px] h-[480px] bg-white rounded-2xl shadow-xl border border-slate-300 relative overflow-hidden flex flex-col justify-between select-none">
-            {activeSide === "front" ? (
-              /* FRONT OF ID CARD */
-              <>
-                {/* Header Band */}
-                <div className="bg-[#0a2463] text-white pt-5 pb-4 px-4 text-center border-b-2 border-amber-400">
-                  <p className="text-[10px] tracking-widest font-bold uppercase text-amber-300">
-                    ATOMIC PATHSHALA EDUCATION
-                  </p>
-                  <p className="text-base font-black tracking-tight">Atomic Pathshala</p>
-                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-white/20 text-[9px] font-bold uppercase tracking-wider text-white">
-                    STAFF IDENTITY CARD
-                  </span>
-                </div>
-
-                {/* Photo & Body */}
-                <div className="flex-1 flex flex-col items-center justify-center px-4 py-3 text-center space-y-3">
-                  {employee.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={employee.photoUrl}
-                      alt={employee.name}
-                      className="w-24 h-28 rounded-xl object-cover border-2 border-[#0a2463] shadow-md"
-                    />
-                  ) : (
-                    <div className="w-24 h-28 rounded-xl bg-slate-100 border-2 border-slate-300 flex items-center justify-center text-slate-400 font-black text-2xl shadow-inner">
-                      {employee.name.charAt(0)}
-                    </div>
-                  )}
-
-                  <div>
-                    <h3 className="text-base font-black text-slate-900 leading-tight">
-                      {employee.name}
-                    </h3>
-                    <p className="text-xs font-bold text-[#0a2463] mt-0.5">
-                      {employee.designation}
-                    </p>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      {employee.department}
-                    </p>
-                  </div>
-
-                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[11px] space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-medium">Emp ID:</span>
-                      <strong className="font-mono text-slate-900 font-bold">{employee.employeeId}</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-medium">Joined:</span>
-                      <span className="text-slate-800 font-semibold">{dojFormatted}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-medium">Type:</span>
-                      <span className="text-slate-800 font-semibold">{employee.employmentType.replace(/_/g, " ")}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer Band */}
-                <div className="bg-slate-50 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between text-[9px] text-slate-600">
-                  <span>Rampur, Uttar Pradesh</span>
-                  <span className="font-bold text-[#0a2463]">atomicpathshala.in</span>
-                </div>
-              </>
-            ) : (
-              /* BACK OF ID CARD */
-              <>
-                <div className="bg-[#0a2463] text-white py-2.5 px-4 text-center border-b-2 border-amber-400">
-                  <p className="text-[11px] font-black uppercase tracking-wider">
-                    SECURITY & VERIFICATION
-                  </p>
-                </div>
-
-                <div className="flex-1 flex flex-col items-center justify-center px-4 py-4 text-center space-y-3">
-                  <p className="text-[10px] text-slate-500 font-semibold">
-                    Scan with any smartphone camera to verify authenticity
-                  </p>
-
-                  {/* QR Code */}
-                  <div className="p-2 rounded-xl bg-white border-2 border-slate-200 shadow-sm">
-                    {employee.qrCodeDataUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={employee.qrCodeDataUrl}
-                        alt="Verification QR"
-                        className="w-36 h-36 object-contain"
-                      />
-                    ) : (
-                      <div className="w-36 h-36 bg-slate-100 flex items-center justify-center text-xs text-slate-400">
-                        QR Pending
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="font-mono text-[10px] font-bold text-[#0a2463]">
-                    {employee.employeeId}
-                  </p>
-
-                  {/* Terms */}
-                  <div className="text-[8px] text-slate-500 leading-tight space-y-1 px-2">
-                    <p>This card remains property of ATOMIC PATHSHALA EDUCATION.</p>
-                    <p>If found, please return to our campus in Rampur, Uttar Pradesh, India.</p>
-                  </div>
-                </div>
-
-                {/* Signature Block */}
-                <div className="border-t border-slate-200 bg-slate-50 p-3 text-center">
-                  <div className="font-serif italic text-xs font-bold text-slate-800">
-                    Firoz Ali
-                  </div>
-                  <div className="border-t border-slate-300 w-32 mx-auto my-0.5" />
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-700">
-                    Firoz Ali • Founder & Proprietor
-                  </p>
-                </div>
-              </>
-            )}
+        {/* Modal Actions Footer */}
+        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="text-xs text-slate-500 text-center sm:text-left">
+            <span className="font-bold text-slate-700 dark:text-slate-300">
+              CR80 Standard (54 × 85.6 mm)
+            </span>
+            <span className="block text-[11px]">
+              Single unified card used for mobile, print & verification
+            </span>
           </div>
-        </div>
 
-        {/* Actions Bar */}
-        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
-          <p className="text-xs text-slate-500">
-            Official CR80 Card: 85.6mm × 53.98mm @ 300 DPI
-          </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {/* View on Public Verification */}
+            {cardData?.verifyUrl && (
+              <a
+                href={cardData.verifyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors"
+                title="Open Public Verification Link"
+              >
+                ↗ Public QR
+              </a>
+            )}
+
+            {/* Direct Link to ID Cards Admin */}
+            <Link
+              href={`/team/id-cards?tab=team&q=${encodeURIComponent(employee.name)}`}
+              className="px-3 py-2 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/50 text-[#0a2463] dark:text-blue-300 text-xs font-bold transition-colors"
+              title="Manage photo, details, and permissions in official ID Cards system"
+            >
+              ⚙️ Manage Details
+            </Link>
+
+            {/* Download Official PDF */}
             <a
-              href={pdfUrl}
+              href={cardData?.pdfUrl || pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-5 py-2.5 rounded-xl bg-[#0a2463] hover:bg-[#0f3a9e] text-white text-xs font-bold shadow-md transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-[#0a2463] hover:bg-[#0f3a9e] text-white text-xs font-bold shadow-md transition-colors flex items-center gap-1.5"
             >
-              <span>Download Printable CR80 PDF</span>
+              <span>Download Printable PDF</span>
               <span>↓</span>
             </a>
           </div>

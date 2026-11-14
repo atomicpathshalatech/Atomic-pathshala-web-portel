@@ -271,6 +271,68 @@ export function loadCard(kind: IdCardKind, userId: string) {
   return kind === "STUDENT" ? loadStudentCard({ userId }) : loadTeamCard(userId);
 }
 
+/**
+ * Load or construct the official Atomic Pathshala ID card model for an employee.
+ * Unifies employee directory records with the official ID card system.
+ */
+export async function loadOfficialEmployeeCardModel(employeeIdOrDbId: string): Promise<{
+  model: IdCardModel;
+  verifyUrl: string;
+} | null> {
+  const employee = await prisma.employee.findFirst({
+    where: { OR: [{ id: employeeIdOrDbId }, { employeeId: employeeIdOrDbId }] },
+  });
+  if (!employee) return null;
+
+  let loaded: LoadedCard | null = null;
+  let card: IdCard | null = null;
+
+  if (employee.userId) {
+    card = await getOrCreateIdCard(employee.userId, "TEAM");
+    loaded = await loadTeamCard(employee.userId);
+    if (loaded?.model) {
+      return { model: loaded.model, verifyUrl: loaded.model.verifyUrl };
+    }
+  }
+
+  // Construct official IdCardModel using employee details
+  const empCode = employee.employeeId;
+  const designation = employee.designation;
+  const department = employee.department;
+
+  const rows: IdCardRow[] = [
+    { icon: "id", label: "Employee ID", value: empCode },
+    { icon: "briefcase", label: "Designation", value: designation },
+  ];
+  if (department && department !== "Unassigned") {
+    rows.push({ icon: "users", label: "Department", value: department });
+  }
+  rows.push({
+    icon: "calendarCheck",
+    label: "Member Since",
+    value: formatCardDate(employee.dateOfJoining) ?? "-",
+  });
+
+  const verifyUrl = card?.publicToken
+    ? verifyUrlFor(card.publicToken)
+    : `${getAppBaseUrl()}/verify/${employee.employeeId}`;
+
+  const model: IdCardModel = {
+    kind: "TEAM",
+    name: employee.name,
+    photoUrl: safeImageUrl(employee.photoUrl),
+    badge: designation,
+    enrollmentNumber: null,
+    rows,
+    rank: null,
+    verifyUrl,
+    qrSvg: qrSvg(verifyUrl),
+    revoked: employee.status === "TERMINATED" || employee.verificationStatus === "REVOKED",
+  };
+
+  return { model, verifyUrl };
+}
+
 const SIGNATURE_FILES: [string, string][] = [
   ["signature.png", "image/png"],
   ["signature.webp", "image/webp"],
