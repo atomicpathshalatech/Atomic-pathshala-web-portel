@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { INDIAN_STATE_STAMP_RULES } from "@/lib/agreements/estamp";
 
@@ -19,21 +19,52 @@ type TeacherWithUser = {
 
 export function ContractCreatorForm({ teachers }: { teachers: TeacherWithUser[] }) {
   const router = useRouter();
-  const [selectedTeacherId, setSelectedTeacherId] = useState(teachers[0]?.id || "");
+  const searchParams = useSearchParams();
+  const paramTeacherId = searchParams.get("teacherId");
+  const paramType = searchParams.get("type");
+
+  const initialTeacherId =
+    paramTeacherId && teachers.some((t) => t.id === paramTeacherId)
+      ? paramTeacherId
+      : teachers[0]?.id || "";
+
+  const [selectedTeacherId, setSelectedTeacherId] = useState(initialTeacherId);
   
   // Document Type & Engagement Model
-  const [documentType, setDocumentType] = useState<"SERVICE_AGREEMENT" | "JOINING_LETTER">("SERVICE_AGREEMENT");
+  const [documentType, setDocumentType] = useState<"SERVICE_AGREEMENT" | "JOINING_LETTER">(
+    paramType === "JOINING_LETTER" ? "JOINING_LETTER" : "SERVICE_AGREEMENT"
+  );
   const [engagementType, setEngagementType] = useState<string>("FULL_TIME");
 
   // Document Details
   const selectedTeacher = teachers.find((t) => t.id === selectedTeacherId);
   const [title, setTitle] = useState(
     selectedTeacher?.user?.name
-      ? `Educator Service Agreement — ${selectedTeacher.user.name}`
+      ? `${paramType === "JOINING_LETTER" ? "Educator Appointment / Joining Letter" : "Educator Service Agreement"} — ${selectedTeacher.user.name}`
       : "Educator Service Agreement"
   );
-  const [designation, setDesignation] = useState(selectedTeacher?.designation || "");
-  const [subject, setSubject] = useState(selectedTeacher?.department || "");
+  const [designation, setDesignation] = useState(
+    selectedTeacher?.subjects?.[0] ? `${selectedTeacher.subjects[0]} Faculty` : "Faculty Educator"
+  );
+  const [subject, setSubject] = useState(
+    selectedTeacher?.department && selectedTeacher.department !== "Unassigned"
+      ? selectedTeacher.department
+      : selectedTeacher?.subjects?.[0] || ""
+  );
+
+  useEffect(() => {
+    if (paramTeacherId && teachers.some((t) => t.id === paramTeacherId)) {
+      setSelectedTeacherId(paramTeacherId);
+      const t = teachers.find((x) => x.id === paramTeacherId);
+      if (t) {
+        setSubject(t.department && t.department !== "Unassigned" ? t.department : (t.subjects?.[0] ?? ""));
+        setDesignation(t.subjects?.[0] ? `${t.subjects[0]} Faculty` : "Faculty Educator");
+        setTitle(
+          `${documentType === "JOINING_LETTER" ? "Educator Appointment / Joining Letter" : "Educator Service Agreement"} — ${t.user.name}`
+        );
+      }
+    }
+  }, [paramTeacherId, teachers, documentType]);
   
   // Compensation & Deliverables (Annexure A)
   const [compensationType, setCompensationType] = useState("MONTHLY_REMUNERATION");

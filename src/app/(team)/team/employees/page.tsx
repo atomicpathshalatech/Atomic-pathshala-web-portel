@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireTeamSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { EmployeeManagementClient } from "@/components/team-portal/EmployeeManagementClient";
+import { syncFacultyToEmployees } from "@/lib/employees/employee-service";
 
 export const metadata: Metadata = {
   title: "Employee ID & Public Verification | Atomic Pathshala",
@@ -10,6 +11,11 @@ export const metadata: Metadata = {
 
 export default async function TeamEmployeesPage() {
   await requireTeamSession();
+
+  // Auto-sync any registered faculty or staff members so they appear automatically
+  await syncFacultyToEmployees().catch((err) => {
+    console.warn("[TeamEmployeesPage] Auto-sync faculty notice:", err);
+  });
 
   // Load all employees with related stats
   const employees = await prisma.employee.findMany({
@@ -34,10 +40,12 @@ export default async function TeamEmployeesPage() {
   });
 
   const total = employees.length;
-  const active = employees.filter((e) => e.status === "ACTIVE" && e.verificationStatus === "ACTIVE").length;
-  const former = employees.filter((e) => e.status === "FORMER").length;
+  const active = employees.filter(
+    (e) => e?.status === "ACTIVE" && (e?.verificationStatus === "VERIFIED" || e?.verificationStatus === "ACTIVE")
+  ).length;
+  const former = employees.filter((e) => e?.status === "FORMER").length;
   const revoked = employees.filter(
-    (e) => e.verificationStatus === "REVOKED" || e.status === "TERMINATED"
+    (e) => e?.verificationStatus === "REVOKED" || e?.status === "TERMINATED"
   ).length;
 
   return (
@@ -63,6 +71,10 @@ export default async function TeamEmployeesPage() {
       <EmployeeManagementClient
         initialEmployees={employees as any}
         stats={{ total, active, former, revoked }}
+      />
+    </div>
+  );
+}
       />
     </div>
   );

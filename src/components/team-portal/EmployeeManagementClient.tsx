@@ -57,21 +57,44 @@ export function EmployeeManagementClient({
 
   // Quick Action in flight state
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Filter logic
   const filteredEmployees = employees.filter((emp) => {
+    if (!emp) return false;
     const matchesSearch =
       searchTerm.trim() === "" ||
-      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.designation.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.department.toLowerCase().includes(searchTerm.toLowerCase());
+      emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.employeeId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.designation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.department?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus = statusFilter === "ALL" || emp.status === statusFilter;
     const matchesType = typeFilter === "ALL" || emp.employmentType === typeFilter;
 
     return matchesSearch && matchesStatus && matchesType;
   });
+
+  async function handleSyncFaculty() {
+    setIsSyncing(true);
+    try {
+      const res = await fetch("/api/team/employees/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to sync faculty");
+      alert(data.message || "Faculty synced successfully!");
+      router.refresh();
+      // Reload current employee list
+      const listRes = await fetch("/api/team/employees");
+      const listData = await listRes.json();
+      if (listData?.data?.employees) {
+        setEmployees(listData.data.employees);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to sync faculty");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   async function handleRevoke(employeeId: string) {
     if (!confirm("Are you sure you want to officially REVOKE verification for this employee?")) return;
@@ -203,14 +226,26 @@ export function EmployeeManagementClient({
           </select>
         </div>
 
-        {/* Action Button: Add Employee */}
-        <button
-          type="button"
-          onClick={() => setIsCreatorOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-[#0a2463] hover:bg-[#0f3a9e] text-white text-xs font-bold shadow-md transition-colors flex items-center justify-center gap-1.5 flex-shrink-0"
-        >
-          <span>+ Add Employee Record</span>
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            type="button"
+            disabled={isSyncing}
+            onClick={handleSyncFaculty}
+            className="px-3.5 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-[#0a2463] dark:text-blue-300 text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            title="Automatically import all teachers and staff into employee verification records"
+          >
+            <span>{isSyncing ? "Syncing..." : "🔄 Auto-Sync Faculty"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsCreatorOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-[#0a2463] hover:bg-[#0f3a9e] text-white text-xs font-bold shadow-md transition-colors flex items-center justify-center gap-1.5"
+          >
+            <span>+ Add Employee</span>
+          </button>
+        </div>
       </div>
 
       {/* Employees Table / Cards */}
@@ -238,9 +273,9 @@ export function EmployeeManagementClient({
               ) : (
                 filteredEmployees.map((emp) => {
                   const isRevoked =
-                    emp.verificationStatus === "REVOKED" || emp.status === "TERMINATED";
-                  const isFormer = emp.status === "FORMER";
-                  const isActive = emp.status === "ACTIVE" && !isRevoked;
+                    emp?.verificationStatus === "REVOKED" || emp?.status === "TERMINATED";
+                  const isFormer = emp?.status === "FORMER";
+                  const isActive = emp?.status === "ACTIVE" && !isRevoked;
 
                   return (
                     <tr
@@ -342,32 +377,50 @@ export function EmployeeManagementClient({
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1 flex-wrap">
                           {/* View ID Card */}
                           <button
                             type="button"
                             onClick={() => setSelectedForCard(emp)}
-                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-200"
+                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-200"
                             title="Preview and download CR80 printable ID card"
                           >
                             🪪 ID Card
                           </button>
 
-                          {/* Issue Certificate */}
+                          {/* Issue Experience Certificate */}
                           <button
                             type="button"
                             onClick={() => setSelectedForCert(emp)}
-                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-blue-700 dark:text-blue-300"
+                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-blue-700 dark:text-blue-300"
                             title="Issue Experience, Relieving, or Verification certificate"
                           >
-                            📜 Certificate
+                            🎓 Experience Letter
                           </button>
+
+                          {/* Issue Joining Letter */}
+                          <Link
+                            href={emp.teacherId ? `/team/contracts?teacherId=${emp.teacherId}&type=JOINING_LETTER` : "/team/contracts"}
+                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-emerald-700 dark:text-emerald-300"
+                            title="Generate official Appointment / Joining Letter"
+                          >
+                            ✉️ Joining Letter
+                          </Link>
+
+                          {/* Issue Service Agreement / Contract */}
+                          <Link
+                            href={emp.teacherId ? `/team/contracts?teacherId=${emp.teacherId}&type=SERVICE_AGREEMENT` : "/team/contracts"}
+                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-purple-700 dark:text-purple-300"
+                            title="Create and execute Educator Service Agreement"
+                          >
+                            📑 Contract
+                          </Link>
 
                           {/* Public Verify Link */}
                           <Link
                             href={`/verify/${emp.employeeId}`}
                             target="_blank"
-                            className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300"
+                            className="px-1.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300"
                             title="Open public verification page"
                           >
                             ↗ Public
@@ -378,7 +431,7 @@ export function EmployeeManagementClient({
                             type="button"
                             disabled={actionLoadingId === emp.id}
                             onClick={() => handleReissueQr(emp.id)}
-                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] text-slate-600"
+                            className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] text-slate-600"
                             title="Rotate QR verification token"
                           >
                             🔄
@@ -390,7 +443,7 @@ export function EmployeeManagementClient({
                               type="button"
                               disabled={actionLoadingId === emp.id}
                               onClick={() => handleRevoke(emp.id)}
-                              className="p-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-[11px] text-rose-600 font-bold"
+                              className="p-1 rounded-lg border border-rose-200 hover:bg-rose-50 text-[11px] text-rose-600 font-bold"
                               title="Revoke Verification"
                             >
                               ⛔

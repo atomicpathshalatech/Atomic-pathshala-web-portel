@@ -30,38 +30,34 @@ export function getAppBaseDomain(): string {
 }
 
 /**
+ * Calculate the next available numerical sequence for Employee ID
+ */
+export async function getNextEmployeeSequence(): Promise<number> {
+  const currentYear = new Date().getFullYear();
+  const yearPrefix = `AP-EMP-${currentYear}-`;
+  const employees = await prisma.employee.findMany({
+    where: { employeeId: { startsWith: yearPrefix } },
+    select: { employeeId: true },
+  });
+  let maxSeq = 0;
+  for (const emp of employees) {
+    const parts = emp.employeeId.split("-");
+    const num = parseInt(parts[parts.length - 1] || "0", 10);
+    if (!isNaN(num) && num > maxSeq) {
+      maxSeq = num;
+    }
+  }
+  return maxSeq + 1;
+}
+
+/**
  * Generate unique, sequential Employee ID: AP-EMP-YYYY-0001
  * Guaranteed never reused.
  */
 export async function generateEmployeeId(): Promise<string> {
   const currentYear = new Date().getFullYear();
-  const yearPrefix = `AP-EMP-${currentYear}-`;
-
-  // Count employees created with this year's prefix
-  const count = await prisma.employee.count({
-    where: {
-      employeeId: {
-        startsWith: yearPrefix,
-      },
-    },
-  });
-
-  const nextSequence = count + 1;
-  const paddedSequence = String(nextSequence).padStart(4, "0");
-  const candidateId = `${yearPrefix}${paddedSequence}`;
-
-  // Double check uniqueness
-  const existing = await prisma.employee.findUnique({
-    where: { employeeId: candidateId },
-  });
-
-  if (existing) {
-    // Fallback timestamp offset if concurrency collision
-    const totalAll = await prisma.employee.count();
-    return `${yearPrefix}${String(totalAll + 1).padStart(4, "0")}`;
-  }
-
-  return candidateId;
+  const nextSeq = await getNextEmployeeSequence();
+  return `AP-EMP-${currentYear}-${String(nextSeq).padStart(4, "0")}`;
 }
 
 /**
@@ -453,4 +449,99 @@ export async function verifyEmployeePublic(
       verifiedAt: new Date().toISOString(),
     },
   };
+}
+
+/**
+ * Automatically sync all registered Teachers & Faculty into Employee records
+ * Ensures every educator has a sequential AP-EMP ID, QR code, and verified record.
+ */
+export async function syncFacultyToEmployees() {
+  const teachers = await prisma.teacher.findMany({
+    include: {
+      user: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const existingEmployees = await prisma.employee.findMany();
+  const baseDomain = getAppBaseDomain();
+  const currentYear = new Date().getFullYear();
+  let nextSeq = await getNextEmployeeSequence();
+
+  const results = [];
+
+  for (const teacher of teachers) {
+    const teacherEmail = teacher.user?.email?.trim().toLowerCase() || "";
+    // Check if employee already exists by teacherId, userId, or email
+    const existing = existingEmployees.find(
+      (e) =>
+        (e.teacherId && e.teacherId === teacher.id) ||
+        (e.userId && e.userId === teacher.userId) ||
+        (teacherEmail && e.email && e.email.trim().toLowerCase() === teacherEmail)
+    );
+
+    const designation =
+      teacher.displayName ||
+      (teacher.subjects && teacher.subjects[0] ? `${teacher.subjects[0]} Faculty` : "Faculty Educator");
+    const department =
+      teacher.department && teacher.department !== "Unassigned"
+        ? teacher.department
+        : (teacher.subjects && teacher.subjects[0]) || "Academic";
+    const assignedBatch =
+      teacher.targetExams && teacher.targetExams[0]
+        ? `${teacher.targetExams[0]} Faculty Batch`
+        : null;
+    const photoUrl = teacher.creativePngUrl || teacher.user?.photoUrl || null;
+
+    if (existing) {
+      // Ensure linkages are maintained
+      const updated = await prisma.employee.update({
+        where: { id: existing.id },
+        data: {
+          teacherId: teacher.id,
+          userId: teacher.userId,
+          email: existing.email || teacher.user?.email || null,
+          phone: existing.phone || teacher.user?.phone || null,
+          photoUrl: existing.photoUrl || photoUrl,
+          assignedBatch: existing.assignedBatch || assignedBatch,
+        },
+      });
+      results.push({ action: "UPDATED", employee: updated });
+    } else {
+      // Create new employee
+      const employeeId = `AP-EMP-${currentYear}-${String(nextSeq).padStart(4, "0")}`;
+      nextSeq++;
+
+      const verificationToken = generateVerificationToken();
+      const verificationUrl = `${baseDomain}/verify/${employeeId}`;
+      const qrCodeDataUrl = await generateQrCodeDataUrl(verificationUrl);
+
+      const created = await prisma.employee.create({
+        data: {
+          employeeId,
+          name: teacher.user?.name || teacher.displayName || "Faculty Member",
+          photoUrl,
+          designation,
+          department,
+          dateOfJoining: teacher.createdAt || new Date(),
+          employmentType: "FULL_TIME",
+          assignedBatch,
+          workLocation: "Rampur, Uttar Pradesh, India",
+          status: "ACTIVE",
+          verificationStatus: "VERIFIED",
+          verificationToken,
+          qrCodeDataUrl,
+          email: teacher.user?.email || null,
+          phone: teacher.user?.phone || null,
+          userId: teacher.userId,
+          teacherId: teacher.id,
+          notes: "Synchronized from official faculty registry",
+        },
+      });
+      existingEmployees.push(created);
+      results.push({ action: "CREATED", employee: created });
+    }
+  }
+
+  return results;
 }

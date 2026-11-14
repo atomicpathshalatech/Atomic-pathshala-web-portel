@@ -10,12 +10,26 @@
  */
 
 import "server-only";
-import crypto from "crypto";
+import * as crypto from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { prisma } from "@/lib/db";
 import { EmployeeCertificateType } from "@prisma/client";
 import { getAppBaseDomain, generateQrCodeDataUrl } from "./employee-service";
 import { uploadFile } from "@/lib/storage";
+
+function cleanWinAnsi(text: string): string {
+  return text
+    .replace(/[VERIFIED]/g, "[VERIFIED]")
+    .replace(/✔/g, "[VERIFIED]")
+    .replace(/—/g, "-")
+    .replace(/–/g, "-")
+    .replace(/•/g, "*")
+    .replace(/[’‘]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[^\x00-\xFF]/g, "");
+}
 
 export function getCertificatePrefix(type: EmployeeCertificateType): string {
   switch (type) {
@@ -165,7 +179,7 @@ Issued on this ${issueDateStr} at Rampur, Uttar Pradesh, India.`;
 }
 
 /**
- * Generate PDF for the certificate with pdf-lib, embedding QR code and official seal
+ * Generate PDF for the certificate with pdf-lib, embedding official logo, Times New Roman typography, QR code and official seal
  */
 export async function buildCertificatePdf(params: {
   certificateNumber: string;
@@ -181,137 +195,192 @@ export async function buildCertificatePdf(params: {
   const page = pdfDoc.addPage([595.28, 841.89]); // A4
   const { width, height } = page.getSize();
 
-  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  // 1. Embed Times New Roman Font Suite
   const timesRoman = await pdfDoc.embedFont(StandardFonts.TimesRoman);
   const timesBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+  const timesItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Corporate Header Background Banner
-  page.drawRectangle({
-    x: 0,
-    y: height - 110,
-    width,
-    height: 110,
-    color: rgb(0.04, 0.12, 0.28), // Deep Navy #0a1f5c
-  });
+  // 2. Load Official Atomic Pathshala Logo
+  let embeddedLogo: any = null;
+  try {
+    const logoPath = path.join(process.cwd(), "public", "logo.png");
+    if (fs.existsSync(logoPath)) {
+      const logoBuffer = fs.readFileSync(logoPath);
+      embeddedLogo = await pdfDoc.embedPng(logoBuffer);
+    }
+  } catch (err) {
+    console.warn("[certificate-service] Could not load logo image:", err);
+  }
 
-  // Header Title
+  const marginX = 52;
+  const usableWidth = width - marginX * 2;
+
+  // 3. Official Corporate Letterhead
+  const headerTopY = height - 42;
+  const logoSize = 52;
+
+  if (embeddedLogo) {
+    page.drawImage(embeddedLogo, {
+      x: marginX,
+      y: headerTopY - logoSize + 6,
+      width: logoSize,
+      height: logoSize,
+    });
+  }
+
+  const textStartX = embeddedLogo ? marginX + logoSize + 14 : marginX;
+
+  // Registered Enterprise Name
   page.drawText("ATOMIC PATHSHALA EDUCATION", {
-    x: 45,
-    y: height - 45,
-    size: 16,
-    font: helveticaBold,
-    color: rgb(1, 1, 1),
+    x: textStartX,
+    y: headerTopY,
+    size: 14,
+    font: timesBold,
+    color: rgb(0.04, 0.12, 0.28), // Deep Navy
   });
 
-  page.drawText("LEARN • EXPLORE • EXCEL • OFFICIAL CERTIFICATE OF RECORD", {
-    x: 45,
-    y: height - 63,
-    size: 8.5,
-    font: helvetica,
-    color: rgb(0.7, 0.82, 0.98),
-  });
-
-  page.drawText("Rampur, Uttar Pradesh, India • https://atomicpathshala.in", {
-    x: 45,
-    y: height - 79,
-    size: 8,
-    font: helvetica,
-    color: rgb(0.6, 0.72, 0.88),
-  });
-
-  // Certificate Reference Pill
-  const refText = `Cert Ref: ${params.certificateNumber}`;
-  const refWidth = helveticaBold.widthOfTextAtSize(refText, 9);
-  page.drawRectangle({
-    x: width - 45 - refWidth - 16,
-    y: height - 68,
-    width: refWidth + 16,
-    height: 24,
-    color: rgb(0.08, 0.22, 0.48),
-    borderColor: rgb(0.3, 0.5, 0.8),
-    borderWidth: 1,
-  });
-  page.drawText(refText, {
-    x: width - 45 - refWidth - 8,
-    y: height - 59,
+  // Corporate Subtitle
+  page.drawText("Official Certificate of Record - Academic & Faculty Directorate", {
+    x: textStartX,
+    y: headerTopY - 14,
     size: 9,
-    font: helveticaBold,
-    color: rgb(1, 1, 1),
+    font: timesRoman,
+    color: rgb(0.35, 0.4, 0.45),
   });
 
-  // Certificate Document Title
-  let currentY = height - 160;
-  const titleWidth = timesBold.widthOfTextAtSize(params.title, 18);
-  page.drawText(params.title, {
-    x: (width - titleWidth) / 2,
-    y: currentY,
-    size: 18,
+  // Official Location & Domain
+  page.drawText("Head Office: Rampur, Uttar Pradesh, India - https://atomicpathshala.in", {
+    x: textStartX,
+    y: headerTopY - 26,
+    size: 8.5,
+    font: timesRoman,
+    color: rgb(0.4, 0.45, 0.5),
+  });
+
+  // Top Right Reference & Issue Date
+  const refText = `Cert Ref: ${params.certificateNumber}`;
+  const dateText = `Date of Issue: ${params.issueDateStr}`;
+  const refWidth = timesBold.widthOfTextAtSize(refText, 8.5);
+  const dateWidth = timesRoman.widthOfTextAtSize(dateText, 8.5);
+
+  page.drawText(refText, {
+    x: width - marginX - refWidth,
+    y: headerTopY - 2,
+    size: 8.5,
     font: timesBold,
     color: rgb(0.04, 0.12, 0.28),
   });
 
-  // Decorative Accent Line
-  currentY -= 12;
-  page.drawLine({
-    start: { x: (width - titleWidth) / 2, y: currentY },
-    end: { x: (width + titleWidth) / 2, y: currentY },
-    thickness: 1.5,
-    color: rgb(0.08, 0.35, 0.72),
+  page.drawText(dateText, {
+    x: width - marginX - dateWidth,
+    y: headerTopY - 16,
+    size: 8.5,
+    font: timesRoman,
+    color: rgb(0.35, 0.4, 0.45),
   });
 
-  // Body Text Paragraphs
-  currentY -= 35;
-  const marginX = 55;
-  const usableWidth = width - marginX * 2;
-  const lines = params.bodyText.split("\n");
+  // Dual Letterhead Accent Rules (Navy & Gold)
+  const ruleY = headerTopY - logoSize - 4;
+  page.drawLine({
+    start: { x: marginX, y: ruleY },
+    end: { x: width - marginX, y: ruleY },
+    thickness: 1.5,
+    color: rgb(0.04, 0.12, 0.28), // Navy
+  });
+  page.drawLine({
+    start: { x: marginX, y: ruleY - 3 },
+    end: { x: width - marginX, y: ruleY - 3 },
+    thickness: 0.75,
+    color: rgb(0.83, 0.69, 0.22), // Gold
+  });
 
-  for (const rawLine of lines) {
-    if (rawLine.length === 0) {
+  // 4. Certificate Document Title (Times Bold, Centered)
+  let currentY = ruleY - 42;
+  const cleanTitle = cleanWinAnsi(params.title);
+  const titleWidth = timesBold.widthOfTextAtSize(cleanTitle, 15);
+  page.drawText(cleanTitle, {
+    x: (width - titleWidth) / 2,
+    y: currentY,
+    size: 15,
+    font: timesBold,
+    color: rgb(0.04, 0.12, 0.28),
+  });
+
+  // Decorative Accent Under Title
+  currentY -= 8;
+  page.drawLine({
+    start: { x: (width - titleWidth) / 2 - 10, y: currentY },
+    end: { x: (width + titleWidth) / 2 + 10, y: currentY },
+    thickness: 1,
+    color: rgb(0.83, 0.69, 0.22), // Gold
+  });
+
+  // 5. Body Text Paragraphs (Times Roman, Professional Leading)
+  currentY -= 32;
+  const rawLines = params.bodyText.split("\n");
+
+  for (const rawLine of rawLines) {
+    const trimmed = rawLine.trim();
+    if (trimmed.length === 0) {
       currentY -= 12;
       continue;
     }
 
-    const words = rawLine.split(" ");
+    const cleaned = cleanWinAnsi(rawLine);
+    const isHeaderLine =
+      cleaned.startsWith("TO WHOMSOEVER") ||
+      cleaned.startsWith("Subject:") ||
+      cleaned.startsWith("Ref:") ||
+      cleaned.startsWith("Official Employment Details:") ||
+      cleaned.startsWith("Dear ");
+
+    const words = cleaned.split(" ");
     let currentLine = "";
+
     for (const word of words) {
       const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const lineWidth = timesRoman.widthOfTextAtSize(testLine, 11);
+      const lineWidth = timesRoman.widthOfTextAtSize(testLine, 10.5);
+
       if (lineWidth > usableWidth) {
         page.drawText(currentLine, {
           x: marginX,
           y: currentY,
-          size: 11,
-          font: currentLine.startsWith("TO WHOMSOEVER") || currentLine.startsWith("Subject:") ? timesBold : timesRoman,
+          size: 10.5,
+          font: isHeaderLine ? timesBold : timesRoman,
           color: rgb(0.12, 0.15, 0.2),
         });
         currentLine = word;
-        currentY -= 18;
+        currentY -= 17;
       } else {
         currentLine = testLine;
       }
     }
+
     if (currentLine) {
       page.drawText(currentLine, {
         x: marginX,
         y: currentY,
-        size: 11,
-        font: currentLine.startsWith("TO WHOMSOEVER") || currentLine.startsWith("Subject:") ? timesBold : timesRoman,
+        size: 10.5,
+        font: isHeaderLine ? timesBold : timesRoman,
         color: rgb(0.12, 0.15, 0.2),
       });
-      currentY -= 18;
+      currentY -= 17;
     }
   }
 
-  // Footer Execution & QR Verification Box
-  const footerY = 175;
+  // 6. Footer Execution & Dual Verification Block
+  const footerY = 160;
+  const footerBoxHeight = 110;
+
   page.drawRectangle({
     x: marginX,
-    y: footerY - 70,
+    y: footerY - footerBoxHeight,
     width: usableWidth,
-    height: 120,
-    color: rgb(0.97, 0.98, 1),
-    borderColor: rgb(0.82, 0.86, 0.92),
+    height: footerBoxHeight,
+    color: rgb(0.98, 0.99, 1),
+    borderColor: rgb(0.85, 0.88, 0.94),
     borderWidth: 1,
   });
 
@@ -321,105 +390,139 @@ export async function buildCertificatePdf(params: {
     const qrBuffer = Buffer.from(qrBase64, "base64");
     const qrImg = await pdfDoc.embedPng(qrBuffer);
     page.drawImage(qrImg, {
-      x: marginX + 16,
-      y: footerY - 60,
-      width: 100,
-      height: 100,
+      x: marginX + 12,
+      y: footerY - footerBoxHeight + 12,
+      width: 86,
+      height: 86,
     });
   } catch (e) {
     console.warn("[certificate-service] QR embed notice:", e);
   }
 
-  // QR Instructions
+  // QR Instructions & Verification details
   page.drawText("OFFICIAL PUBLIC VERIFICATION QR", {
-    x: marginX + 130,
-    y: footerY + 28,
-    size: 9,
-    font: helveticaBold,
+    x: marginX + 110,
+    y: footerY - 24,
+    size: 8.5,
+    font: timesBold,
     color: rgb(0.04, 0.12, 0.28),
   });
 
-  page.drawText("Scan this QR code with any mobile device to immediately", {
-    x: marginX + 130,
-    y: footerY + 12,
+  page.drawText("Scan this QR code with any smartphone to verify the authenticity", {
+    x: marginX + 110,
+    y: footerY - 38,
     size: 8,
-    font: helvetica,
+    font: timesRoman,
     color: rgb(0.3, 0.35, 0.4),
   });
 
-  page.drawText("verify the authenticity of this official record at:", {
-    x: marginX + 130,
-    y: footerY - 2,
+  page.drawText("of this credential directly on the official institutional portal:", {
+    x: marginX + 110,
+    y: footerY - 50,
     size: 8,
-    font: helvetica,
+    font: timesRoman,
     color: rgb(0.3, 0.35, 0.4),
   });
 
-  page.drawText(params.verificationUrl, {
-    x: marginX + 130,
-    y: footerY - 16,
-    size: 8,
-    font: helveticaBold,
-    color: rgb(0.08, 0.35, 0.72),
-  });
-
-  page.drawText(`Issue Date: ${params.issueDateStr} • Certificate ID: ${params.certificateNumber}`, {
-    x: marginX + 130,
-    y: footerY - 34,
+  const cleanVerifyUrl = cleanWinAnsi(params.verificationUrl);
+  page.drawText(cleanVerifyUrl, {
+    x: marginX + 110,
+    y: footerY - 64,
     size: 7.5,
-    font: helvetica,
+    font: timesBold,
+    color: rgb(0.04, 0.22, 0.55),
+  });
+
+  page.drawText(`Certificate ID: ${params.certificateNumber} - Issued: ${params.issueDateStr}`, {
+    x: marginX + 110,
+    y: footerY - 78,
+    size: 7.5,
+    font: timesItalic,
     color: rgb(0.4, 0.45, 0.5),
   });
 
-  // Authorized Signatory Box (Right side)
-  const sigX = width - marginX - 160;
+  page.drawText("[VERIFIED INSTITUTIONAL RECORD]", {
+    x: marginX + 110,
+    y: footerY - 92,
+    size: 7.5,
+    font: timesBold,
+    color: rgb(0.08, 0.55, 0.25),
+  });
+
+  // Authorized Signatory Seal (Right side)
+  const sigX = width - marginX - 170;
+
   page.drawText("AUTHORIZED SIGNATORY", {
     x: sigX,
-    y: footerY + 28,
-    size: 8.5,
-    font: helveticaBold,
+    y: footerY - 24,
+    size: 8,
+    font: timesBold,
+    color: rgb(0.04, 0.12, 0.28),
+  });
+
+  // Calligraphic script signature
+  page.drawText("Firoz Ali", {
+    x: sigX,
+    y: footerY - 48,
+    size: 19,
+    font: timesItalic,
     color: rgb(0.04, 0.12, 0.28),
   });
 
   page.drawText("FIROZ ALI", {
     x: sigX,
-    y: footerY + 5,
-    size: 13,
+    y: footerY - 62,
+    size: 9.5,
     font: timesBold,
     color: rgb(0.04, 0.12, 0.28),
   });
 
   page.drawText("Founder & Proprietor", {
     x: sigX,
-    y: footerY - 10,
-    size: 8.5,
-    font: helveticaBold,
+    y: footerY - 74,
+    size: 8,
+    font: timesRoman,
     color: rgb(0.3, 0.35, 0.4),
   });
 
   page.drawText("ATOMIC PATHSHALA EDUCATION", {
     x: sigX,
-    y: footerY - 24,
-    size: 8,
-    font: helvetica,
+    y: footerY - 86,
+    size: 7.5,
+    font: timesBold,
     color: rgb(0.3, 0.35, 0.4),
   });
 
   page.drawText("Rampur, Uttar Pradesh, India", {
     x: sigX,
-    y: footerY - 38,
+    y: footerY - 98,
     size: 7.5,
-    font: helvetica,
+    font: timesRoman,
     color: rgb(0.4, 0.45, 0.5),
   });
 
-  // Security Guarantee Footer Line
-  page.drawText("Security Guarantee: Document sealed against alteration. Any unauthorized modification invalidates official authenticity.", {
+  // 7. Security Guarantee & Running Page Footer
+  page.drawLine({
+    start: { x: marginX, y: 38 },
+    end: { x: width - marginX, y: 38 },
+    thickness: 0.5,
+    color: rgb(0.85, 0.88, 0.92),
+  });
+
+  page.drawText("Atomic Pathshala - Rampur, Uttar Pradesh, India - Official Service Certificate", {
     x: marginX,
-    y: 35,
-    size: 7.5,
-    font: helvetica,
-    color: rgb(0.5, 0.55, 0.6),
+    y: 26,
+    size: 8,
+    font: timesRoman,
+    color: rgb(0.4, 0.45, 0.5),
+  });
+
+  page.drawText("Page 1 of 1", {
+    x: width - marginX - timesBold.widthOfTextAtSize("Page 1 of 1", 8),
+    y: 26,
+    size: 8,
+    font: timesBold,
+    color: rgb(0.3, 0.35, 0.4),
   });
 
   const pdfBytes = await pdfDoc.save();
