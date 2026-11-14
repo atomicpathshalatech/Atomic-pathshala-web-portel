@@ -22,8 +22,8 @@
  */
 
 import { PDFDocument, PDFPage, PDFFont, PDFImage, rgb, StandardFonts } from "pdf-lib";
-import fs from "fs";
-import path from "path";
+import * as fs from "fs";
+import * as path from "path";
 
 export const BRAND_COLORS = {
   royalBlue: rgb(0.078, 0.337, 0.753),  // #1456C0
@@ -92,6 +92,143 @@ export function cleanWinAnsi(text: string): string {
     .replace(/•/g, "*")
     .replace(/✔/g, "[X]")
     .replace(/[^\x00-\xFF]/g, "");
+}
+
+/**
+ * Format any date input into official institutional UK/Indian format: "19 September 2026"
+ */
+export function formatOfficialDate(dateInput: string | Date | undefined | null): string {
+  if (!dateInput) return "";
+  if (dateInput instanceof Date) {
+    if (isNaN(dateInput.getTime())) return "";
+    return dateInput.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  }
+  const str = String(dateInput).trim();
+  if (!str || str.toLowerCase() === "present") return "Present";
+  if (/^\d{1,2}\s+[A-Za-z]+\s+\d{4}$/.test(str)) {
+    return str;
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  }
+  return str;
+}
+
+/**
+ * Draw a rich paragraph with inline markdown bold (**bold**) support using Times New Roman fonts
+ * Word-level typography engine: never introduces spaces before punctuation like commas, periods, or brackets.
+ */
+export function drawRichParagraph(
+  page: PDFPage,
+  fonts: UniversalFonts,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  fontSize: number = 10,
+  lineHeight: number = 16
+): number {
+  const clean = cleanWinAnsi(text);
+
+  interface StyledPart {
+    text: string;
+    isBold: boolean;
+    width: number;
+  }
+
+  interface RichWord {
+    parts: StyledPart[];
+    totalWidth: number;
+  }
+
+  const words: RichWord[] = [];
+  let currentWordParts: StyledPart[] = [];
+  let currentWordWidth = 0;
+  let currentBuffer = "";
+  let isBold = false;
+
+  const flushBufferToPart = () => {
+    if (currentBuffer.length > 0) {
+      const font = isBold ? fonts.timesBold : fonts.timesRoman;
+      const width = font.widthOfTextAtSize(currentBuffer, fontSize);
+      currentWordParts.push({ text: currentBuffer, isBold, width });
+      currentWordWidth += width;
+      currentBuffer = "";
+    }
+  };
+
+  const flushWord = () => {
+    flushBufferToPart();
+    if (currentWordParts.length > 0) {
+      words.push({ parts: currentWordParts, totalWidth: currentWordWidth });
+      currentWordParts = [];
+      currentWordWidth = 0;
+    }
+  };
+
+  let i = 0;
+  while (i < clean.length) {
+    if (clean[i] === "*" && clean[i + 1] === "*") {
+      flushBufferToPart();
+      isBold = !isBold;
+      i += 2;
+    } else if (/\s/.test(clean[i])) {
+      flushWord();
+      while (i < clean.length && /\s/.test(clean[i])) {
+        i++;
+      }
+    } else {
+      currentBuffer += clean[i];
+      i++;
+    }
+  }
+  flushWord();
+
+  const spaceWidth = fonts.timesBold.widthOfTextAtSize(" ", fontSize) * 1.35;
+  let currentLine: RichWord[] = [];
+  let currentLineWidth = 0;
+  let currentY = y;
+
+  const flushLine = (lineWords: RichWord[]) => {
+    let curX = x;
+    for (let wIdx = 0; wIdx < lineWords.length; wIdx++) {
+      const word = lineWords[wIdx];
+      for (const part of word.parts) {
+        const font = part.isBold ? fonts.timesBold : fonts.timesRoman;
+        page.drawText(part.text, {
+          x: curX,
+          y: currentY,
+          size: fontSize,
+          font,
+          color: BRAND_COLORS.bodyText,
+        });
+        curX += part.width;
+      }
+      if (wIdx < lineWords.length - 1) {
+        curX += spaceWidth;
+      }
+    }
+    currentY -= lineHeight;
+  };
+
+  for (const word of words) {
+    const testWidth = currentLineWidth === 0 ? word.totalWidth : currentLineWidth + spaceWidth + word.totalWidth;
+    if (testWidth > maxWidth && currentLine.length > 0) {
+      flushLine(currentLine);
+      currentLine = [word];
+      currentLineWidth = word.totalWidth;
+    } else {
+      currentLine.push(word);
+      currentLineWidth = testWidth;
+    }
+  }
+
+  if (currentLine.length > 0) {
+    flushLine(currentLine);
+  }
+
+  return currentY;
 }
 
 /**
@@ -177,6 +314,7 @@ export function drawDocumentHeader(
   options: {
     documentRef: string;
     dateStr: string;
+    employeeId?: string;
     isSubsequentPage?: boolean;
     subsequentTitle?: string;
   }
@@ -382,7 +520,8 @@ export async function drawUnifiedVerificationAndSignatory(
     y: number;
     qrCodeDataUrl?: string;
     verificationUrl?: string;
-    documentId: string;
+    employeeId?: string;
+    documentId?: string;
     issueDateStr: string;
     signatureImg?: PDFImage | null;
   }
@@ -453,7 +592,7 @@ export async function drawUnifiedVerificationAndSignatory(
   // Text next to QR Code
   const textLeft = qrDrawn ? marginX + 90 : marginX + 16;
 
-  page.drawText("Verify this certificate at", {
+  page.drawText("Verify this document at", {
     x: textLeft,
     y: boxY + boxHeight - 25,
     size: 9.5,
@@ -485,10 +624,12 @@ export async function drawUnifiedVerificationAndSignatory(
     color: BRAND_COLORS.royalBlue,
   });
 
-  page.drawText(cleanWinAnsi(`Certificate ID: ${options.documentId}`), {
+  // Universal Single ID Requirement: Always display Employee ID (e.g. AP10001)
+  const displayId = options.employeeId || options.documentId || "";
+  page.drawText(cleanWinAnsi(`Employee ID: ${displayId}`), {
     x: textLeft,
     y: boxY + 18,
-    size: 8,
+    size: 8.5,
     font: fonts.timesBold,
     color: BRAND_COLORS.navyBlue,
   });
@@ -503,28 +644,31 @@ export async function drawUnifiedVerificationAndSignatory(
   });
 
   // 4. Right Signatory Block (Universal Official Handwritten Signature)
-  const sigBlockX = midX + 32;
+  const sigBlockX = midX + 28;
   const sigImg = options.signatureImg !== undefined ? options.signatureImg : await loadBrandSignature(pdfDoc);
 
   if (sigImg) {
+    const sigAspect = sigImg.width / sigImg.height;
+    const sigHeight = 36;
+    const sigWidth = Math.min(sigHeight * sigAspect, 105);
     page.drawImage(sigImg, {
-      x: sigBlockX,
-      y: boxY + boxHeight - 50,
-      width: 110,
-      height: 38,
+      x: sigBlockX + (105 - sigWidth) / 2,
+      y: boxY + boxHeight - 48,
+      width: sigWidth,
+      height: sigHeight,
     });
   } else {
     page.drawText("Firoz Ali", {
-      x: sigBlockX + 12,
+      x: sigBlockX + 16,
       y: boxY + boxHeight - 44,
-      size: 20,
+      size: 18,
       font: fonts.timesItalic,
       color: BRAND_COLORS.navyBlue,
     });
   }
 
   page.drawText("Firoz Ali", {
-    x: sigBlockX + 22,
+    x: sigBlockX + 24,
     y: boxY + boxHeight - 64,
     size: 11,
     font: fonts.timesBold,
@@ -532,7 +676,7 @@ export async function drawUnifiedVerificationAndSignatory(
   });
 
   page.drawText("Founder & Director", {
-    x: sigBlockX + 10,
+    x: sigBlockX + 12,
     y: boxY + boxHeight - 77,
     size: 9,
     font: fonts.timesRoman,

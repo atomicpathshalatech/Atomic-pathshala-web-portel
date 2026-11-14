@@ -68,7 +68,7 @@ export function EmployeeCreatorModal({
           <div>
             <h2 className="text-lg font-black tracking-tight">Add New Employee Record</h2>
             <p className="text-xs text-blue-200 mt-0.5">
-              Unique ID (AP-EMP-YYYY-XXXX) and secure verification QR will be generated automatically.
+              Unique permanent ID (AP10001+) and secure verification QR will be generated automatically.
             </p>
           </div>
           <button

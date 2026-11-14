@@ -46,7 +46,7 @@ export default async function VerifyCredentialPage({
   }
 
   const rawToken = params.token;
-  const isEmployeePattern = rawToken.toUpperCase().startsWith("AP-EMP-");
+  const isEmployeePattern = rawToken.toUpperCase().startsWith("AP-EMP-") || /^AP\d{5}$/i.test(rawToken);
 
   // Attempt Employee verification first if it looks like an employee ID or if we test token
   let employeeResult = null;

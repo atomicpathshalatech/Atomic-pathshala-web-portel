@@ -7,7 +7,8 @@ export type OfficialDocumentType =
   | "JOINING_LETTER"
   | "EXPERIENCE_CERTIFICATE"
   | "RELIEVING_LETTER"
-  | "CONTRACT_LETTER";
+  | "CONTRACT_LETTER"
+  | "INTERNSHIP_CERTIFICATE";
 
 interface EmployeeCertificateModalProps {
   isOpen: boolean;
@@ -257,6 +258,7 @@ export function EmployeeCertificateModal({
               {docType === "EXPERIENCE_CERTIFICATE" && "🎓"}
               {docType === "RELIEVING_LETTER" && "📋"}
               {docType === "CONTRACT_LETTER" && "⚖️"}
+              {docType === "INTERNSHIP_CERTIFICATE" && "🏛️"}
             </div>
             <div>
               <h2 className="text-base font-black tracking-tight">
@@ -276,22 +278,22 @@ export function EmployeeCertificateModal({
           </button>
         </div>
 
-        {/* 4 PRIMARY CATEGORY TABS */}
+        {/* 5 OFFICIAL CATEGORY TABS */}
         {!generatedResult && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-1.5 gap-1 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-1.5 gap-1 text-xs">
             <button
               type="button"
               onClick={() => {
                 setDocType("JOINING_LETTER");
                 setIsPreviewOpen(false);
               }}
-              className={`py-2 px-2.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
+              className={`py-2 px-2 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1 ${
                 docType === "JOINING_LETTER"
                   ? "bg-[#1456C0] text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60"
               }`}
             >
-              <span>1. Joining Confirmation</span>
+              <span>1. Joining</span>
             </button>
 
             <button
@@ -300,13 +302,13 @@ export function EmployeeCertificateModal({
                 setDocType("EXPERIENCE_CERTIFICATE");
                 setIsPreviewOpen(false);
               }}
-              className={`py-2 px-2.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
+              className={`py-2 px-2 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1 ${
                 docType === "EXPERIENCE_CERTIFICATE"
                   ? "bg-[#1456C0] text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60"
               }`}
             >
-              <span>2. Experience Certificate</span>
+              <span>2. Experience</span>
             </button>
 
             <button
@@ -315,13 +317,13 @@ export function EmployeeCertificateModal({
                 setDocType("RELIEVING_LETTER");
                 setIsPreviewOpen(false);
               }}
-              className={`py-2 px-2.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
+              className={`py-2 px-2 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1 ${
                 docType === "RELIEVING_LETTER"
                   ? "bg-[#1456C0] text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60"
               }`}
             >
-              <span>3. Relieving Letter</span>
+              <span>3. Relieving</span>
             </button>
 
             <button
@@ -330,13 +332,28 @@ export function EmployeeCertificateModal({
                 setDocType("CONTRACT_LETTER");
                 setIsPreviewOpen(false);
               }}
-              className={`py-2 px-2.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
+              className={`py-2 px-2 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1 ${
                 docType === "CONTRACT_LETTER"
                   ? "bg-[#1456C0] text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60"
               }`}
             >
-              <span>4. Contract Letter</span>
+              <span>4. Contract</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDocType("INTERNSHIP_CERTIFICATE");
+                setIsPreviewOpen(false);
+              }}
+              className={`py-2 px-2 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1 ${
+                docType === "INTERNSHIP_CERTIFICATE"
+                  ? "bg-[#1456C0] text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60"
+              }`}
+            >
+              <span>5. Internship</span>
             </button>
           </div>
         )}
@@ -644,6 +661,56 @@ export function EmployeeCertificateModal({
                     rows={2}
                     value={conductRemarks}
                     onChange={(e) => setConductRemarks(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* CATEGORY 5: INTERNSHIP CERTIFICATE FORM */}
+            {docType === "INTERNSHIP_CERTIFICATE" && (
+              <div className="space-y-3.5 animate-in fade-in duration-150">
+                <div className="border-b border-slate-200 dark:border-slate-700 pb-1">
+                  <h3 className="text-xs font-bold text-[#1456C0] uppercase tracking-wider">
+                    Internship Certificate Parameters
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                      Internship Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={tenureStart}
+                      onChange={(e) => setTenureStart(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                      Internship End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={tenureEnd}
+                      onChange={(e) => setTenureEnd(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1 text-xs">
+                    Performance, Conduct & Project Deliverables Statement
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={conductRemarks}
+                    onChange={(e) => setConductRemarks(e.target.value)}
+                    placeholder="Commendable punctuality, academic discipline, and collaborative contributions."
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
                   />
                 </div>

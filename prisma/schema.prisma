@@ -8769,6 +8769,7 @@ enum EmployeeCertificateType {
   RELIEVING_LETTER
   JOINING_LETTER
   CONTRACT_LETTER
+  INTERNSHIP_CERTIFICATE
 }
 
 enum EmployeeCertificateStatus {
@@ -8856,4 +8857,18 @@ model EmployeeVerificationLog {
   @@index([certificateId])
   @@index([scannedAt])
   @@map("employee_verification_logs")
+}
+
+model EmployeeLegacyIdMapping {
+  id            String   @id @default(cuid())
+  employeeId    String   // DB primary key id in Employee table
+  previousId    String   // Legacy ID like AP-EMP-2026-0001 or EMP-86738655
+  newEmployeeId String   // New standard ID: AP10001, AP10002, etc.
+  migrationDate DateTime @default(now())
+  status        String   @default("MIGRATED")
+  notes         String?
+
+  @@index([previousId])
+  @@index([newEmployeeId])
+  @@map("employee_legacy_id_mappings")
 }

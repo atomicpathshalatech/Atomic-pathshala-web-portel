@@ -30,34 +30,55 @@ export function getAppBaseDomain(): string {
 }
 
 /**
- * Calculate the next available numerical sequence for Employee ID
+ * Calculate the next available numerical sequence for Employee ID (AP10001, AP10002, ...)
+ * Sequential 5-digit sequence starting at 10001. Guaranteed never reused.
  */
 export async function getNextEmployeeSequence(): Promise<number> {
-  const currentYear = new Date().getFullYear();
-  const yearPrefix = `AP-EMP-${currentYear}-`;
   const employees = await prisma.employee.findMany({
-    where: { employeeId: { startsWith: yearPrefix } },
+    where: { employeeId: { startsWith: "AP" } },
     select: { employeeId: true },
   });
-  let maxSeq = 0;
+
+  let maxNum = 10000; // Base before AP10001
   for (const emp of employees) {
-    const parts = emp.employeeId.split("-");
-    const num = parseInt(parts[parts.length - 1] || "0", 10);
-    if (!isNaN(num) && num > maxSeq) {
-      maxSeq = num;
+    const match = emp.employeeId.match(/^AP(\d{5})$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
     }
   }
-  return maxSeq + 1;
+
+  // Also verify against legacy mappings to prevent sequence collisions
+  try {
+    const legacyMappings = await prisma.employeeLegacyIdMapping.findMany({
+      where: { newEmployeeId: { startsWith: "AP" } },
+      select: { newEmployeeId: true },
+    });
+    for (const m of legacyMappings) {
+      const match = m.newEmployeeId.match(/^AP(\d{5})$/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+  } catch (err) {
+    // If table not yet loaded
+  }
+
+  return maxNum + 1;
 }
 
 /**
- * Generate unique, sequential Employee ID: AP-EMP-YYYY-0001
- * Guaranteed never reused.
+ * Generate unique, sequential Employee ID: AP10001, AP10002, ...
+ * Prefix "AP" + 5 digits. Guaranteed never reused.
  */
 export async function generateEmployeeId(): Promise<string> {
-  const currentYear = new Date().getFullYear();
   const nextSeq = await getNextEmployeeSequence();
-  return `AP-EMP-${currentYear}-${String(nextSeq).padStart(4, "0")}`;
+  return `AP${nextSeq}`;
 }
 
 /**
@@ -243,7 +264,7 @@ export async function verifyEmployeePublic(
   const cleanId = decodeURIComponent(identifier).trim();
 
   // Look up by employeeId or verificationToken
-  const employee = await prisma.employee.findFirst({
+  let employee = await prisma.employee.findFirst({
     where: {
       OR: [
         { employeeId: { equals: cleanId, mode: "insensitive" } },
@@ -251,6 +272,24 @@ export async function verifyEmployeePublic(
       ],
     },
   });
+
+  // If not found directly, check legacy ID mapping (e.g. AP-EMP-2026-0001 or EMP-86738655)
+  if (!employee) {
+    try {
+      const legacy = await prisma.employeeLegacyIdMapping.findFirst({
+        where: {
+          previousId: { equals: cleanId, mode: "insensitive" },
+        },
+      });
+      if (legacy) {
+        employee = await prisma.employee.findUnique({
+          where: { id: legacy.employeeId },
+        });
+      }
+    } catch (e) {
+      // Legacy table query fallback
+    }
+  }
 
   const enterpriseName = "ATOMIC PATHSHALA EDUCATION";
   const brandName = "Atomic Pathshala";
@@ -508,8 +547,8 @@ export async function syncFacultyToEmployees() {
       });
       results.push({ action: "UPDATED", employee: updated });
     } else {
-      // Create new employee
-      const employeeId = `AP-EMP-${currentYear}-${String(nextSeq).padStart(4, "0")}`;
+      // Create new employee with standard AP10001+ ID format
+      const employeeId = `AP${nextSeq}`;
       nextSeq++;
 
       const verificationToken = generateVerificationToken();

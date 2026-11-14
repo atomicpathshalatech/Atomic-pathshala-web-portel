@@ -22,6 +22,8 @@ import { buildJoiningConfirmationPdf } from "@/lib/documents/joining-confirmatio
 import { buildExperienceCertificatePdf } from "@/lib/documents/experience-certificate-template";
 import { buildRelievingLetterPdf } from "@/lib/documents/relieving-letter-template";
 import { buildContractLetterPdf } from "@/lib/documents/contract-letter-template";
+import { buildInternshipCertificatePdf } from "@/lib/documents/internship-certificate-template";
+import { formatOfficialDate } from "@/lib/documents/universal-design-system";
 
 function cleanWinAnsi(text: string): string {
   return text
@@ -47,6 +49,8 @@ export function getCertificatePrefix(type: EmployeeCertificateType): string {
       return "AP-JLC";
     case "CONTRACT_LETTER":
       return "AP-CON";
+    case "INTERNSHIP_CERTIFICATE":
+      return "AP-INT";
     default:
       return "AP-CERT";
   }
@@ -206,6 +210,19 @@ Yours Sincerely,`;
 This is to certify that ${employeeName} (Employee ID: ${employeeId}) has formally joined ATOMIC PATHSHALA EDUCATION, operating under the brand name Atomic Pathshala, as ${designation} in the Department of ${department}, effective from ${startDateStr}.
 
 The employee's credentials, qualifications, and pedagogical records have been duly authenticated in the institutional employee repository.
+
+Issued on this ${issueDateStr} at Rampur, Uttar Pradesh, India.`;
+      break;
+
+    case "INTERNSHIP_CERTIFICATE":
+      title = "INTERNSHIP CERTIFICATE";
+      body = `TO WHOMSOEVER IT MAY CONCERN
+
+This is to officially certify that ${employeeName} (Employee ID: ${employeeId}) has successfully undertaken and completed an institutional internship program with ATOMIC PATHSHALA EDUCATION, operating under the brand name Atomic Pathshala, as ${designation} in the Department of ${department}.
+
+The internship tenure commenced on ${startDateStr} and concluded on ${endDateStr}. During this period, the candidate demonstrated diligence, academic rigor, strong analytical acumen, and an earnest commitment to educational operations.
+
+We appreciate the valuable contribution made by ${employeeName} during their internship association with ATOMIC PATHSHALA EDUCATION and wish them the very best in their future endeavors.
 
 Issued on this ${issueDateStr} at Rampur, Uttar Pradesh, India.`;
       break;
@@ -586,9 +603,9 @@ export async function generateCertificate(dto: GenerateCertificateDto) {
   const qrCodeDataUrl = await generateQrCodeDataUrl(verificationUrl);
 
   const issueDate = dto.issueDate ? new Date(dto.issueDate) : new Date();
-  const issueDateStr = issueDate.toLocaleDateString("en-IN", { dateStyle: "long" });
-  const startDateStr = dto.customTenureStart || employee.dateOfJoining.toLocaleDateString("en-IN", { dateStyle: "long" });
-  const endDateStr = dto.customTenureEnd || (employee.lastWorkingDate ? employee.lastWorkingDate.toLocaleDateString("en-IN", { dateStyle: "long" }) : "Present");
+  const issueDateStr = formatOfficialDate(issueDate);
+  const startDateStr = formatOfficialDate(dto.customTenureStart || employee.dateOfJoining);
+  const endDateStr = formatOfficialDate(dto.customTenureEnd || (employee.lastWorkingDate ? employee.lastWorkingDate : "Present"));
 
   const { title, body } = compileCertificateText({
     certificateNumber,
@@ -631,6 +648,21 @@ export async function generateCertificate(dto: GenerateCertificateDto) {
     documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
   } else if (dto.certificateType === "EXPERIENCE_CERTIFICATE") {
     pdfBuffer = await buildExperienceCertificatePdf({
+      certificateNumber,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      startDateStr,
+      endDateStr,
+      conductRemarks: dto.conductRemarks,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else if (dto.certificateType === "INTERNSHIP_CERTIFICATE") {
+    pdfBuffer = await buildInternshipCertificatePdf({
       certificateNumber,
       issueDateStr,
       employeeName: employee.name,
@@ -768,9 +800,9 @@ export async function previewCertificatePdf(dto: GenerateCertificateDto): Promis
   const qrCodeDataUrl = await generateQrCodeDataUrl(verificationUrl);
 
   const issueDate = dto.issueDate ? new Date(dto.issueDate) : new Date();
-  const issueDateStr = issueDate.toLocaleDateString("en-IN", { dateStyle: "long" });
-  const startDateStr = dto.customTenureStart || employee.dateOfJoining.toLocaleDateString("en-IN", { dateStyle: "long" });
-  const endDateStr = dto.customTenureEnd || (employee.lastWorkingDate ? employee.lastWorkingDate.toLocaleDateString("en-IN", { dateStyle: "long" }) : "Present");
+  const issueDateStr = formatOfficialDate(issueDate);
+  const startDateStr = formatOfficialDate(dto.customTenureStart || employee.dateOfJoining);
+  const endDateStr = formatOfficialDate(dto.customTenureEnd || (employee.lastWorkingDate ? employee.lastWorkingDate : "Present"));
 
   let pdfBuffer: Buffer;
   let documentHash: string;
@@ -799,6 +831,21 @@ export async function previewCertificatePdf(dto: GenerateCertificateDto): Promis
     documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
   } else if (dto.certificateType === "EXPERIENCE_CERTIFICATE") {
     pdfBuffer = await buildExperienceCertificatePdf({
+      certificateNumber,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      startDateStr,
+      endDateStr,
+      conductRemarks: dto.conductRemarks,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else if (dto.certificateType === "INTERNSHIP_CERTIFICATE") {
+    pdfBuffer = await buildInternshipCertificatePdf({
       certificateNumber,
       issueDateStr,
       employeeName: employee.name,

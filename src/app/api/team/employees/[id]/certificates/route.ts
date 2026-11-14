@@ -17,6 +17,7 @@ const certSchema = z.object({
     "RELIEVING_LETTER",
     "JOINING_LETTER",
     "CONTRACT_LETTER",
+    "INTERNSHIP_CERTIFICATE",
   ]),
   issueDate: z.string().optional(),
   conductRemarks: z.string().optional(),
