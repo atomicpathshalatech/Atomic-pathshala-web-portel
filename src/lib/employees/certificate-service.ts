@@ -18,6 +18,10 @@ import { prisma } from "@/lib/db";
 import { EmployeeCertificateType } from "@prisma/client";
 import { getAppBaseDomain, generateQrCodeDataUrl } from "./employee-service";
 import { uploadFile } from "@/lib/storage";
+import { buildJoiningConfirmationPdf } from "@/lib/documents/joining-confirmation-template";
+import { buildExperienceCertificatePdf } from "@/lib/documents/experience-certificate-template";
+import { buildRelievingLetterPdf } from "@/lib/documents/relieving-letter-template";
+import { buildContractLetterPdf } from "@/lib/documents/contract-letter-template";
 
 function cleanWinAnsi(text: string): string {
   return text
@@ -41,6 +45,8 @@ export function getCertificatePrefix(type: EmployeeCertificateType): string {
       return "AP-REL";
     case "JOINING_LETTER":
       return "AP-JLC";
+    case "CONTRACT_LETTER":
+      return "AP-CON";
     default:
       return "AP-CERT";
   }
@@ -71,6 +77,36 @@ export type GenerateCertificateDto = {
   customTenureEnd?: string;
   notes?: string;
   createdById?: string;
+
+  // Category 1: Official Joining Confirmation
+  reportingAuthority?: string;
+  assignedSubject?: string;
+  assignedBatch?: string;
+  workLocation?: string;
+  reportingInstructions?: string;
+  workingSchedule?: string;
+  compensationReference?: string;
+  requiredDocuments?: string[];
+
+  // Category 3: Relieving Letter
+  resignationReference?: string;
+  relievingEffectiveDate?: string;
+  handoverClearanceStatus?: string;
+  assetsReturnStatus?: string;
+  finalSettlementStatus?: string;
+
+  // Category 4: Contract Letter
+  contractEndDate?: string;
+  engagementType?: string;
+  compensationType?: string;
+  monthlySalary?: string;
+  annualSalary?: string;
+  perLectureRate?: string;
+  perHourRate?: string;
+  teachingHoursMonthly?: string;
+  paymentCycleDay?: string;
+  noticePeriodDays?: string;
+  specialConditions?: string;
 };
 
 /**
@@ -567,17 +603,112 @@ export async function generateCertificate(dto: GenerateCertificateDto) {
     conductRemarks: dto.conductRemarks,
   });
 
-  // Build PDF
-  const { pdfBuffer, documentHash } = await buildCertificatePdf({
-    certificateNumber,
-    title,
-    bodyText: body,
-    issueDateStr,
-    employeeName: employee.name,
-    employeeId: employee.employeeId,
-    qrCodeDataUrl,
-    verificationUrl,
-  });
+  // 6. Build PDF with Universal Design System
+  let pdfBuffer: Buffer;
+  let documentHash: string;
+
+  if (dto.certificateType === "JOINING_LETTER") {
+    pdfBuffer = await buildJoiningConfirmationPdf({
+      documentRef: certificateNumber,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      employmentType: dto.engagementType || employee.employmentType,
+      joiningDateStr: startDateStr,
+      reportingAuthority: dto.reportingAuthority || "Founder & Director",
+      assignedSubject: dto.assignedSubject,
+      assignedBatch: dto.assignedBatch || employee.assignedBatch || undefined,
+      workLocation: dto.workLocation || employee.workLocation,
+      reportingInstructions: dto.reportingInstructions,
+      workingSchedule: dto.workingSchedule,
+      compensationReference: dto.compensationReference,
+      requiredDocuments: dto.requiredDocuments,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else if (dto.certificateType === "EXPERIENCE_CERTIFICATE") {
+    pdfBuffer = await buildExperienceCertificatePdf({
+      certificateNumber,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      startDateStr,
+      endDateStr,
+      conductRemarks: dto.conductRemarks,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else if (dto.certificateType === "RELIEVING_LETTER") {
+    pdfBuffer = await buildRelievingLetterPdf({
+      documentRef: certificateNumber,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      joiningDateStr: startDateStr,
+      lastWorkingDateStr: endDateStr,
+      relievingEffectiveDateStr: dto.relievingEffectiveDate || endDateStr,
+      resignationReference: dto.resignationReference,
+      handoverClearanceStatus: dto.handoverClearanceStatus || "Completed & Verified",
+      assetsReturnStatus: dto.assetsReturnStatus || "Returned & Deactivated",
+      finalSettlementStatus: dto.finalSettlementStatus || "Settled & Disbursed",
+      conductRemarks: dto.conductRemarks,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else if (dto.certificateType === "CONTRACT_LETTER") {
+    const endContractStr = dto.contractEndDate || new Date(Date.now() + 365 * 24 * 3600 * 1000).toLocaleDateString("en-IN", { dateStyle: "long" });
+    pdfBuffer = await buildContractLetterPdf({
+      agreementReference: certificateNumber,
+      executionDateStr: issueDateStr,
+      effectiveDateStr: startDateStr,
+      contractEndDateStr: endContractStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      address: employee.workLocation,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      subject: dto.assignedSubject,
+      engagementType: dto.engagementType || employee.employmentType,
+      assignedBatch: dto.assignedBatch || employee.assignedBatch || undefined,
+      workLocation: dto.workLocation || employee.workLocation,
+      reportingAuthority: dto.reportingAuthority || "Founder & Director",
+      workingSchedule: dto.workingSchedule,
+      monthlySalary: dto.monthlySalary,
+      annualSalary: dto.annualSalary,
+      perLectureRate: dto.perLectureRate,
+      perHourRate: dto.perHourRate,
+      teachingHoursMonthly: dto.teachingHoursMonthly,
+      paymentCycleDay: dto.paymentCycleDay || "7th",
+      noticePeriodDays: dto.noticePeriodDays || "60",
+      specialConditions: dto.specialConditions,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else {
+    // Legacy fallback for EMPLOYMENT_VERIFICATION
+    const built = await buildCertificatePdf({
+      certificateNumber,
+      title,
+      bodyText: body,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    pdfBuffer = built.pdfBuffer;
+    documentHash = built.documentHash;
+  }
 
   // Upload to R2
   let pdfUrl: string | null = null;
@@ -613,6 +744,152 @@ export async function generateCertificate(dto: GenerateCertificateDto) {
   });
 
   return certificate;
+}
+
+/**
+ * Preview an Employment Certificate / Service Agreement without saving to DB
+ * Fulfills the Mandatory Approval & Preview Step before issuance.
+ */
+export async function previewCertificatePdf(dto: GenerateCertificateDto): Promise<{
+  pdfBuffer: Buffer;
+  documentHash: string;
+  certificateNumber: string;
+}> {
+  const employee = await prisma.employee.findFirst({
+    where: {
+      OR: [{ id: dto.employeeId }, { employeeId: dto.employeeId }],
+    },
+  });
+  if (!employee) throw new Error("Employee record not found.");
+
+  const certificateNumber = `${getCertificatePrefix(dto.certificateType)}-${new Date().getFullYear()}-PREVIEW`;
+  const baseDomain = getAppBaseDomain();
+  const verificationUrl = `${baseDomain}/verify/cert/${certificateNumber}`;
+  const qrCodeDataUrl = await generateQrCodeDataUrl(verificationUrl);
+
+  const issueDate = dto.issueDate ? new Date(dto.issueDate) : new Date();
+  const issueDateStr = issueDate.toLocaleDateString("en-IN", { dateStyle: "long" });
+  const startDateStr = dto.customTenureStart || employee.dateOfJoining.toLocaleDateString("en-IN", { dateStyle: "long" });
+  const endDateStr = dto.customTenureEnd || (employee.lastWorkingDate ? employee.lastWorkingDate.toLocaleDateString("en-IN", { dateStyle: "long" }) : "Present");
+
+  let pdfBuffer: Buffer;
+  let documentHash: string;
+
+  if (dto.certificateType === "JOINING_LETTER") {
+    pdfBuffer = await buildJoiningConfirmationPdf({
+      documentRef: certificateNumber,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      employmentType: dto.engagementType || employee.employmentType,
+      joiningDateStr: startDateStr,
+      reportingAuthority: dto.reportingAuthority || "Founder & Director",
+      assignedSubject: dto.assignedSubject,
+      assignedBatch: dto.assignedBatch || employee.assignedBatch || undefined,
+      workLocation: dto.workLocation || employee.workLocation,
+      reportingInstructions: dto.reportingInstructions,
+      workingSchedule: dto.workingSchedule,
+      compensationReference: dto.compensationReference,
+      requiredDocuments: dto.requiredDocuments,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else if (dto.certificateType === "EXPERIENCE_CERTIFICATE") {
+    pdfBuffer = await buildExperienceCertificatePdf({
+      certificateNumber,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      startDateStr,
+      endDateStr,
+      conductRemarks: dto.conductRemarks,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else if (dto.certificateType === "RELIEVING_LETTER") {
+    pdfBuffer = await buildRelievingLetterPdf({
+      documentRef: certificateNumber,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      joiningDateStr: startDateStr,
+      lastWorkingDateStr: endDateStr,
+      relievingEffectiveDateStr: dto.relievingEffectiveDate || endDateStr,
+      resignationReference: dto.resignationReference,
+      handoverClearanceStatus: dto.handoverClearanceStatus || "Completed & Verified",
+      assetsReturnStatus: dto.assetsReturnStatus || "Returned & Deactivated",
+      finalSettlementStatus: dto.finalSettlementStatus || "Settled & Disbursed",
+      conductRemarks: dto.conductRemarks,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else if (dto.certificateType === "CONTRACT_LETTER") {
+    const endContractStr = dto.contractEndDate || new Date(Date.now() + 365 * 24 * 3600 * 1000).toLocaleDateString("en-IN", { dateStyle: "long" });
+    pdfBuffer = await buildContractLetterPdf({
+      agreementReference: certificateNumber,
+      executionDateStr: issueDateStr,
+      effectiveDateStr: startDateStr,
+      contractEndDateStr: endContractStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      address: employee.workLocation,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      subject: dto.assignedSubject,
+      engagementType: dto.engagementType || employee.employmentType,
+      assignedBatch: dto.assignedBatch || employee.assignedBatch || undefined,
+      workLocation: dto.workLocation || employee.workLocation,
+      reportingAuthority: dto.reportingAuthority || "Founder & Director",
+      workingSchedule: dto.workingSchedule,
+      monthlySalary: dto.monthlySalary,
+      annualSalary: dto.annualSalary,
+      perLectureRate: dto.perLectureRate,
+      perHourRate: dto.perHourRate,
+      teachingHoursMonthly: dto.teachingHoursMonthly,
+      paymentCycleDay: dto.paymentCycleDay || "7th",
+      noticePeriodDays: dto.noticePeriodDays || "60",
+      specialConditions: dto.specialConditions,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    documentHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
+  } else {
+    const { title, body } = compileCertificateText({
+      certificateNumber,
+      certificateType: dto.certificateType,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      designation: dto.customDesignation || employee.designation,
+      department: dto.customDepartment || employee.department,
+      startDateStr,
+      endDateStr,
+      conductRemarks: dto.conductRemarks,
+    });
+    const built = await buildCertificatePdf({
+      certificateNumber,
+      title,
+      bodyText: body,
+      issueDateStr,
+      employeeName: employee.name,
+      employeeId: employee.employeeId,
+      qrCodeDataUrl,
+      verificationUrl,
+    });
+    pdfBuffer = built.pdfBuffer;
+    documentHash = built.documentHash;
+  }
+
+  return { pdfBuffer, documentHash, certificateNumber };
 }
 
 /**

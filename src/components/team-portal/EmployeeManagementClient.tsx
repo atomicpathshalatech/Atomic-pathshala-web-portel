@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EmployeeCreatorModal } from "./EmployeeCreatorModal";
 import { EmployeeIdCardModal } from "./EmployeeIdCardModal";
-import { EmployeeCertificateModal } from "./EmployeeCertificateModal";
+import { EmployeeCertificateModal, OfficialDocumentType } from "./EmployeeCertificateModal";
 
 interface Employee {
   id: string;
@@ -54,6 +54,7 @@ export function EmployeeManagementClient({
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [selectedForCard, setSelectedForCard] = useState<Employee | null>(null);
   const [selectedForCert, setSelectedForCert] = useState<Employee | null>(null);
+  const [certInitialType, setCertInitialType] = useState<OfficialDocumentType>("JOINING_LETTER");
 
   // Quick Action in flight state
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -388,33 +389,56 @@ export function EmployeeManagementClient({
                             🪪 ID Card
                           </button>
 
-                          {/* Issue Experience Certificate */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedForCert(emp)}
-                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-blue-700 dark:text-blue-300"
-                            title="Issue Experience, Relieving, or Verification certificate"
-                          >
-                            🎓 Experience Letter
-                          </button>
+                          {/* 4 Primary Document Categories */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCertInitialType("JOINING_LETTER");
+                                setSelectedForCert(emp);
+                              }}
+                              className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-emerald-700 dark:text-emerald-300"
+                              title="Issue Official Joining Confirmation Letter"
+                            >
+                              ✉️ Joining
+                            </button>
 
-                          {/* Issue Joining Letter */}
-                          <Link
-                            href={emp.teacherId ? `/team/contracts?teacherId=${emp.teacherId}&type=JOINING_LETTER` : "/team/contracts"}
-                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-emerald-700 dark:text-emerald-300"
-                            title="Generate official Appointment / Joining Letter"
-                          >
-                            ✉️ Joining Letter
-                          </Link>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCertInitialType("EXPERIENCE_CERTIFICATE");
+                                setSelectedForCert(emp);
+                              }}
+                              className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-blue-700 dark:text-blue-300"
+                              title="Issue Experience Certificate"
+                            >
+                              🎓 Experience
+                            </button>
 
-                          {/* Issue Service Agreement / Contract */}
-                          <Link
-                            href={emp.teacherId ? `/team/contracts?teacherId=${emp.teacherId}&type=SERVICE_AGREEMENT` : "/team/contracts"}
-                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-purple-700 dark:text-purple-300"
-                            title="Create and execute Educator Service Agreement"
-                          >
-                            📑 Contract
-                          </Link>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCertInitialType("RELIEVING_LETTER");
+                                setSelectedForCert(emp);
+                              }}
+                              className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-amber-700 dark:text-amber-300"
+                              title="Issue Relieving Letter & Clearance Record"
+                            >
+                              📋 Relieving
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCertInitialType("CONTRACT_LETTER");
+                                setSelectedForCert(emp);
+                              }}
+                              className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-purple-700 dark:text-purple-300"
+                              title="Generate Complete Service Agreement Contract with PDF Preview"
+                            >
+                              ⚖️ Contract Letter
+                            </button>
+                          </div>
 
                           {/* Public Verify Link */}
                           <Link
@@ -479,6 +503,7 @@ export function EmployeeManagementClient({
         isOpen={Boolean(selectedForCert)}
         onClose={() => setSelectedForCert(null)}
         employee={selectedForCert}
+        initialType={certInitialType}
       />
     </div>
   );

@@ -8768,6 +8768,7 @@ enum EmployeeCertificateType {
   EMPLOYMENT_VERIFICATION
   RELIEVING_LETTER
   JOINING_LETTER
+  CONTRACT_LETTER
 }
 
 enum EmployeeCertificateStatus {
