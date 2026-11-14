@@ -69,19 +69,19 @@ export function generateServiceAgreementId(count: number = 1): string {
 export function compileServiceAgreementText(vars: ServiceAgreementVariables): string {
   const stampSection = vars.stampCertificateNo
     ? `
---------------------------------------------------------------------------------
+
 [AUTHENTIC STATE GOVERNMENT E-STAMP CERTIFICATE ATTACHED]
 Certificate Number : ${vars.stampCertificateNo}
 Issuing State      : ${vars.stampState || "Uttar Pradesh"}
 Stamp Duty Paid    : INR ${vars.stampDutyAmount || "100"} /-
 Description        : Non-Judicial e-Stamp Certificate (Verified)
---------------------------------------------------------------------------------
+
 `
     : "";
 
-  return `================================================================================
+  return `
                            EDUCATOR SERVICE AGREEMENT
-================================================================================
+
 ${stampSection}
 Agreement Reference : ${vars.agreementReference}
 Execution Date      : ${vars.executionDate}
@@ -129,7 +129,7 @@ consideration contained herein, the Parties agree as follows:
 
 
 CLAUSE 1 — DEFINITIONS AND INTERPRETATION
---------------------------------------------------------------------------------
+
 1.1 Definitions:
     a) "Academic Materials" means all course handouts, handwritten lecture notes, slides, 
        syllabi, formula compilations, DPPs, tests, and answer keys prepared for courses.
@@ -150,7 +150,7 @@ CLAUSE 1 — DEFINITIONS AND INTERPRETATION
 
 
 CLAUSE 2 — APPOINTMENT AND NATURE OF ENGAGEMENT
---------------------------------------------------------------------------------
+
 2.1 Appointment: The Platform Owner hereby engages the Educator as ${vars.designation} 
     in the Department of ${vars.department}, and the Educator accepts such engagement.
 2.2 Engagement Model: The Educator is engaged under the ${vars.engagementType} engagement model.
@@ -159,7 +159,7 @@ CLAUSE 2 — APPOINTMENT AND NATURE OF ENGAGEMENT
 
 
 CLAUSE 3 — SCOPE OF SERVICES
---------------------------------------------------------------------------------
+
 3.1 The Educator shall provide high-quality teaching, academic mentoring, and content creation services.
 3.2 Specific deliverables include:
     a) Conducting scheduled live interactive classes with academic rigor.
@@ -170,7 +170,7 @@ CLAUSE 3 — SCOPE OF SERVICES
 
 
 CLAUSE 4 — TEACHING SCHEDULE AND DELIVERABLES
---------------------------------------------------------------------------------
+
 4.1 The Educator shall deliver approximately ${vars.teachingHoursMonthly || "70 to 80"} hours 
     of live/recorded teaching per month, as detailed in the official Academic Timetable.
 4.2 Timely syllabus completion in accordance with the pre-published Academic Calendar is an 
@@ -178,7 +178,7 @@ CLAUSE 4 — TEACHING SCHEDULE AND DELIVERABLES
 
 
 CLAUSE 5 — ATTENDANCE, PUNCTUALITY AND RESCHEDULING
---------------------------------------------------------------------------------
+
 5.1 Class Punctuality: The Educator must join scheduled live sessions at least 5 minutes 
     prior to commencement to verify audio/visual feeds and digital whiteboard equipment.
 5.2 Planned Leave: The Educator shall provide written notice of at least 24 to 48 hours for 
@@ -188,7 +188,7 @@ CLAUSE 5 — ATTENDANCE, PUNCTUALITY AND RESCHEDULING
 
 
 CLAUSE 6 — COMPENSATION AND PAYMENT TERMS
---------------------------------------------------------------------------------
+
 6.1 Remuneration: In consideration of the satisfactory performance of services, the Platform 
     Owner shall pay the Educator compensation as set forth in Annexure A.
 6.2 Disbursement Cycle: Remuneration shall be processed on or before the ${vars.paymentCycleDay || "7th"} 
@@ -198,7 +198,7 @@ CLAUSE 6 — COMPENSATION AND PAYMENT TERMS
 
 
 CLAUSE 7 — ACADEMIC QUALITY AND TEACHING STANDARDS
---------------------------------------------------------------------------------
+
 7.1 Standards: The Educator shall strictly adhere to NCERT, NEET, and JEE guidelines.
 7.2 Professional Accuracy: The Educator shall exercise reasonable professional skill, care, 
     and pedagogical diligence in lecture preparation and problem-solving.
@@ -207,7 +207,7 @@ CLAUSE 7 — ACADEMIC QUALITY AND TEACHING STANDARDS
 
 
 CLAUSE 8 — INTELLECTUAL PROPERTY RIGHTS
---------------------------------------------------------------------------------
+
 8.1 Pre-Existing Materials: Proprietary notes, self-authored books, or pedagogical frameworks 
     created by the Educator prior to this engagement remain the personal IP of the Educator.
 8.2 Platform-Commissioned Content: All live class recordings, specialized video modules, 
@@ -221,14 +221,14 @@ CLAUSE 8 — INTELLECTUAL PROPERTY RIGHTS
 
 
 CLAUSE 9 — CONFIDENTIALITY AND NON-DISCLOSURE
---------------------------------------------------------------------------------
+
 9.1 Protection: The Educator agrees to hold all Confidential Information in strictest confidence.
 9.2 Exclusions: Information that is publicly known through no fault of the Educator is excluded.
 9.3 Survival: Confidentiality obligations survive the termination of this Agreement indefinitely.
 
 
 CLAUSE 10 — STUDENT DATA PROTECTION AND PRIVACY
---------------------------------------------------------------------------------
+
 10.1 Prohibition on Scraping: The Educator shall not download, scrape, screenshot, or store 
      student contact records, phone numbers, or parent details.
 10.2 Zero Commercial Misuse: Student information shall never be sold, distributed, or utilized 
@@ -237,7 +237,7 @@ CLAUSE 10 — STUDENT DATA PROTECTION AND PRIVACY
 
 
 CLAUSE 11 — PLATFORM USAGE AND DIGITAL SECURITY
---------------------------------------------------------------------------------
+
 11.1 Credential Integrity: Account credentials for the LMS, Live Classroom, and Test Portal 
      are strictly personal and non-transferable. Sharing credentials is a material breach.
 11.2 Prohibited Actions: Reverse engineering, automated data scraping, or security bypassing 
@@ -245,7 +245,7 @@ CLAUSE 11 — PLATFORM USAGE AND DIGITAL SECURITY
 
 
 CLAUSE 12 — STUDENT COMMUNICATION POLICY
---------------------------------------------------------------------------------
+
 12.1 Official Channels: Student interactions must occur exclusively through official platform 
      forums, live chat, or authorized Telegram academic groups.
 12.2 Financial Prohibition: The Educator shall NEVER solicit, accept, or process private tuition 
@@ -253,14 +253,14 @@ CLAUSE 12 — STUDENT COMMUNICATION POLICY
 
 
 CLAUSE 13 — PROFESSIONAL CONDUCT AND ETHICS
---------------------------------------------------------------------------------
+
 13.1 Dignified Atmosphere: The Educator must maintain an inspiring, encouraging, and respectful tone.
 13.2 Zero Harassment: Harassment or discrimination of any kind is subject to immediate termination.
 13.3 Attire & Decorum: Modest, professional attire must be maintained during all video streams.
 
 
 CLAUSE 14 — BRAND AND MARKETING REPRESENTATION
---------------------------------------------------------------------------------
+
 14.1 Authorized Branding: The Educator may use the Atomic Pathshala name and logo only for 
      approved course promotion and authorized academic presentations.
 14.2 Public Statements: The Educator shall refrain from making defamatory or disparaging public 
@@ -268,7 +268,7 @@ CLAUSE 14 — BRAND AND MARKETING REPRESENTATION
 
 
 CLAUSE 15 — EXCLUSIVITY (DURING ACTIVE TERM)
---------------------------------------------------------------------------------
+
 15.1 If designated as Full-Time, the Educator shall not teach parallel competitive coaching 
      batches for competing online EdTech platforms during the active term without prior consent.
 15.2 In accordance with Section 27 of the Indian Contract Act, 1872, no post-termination 
@@ -276,25 +276,25 @@ CLAUSE 15 — EXCLUSIVITY (DURING ACTIVE TERM)
 
 
 CLAUSE 16 — NON-SOLICITATION
---------------------------------------------------------------------------------
+
 16.1 During the term and for 12 months thereafter, the Educator shall not directly solicit 
      actively enrolled Atomic Pathshala students away from the Platform using confidential data.
 
 
 CLAUSE 17 — REPRESENTATIONS AND WARRANTIES
---------------------------------------------------------------------------------
+
 17.1 Qualifications: The Educator represents possessing the academic credentials and competence claimed.
 17.2 Originality: All newly created content provided by the Educator is original and non-infringing.
 
 
 CLAUSE 18 — TERM AND RENEWAL
---------------------------------------------------------------------------------
+
 18.1 This Agreement is effective from ${vars.effectiveDate} until ${vars.contractEndDate}.
 18.2 Extension or renewal may be executed upon mutually agreed written terms prior to expiry.
 
 
 CLAUSE 19 — TERMINATION
---------------------------------------------------------------------------------
+
 19.1 Convenience: Either Party may terminate this Agreement by serving ${vars.noticePeriodDays || "60"} 
      days prior written notice to the other Party.
 19.2 Immediate Cause: The Platform Owner may terminate immediately for gross academic misconduct, 
@@ -302,31 +302,31 @@ CLAUSE 19 — TERMINATION
 
 
 CLAUSE 20 — STUDENT CONTINUITY AND ACADEMIC HANDOVER
---------------------------------------------------------------------------------
+
 20.1 Upon notice of termination, the Educator must complete ongoing course chapters or prepare 
      structured handover notes to the successor faculty to safeguard student academic progress.
 
 
 CLAUSE 21 — POST-TERMINATION OBLIGATIONS
---------------------------------------------------------------------------------
+
 21.1 The Educator shall return all platform assets, cease using internal credentials, and 
      abide by surviving confidentiality and non-solicitation covenants.
 
 
 CLAUSE 22 — LIMITATION OF LIABILITY
---------------------------------------------------------------------------------
+
 22.1 To the extent permitted by law, neither Party shall be liable for indirect, incidental, 
      or consequential damages arising out of this Agreement.
 
 
 CLAUSE 23 — FORCE MAJEURE
---------------------------------------------------------------------------------
+
 23.1 Neither Party shall be held in breach for failure of performance caused by acts of God, 
      pandemics, state-wide internet blackouts, war, or governmental orders.
 
 
 CLAUSE 24 — DISPUTE RESOLUTION AND ARBITRATION
---------------------------------------------------------------------------------
+
 24.1 Amicable Settlement: The Parties shall endeavor to settle disputes amicably within 30 days.
 24.2 Arbitration: Any unresolved dispute shall be referred to arbitration in accordance with 
      the Arbitration and Conciliation Act, 1996, by a sole arbitrator appointed mutually.
@@ -336,7 +336,7 @@ CLAUSE 24 — DISPUTE RESOLUTION AND ARBITRATION
 
 
 CLAUSE 25 — GENERAL PROVISIONS
---------------------------------------------------------------------------------
+
 25.1 Entire Agreement: This Agreement, along with Annexures A, B, and C, constitutes the entire 
      understanding between the Parties and supersedes all prior oral or written discussions.
 25.2 Amendments: Any amendment must be in writing and signed by both Parties.
@@ -345,10 +345,10 @@ CLAUSE 25 — GENERAL PROVISIONS
      and such electronic execution is legally valid and binding under the Information Technology Act, 2000.
 
 
-================================================================================
+
                                   ANNEXURE A
                        COMPENSATION AND DELIVERABLES
-================================================================================
+
 A.1 Compensation Model      : ${vars.compensationType}
 A.2 Annual Compensation     : ${vars.annualSalary || "INR 7,20,000 /- per annum"}
 A.3 Monthly Remuneration    : ${vars.monthlySalary || "INR 60,000 /- per month"}
@@ -361,10 +361,10 @@ A.9 Payment Due Date        : On or before the ${vars.paymentCycleDay || "7th"} 
 A.10 Statutory Deductions   : TDS under Indian Income Tax Act; GST where applicable
 
 
-================================================================================
+
                                   ANNEXURE B
                              ACADEMIC ASSIGNMENT
-================================================================================
+
 B.1 Department              : ${vars.department}
 B.2 Assigned Subject        : ${vars.subject || vars.department}
 B.3 Assigned Batches        : ${vars.assignedBatch || "Comprehensive NEET / JEE Batches"}
@@ -374,22 +374,22 @@ B.6 Reporting Authority     : ${vars.reportingAuthority || "Founder & Proprietor
 B.7 Academic Session        : ${vars.academicSession || "2025-2026 Academic Session"}
 
 
-================================================================================
+
                                   ANNEXURE C
                              SPECIAL CONDITIONS
-================================================================================
+
 ${vars.specialConditions || "No additional special conditions stipulated. Standard institutional terms apply."}
 
 
-================================================================================
+
                               SIGNATURE PAGE
-================================================================================
+
 IN WITNESS WHEREOF, the Parties hereto have caused this Educator Service Agreement 
 to be duly executed by their authorized representatives as of the date first above written.
 
 FIRST PARTY (PLATFORM OWNER):
 
-_________________________________________
+
 FIROZ ALI
 Founder & Proprietor
 ATOMIC PATHSHALA EDUCATION
@@ -400,7 +400,7 @@ Website: https://atomicpathshala.in
 
 SECOND PARTY (EDUCATOR):
 
-_________________________________________
+
 ${vars.educatorName.toUpperCase()}
 Designation : ${vars.designation}
 Educator ID : ${vars.educatorId}

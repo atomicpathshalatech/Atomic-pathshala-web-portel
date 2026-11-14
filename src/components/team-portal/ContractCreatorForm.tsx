@@ -27,33 +27,41 @@ export function ContractCreatorForm({ teachers }: { teachers: TeacherWithUser[] 
 
   // Document Details
   const selectedTeacher = teachers.find((t) => t.id === selectedTeacherId);
-  const [title, setTitle] = useState("Educator Service Agreement — 2025/2026");
-  const [designation, setDesignation] = useState("Faculty Educator");
-  const [subject, setSubject] = useState(selectedTeacher?.department || "Physics");
+  const [title, setTitle] = useState(
+    selectedTeacher?.user?.name
+      ? `Educator Service Agreement — ${selectedTeacher.user.name}`
+      : "Educator Service Agreement"
+  );
+  const [designation, setDesignation] = useState(selectedTeacher?.designation || "");
+  const [subject, setSubject] = useState(selectedTeacher?.department || "");
   
   // Compensation & Deliverables (Annexure A)
   const [compensationType, setCompensationType] = useState("MONTHLY_REMUNERATION");
-  const [annualSalary, setAnnualSalary] = useState("INR 7,20,000 /- (Seven Lakhs Twenty Thousand) per annum");
-  const [monthlySalary, setMonthlySalary] = useState("INR 60,000 /- (Sixty Thousand) per month");
+  const [annualSalary, setAnnualSalary] = useState("");
+  const [monthlySalary, setMonthlySalary] = useState("");
   const [perLectureRate, setPerLectureRate] = useState("");
   const [perHourRate, setPerHourRate] = useState("");
-  const [teachingHoursMonthly, setTeachingHoursMonthly] = useState("70 to 80 Hours");
-  const [doubtHoursMonthly, setDoubtHoursMonthly] = useState("15 Hours per month");
-  const [noticePeriodDays, setNoticePeriodDays] = useState("60 Days");
-  const [effectiveDate, setEffectiveDate] = useState("03 May, 2025");
-  const [contractEndDate, setContractEndDate] = useState("02 May, 2026");
+  const [teachingHoursMonthly, setTeachingHoursMonthly] = useState("");
+  const [doubtHoursMonthly, setDoubtHoursMonthly] = useState("");
+  const [noticePeriodDays, setNoticePeriodDays] = useState("30 Days");
+  const [effectiveDate, setEffectiveDate] = useState(
+    new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+  );
+  const [contractEndDate, setContractEndDate] = useState("");
 
   // Academic Assignment (Annexure B)
-  const [assignedBatch, setAssignedBatch] = useState("Comprehensive NEET / JEE Batches");
+  const [assignedBatch, setAssignedBatch] = useState("");
   const [teachingMedium, setTeachingMedium] = useState("English / Bilingual (Hinglish)");
-  const [workLocation, setWorkLocation] = useState("Rampur, Uttar Pradesh, India / Digital Streaming Studio");
+  const [workLocation, setWorkLocation] = useState("Rampur, Uttar Pradesh, India / Digital Studio");
   const [reportingAuthority, setReportingAuthority] = useState("Founder & Proprietor");
-  const [workingSchedule, setWorkingSchedule] = useState("As per official Academic Timetable");
-  const [academicSession, setAcademicSession] = useState("2025-2026 Academic Session");
+  const [workingSchedule, setWorkingSchedule] = useState("");
+  const [academicSession, setAcademicSession] = useState(
+    `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`
+  );
 
   // Educator Profile Info
-  const [address, setAddress] = useState("Rampur, Uttar Pradesh, India");
-  const [panNumber, setPanNumber] = useState("DTHPA7342Q");
+  const [address, setAddress] = useState("");
+  const [panNumber, setPanNumber] = useState("");
 
   // Special Conditions (Annexure C)
   const [specialConditions, setSpecialConditions] = useState("");
@@ -223,7 +231,20 @@ export function ContractCreatorForm({ teachers }: { teachers: TeacherWithUser[] 
             <label className="text-xs font-bold text-on-surface">Select Educator / Faculty</label>
             <select
               value={selectedTeacherId}
-              onChange={(e) => setSelectedTeacherId(e.target.value)}
+              onChange={(e) => {
+                const newId = e.target.value;
+                setSelectedTeacherId(newId);
+                const teacher = teachers.find((t) => t.id === newId);
+                if (teacher) {
+                  setTitle(
+                    documentType === "JOINING_LETTER"
+                      ? `Educator Appointment Letter — ${teacher.user.name}`
+                      : `Educator Service Agreement — ${teacher.user.name}`
+                  );
+                  if (teacher.designation) setDesignation(teacher.designation);
+                  if (teacher.department) setSubject(teacher.department);
+                }
+              }}
               className="w-full rounded-xl border border-outline-variant/40 bg-surface px-4 py-2.5 text-xs text-on-surface font-semibold outline-none focus:ring-2 focus:ring-primary"
             >
               {teachers.map((t) => (
