@@ -73,7 +73,7 @@ export const MASTER_POLICIES: MasterPolicyDefinition[] = [
     title: "Policy D — Confidentiality & Non-Disclosure",
     description: "Protects proprietary business strategies, student contact records, compensation agreements, and academic test banks.",
     detailedRules: `1. Scope of Confidential Information: Encompasses all non-public technical, financial, and academic information, including but not limited to student databases, enrollment metrics, internal test banks, unreleased course curriculums, faculty compensation terms, and software source code.
-2. Non-Disclosure Obligations: The Educator agrees never to disclose, reproduce, or disseminate confidential information to any third party, competing educational entity, or public forum without prior written authorization from the Founder & Proprietor.
+2. Non-Disclosure Obligations: The Educator agrees never to disclose, reproduce, or disseminate confidential information to any third party, competing educational entity, or public forum without prior written authorization from the Founder and Director.
 3. Faculty Compensation Confidentiality: Remuneration packages, honorariums, and revenue-sharing percentages are strictly confidential between the Educator and Atomic Pathshala.
 4. Survival: Confidentiality obligations survive the termination or expiration of this agreement indefinitely as permitted under applicable Indian law.`,
     version: "1.0",

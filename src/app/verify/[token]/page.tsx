@@ -235,9 +235,12 @@ export default async function VerifyCredentialPage({
                     <span>Issuing Organization:</span>
                     <strong className="text-slate-800 font-bold">{enterpriseName}</strong>
                   </div>
-                  <div className="flex items-center justify-between text-slate-600">
+                  <div className="flex items-start justify-between text-slate-600">
                     <span>Authorized By:</span>
-                    <strong className="text-slate-800 font-bold">Firoz Ali (Founder & Proprietor)</strong>
+                    <div className="text-right">
+                      <strong className="text-slate-800 font-bold block">Firoz Ali</strong>
+                      <span className="text-[10px] text-slate-500 font-medium">Founder and Director</span>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between text-slate-600">
                     <span>Registered Location:</span>

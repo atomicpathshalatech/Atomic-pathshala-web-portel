@@ -6,7 +6,7 @@
  * - Dimensions: Standard CR80 Card (85.6mm x 53.98mm -> 242.6pt x 153pt) or High-Res Print Sheet (A4)
  * - Color Palette: Deep Navy Blue (#0a1f5c), Crisp White, Gold / Cyan Accents (#0284c7)
  * - Brand: ATOMIC PATHSHALA EDUCATION (Brand: Atomic Pathshala)
- * - Signatory: Firoz Ali, Founder & Proprietor
+ * - Signatory: Firoz Ali, Founder and Director
  */
 
 import "server-only";
@@ -337,7 +337,7 @@ export async function generateEmployeeIdCardPdf(employee: Employee): Promise<Buf
     color: rgb(0.04, 0.12, 0.32),
   });
 
-  back.drawText("Founder & Proprietor", {
+  back.drawText("Founder and Director", {
     x: cardWidth - 80,
     y: 13,
     size: 5.5,

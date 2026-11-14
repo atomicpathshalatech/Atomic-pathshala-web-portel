@@ -84,7 +84,7 @@ export function ContractCreatorForm({ teachers }: { teachers: TeacherWithUser[] 
   const [assignedBatch, setAssignedBatch] = useState("");
   const [teachingMedium, setTeachingMedium] = useState("English / Bilingual (Hinglish)");
   const [workLocation, setWorkLocation] = useState("Rampur, Uttar Pradesh, India / Digital Studio");
-  const [reportingAuthority, setReportingAuthority] = useState("Founder & Proprietor");
+  const [reportingAuthority, setReportingAuthority] = useState("Founder and Director");
   const [workingSchedule, setWorkingSchedule] = useState("");
   const [academicSession, setAcademicSession] = useState(
     `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`

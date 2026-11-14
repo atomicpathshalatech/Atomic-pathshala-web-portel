@@ -5,7 +5,7 @@
  * Complies with strict legal identity & statutory rules:
  * - Enterprise: ATOMIC PATHSHALA EDUCATION
  * - Brand: Atomic Pathshala
- * - First Party: Firoz Ali, Founder & Proprietor, Rampur, Uttar Pradesh, India.
+ * - First Party: Firoz Ali, Founder and Director, Rampur, Uttar Pradesh, India.
  * - Second Party: Educator
  * - Indian Contract Act, 1872 (Section 27 non-compete compliance)
  * - Indian Copyright Act, 1957 (commissioned vs pre-existing IP)
@@ -370,7 +370,7 @@ B.2 Assigned Subject        : ${vars.subject || vars.department}
 B.3 Assigned Batches        : ${vars.assignedBatch || "Comprehensive NEET / JEE Batches"}
 B.4 Teaching Medium         : ${vars.teachingMedium || "English / Bilingual (Hinglish)"}
 B.5 Work Location           : ${vars.workLocation || "Rampur, Uttar Pradesh, India / Digital Streaming Studio"}
-B.6 Reporting Authority     : ${vars.reportingAuthority || "Founder & Proprietor"}
+B.6 Reporting Authority     : ${vars.reportingAuthority || "Founder and Director"}
 B.7 Academic Session        : ${vars.academicSession || "2025-2026 Academic Session"}
 
 
@@ -391,7 +391,7 @@ FIRST PARTY (PLATFORM OWNER):
 
 
 FIROZ ALI
-Founder & Proprietor
+Founder and Director
 ATOMIC PATHSHALA EDUCATION
 Brand: Atomic Pathshala
 Rampur, Uttar Pradesh, India

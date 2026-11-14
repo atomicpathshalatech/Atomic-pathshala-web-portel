@@ -198,7 +198,7 @@ export function DirectorCountersignPanel({
             <div>
               <h3 className="font-bold text-base text-on-surface">Fully Executed Document</h3>
               <p className="text-xs text-on-surface-variant">
-                Both Educator and Founder &amp; Proprietor have electronically executed this document. Cryptographically locked.
+                Both Educator and Founder and Director have electronically executed this document. Cryptographically locked.
               </p>
             </div>
           </div>
@@ -297,7 +297,7 @@ export function DirectorCountersignPanel({
             </div>
             <div>
               <h3 className="font-bold text-base text-on-surface">
-                Founder &amp; Proprietor Countersignature
+                Founder and Director Countersignature
               </h3>
               <p className="text-xs text-on-surface-variant">
                 Educator <strong>{educatorSignedName || "Faculty"}</strong> has signed. Please review and countersign to generate the final executed document.

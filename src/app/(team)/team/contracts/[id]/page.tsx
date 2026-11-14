@@ -250,7 +250,7 @@ export default async function ContractDetailPage({
               )}
               <div className="pt-2 border-t border-outline-variant/20 text-xs">
                 <p className="font-bold text-on-surface">Firoz Ali</p>
-                <p className="text-[11px] text-on-surface-variant">Founder &amp; Proprietor &bull; Rampur, Uttar Pradesh, India</p>
+                <p className="text-[11px] text-on-surface-variant">Founder and Director &bull; Rampur, Uttar Pradesh, India</p>
               </div>
             </div>
 

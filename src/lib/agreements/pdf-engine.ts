@@ -37,7 +37,7 @@ export type AgreementPdfInput = {
   educatorSignedName?: string;
   educatorSignedAt?: Date;
   educatorIp?: string;
-  // Founder & Proprietor Signature
+  // Founder and Director Signature
   directorSignatureDataUrl?: string;
   directorSignedName?: string;
   directorSignedAt?: Date;
@@ -745,7 +745,7 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
     color: rgb(0.25, 0.3, 0.38),
   });
 
-  // Founder & Proprietor Calligraphic Signature
+  // Founder and Director Calligraphic Signature
   signPage.drawText("Firoz Ali", {
     x: box2X + 16,
     y: sigAreaY + 12,
@@ -760,7 +760,7 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
     color: rgb(0.8, 0.84, 0.9),
   });
 
-  signPage.drawText(`[VERIFIED] Countersigned: Firoz Ali (Founder & Proprietor)`, {
+  signPage.drawText(`[VERIFIED] Countersigned: Firoz Ali (Founder and Director)`, {
     x: box2X + 12,
     y: signY - 165,
     size: 8,

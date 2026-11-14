@@ -242,7 +242,7 @@ export function EmployeeCertificateModal({
             </div>
 
             <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50">
-              <strong>Official Identity:</strong> This document will be digitally signed under the authority of <strong>Firoz Ali, Founder & Proprietor</strong> of <strong>ATOMIC PATHSHALA EDUCATION</strong>.
+              <strong>Official Identity:</strong> This document will be digitally signed under the authority of <strong>Firoz Ali, Founder and Director</strong> of <strong>ATOMIC PATHSHALA EDUCATION</strong>.
             </div>
 
             {/* Actions */}

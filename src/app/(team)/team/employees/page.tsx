@@ -41,7 +41,7 @@ export default async function TeamEmployeesPage() {
 
   const total = employees.length;
   const active = employees.filter(
-    (e) => e?.status === "ACTIVE" && (e?.verificationStatus === "VERIFIED" || e?.verificationStatus === "ACTIVE")
+    (e) => e?.status === "ACTIVE" && e?.verificationStatus === "VERIFIED"
   ).length;
   const former = employees.filter((e) => e?.status === "FORMER").length;
   const revoked = employees.filter(
@@ -71,10 +71,6 @@ export default async function TeamEmployeesPage() {
       <EmployeeManagementClient
         initialEmployees={employees as any}
         stats={{ total, active, former, revoked }}
-      />
-    </div>
-  );
-}
       />
     </div>
   );

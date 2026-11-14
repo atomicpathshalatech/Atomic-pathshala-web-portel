@@ -477,7 +477,7 @@ export async function buildCertificatePdf(params: {
     color: rgb(0.04, 0.12, 0.28),
   });
 
-  page.drawText("Founder & Proprietor", {
+  page.drawText("Founder and Director", {
     x: sigX,
     y: footerY - 74,
     size: 8,
@@ -601,7 +601,7 @@ export async function generateCertificate(dto: GenerateCertificateDto) {
       employeeId: employee.id,
       issueDate,
       issuedBy: "Firoz Ali",
-      issuedByDesignation: "Founder & Proprietor",
+      issuedByDesignation: "Founder and Director",
       contentSnapshot: body,
       pdfUrl: pdfUrl || s3Key,
       pdfHash: documentHash,
@@ -689,7 +689,7 @@ export async function verifyCertificatePublic(
       tone: isRevoked ? "danger" : "success",
       description: isRevoked
         ? `This certificate was officially revoked. Reason: ${certificate.revocationReason || "Administrative invalidation"}.`
-        : "Official Genuine Certificate issued by Atomic Pathshala Education and signed by Firoz Ali, Founder & Proprietor.",
+        : "Official Genuine Certificate issued by Atomic Pathshala Education and signed by Firoz Ali, Founder and Director.",
     },
     enterpriseName,
     brandName,

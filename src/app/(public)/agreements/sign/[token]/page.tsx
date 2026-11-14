@@ -240,7 +240,7 @@ export default function EducatorSigningPage({
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Next Stage</span>
-              <span className="font-bold text-sky-700">Founder &amp; Proprietor Countersignature</span>
+              <span className="font-bold text-sky-700">Founder and Director Countersignature</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Document Security</span>

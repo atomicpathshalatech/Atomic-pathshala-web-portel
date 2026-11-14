@@ -39,7 +39,7 @@ export const DEFAULT_COMPANY_DETAILS = {
   companyName: "ATOMIC PATHSHALA EDUCATION",
   brandName: "Atomic Pathshala",
   authorizedSignatoryName: "Firoz Ali",
-  authorizedSignatoryDesignation: "Founder & Proprietor",
+  authorizedSignatoryDesignation: "Founder and Director",
   companyAddress: "Rampur, Uttar Pradesh, India",
   website: "https://atomicpathshala.in",
   companyCin: "",

@@ -6,7 +6,7 @@
  * - Enterprise Name: ATOMIC PATHSHALA EDUCATION
  * - Brand: Atomic Pathshala
  * - Founder: Firoz Ali
- * - Designation: Founder & Proprietor
+ * - Designation: Founder and Director
  * - Location: Rampur, Uttar Pradesh, India
  * - Website: https://atomicpathshala.in
  */
