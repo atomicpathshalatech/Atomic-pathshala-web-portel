@@ -12,7 +12,9 @@ export const dynamic = "force-dynamic";
 const countersignSchema = z.object({
   directorSignedName: z.string().min(2, "Director legal name is required"),
   signatureDataUrl: z.string().optional(),
-  signatureMethod: z.enum(["ELECTRONIC_DRAWN", "ELECTRONIC_TYPED"]).default("ELECTRONIC_TYPED"),
+  signatureMethod: z
+    .enum(["ELECTRONIC_DRAWN", "ELECTRONIC_TYPED", "ELECTRONIC_UPLOADED"])
+    .default("ELECTRONIC_TYPED"),
 });
 
 export async function POST(
