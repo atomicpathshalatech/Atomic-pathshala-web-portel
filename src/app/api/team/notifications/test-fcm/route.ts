@@ -31,19 +31,30 @@ export async function GET(req: NextRequest) {
       hasPrivateKey: Boolean(privateKey),
       privateKeyLength: privateKey ? privateKey.length : 0,
       privateKeyStartsWithHeader: privateKey ? privateKey.includes("BEGIN PRIVATE KEY") : false,
+      privateKeyStartSnippet: privateKey ? JSON.stringify(privateKey.slice(0, 35)) : null,
+      privateKeyEndSnippet: privateKey ? JSON.stringify(privateKey.slice(-35)) : null,
       privateKeyHasEscapedNewlines: privateKey ? privateKey.includes("\\n") : false,
       privateKeyHasRealNewlines: privateKey ? privateKey.includes("\n") : false,
     };
+
+    function normalizePrivateKey(rawKey: string): string {
+      let key = rawKey.trim();
+      if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+        key = key.slice(1, -1).trim();
+      }
+      key = key.replace(/\\\\n/g, "\n").replace(/\\n/g, "\n").replace(/\r/g, "");
+      if (!key.includes("-----BEGIN")) {
+        key = `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----`;
+      }
+      return key;
+    }
 
     let initError = null;
     let app = null;
 
     if (projectId && clientEmail && privateKey) {
       try {
-        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-          privateKey = privateKey.slice(1, -1);
-        }
-        privateKey = privateKey.replace(/\\n/g, "\n");
+        const cleanKey = normalizePrivateKey(privateKey);
 
         const existing = getApps();
         if (existing.length) {
@@ -53,7 +64,7 @@ export async function GET(req: NextRequest) {
             credential: cert({
               projectId,
               clientEmail,
-              privateKey,
+              privateKey: cleanKey,
             }),
           });
         }
