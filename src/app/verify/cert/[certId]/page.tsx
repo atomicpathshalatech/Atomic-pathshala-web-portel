@@ -179,20 +179,18 @@ export default async function VerifyCertificatePage({
                 </div>
               </div>
 
-              {/* Download Official Document Action */}
-              {result.certificate.pdfUrl && result.isValid && (
-                <div className="pt-2">
-                  <a
-                    href={result.certificate.pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-3 px-4 rounded-xl bg-[#0a2463] hover:bg-[#0f3a9e] text-white font-bold text-sm text-center flex items-center justify-center gap-2 shadow-lg transition-colors"
-                  >
-                    <span>Download Official Signed PDF</span>
-                    <span>↓</span>
-                  </a>
+              {/* Security & Verification Notice (Public Downloads Disabled) */}
+              <div className="pt-2">
+                <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-center text-xs text-slate-500 space-y-1">
+                  <div className="flex items-center justify-center gap-1.5 text-emerald-700 font-bold text-xs">
+                    <span>✓</span>
+                    <span>Authentic Institutional Document Verified</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    This public portal only verifies document authenticity and cryptographic fingerprint. Direct document downloads are restricted to authorized personnel.
+                  </p>
                 </div>
-              )}
+              </div>
             </div>
           ) : (
             <div className="p-8 text-center space-y-4">

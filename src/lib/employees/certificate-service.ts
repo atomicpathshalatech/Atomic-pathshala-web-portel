@@ -981,7 +981,6 @@ export async function verifyCertificatePublic(
       department: certificate.employee.department,
       issueDate: certificate.issueDate.toLocaleDateString("en-IN", { dateStyle: "long" }),
       issuedBy: `${certificate.issuedBy}, ${certificate.issuedByDesignation}`,
-      pdfUrl: certificate.pdfUrl,
       pdfHash: certificate.pdfHash,
       status: certificate.status,
       verifiedAt: new Date().toISOString(),
