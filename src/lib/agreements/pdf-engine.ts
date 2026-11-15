@@ -44,16 +44,49 @@ export type AgreementPdfInput = {
   directorIp?: string;
 };
 
+/**
+ * Clean WinAnsi text for standard PDF fonts (TimesRoman, Helvetica).
+ * Converts Unicode punctuation, dashes, bullets, and currency symbols to Latin-1 ASCII equivalents.
+ * Strips unsupported non-WinAnsi glyphs without corrupting letters or hyphens.
+ */
 function cleanWinAnsi(text: string): string {
+  if (!text) return "";
   return text
-    .replace(/[VERIFIED]/g, "[VERIFIED]")
-    .replace(/✔/g, "[VERIFIED]")
-    .replace(/-/g, "-")
-    .replace(/–/g, "-")
-    .replace(/-/g, "*")
-    .replace(/[’‘]/g, "'")
-    .replace(/[“”]/g, '"')
-    .replace(/[^\x00-\xFF]/g, "");
+    .replace(/[\u2018\u2019]/g, "'") // Smart single quotes
+    .replace(/[\u201C\u201D]/g, '"') // Smart double quotes
+    .replace(/[\u2014\u2015]/g, " - ") // Em-dash & horizontal bar
+    .replace(/[\u2012\u2013]/g, "-") // En-dash & figure dash
+    .replace(/[\u2022\u25CF\u2023]/g, "- ") // Bullets
+    .replace(/\u2026/g, "...") // Ellipsis
+    .replace(/[\u20B9\u20A8]/g, "INR ") // Rupee symbols
+    .replace(/[\u2713\u2714\u2611]/g, "") // Unicode checkmarks (drawn via vector)
+    .replace(/[^\x00-\xFF]/g, ""); // Strip anything outside WinAnsi
+}
+
+/**
+ * Consistent official institutional date formatting.
+ * Avoids raw ISO strings like "2026-11-14" in executive legal PDFs.
+ */
+function formatOfficialDate(raw: string | Date | undefined | null): string {
+  if (!raw) return "";
+  const d = typeof raw === "string" ? new Date(raw) : raw;
+  if (isNaN(d.getTime())) return String(raw);
+  const day = d.getDate();
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
@@ -63,12 +96,10 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
 }> {
   const pdfDoc = await PDFDocument.create();
 
-  // 1. Embed Times New Roman Fonts Suite
+  // 1. Embed Times New Roman Suite
   const timesRoman = await pdfDoc.embedFont(StandardFonts.TimesRoman);
   const timesBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
   const timesItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
-  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   // 2. Load Official Atomic Pathshala Logo
   let embeddedLogo: any = null;
@@ -93,7 +124,7 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
     }
   }
 
-  // 4. Dimensions & Layout Setup
+  // 4. Dimensions & Standard Layout Setup
   const pageWidth = 595.28; // Standard A4 width
   const pageHeight = 841.89; // Standard A4 height
   const marginX = 54;
@@ -102,13 +133,12 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
   const marginBottom = 50;
   const usableWidth = pageWidth - marginX * 2;
 
-  // 5. Clean and parse raw body text (Filter out terminal ASCII lines)
+  // 5. Clean and parse raw body text (Filter out terminal ASCII borders)
   const rawLines = input.bodyText.split("\n");
   const cleanedLines: string[] = [];
 
   for (const raw of rawLines) {
     const trimmed = raw.trim();
-    // Skip ASCII terminal borders completely
     if (/^[=\-_]{4,}$/.test(trimmed)) continue;
     cleanedLines.push(raw);
   }
@@ -116,6 +146,7 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
   // 6. Tokenize lines into formatted render items
   type RenderItem =
     | { type: "SECTION_HEADER"; text: string }
+    | { type: "CLAUSE_PARAGRAPH"; lead: string; body: string }
     | { type: "KEY_VALUE"; label: string; value: string }
     | { type: "POLICY_LINE"; title: string; desc: string }
     | { type: "SUBJECT_LINE"; text: string }
@@ -132,9 +163,18 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
       continue;
     }
 
+    // Stop parsing template static signature placeholders
+    // (Executed dual signatures are rendered dynamically in Section 8)
+    if (
+      /^SIGNATURE\s+PAGE/i.test(trimmed) ||
+      /^IN\s+WITNESS\s+WHEREOF,\s+the\s+Parties\s+hereto\s+have\s+caused/i.test(trimmed)
+    ) {
+      break;
+    }
+
     // Section Headers
     if (
-      /^(CLAUSE\s+[0-9]+|ANNEXURE\s+[A-Z]|[0-9]+\.\s+[A-Z\s&,()]+$|PARTIES\s+TO\s+THIS\s+AGREEMENT|WHEREAS:|NOW,\s+THEREFORE|EDUCATOR\s+ACCEPTANCE|OFFICIAL\s+LETTER\s+OF\s+APPOINTMENT|EDUCATOR\s+SERVICE\s+AGREEMENT)/i.test(
+      /^(CLAUSE\s+[0-9]+|ANNEXURE\s+[A-Z]|PARTIES\s+TO\s+THIS\s+AGREEMENT:?|WHEREAS:?|NOW,\s+THEREFORE:?$|EDUCATOR\s+ACCEPTANCE:?|OFFICIAL\s+LETTER\s+OF\s+APPOINTMENT|EDUCATOR\s+SERVICE\s+AGREEMENT)/i.test(
         trimmed
       )
     ) {
@@ -165,14 +205,25 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
       continue;
     }
 
-    // Key-Value rows (e.g. "1.1 Educator Name : Umaima Nadeem" or "Document Reference: AP-JL-...")
-    const kvMatch = trimmed.match(/^([0-9.]*\s*[A-Za-z\s&()]+?)\s*:\s*(.+)$/);
+    // Numbered Clause Paragraphs (e.g. "2.1 Appointment : The Platform Owner..." or "7.3 Timely Error Rectification : Any...")
+    const clauseMatch = trimmed.match(/^([0-9]+\.[0-9]+\s+[A-Za-z\s&(),/-]+?)\s*:\s*(.+)$/);
+    if (clauseMatch && clauseMatch[1] && clauseMatch[2]) {
+      parsedItems.push({
+        type: "CLAUSE_PARAGRAPH",
+        lead: clauseMatch[1].trim() + ":",
+        body: clauseMatch[2].trim(),
+      });
+      continue;
+    }
+
+    // Tabular Key-Value rows (short metadata labels like "Agreement Reference : AP-AG-..." or "A.1 Compensation Model : ...")
+    const kvMatch = trimmed.match(/^([A-Za-z0-9.]*\s*[A-Za-z\s&()/-]+?)\s*:\s*(.+)$/);
     if (
       kvMatch &&
       kvMatch[1] &&
       kvMatch[2] &&
       !trimmed.startsWith("http") &&
-      kvMatch[1].length < 35
+      kvMatch[1].trim().length < 32
     ) {
       parsedItems.push({
         type: "KEY_VALUE",
@@ -237,7 +288,9 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
 
     // Document Reference Badge (Right aligned)
     const refText = `Ref: ${input.agreementNumber}`;
-    const dateText = `Date: ${input.effectiveDate}`;
+    const dateFormatted = formatOfficialDate(input.effectiveDate);
+    const dateText = `Date: ${dateFormatted}`;
+
     page.drawText(refText, {
       x: pageWidth - marginX - timesBold.widthOfTextAtSize(refText, 8.5),
       y: headerTop - 10,
@@ -334,13 +387,14 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
     }
   }
 
-  // Wrap helper for Times Roman
+  // Word-wrap helper with safety against long words
   function wrapText(text: string, maxWidth: number, font: any, fontSize: number): string[] {
-    const words = text.split(" ");
+    const words = text.split(/\s+/);
     const lines: string[] = [];
     let currentLine = "";
 
     for (const w of words) {
+      if (!w) continue;
       const test = currentLine ? `${currentLine} ${w}` : w;
       if (font.widthOfTextAtSize(test, fontSize) > maxWidth) {
         if (currentLine) lines.push(currentLine);
@@ -354,36 +408,141 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
   }
 
   // Render items onto pages
-  for (const item of parsedItems) {
+  for (let itemIdx = 0; itemIdx < parsedItems.length; itemIdx++) {
+    const item = parsedItems[itemIdx];
+    if (!item) continue;
+
     switch (item.type) {
       case "EMPTY":
-        currentY -= 8;
+        currentY -= 7;
         break;
 
       case "SECTION_HEADER": {
-        checkPageSpace(38);
-        currentY -= 10;
-        currentPage.drawText(cleanWinAnsi(item.text), {
-          x: marginX,
-          y: currentY,
-          size: 11,
-          font: timesBold,
-          color: rgb(0.04, 0.12, 0.28),
-        });
-        currentY -= 4;
+        const cleanedText = cleanWinAnsi(item.text);
+
+        // Skip redundant document title on page 1 if it matches document title
+        if (
+          isFirstPage &&
+          currentY > pageHeight - marginTopPage1 - 30 &&
+          /^(OFFICIAL\s+)?(EDUCATOR\s+SERVICE\s+AGREEMENT|OFFICIAL\s+LETTER\s+OF\s+APPOINTMENT)$/i.test(
+            cleanedText
+          )
+        ) {
+          break;
+        }
+
+        const headerLines = wrapText(cleanedText, usableWidth, timesBold, 10.5);
+        const headerHeight = headerLines.length * 13 + 14;
+        checkPageSpace(headerHeight);
+        currentY -= 6;
+
+        for (const hLine of headerLines) {
+          currentPage.drawText(hLine, {
+            x: marginX,
+            y: currentY,
+            size: 10.5,
+            font: timesBold,
+            color: rgb(0.04, 0.12, 0.28),
+          });
+          currentY -= 13;
+        }
+
+        currentY -= 2;
+
+        // Bounded gold underline strictly clamped to usableWidth
+        const lastLineWidth = timesBold.widthOfTextAtSize(
+          headerLines[headerLines.length - 1]!,
+          10.5
+        );
+        const lineWidth = Math.min(lastLineWidth, usableWidth);
         currentPage.drawLine({
           start: { x: marginX, y: currentY },
-          end: { x: marginX + timesBold.widthOfTextAtSize(item.text, 11), y: currentY },
+          end: { x: Math.min(marginX + lineWidth, pageWidth - marginX), y: currentY },
           thickness: 1,
           color: rgb(0.85, 0.65, 0.15),
         });
-        currentY -= 12;
+        currentY -= 10;
+        break;
+      }
+
+      case "CLAUSE_PARAGRAPH": {
+        const cleanedLead = cleanWinAnsi(item.lead);
+        const cleanedBody = cleanWinAnsi(item.body);
+        const leadWithSpace = `${cleanedLead} `;
+        const leadWidth = timesBold.widthOfTextAtSize(leadWithSpace, 9.5);
+
+        const words = cleanedBody.split(/\s+/);
+        let line0 = "";
+        let wIdx = 0;
+        const remaining0 = usableWidth - leadWidth;
+
+        while (wIdx < words.length) {
+          const w = words[wIdx]!;
+          const test = line0 ? `${line0} ${w}` : w;
+          if (timesRoman.widthOfTextAtSize(test, 9.5) <= remaining0) {
+            line0 = test;
+            wIdx++;
+          } else {
+            break;
+          }
+        }
+
+        const otherLines: string[] = [];
+        let curLine = "";
+        while (wIdx < words.length) {
+          const w = words[wIdx]!;
+          const test = curLine ? `${curLine} ${w}` : w;
+          if (timesRoman.widthOfTextAtSize(test, 9.5) <= usableWidth) {
+            curLine = test;
+            wIdx++;
+          } else {
+            if (curLine) otherLines.push(curLine);
+            curLine = w;
+            wIdx++;
+          }
+        }
+        if (curLine) otherLines.push(curLine);
+
+        const totalLines = 1 + otherLines.length;
+        checkPageSpace(totalLines * 13 + 4);
+
+        currentPage.drawText(leadWithSpace, {
+          x: marginX,
+          y: currentY,
+          size: 9.5,
+          font: timesBold,
+          color: rgb(0.04, 0.12, 0.28),
+        });
+
+        if (line0) {
+          currentPage.drawText(line0, {
+            x: marginX + leadWidth,
+            y: currentY,
+            size: 9.5,
+            font: timesRoman,
+            color: rgb(0.1, 0.12, 0.16),
+          });
+        }
+        currentY -= 13;
+
+        for (const oLine of otherLines) {
+          checkPageSpace(13);
+          currentPage.drawText(oLine, {
+            x: marginX,
+            y: currentY,
+            size: 9.5,
+            font: timesRoman,
+            color: rgb(0.1, 0.12, 0.16),
+          });
+          currentY -= 13;
+        }
+        currentY -= 2;
         break;
       }
 
       case "SUBJECT_LINE": {
-        checkPageSpace(22);
-        currentY -= 4;
+        checkPageSpace(20);
+        currentY -= 2;
         currentPage.drawText(cleanWinAnsi(item.text), {
           x: marginX,
           y: currentY,
@@ -391,7 +550,7 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
           font: timesBold,
           color: rgb(0.05, 0.1, 0.2),
         });
-        currentY -= 14;
+        currentY -= 13;
         break;
       }
 
@@ -404,18 +563,20 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
           font: timesBold,
           color: rgb(0.08, 0.12, 0.18),
         });
-        currentY -= 14;
+        currentY -= 13;
         break;
       }
 
       case "KEY_VALUE": {
-        checkPageSpace(16);
-        const labelText = `${item.label} :`;
+        checkPageSpace(15);
+        const cleanedLabel = cleanWinAnsi(item.label);
+        const labelText = `${cleanedLabel} :`;
         const labelWidth = timesBold.widthOfTextAtSize(labelText, 9.5);
-        const colWidth = 150;
+        const baseColWidth = 155;
+        const colWidth = Math.max(labelWidth + 8, baseColWidth);
 
         // Draw Label in TimesBold
-        currentPage.drawText(cleanWinAnsi(labelText), {
+        currentPage.drawText(labelText, {
           x: marginX,
           y: currentY,
           size: 9.5,
@@ -424,16 +585,16 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
         });
 
         // Value in TimesRoman
-        const valueX = marginX + Math.max(labelWidth + 8, colWidth);
+        const valueX = marginX + colWidth;
         const availableValueWidth = pageWidth - marginX - valueX;
-        const wrappedVal = wrapText(item.value, availableValueWidth, timesRoman, 9.5);
+        const wrappedVal = wrapText(cleanWinAnsi(item.value), availableValueWidth, timesRoman, 9.5);
 
         for (let i = 0; i < wrappedVal.length; i++) {
           if (i > 0) {
             currentY -= 13;
-            checkPageSpace(14);
+            checkPageSpace(13);
           }
-          currentPage.drawText(cleanWinAnsi(wrappedVal[i]!), {
+          currentPage.drawText(wrappedVal[i]!, {
             x: valueX,
             y: currentY,
             size: 9.5,
@@ -446,11 +607,15 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
       }
 
       case "POLICY_LINE": {
-        checkPageSpace(24);
-        const titleText = `${item.title}: `;
+        const cleanedTitle = cleanWinAnsi(item.title);
+        const titleText = `${cleanedTitle}: `;
         const titleWidth = timesBold.widthOfTextAtSize(titleText, 9.5);
+        const cleanedDesc = cleanWinAnsi(item.desc);
 
-        currentPage.drawText(cleanWinAnsi(titleText), {
+        const wrappedDesc = wrapText(cleanedDesc, usableWidth - titleWidth - 4, timesRoman, 9.5);
+        checkPageSpace((wrappedDesc.length || 1) * 13 + 4);
+
+        currentPage.drawText(titleText, {
           x: marginX,
           y: currentY,
           size: 9.5,
@@ -458,15 +623,8 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
           color: rgb(0.05, 0.15, 0.32),
         });
 
-        const wrappedDesc = wrapText(
-          item.desc,
-          usableWidth - titleWidth - 5,
-          timesRoman,
-          9.5
-        );
-
         if (wrappedDesc.length > 0 && wrappedDesc[0]) {
-          currentPage.drawText(cleanWinAnsi(wrappedDesc[0]), {
+          currentPage.drawText(wrappedDesc[0], {
             x: marginX + titleWidth,
             y: currentY,
             size: 9.5,
@@ -476,9 +634,9 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
           currentY -= 13;
 
           for (let i = 1; i < wrappedDesc.length; i++) {
-            checkPageSpace(14);
-            currentPage.drawText(cleanWinAnsi(wrappedDesc[i]!), {
-              x: marginX + 15,
+            checkPageSpace(13);
+            currentPage.drawText(wrappedDesc[i]!, {
+              x: marginX + 12,
               y: currentY,
               size: 9.5,
               font: timesRoman,
@@ -487,70 +645,101 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
             currentY -= 13;
           }
         }
+        currentY -= 2;
         break;
       }
 
       case "PARAGRAPH": {
-        const wrapped = wrapText(item.text, usableWidth, timesRoman, 9.5);
+        const cleaned = cleanWinAnsi(item.text);
+        const wrapped = wrapText(cleaned, usableWidth, timesRoman, 9.5);
+        checkPageSpace(wrapped.length * 13 + 4);
+
         for (const line of wrapped) {
-          checkPageSpace(14);
-          currentPage.drawText(cleanWinAnsi(line), {
+          checkPageSpace(13);
+          currentPage.drawText(line, {
             x: marginX,
             y: currentY,
             size: 9.5,
             font: timesRoman,
             color: rgb(0.1, 0.12, 0.16),
           });
-          currentY -= 13.5;
+          currentY -= 13;
         }
+        currentY -= 2;
         break;
       }
     }
   }
 
-  // 8. Dedicated Signatures & Execution Page
-  const signPage = pdfDoc.addPage([pageWidth, pageHeight]);
-  pages.push(signPage);
-  renderSubsequentHeader(signPage);
+  // 8. Dual Electronic Signature Execution Section
+  checkPageSpace(335);
 
-  let signY = pageHeight - 65;
+  let signY = currentY - 8;
 
-  signPage.drawText("IN WITNESS WHEREOF: DUAL ELECTRONIC SIGNATURE EXECUTION", {
+  currentPage.drawText("IN WITNESS WHEREOF: DUAL ELECTRONIC SIGNATURE EXECUTION", {
     x: marginX,
     y: signY,
-    size: 13,
+    size: 11.5,
     font: timesBold,
     color: rgb(0.04, 0.12, 0.28),
   });
-  signY -= 18;
+  signY -= 16;
 
   const statutoryText1 =
     "Pursuant to Section 10A of the Information Technology Act, 2000 and the Indian Contract Act, 1872,";
   const statutoryText2 =
     "both parties have reviewed, approved, and recorded their electronic execution to all covenants, payment terms, and policies.";
-  signPage.drawText(statutoryText1, {
+  currentPage.drawText(statutoryText1, {
     x: marginX,
     y: signY,
-    size: 8.5,
+    size: 8,
     font: timesRoman,
     color: rgb(0.3, 0.35, 0.4),
   });
-  signY -= 12;
-  signPage.drawText(statutoryText2, {
+  signY -= 11;
+  currentPage.drawText(statutoryText2, {
     x: marginX,
     y: signY,
-    size: 8.5,
+    size: 8,
     font: timesRoman,
     color: rgb(0.3, 0.35, 0.4),
   });
-  signY -= 30;
+  signY -= 22;
 
-  const colWidth = (usableWidth - 20) / 2;
-  const boxHeight = 220;
+  const colWidth = (usableWidth - 18) / 2;
+  const boxHeight = 205;
+
+  function drawVerificationBadge(page: any, x: number, y: number, badgeText: string) {
+    page.drawCircle({
+      x: x + 6,
+      y: y + 3,
+      size: 4.5,
+      color: rgb(0.1, 0.55, 0.25),
+    });
+    page.drawLine({
+      start: { x: x + 3.8, y: y + 3.2 },
+      end: { x: x + 5.5, y: y + 1.2 },
+      thickness: 1.1,
+      color: rgb(1, 1, 1),
+    });
+    page.drawLine({
+      start: { x: x + 5.5, y: y + 1.2 },
+      end: { x: x + 8.5, y: y + 5.0 },
+      thickness: 1.1,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText(badgeText, {
+      x: x + 14,
+      y: y,
+      size: 8,
+      font: timesBold,
+      color: rgb(0.08, 0.5, 0.22),
+    });
+  }
 
   // Box 1: Educator Box (Left)
   const box1X = marginX;
-  signPage.drawRectangle({
+  currentPage.drawRectangle({
     x: box1X,
     y: signY - boxHeight,
     width: colWidth,
@@ -560,121 +749,114 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
     color: rgb(0.985, 0.99, 1),
   });
 
-  signPage.drawRectangle({
+  currentPage.drawRectangle({
     x: box1X,
-    y: signY - 26,
+    y: signY - 24,
     width: colWidth,
-    height: 26,
+    height: 24,
     color: rgb(0.06, 0.18, 0.38),
   });
 
-  signPage.drawText("FIRST PARTY: THE EDUCATOR", {
-    x: box1X + 12,
-    y: signY - 17,
-    size: 9.5,
+  currentPage.drawText("FIRST PARTY: THE EDUCATOR", {
+    x: box1X + 10,
+    y: signY - 16,
+    size: 9,
     font: timesBold,
     color: rgb(1, 1, 1),
   });
 
-  let fieldY1 = signY - 44;
-  signPage.drawText(`Name: ${input.educatorName}`, {
-    x: box1X + 12,
+  let fieldY1 = signY - 40;
+  currentPage.drawText(`Name: ${input.educatorName}`, {
+    x: box1X + 10,
     y: fieldY1,
-    size: 9.5,
+    size: 9,
     font: timesBold,
     color: rgb(0.08, 0.12, 0.18),
   });
-  fieldY1 -= 14;
+  fieldY1 -= 13;
 
-  signPage.drawText(`Designation: ${input.designation}`, {
-    x: box1X + 12,
+  currentPage.drawText(`Designation: ${input.designation}`, {
+    x: box1X + 10,
     y: fieldY1,
-    size: 8.5,
+    size: 8,
     font: timesRoman,
     color: rgb(0.25, 0.3, 0.38),
   });
-  fieldY1 -= 14;
+  fieldY1 -= 13;
 
-  // Only display PAN if genuine and not placeholder
   if (input.educatorPan && !input.educatorPan.includes("ABCDE") && input.educatorPan.length >= 8) {
-    signPage.drawText(`PAN: ${input.educatorPan}`, {
-      x: box1X + 12,
+    currentPage.drawText(`PAN: ${input.educatorPan}`, {
+      x: box1X + 10,
       y: fieldY1,
-      size: 8.5,
+      size: 8,
       font: timesRoman,
       color: rgb(0.25, 0.3, 0.38),
     });
-    fieldY1 -= 14;
+    fieldY1 -= 13;
   }
 
-  // Draw Educator Signature (Clean cursive calligraphic or genuine canvas PNG)
-  const sigAreaY = signY - 145;
-  let signatureDrawn = false;
-
+  // Draw Educator Signature
+  const sigAreaY = signY - 135;
+  let eduSigDrawn = false;
   if (input.educatorSignatureDataUrl && input.educatorSignatureDataUrl.length > 2000) {
     try {
       const base64Data = input.educatorSignatureDataUrl.replace(/^data:image\/\w+;base64,/, "");
       const sigImgBuffer = Buffer.from(base64Data, "base64");
-      const sigImg = await pdfDoc.embedPng(sigImgBuffer).catch(async () => {
-        return await pdfDoc.embedJpg(sigImgBuffer);
+      const sigImg = await pdfDoc.embedPng(sigImgBuffer).catch(() => pdfDoc.embedJpg(sigImgBuffer));
+      const maxW = 135;
+      const maxH = 42;
+      const scale = Math.min(maxW / sigImg.width, maxH / sigImg.height, 1);
+      const drawW = sigImg.width * scale;
+      const drawH = sigImg.height * scale;
+      currentPage.drawImage(sigImg, {
+        x: box1X + 14,
+        y: sigAreaY + (maxH - drawH) / 2,
+        width: drawW,
+        height: drawH,
       });
-      signPage.drawImage(sigImg, {
-        x: box1X + 16,
-        y: sigAreaY,
-        width: 130,
-        height: 40,
-      });
-      signatureDrawn = true;
-    } catch {
-      signatureDrawn = false;
-    }
+      eduSigDrawn = true;
+    } catch {}
   }
 
-  if (!signatureDrawn) {
-    // Elegant Calligraphic Signature
-    signPage.drawText(input.educatorSignedName || input.educatorName, {
-      x: box1X + 16,
+  if (!eduSigDrawn) {
+    currentPage.drawText(input.educatorSignedName || input.educatorName, {
+      x: box1X + 14,
       y: sigAreaY + 12,
       size: 19,
       font: timesItalic,
       color: rgb(0.04, 0.15, 0.4),
     });
-    signPage.drawLine({
-      start: { x: box1X + 14, y: sigAreaY + 6 },
-      end: { x: box1X + colWidth - 14, y: sigAreaY + 6 },
+    currentPage.drawLine({
+      start: { x: box1X + 12, y: sigAreaY + 6 },
+      end: { x: box1X + colWidth - 12, y: sigAreaY + 6 },
       thickness: 0.75,
       color: rgb(0.8, 0.84, 0.9),
     });
   }
 
-  signPage.drawText(`[VERIFIED] Electronically Signed: ${input.educatorSignedName || input.educatorName}`, {
-    x: box1X + 12,
-    y: signY - 165,
-    size: 8,
-    font: timesBold,
-    color: rgb(0.1, 0.5, 0.25), // Forest Green
-  });
+  drawVerificationBadge(
+    currentPage,
+    box1X + 10,
+    signY - 152,
+    `Digitally Verified & Signed: ${input.educatorSignedName || input.educatorName}`
+  );
 
   const eduTime = input.educatorSignedAt
-    ? input.educatorSignedAt.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }) + " (IST)"
-    : `${input.effectiveDate} (IST)`;
+    ? formatOfficialDate(input.educatorSignedAt) + " (IST)"
+    : `${formatOfficialDate(input.effectiveDate)} (IST)`;
 
-  signPage.drawText(`Timestamp: ${eduTime}`, {
-    x: box1X + 12,
-    y: signY - 178,
+  currentPage.drawText(`Timestamp: ${eduTime}`, {
+    x: box1X + 10,
+    y: signY - 167,
     size: 7.5,
     font: timesRoman,
     color: rgb(0.4, 0.45, 0.5),
   });
 
   if (input.educatorIp) {
-    signPage.drawText(`Signer IP: ${input.educatorIp}`, {
-      x: box1X + 12,
-      y: signY - 190,
+    currentPage.drawText(`Signer IP: ${input.educatorIp}`, {
+      x: box1X + 10,
+      y: signY - 179,
       size: 7.5,
       font: timesRoman,
       color: rgb(0.4, 0.45, 0.5),
@@ -682,8 +864,8 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
   }
 
   // Box 2: Atomic Pathshala Box (Right)
-  const box2X = box1X + colWidth + 20;
-  signPage.drawRectangle({
+  const box2X = box1X + colWidth + 18;
+  currentPage.drawRectangle({
     x: box2X,
     y: signY - boxHeight,
     width: colWidth,
@@ -693,150 +875,152 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
     color: rgb(0.985, 0.99, 1),
   });
 
-  signPage.drawRectangle({
+  currentPage.drawRectangle({
     x: box2X,
-    y: signY - 26,
+    y: signY - 24,
     width: colWidth,
-    height: 26,
+    height: 24,
     color: rgb(0.04, 0.12, 0.28),
   });
 
-  signPage.drawText("SECOND PARTY: ATOMIC PATHSHALA", {
-    x: box2X + 12,
-    y: signY - 17,
-    size: 9.5,
+  currentPage.drawText("SECOND PARTY: ATOMIC PATHSHALA", {
+    x: box2X + 10,
+    y: signY - 16,
+    size: 9,
     font: timesBold,
     color: rgb(1, 1, 1),
   });
 
-  let fieldY2 = signY - 44;
-  signPage.drawText(`Authorized Signatory: ${input.authorizedSignatoryName}`, {
-    x: box2X + 12,
+  let fieldY2 = signY - 40;
+  currentPage.drawText(`Authorized Signatory: ${input.authorizedSignatoryName}`, {
+    x: box2X + 10,
     y: fieldY2,
-    size: 9.5,
+    size: 9,
     font: timesBold,
     color: rgb(0.08, 0.12, 0.18),
   });
-  fieldY2 -= 14;
+  fieldY2 -= 13;
 
-  signPage.drawText(`Designation: ${input.authorizedSignatoryDesignation}`, {
-    x: box2X + 12,
+  currentPage.drawText(`Designation: ${input.authorizedSignatoryDesignation}`, {
+    x: box2X + 10,
     y: fieldY2,
-    size: 8.5,
+    size: 8,
     font: timesRoman,
     color: rgb(0.25, 0.3, 0.38),
   });
-  fieldY2 -= 14;
+  fieldY2 -= 13;
 
-  signPage.drawText("Enterprise: ATOMIC PATHSHALA EDUCATION", {
-    x: box2X + 12,
+  currentPage.drawText("Enterprise: ATOMIC PATHSHALA EDUCATION", {
+    x: box2X + 10,
     y: fieldY2,
-    size: 8.5,
+    size: 8,
     font: timesRoman,
     color: rgb(0.25, 0.3, 0.38),
   });
-  fieldY2 -= 14;
+  fieldY2 -= 13;
 
-  signPage.drawText("Location: Rampur, Uttar Pradesh, India", {
-    x: box2X + 12,
+  currentPage.drawText("Location: Rampur, Uttar Pradesh, India", {
+    x: box2X + 10,
     y: fieldY2,
-    size: 8.5,
+    size: 8,
     font: timesRoman,
     color: rgb(0.25, 0.3, 0.38),
   });
 
-  // Founder and Director Signature (Universal handwritten signature image from public/brand/signature.png or passed dataUrl)
-  let directorSigDrawn = false;
+  // Founder and Director Signature (Universal brand signature)
+  let dirSigDrawn = false;
   const dirSigData = input.directorSignatureDataUrl || undefined;
   if (dirSigData && dirSigData.length > 2000) {
     try {
       const base64Data = dirSigData.replace(/^data:image\/\w+;base64,/, "");
       const sigImgBuffer = Buffer.from(base64Data, "base64");
-      const sigImg = await pdfDoc.embedPng(sigImgBuffer).catch(async () => {
-        return await pdfDoc.embedJpg(sigImgBuffer);
+      const sigImg = await pdfDoc.embedPng(sigImgBuffer).catch(() => pdfDoc.embedJpg(sigImgBuffer));
+      const maxW = 135;
+      const maxH = 42;
+      const scale = Math.min(maxW / sigImg.width, maxH / sigImg.height, 1);
+      const drawW = sigImg.width * scale;
+      const drawH = sigImg.height * scale;
+      currentPage.drawImage(sigImg, {
+        x: box2X + 14,
+        y: sigAreaY + (maxH - drawH) / 2,
+        width: drawW,
+        height: drawH,
       });
-      signPage.drawImage(sigImg, {
-        x: box2X + 16,
-        y: sigAreaY,
-        width: 130,
-        height: 40,
-      });
-      directorSigDrawn = true;
+      dirSigDrawn = true;
     } catch {}
   }
 
-  if (!directorSigDrawn) {
-    // Load universal approved brand signature from disk (public/brand/signature.png)
+  if (!dirSigDrawn) {
     try {
       const brandSigPath = path.join(process.cwd(), "public", "brand", "signature.png");
       if (fs.existsSync(brandSigPath)) {
         const sigImg = await pdfDoc.embedPng(fs.readFileSync(brandSigPath));
-        signPage.drawImage(sigImg, {
-          x: box2X + 16,
-          y: sigAreaY,
-          width: 130,
-          height: 40,
+        const maxW = 135;
+        const maxH = 42;
+        const scale = Math.min(maxW / sigImg.width, maxH / sigImg.height, 1);
+        const drawW = sigImg.width * scale;
+        const drawH = sigImg.height * scale;
+        currentPage.drawImage(sigImg, {
+          x: box2X + 14,
+          y: sigAreaY + (maxH - drawH) / 2,
+          width: drawW,
+          height: drawH,
         });
-        directorSigDrawn = true;
+        dirSigDrawn = true;
       }
     } catch {}
   }
 
-  if (!directorSigDrawn) {
-    signPage.drawText("Firoz Ali", {
-      x: box2X + 16,
+  if (!dirSigDrawn) {
+    currentPage.drawText("Firoz Ali", {
+      x: box2X + 14,
       y: sigAreaY + 12,
-      size: 21,
+      size: 20,
       font: timesItalic,
       color: rgb(0.04, 0.15, 0.4),
     });
-    signPage.drawLine({
-      start: { x: box2X + 14, y: sigAreaY + 6 },
-      end: { x: box2X + colWidth - 14, y: sigAreaY + 6 },
+    currentPage.drawLine({
+      start: { x: box2X + 12, y: sigAreaY + 6 },
+      end: { x: box2X + colWidth - 12, y: sigAreaY + 6 },
       thickness: 0.75,
       color: rgb(0.8, 0.84, 0.9),
     });
   }
 
-  signPage.drawText(`[VERIFIED] Countersigned: Firoz Ali (Founder and Director)`, {
-    x: box2X + 12,
-    y: signY - 165,
-    size: 8,
-    font: timesBold,
-    color: rgb(0.1, 0.5, 0.25),
-  });
+  drawVerificationBadge(
+    currentPage,
+    box2X + 10,
+    signY - 152,
+    "Digitally Verified & Countersigned: Firoz Ali"
+  );
 
   const dirTime = input.directorSignedAt
-    ? input.directorSignedAt.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }) + " (IST)"
-    : `${input.effectiveDate} (IST)`;
+    ? formatOfficialDate(input.directorSignedAt) + " (IST)"
+    : `${formatOfficialDate(input.effectiveDate)} (IST)`;
 
-  signPage.drawText(`Timestamp: ${dirTime}`, {
-    x: box2X + 12,
-    y: signY - 178,
+  currentPage.drawText(`Timestamp: ${dirTime}`, {
+    x: box2X + 10,
+    y: signY - 167,
     size: 7.5,
     font: timesRoman,
     color: rgb(0.4, 0.45, 0.5),
   });
 
   if (input.directorIp) {
-    signPage.drawText(`Signer IP: ${input.directorIp}`, {
-      x: box2X + 12,
-      y: signY - 190,
+    currentPage.drawText(`Signer IP: ${input.directorIp}`, {
+      x: box2X + 10,
+      y: signY - 179,
       size: 7.5,
       font: timesRoman,
       color: rgb(0.4, 0.45, 0.5),
     });
   }
 
-  // Bottom Cryptographic Audit Block
-  const auditY = signY - boxHeight - 20;
-  const auditHeight = 78;
+  // Cryptographic Audit Seal Block
+  const auditY = signY - boxHeight - 16;
+  const auditHeight = 68;
 
-  signPage.drawRectangle({
+  currentPage.drawRectangle({
     x: marginX,
     y: auditY - auditHeight,
     width: usableWidth,
@@ -846,46 +1030,46 @@ export async function generateAgreementPdf(input: AgreementPdfInput): Promise<{
     color: rgb(0.97, 0.985, 1),
   });
 
-  signPage.drawText("CRYPTOGRAPHIC AUDIT & STATUTORY COMPLIANCE SEAL", {
-    x: marginX + 14,
-    y: auditY - 18,
-    size: 8.5,
+  currentPage.drawText("CRYPTOGRAPHIC AUDIT & STATUTORY COMPLIANCE SEAL", {
+    x: marginX + 12,
+    y: auditY - 16,
+    size: 8,
     font: timesBold,
     color: rgb(0.04, 0.12, 0.28),
   });
 
-  signPage.drawText(`Agreement Reference Number: ${input.agreementNumber}`, {
-    x: marginX + 14,
-    y: auditY - 32,
-    size: 8,
+  currentPage.drawText(`Agreement Reference Number: ${input.agreementNumber}`, {
+    x: marginX + 12,
+    y: auditY - 29,
+    size: 7.5,
     font: timesRoman,
     color: rgb(0.2, 0.25, 0.32),
   });
 
   const stampInfo = input.eStampCertNo
     ? `State Government e-Stamp Verified: ${input.eStampCertNo} (${input.eStampState || "UP"} - INR ${input.eStampAmount || "100"})`
-    : "Standard execution mode pursuant to Section 10A of the IT Act, 2000.";
+    : "Standard electronic execution pursuant to Section 10A of the Information Technology Act, 2000.";
 
-  signPage.drawText(stampInfo, {
-    x: marginX + 14,
-    y: auditY - 45,
-    size: 8,
+  currentPage.drawText(stampInfo, {
+    x: marginX + 12,
+    y: auditY - 41,
+    size: 7.5,
     font: timesRoman,
     color: rgb(0.2, 0.25, 0.32),
   });
 
-  signPage.drawText(
+  currentPage.drawText(
     "Legal Validity: Both parties confirm that electronic execution constitutes full mutual assent and is legally binding.",
     {
-      x: marginX + 14,
-      y: auditY - 58,
-      size: 7.5,
+      x: marginX + 12,
+      y: auditY - 53,
+      size: 7,
       font: timesItalic,
       color: rgb(0.35, 0.4, 0.45),
     }
   );
 
-  // 9. Add Running Page Numbers to all pages (Page X of Y)
+  // 9. Running Page Numbers on all pages (Page X of Y)
   const totalPages = pages.length;
   for (let idx = 0; idx < totalPages; idx++) {
     const p = pages[idx];
