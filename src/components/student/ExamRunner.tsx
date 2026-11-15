@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { isNativeApp } from "@/lib/platform";
 import { ExamLanguageModal } from "./ExamLanguageModal";
 import { ExamInstructionsView } from "./ExamInstructionsView";
 import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
@@ -345,6 +346,7 @@ export function ExamRunner({
     if (phase !== "RUNNING") return;
 
     const handleFullscreenChange = () => {
+      if (isNativeApp()) return;
       if (!document.fullscreenElement) {
         setFullscreenWarning(true);
         logViolation("FULLSCREEN_EXIT");
@@ -661,7 +663,11 @@ export function ExamRunner({
   // ==========================================
   if (phase === "INSTRUCTIONS") {
     return (
-      <div className="fixed inset-0 overflow-y-auto overscroll-contain bg-slate-100 dark:bg-slate-950 p-4 sm:p-6 lg:p-8 z-50">
+      <div
+        data-exam-runner="true"
+        className="fixed inset-0 overflow-y-auto overscroll-contain touch-pan-y bg-slate-100 dark:bg-slate-950 p-4 sm:p-6 lg:p-8 z-50"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
         <ExamInstructionsView
           testId={testId}
           testTitle={data?.test.title || "Test"}
@@ -698,7 +704,11 @@ export function ExamRunner({
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#f8fafc] dark:bg-slate-950 text-slate-900 dark:text-white flex flex-col justify-between select-none">
+    <div
+      data-exam-runner="true"
+      className="w-full min-h-screen bg-[#f8fafc] dark:bg-slate-950 text-slate-900 dark:text-white flex flex-col justify-between touch-pan-y"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
       {/* 1. TOP HEADER (Matches Screenshot media_1788449327614.png) */}
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-2.5 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
@@ -1051,20 +1061,32 @@ export function ExamRunner({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await document.documentElement.requestFullscreen();
-                  setFullscreenWarning(false);
-                } catch {
-                  setFullscreenWarning(false);
-                }
-              }}
-              className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs shadow-lg shadow-blue-500/20 transition"
-            >
-              Return to Fullscreen
-            </button>
+            <div className="flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    if (document.documentElement.requestFullscreen) {
+                      await document.documentElement.requestFullscreen();
+                    }
+                  } catch {
+                    // ignore
+                  } finally {
+                    setFullscreenWarning(false);
+                  }
+                }}
+                className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs shadow-lg shadow-blue-500/20 transition cursor-pointer"
+              >
+                Return to Fullscreen
+              </button>
+              <button
+                type="button"
+                onClick={() => setFullscreenWarning(false)}
+                className="w-full py-2.5 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 text-xs font-bold transition cursor-pointer"
+              >
+                Continue Exam
+              </button>
+            </div>
           </div>
         </div>
       )}

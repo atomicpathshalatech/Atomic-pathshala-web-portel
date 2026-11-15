@@ -801,10 +801,20 @@ function TimelineLectureRow({
           </div>
         </div>
 
-        {/* Lecture Title */}
-        <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight mt-1 line-clamp-2">
-          {item.title}
-        </p>
+        {/* Lecture / Test Title */}
+        {item.type === "TEST" && item.testId ? (
+          <Link
+            href={item.testSubmitted ? `/tests/${item.testId}/result` : `/tests/${item.testId}/attempt`}
+            className="font-bold text-xs sm:text-sm text-slate-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400 leading-tight mt-1 line-clamp-2 transition block"
+            title="Click to open test"
+          >
+            {item.title}
+          </Link>
+        ) : (
+          <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight mt-1 line-clamp-2">
+            {item.title}
+          </p>
+        )}
 
         {/* Footer Row: Teacher Info & Role-Aware Action Button */}
         <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
@@ -857,14 +867,18 @@ function TimelineLectureRow({
                     <span>Result</span>
                   </Link>
                 ) : clientNow.getTime() < new Date(item.startsAt).getTime() ? (
-                  <span className="inline-flex items-center gap-1 py-1 px-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg text-[11px] font-bold">
-                    <span className="material-symbols-outlined text-[14px]">schedule</span>
+                  <Link
+                    href={`/tests/${item.testId}/attempt`}
+                    className="inline-flex items-center gap-1 py-1 px-3 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 rounded-lg text-[11px] font-bold shadow-2xs transition active:scale-95"
+                    title="Click to view test instructions and preparation room"
+                  >
+                    <span className="material-symbols-outlined text-[14px] text-amber-600">schedule</span>
                     <span>Opens {startTimeStr}</span>
-                  </span>
+                  </Link>
                 ) : (
                   <Link
                     href={`/tests/${item.testId}/attempt`}
-                    className="inline-flex items-center gap-1 py-1 px-3 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95"
+                    className="inline-flex items-center gap-1 py-1 px-3.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[11px] font-bold shadow-md shadow-violet-500/20 transition active:scale-95 animate-pulse"
                   >
                     <span className="material-symbols-outlined text-[14px]">play_arrow</span>
                     <span>Start Test</span>

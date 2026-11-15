@@ -237,33 +237,80 @@ export default async function BatchCoursePage({
   let dbTests: any[] = [];
   if (dbBatch) {
     try {
+      const now = new Date();
       const rawTests = await prisma.test.findMany({
         where: {
+          archived: false,
           OR: [
             { batchSchedule: { batchId: dbBatch.id } },
+            { testSeries: { batchImports: { some: { batchId: dbBatch.id } } } },
             ...(dbBatch.courseId
               ? [{ chapter: { subject: { courseId: dbBatch.courseId } } }]
               : []),
           ],
-          status: "PUBLISHED",
+          AND: [
+            {
+              OR: [
+                { status: { in: ["PUBLISHED", "APPROVED"] } },
+                { status: "DRAFT", openTime: { not: null } },
+              ],
+            },
+          ],
         },
-        orderBy: { createdAt: "desc" },
-        take: 20,
+        orderBy: [{ openTime: "asc" }, { createdAt: "desc" }],
+        take: 50,
         select: {
           id: true,
           name: true,
           durationMin: true,
+          openTime: true,
+          closeTime: true,
+          status: true,
+          testSeries: { select: { id: true, name: true } },
+          attempts: studentId
+            ? {
+                where: { studentId },
+                select: { id: true, status: true, score: true },
+                take: 1,
+              }
+            : false,
         },
       });
 
-      dbTests = rawTests.map((t) => ({
-        id: t.id,
-        title: t.name,
-        name: t.name,
-        durationMins: t.durationMin,
-        durationMin: t.durationMin,
-        totalMarks: 720,
-      }));
+      dbTests = rawTests.map((t) => {
+        const startsAt = t.openTime;
+        const endsAt = startsAt ? new Date(startsAt.getTime() + (t.durationMin || 180) * 60_000) : null;
+        const attempt = t.attempts?.[0];
+        const isSubmitted = attempt?.status === "SUBMITTED" || attempt?.status === "AUTO_SUBMITTED";
+
+        let timingState: "UPCOMING" | "PRESENT" | "PAST" = "UPCOMING";
+        if (isSubmitted || (endsAt && now > endsAt)) {
+          timingState = "PAST";
+        } else if (startsAt && now >= startsAt && (!endsAt || now <= endsAt)) {
+          timingState = "PRESENT";
+        } else {
+          timingState = "UPCOMING";
+        }
+
+        return {
+          id: t.id,
+          title: t.name,
+          name: t.name,
+          durationMins: t.durationMin || 180,
+          durationMin: t.durationMin || 180,
+          totalMarks: 720,
+          openTime: t.openTime?.toISOString() || null,
+          closeTime: t.closeTime?.toISOString() || null,
+          startsAt: startsAt?.toISOString() || null,
+          endsAt: endsAt?.toISOString() || null,
+          timingState,
+          status: t.status,
+          testSeriesName: t.testSeries?.name || null,
+          isSubmitted,
+          attemptId: attempt?.id || null,
+          score: attempt?.score ?? null,
+        };
+      });
     } catch (err) {
       console.error("Test query error for batch:", err);
     }

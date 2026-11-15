@@ -314,8 +314,11 @@ export default async function StudentTestsPage() {
       include: {
         tests: {
           where: {
-            status: { in: ["PUBLISHED", "APPROVED"] },
             archived: false,
+            OR: [
+              { status: { in: ["PUBLISHED", "APPROVED"] } },
+              { status: "DRAFT", openTime: { not: null } },
+            ],
           },
           include: {
             attempts: {

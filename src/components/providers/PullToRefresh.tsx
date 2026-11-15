@@ -29,6 +29,14 @@ export function PullToRefresh() {
   useEffect(() => {
     if (!isNativeApp()) return;
     const onStart = (e: TouchEvent) => {
+      if (
+        typeof window !== "undefined" &&
+        (window.location.pathname.includes("/attempt") ||
+          window.location.pathname.includes("/tests/") ||
+          document.querySelector("[data-exam-runner='true']"))
+      ) {
+        return;
+      }
       if (refreshing || e.touches.length !== 1 || window.scrollY > 0 || document.fullscreenElement) return;
       if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"]')) return;
       if (insideScrolledArea(e.target as Element)) return;

@@ -207,10 +207,9 @@ export default async function SchedulePage({
     bookingId: b.id,
   }));
 
-  // Chapter tests with a set time (published, or scheduled and still being
-  // prepared) of the chapters the student's batches cover — found the same
-  // way the batch page finds them (chaptersOfBatches). "View Test" opens the
-  // Tests page, where it shows as Upcoming until its time.
+  // Tests the student's batches cover — including Chapter practice tests
+  // and all Mock / Minor / Major tests from the batch's Test Series (BatchTestSeries).
+  // "Start Test" opens the test attempt room (or result if already submitted).
   await publishDueTests();
   const now = new Date();
   const batchById = new Map(enrollments.map((e) => [e.batch.id, e.batch]));
@@ -247,8 +246,66 @@ export default async function SchedulePage({
     };
   });
 
+  // Test Series tests linked to the student's enrolled batches via BatchTestSeries
+  const batchTestSeriesLinks = await prisma.batchTestSeries.findMany({
+    where: { batchId: { in: Array.from(batchById.keys()) } },
+    select: { batchId: true, testSeriesId: true },
+  });
+
+  const testSeriesBatchMap = new Map<string, string>();
+  batchTestSeriesLinks.forEach((l) => {
+    testSeriesBatchMap.set(l.testSeriesId, l.batchId);
+  });
+
+  const testSeriesTests = batchTestSeriesLinks.length
+    ? await prisma.test.findMany({
+        where: {
+          archived: false,
+          testSeriesId: { in: batchTestSeriesLinks.map((l) => l.testSeriesId) },
+          openTime: { not: null, gte: new Date(now.getTime() - 60 * 24 * 3600 * 1000) },
+          OR: [
+            { status: { in: ["PUBLISHED", "APPROVED"] } },
+            { status: "DRAFT", openTime: { not: null } },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          openTime: true,
+          durationMin: true,
+          testSeriesId: true,
+          examType: true,
+          status: true,
+          testSeries: { select: { id: true, name: true, course: true } },
+        },
+        take: 200,
+      })
+    : [];
+
+  const testSeriesTestItems: ScheduleItem[] = testSeriesTests.map((t) => {
+    const batchId = testSeriesBatchMap.get(t.testSeriesId!) || Array.from(batchById.keys())[0]!;
+    const b = batchById.get(batchId)!;
+    const startsAt = t.openTime!;
+    const endsAt = new Date(startsAt.getTime() + (t.durationMin || 180) * 60_000);
+    return {
+      id: `test-series-test-${t.id}`,
+      title: t.name,
+      subject: t.testSeries?.name || t.examType || "NEET Mock Test",
+      type: "TEST",
+      status: endsAt < now ? "COMPLETED" : startsAt <= now ? "LIVE" : "SCHEDULED",
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      batchId: b.id,
+      batch: { id: b.id, name: b.name, code: b.code },
+      teacher: null,
+      testId: t.id,
+    };
+  });
+
+  const allTestItems = [...chapterTestItems, ...testSeriesTestItems];
+
   // Tests the student already submitted: their schedule row offers the result.
-  const testIds = [...batchScheduleItems, ...chapterTestItems].map((i) => i.testId).filter((id): id is string => Boolean(id));
+  const testIds = [...batchScheduleItems, ...allTestItems].map((i) => i.testId).filter((id): id is string => Boolean(id));
   const submitted = testIds.length
     ? new Set(
         (
@@ -259,11 +316,11 @@ export default async function SchedulePage({
         ).map((a) => a.testId)
       )
     : new Set<string>();
-  for (const item of [...batchScheduleItems, ...chapterTestItems]) {
+  for (const item of [...batchScheduleItems, ...allTestItems]) {
     if (item.testId) item.testSubmitted = submitted.has(item.testId);
   }
 
-  const allSchedules: ScheduleItem[] = [...batchScheduleItems, ...doubtScheduleItems, ...chapterTestItems].sort(
+  const allSchedules: ScheduleItem[] = [...batchScheduleItems, ...doubtScheduleItems, ...allTestItems].sort(
     (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
   );
 

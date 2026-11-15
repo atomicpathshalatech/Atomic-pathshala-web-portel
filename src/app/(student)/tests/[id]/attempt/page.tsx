@@ -6,6 +6,8 @@ import { resolveStudentForTest } from "@/lib/test-series/access";
 import { computeDeadlineMs } from "@/lib/test-engine/scoring";
 import { toLegacyQuestion } from "@/lib/questions/legacy";
 import { ExamRunner } from "@/components/student/ExamRunner";
+import { UpcomingTestWaitingRoom } from "@/components/student/UpcomingTestWaitingRoom";
+import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import { examQuestions, finalizeReattempt, reattemptAnswers, reattemptDeadlineMs } from "@/lib/test-engine/reattempts";
 
 export const metadata: Metadata = {
@@ -89,10 +91,27 @@ export default async function TestAttemptPage({
     );
   }
 
+  await publishDueTests({ testIds: [params.id] });
+
   const now = new Date();
-  // Batch-scheduled tests respect class window; test series tests respect openTime/closeTime
-  if (test.batchSchedule && now < test.batchSchedule.startsAt) redirect("/tests");
-  if (test.openTime && now < test.openTime) redirect("/tests");
+  const scheduledStartTime = test.batchSchedule?.startsAt || test.openTime;
+
+  // If the test has not opened yet, show the Waiting Room with live countdown instead of abrupt redirect
+  if (scheduledStartTime && now < scheduledStartTime) {
+    const totalQuestions = test.sections.reduce((acc, s) => acc + s.questions.length, 0);
+    return (
+      <UpcomingTestWaitingRoom
+        testId={test.id}
+        testTitle={test.name}
+        openTime={scheduledStartTime.toISOString()}
+        durationMin={test.durationMin || 180}
+        totalQuestions={totalQuestions || 180}
+        targetExam={test.batchSchedule?.batch.targetExam || test.testSeries?.course || test.examType || "NEET UG"}
+        batchName={test.batchSchedule?.batch.name || test.testSeries?.name || undefined}
+        instructions={test.instructions}
+      />
+    );
+  }
 
   let attempt = await prisma.attempt.findUnique({
     where: { testId_studentId: { testId: test.id, studentId: student.id } },
@@ -104,7 +123,10 @@ export default async function TestAttemptPage({
     // must be published after its questions are added).
     const hasQuestions = test.sections.some((s) => s.questions.length > 0);
     const isDpp = test.batchSchedule?.type === "DPP" || test.testType === "DPP";
-    const published = isDpp ? test.status === "PUBLISHED" : !["DRAFT", "PENDING_APPROVAL", "UNDER_REVIEW"].includes(test.status);
+    const isScheduledDue = test.openTime ? now >= test.openTime : false;
+    const published = isDpp
+      ? test.status === "PUBLISHED"
+      : isScheduledDue || !["DRAFT", "PENDING_APPROVAL", "UNDER_REVIEW"].includes(test.status);
     if (!hasQuestions || !published) redirect(isDpp ? "/dpp" : "/tests");
     if (test.batchSchedule && now > test.batchSchedule.endsAt) redirect("/tests");
     if (test.closeTime && now > test.closeTime) redirect("/tests");
