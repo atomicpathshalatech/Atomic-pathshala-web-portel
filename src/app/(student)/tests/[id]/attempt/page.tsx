@@ -10,6 +10,10 @@ import { UpcomingTestWaitingRoom } from "@/components/student/UpcomingTestWaitin
 import { publishDueTests } from "@/lib/tests/scheduled-publish";
 import { examQuestions, finalizeReattempt, reattemptAnswers, reattemptDeadlineMs } from "@/lib/test-engine/reattempts";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
 export const metadata: Metadata = {
   title: "Live CBT Exam Room | Atomic Pathshala",
 };

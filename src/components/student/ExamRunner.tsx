@@ -130,10 +130,12 @@ function formatClock(totalSec: number) {
 
 const isReferenceImageUrl = (url?: string | null) => {
   if (!url) return false;
+  const lower = url.toLowerCase();
   return (
     url.includes("/questions/q_") ||
     url.includes("/ref_") ||
-    url.toLowerCase().includes("reference")
+    lower.includes("reference") ||
+    lower.includes("question-ref")
   );
 };
 
@@ -153,7 +155,16 @@ export function ExamRunner({
   const router = useRouter();
   const base = apiBase ?? `/api/tests/${testId}/attempts/my`;
   const resultUrl = resultHref ?? `/tests/${testId}/result`;
-  const [data, setData] = useState<ExamAttemptData | null>(initialData || null);
+  const [data, setData] = useState<ExamAttemptData | null>(() => {
+    if (!initialData) return null;
+    return {
+      ...initialData,
+      questions: initialData.questions.map((q) => ({
+        ...q,
+        imageUrl: q.imageUrl && !isReferenceImageUrl(q.imageUrl) ? q.imageUrl : null,
+      })),
+    };
+  });
   const [loading, setLoading] = useState(!initialData);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -233,8 +244,15 @@ export function ExamRunner({
         router.replace(resultUrl);
         return;
       }
-      setData(d);
-      startFrom(d);
+      const sanitized: ExamAttemptData = {
+        ...d,
+        questions: d.questions.map((q) => ({
+          ...q,
+          imageUrl: q.imageUrl && !isReferenceImageUrl(q.imageUrl) ? q.imageUrl : null,
+        })),
+      };
+      setData(sanitized);
+      startFrom(sanitized);
     } catch {
       setLoadError("Could not connect to the exam server. Please check your internet connection.");
     } finally {

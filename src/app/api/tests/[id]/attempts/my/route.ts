@@ -6,6 +6,10 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveStudentForTest } from "@/lib/test-series/access";
 import { computeDeadlineMs, finalizeAttempt } from "@/lib/test-engine/scoring";
 import { toLegacyQuestion } from "@/lib/questions/legacy";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 /**
