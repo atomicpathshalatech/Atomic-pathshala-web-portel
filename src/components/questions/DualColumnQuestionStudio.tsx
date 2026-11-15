@@ -363,9 +363,20 @@ export function DualColumnQuestionStudio({
             <div className="mt-3 space-y-2.5">
               <div>
                 <h2 className="font-black text-base text-white tracking-tight">{title}</h2>
-                <p className="text-xs text-blue-200 font-medium mt-0.5">
-                  {savedQuestionsCount} / {totalQuestionsCount} Questions
-                </p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-xs font-bold text-white bg-blue-500/30 border border-white/10 px-2 py-0.5 rounded-md">
+                    {savedQuestionsCount} / {totalQuestionsCount} Questions Added
+                  </span>
+                </div>
+                {totalQuestionsCount > savedQuestionsCount ? (
+                  <p className="text-[11px] text-blue-200/90 font-medium mt-1">
+                    {totalQuestionsCount - savedQuestionsCount} slots remaining to fill
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-emerald-300 font-semibold mt-1">
+                    ✓ All {totalQuestionsCount} question slots filled
+                  </p>
+                )}
               </div>
 
             </div>

@@ -61,6 +61,7 @@ async function run() {
   const at2pm = new Date("2026-10-15T08:30:00Z");
   assert(sp.isTestEditable({ status: "DRAFT", openTime: at2pm }, now), "Draft before its time: can be changed");
   assert(sp.isTestEditable({ status: "DRAFT", openTime: at2pm }, new Date(at2pm.getTime() - 60_000)), "One minute before the time: still can be changed");
+  assert(sp.isTestEditable({ status: "PUBLISHED", openTime: at2pm }, now), "Published scheduled test before its time: can still be changed");
   assert(!sp.isTestEditable({ status: "DRAFT", openTime: at2pm }, at2pm), "At its time: locked");
   assert(!sp.isTestEditable({ status: "PUBLISHED", openTime: null }, now), "Published: locked");
   assert(sp.isTestEditable({ status: "DRAFT", openTime: null }, now), "Draft with no time: can be changed");

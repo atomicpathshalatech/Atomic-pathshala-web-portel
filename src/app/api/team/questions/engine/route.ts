@@ -33,10 +33,25 @@ async function linkToExercise(questionId: string, exerciseId: unknown, sectionId
 }
 
 /** A test's questions stop changing once it has started (or someone has taken it). */
-async function testSectionLockReason(sectionId: unknown): Promise<string | null> {
-  if (typeof sectionId !== "string" || !sectionId) return null;
-  const section = await prisma.section.findUnique({ where: { id: sectionId }, select: { test: { select: { id: true, openTime: true } } } });
-  return section ? testStartedReason(section.test) : null;
+async function testLockReason(testId: unknown, sectionId: unknown): Promise<string | null> {
+  const resolvedTestId =
+    (typeof testId === "string" && testId ? testId : null) ||
+    (typeof sectionId === "string" && sectionId ? await testIdOfSection(prisma, sectionId) : null);
+
+  if (!resolvedTestId) return null;
+
+  const test = await prisma.test.findUnique({
+    where: { id: resolvedTestId },
+    select: {
+      id: true,
+      openTime: true,
+      status: true,
+      archived: true,
+      _count: { select: { attempts: true } },
+    },
+  });
+
+  return test ? testStartedReason(test) : null;
 }
 
 export async function GET(request: NextRequest) {
@@ -218,8 +233,8 @@ export async function POST(request: NextRequest) {
     if (!statementEn?.trim() && !statementHi?.trim()) {
       return apiError("At least one language statement is required.", 400);
     }
-    const sectionLocked = await testSectionLockReason(testSectionId);
-    if (sectionLocked) return apiError(sectionLocked, 409);
+    const testLocked = await testLockReason(bodyTestId, testSectionId);
+    if (testLocked) return apiError(testLocked, 409);
 
     // A test holds each question once: the same question saved again (into
     // another slot or section) is refused. Checked again under a lock when
@@ -574,8 +589,8 @@ export async function PUT(request: NextRequest) {
       include: { translations: true },
     });
     if (!existing) return apiError("Question not found.", 404);
-    const sectionLocked = await testSectionLockReason(testSectionId);
-    if (sectionLocked) return apiError(sectionLocked, 409);
+    const testLocked = await testLockReason(bodyTestId, testSectionId);
+    if (testLocked) return apiError(testLocked, 409);
 
     // A test holds each question once — checked before anything is saved:
     // not this question in another section, nor the same question (its

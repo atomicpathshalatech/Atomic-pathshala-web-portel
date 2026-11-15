@@ -8,21 +8,64 @@ import { prisma } from "@/lib/db";
  * itself, and from then on it can no longer be changed.
  */
 
-type EditableLike = { status: string; openTime?: Date | string | null };
+type EditableLike = {
+  status?: string | null;
+  openTime?: Date | string | null;
+  archived?: boolean | null;
+  _count?: { attempts?: number } | null;
+  attemptsCount?: number | null;
+};
 
-/** Draft, and (when it has a set time) that time has not come yet. */
+/**
+ * Checks whether a test's questions and structure can be edited by an author/admin.
+ *
+ * Rules:
+ * 1. An archived test is NEVER editable.
+ * 2. A test with student attempts is NEVER editable (to protect integrity of submissions).
+ * 3. A test with a scheduled start time (openTime):
+ *    - Editable as long as now < openTime (even if status is PUBLISHED for student visibility or DRAFT).
+ *    - Once now >= openTime, question authoring is locked automatically.
+ * 4. A test without openTime:
+ *    - Editable while status is DRAFT (or not explicitly locked/published/archived).
+ *    - Once published without a scheduled time, it is live immediately, so questions cannot be changed.
+ */
 export function isTestEditable(test: EditableLike, now: Date = new Date()): boolean {
-  if (test.status !== "DRAFT") return false;
-  if (!test.openTime) return true;
-  return now.getTime() < new Date(test.openTime).getTime();
+  if (!test) return false;
+  if (test.archived || test.status === "ARCHIVED") return false;
+
+  const attempts = test._count?.attempts ?? test.attemptsCount ?? 0;
+  if (attempts > 0) return false;
+
+  if (test.openTime) {
+    const openMs = new Date(test.openTime).getTime();
+    if (!Number.isNaN(openMs)) {
+      return now.getTime() < openMs;
+    }
+  }
+
+  return test.status === "DRAFT" || !test.status;
 }
 
 /** Why the test can no longer be changed (null when it can). */
 export function testLockedReason(test: EditableLike, now: Date = new Date()): string | null {
   if (isTestEditable(test, now)) return null;
-  if (test.status === "DRAFT" && test.openTime) {
-    return `This test started at ${formatIst(test.openTime)} — questions can no longer be changed.`;
+
+  if (test.archived || test.status === "ARCHIVED") {
+    return "This test is archived — questions can no longer be changed.";
   }
+
+  const attempts = test._count?.attempts ?? test.attemptsCount ?? 0;
+  if (attempts > 0) {
+    return "This test already has student attempts — questions can no longer be changed.";
+  }
+
+  if (test.openTime) {
+    const openMs = new Date(test.openTime).getTime();
+    if (!Number.isNaN(openMs) && now.getTime() >= openMs) {
+      return `This test started at ${formatIst(test.openTime)} — questions can no longer be changed.`;
+    }
+  }
+
   return "This test is published — questions can no longer be changed.";
 }
 export const testStartedReason = testLockedReason;

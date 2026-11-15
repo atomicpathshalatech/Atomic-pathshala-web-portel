@@ -2426,9 +2426,22 @@ export function UnifiedQuestionEditor({
               >
                 ← Prev Slot
               </button>
-              <span className="text-xs font-mono font-bold text-slate-600 px-1">
-                Slot {slotNumber} / {totalSlots}
-              </span>
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
+                  Viewing Slot {slotNumber} of {totalSlots}
+                </span>
+                {initialQuestion?.isSaved || initialQuestion?.id || currentDraftId ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    Filled
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    Empty Slot
+                  </span>
+                )}
+              </div>
             </div>
           )}
 

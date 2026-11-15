@@ -127,9 +127,9 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
     0
   );
 
-  // Locked once published — or once a scheduled test's time has come (even if it could not publish).
-  const isPublished = !isTestEditable(test);
-  const opensAt = test.status === "DRAFT" && test.openTime && test.openTime > new Date() ? test.openTime.toISOString() : null;
+  // Locked once attempts exist, or once past scheduled openTime, or if published without scheduled time.
+  const isLocked = !isTestEditable(test);
+  const opensAt = test.openTime && new Date(test.openTime) > new Date() ? test.openTime.toISOString() : null;
 
   return (
     <DualColumnQuestionStudio
@@ -141,7 +141,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
       initialQuestions={initialQuestions.length > 0 ? initialQuestions : undefined}
       backHref={`/team/tests/${test.id}`}
       syllabus={testSyllabus(test)}
-      isPublished={isPublished}
+      isPublished={isLocked}
       opensAt={opensAt}
     />
   );
