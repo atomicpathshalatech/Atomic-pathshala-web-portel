@@ -56,9 +56,9 @@ export function legacyTypeToQuestionType(type: LegacyQuestionInput["type"]) {
   return type === "MCQ" ? "SINGLE_CORRECT" : "INTEGER";
 }
 
-/** Reverse of the above, for display in the old UI vocabulary. */
+/** Reverse of the above, for display in the old UI vocabulary. All choice-based formats (MCQ, MATCH_COLUMN, ASSERTION_REASON, STATEMENT_BASED) map to "MCQ". */
 export function questionTypeToLegacyType(type: string): "MCQ" | "INTEGER" {
-  return type === "SINGLE_CORRECT" || type === "MULTIPLE_CORRECT" ? "MCQ" : "INTEGER";
+  return type === "INTEGER" || type === "NUMERICAL" ? "INTEGER" : "MCQ";
 }
 
 export function legacyTagsToString(tags: string[]): string | null {

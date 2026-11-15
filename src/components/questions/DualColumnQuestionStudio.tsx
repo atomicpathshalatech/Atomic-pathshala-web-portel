@@ -15,7 +15,7 @@ export interface QuestionEntry {
   topic?: string;
   subTopic?: string;
   difficulty: "EASY" | "MEDIUM" | "HARD";
-  type: "SINGLE_CORRECT" | "MULTIPLE_CORRECT" | "NUMERICAL" | "ASSERTION_REASON" | "MATCH_COLUMN";
+  type: "SINGLE_CORRECT" | "MULTIPLE_CORRECT" | "NUMERICAL" | "ASSERTION_REASON" | "MATCH_COLUMN" | "STATEMENT_BASED";
   marks: number;
   negativeMarks: number;
   statementHi: string;

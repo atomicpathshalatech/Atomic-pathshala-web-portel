@@ -7,7 +7,7 @@ type Question = {
   id: string;
   order: number;
   body: string;
-  type: "MCQ" | "INTEGER";
+  type: "MCQ" | "INTEGER" | "NUMERICAL" | "MATCH_COLUMN" | string;
   optionA: string | null;
   optionB: string | null;
   optionC: string | null;
@@ -228,7 +228,7 @@ export function TestAttemptRunner({ testId }: { testId: string }) {
               </div>
               <p className="font-body-md text-body-lg text-on-surface whitespace-pre-wrap">{question.body}</p>
 
-              {question.type === "MCQ" ? (
+              {question.type !== "INTEGER" && question.type !== "NUMERICAL" ? (
                 <div className="space-y-2">
                   {OPTION_KEYS.map((key) => {
                     const label = (question as unknown as Record<string, string | null>)[`option${key}`];

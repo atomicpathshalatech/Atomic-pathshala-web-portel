@@ -119,7 +119,16 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
             q.category?.includes("Source:") ||
             q.category?.includes("PYQ"));
 
-        const validDiagramUrl = diagramAsset?.publicUrl || (isReferenceImage ? null : q.imageUrl);
+        const statementHasImage =
+          Boolean(enTrans?.statement && /!\[.*?\]\(.*?\)/.test(enTrans.statement)) ||
+          Boolean(hiTrans?.statement && /!\[.*?\]\(.*?\)/.test(hiTrans.statement));
+
+        let validDiagramUrl = diagramAsset?.publicUrl || null;
+        if (!validDiagramUrl && !statementHasImage) {
+          if (q.type === "MATCH_COLUMN" || !isReferenceImage) {
+            validDiagramUrl = q.imageUrl || q.referenceImageUrl || null;
+          }
+        }
 
         return {
           id: q.id,

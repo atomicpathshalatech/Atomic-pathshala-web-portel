@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       solutionImageUrl,
       source = "DIRECT_OCR",
       tags = "",
+      testId: bodyTestId,
       testSectionId,
       order,
       slotNumber,
@@ -152,6 +153,7 @@ export async function POST(request: NextRequest) {
         if (testSectionId) {
           try {
             const sec = await prisma.section.findUnique({ where: { id: testSectionId }, select: { testId: true } });
+            const targetTestId = bodyTestId || (sec?.testId ?? null);
             const resolvedOrder =
               typeof order === "number" && order > 0
                 ? order
@@ -169,12 +171,33 @@ export async function POST(request: NextRequest) {
               });
               if (existingAtSlot) {
                 if (existingAtSlot.questionId !== updated.id) {
+                  if (targetTestId) {
+                    const existingInTest = await prisma.sectionQuestion.findFirst({
+                      where: { testId: targetTestId, questionId: updated.id },
+                    });
+                    if (existingInTest && existingInTest.id !== existingAtSlot.id) {
+                      await prisma.sectionQuestion.delete({ where: { id: existingInTest.id } }).catch(() => null);
+                    }
+                  }
                   await prisma.sectionQuestion.update({
                     where: { id: existingAtSlot.id },
-                    data: { questionId: updated.id },
+                    data: { questionId: updated.id, testId: targetTestId ?? existingAtSlot.testId },
+                  });
+                } else if (!existingAtSlot.testId && targetTestId) {
+                  await prisma.sectionQuestion.update({
+                    where: { id: existingAtSlot.id },
+                    data: { testId: targetTestId },
                   });
                 }
               } else {
+                if (targetTestId) {
+                  const existingInTest = await prisma.sectionQuestion.findFirst({
+                    where: { testId: targetTestId, questionId: updated.id },
+                  });
+                  if (existingInTest) {
+                    await prisma.sectionQuestion.delete({ where: { id: existingInTest.id } }).catch(() => null);
+                  }
+                }
                 await prisma.sectionQuestion.upsert({
                   where: {
                     sectionId_questionId: {
@@ -182,9 +205,9 @@ export async function POST(request: NextRequest) {
                       questionId: updated.id,
                     },
                   },
-                  update: { order: resolvedOrder },
+                  update: { order: resolvedOrder, testId: targetTestId },
                   create: {
-                    testId: sec?.testId ?? null,
+                    testId: targetTestId,
                     sectionId: testSectionId,
                     questionId: updated.id,
                     order: resolvedOrder,
@@ -317,6 +340,8 @@ export async function POST(request: NextRequest) {
 
     if (testSectionId) {
       try {
+        const sec = await prisma.section.findUnique({ where: { id: testSectionId }, select: { testId: true } });
+        const targetTestId = bodyTestId || (sec?.testId ?? null);
         const resolvedOrder =
           typeof order === "number" && order > 0
             ? order
@@ -334,12 +359,33 @@ export async function POST(request: NextRequest) {
           });
           if (existingAtSlot) {
             if (existingAtSlot.questionId !== created.id) {
+              if (targetTestId) {
+                const existingInTest = await prisma.sectionQuestion.findFirst({
+                  where: { testId: targetTestId, questionId: created.id },
+                });
+                if (existingInTest && existingInTest.id !== existingAtSlot.id) {
+                  await prisma.sectionQuestion.delete({ where: { id: existingInTest.id } }).catch(() => null);
+                }
+              }
               await prisma.sectionQuestion.update({
                 where: { id: existingAtSlot.id },
-                data: { questionId: created.id },
+                data: { questionId: created.id, testId: targetTestId ?? existingAtSlot.testId },
+              });
+            } else if (!existingAtSlot.testId && targetTestId) {
+              await prisma.sectionQuestion.update({
+                where: { id: existingAtSlot.id },
+                data: { testId: targetTestId },
               });
             }
           } else {
+            if (targetTestId) {
+              const existingInTest = await prisma.sectionQuestion.findFirst({
+                where: { testId: targetTestId, questionId: created.id },
+              });
+              if (existingInTest) {
+                await prisma.sectionQuestion.delete({ where: { id: existingInTest.id } }).catch(() => null);
+              }
+            }
             await prisma.sectionQuestion.upsert({
               where: {
                 sectionId_questionId: {
@@ -347,8 +393,9 @@ export async function POST(request: NextRequest) {
                   questionId: created.id,
                 },
               },
-              update: { order: resolvedOrder },
+              update: { order: resolvedOrder, testId: targetTestId },
               create: {
+                testId: targetTestId,
                 sectionId: testSectionId,
                 questionId: created.id,
                 order: resolvedOrder,

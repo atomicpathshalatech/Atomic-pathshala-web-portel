@@ -138,6 +138,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
+function mapQuestionType(typeStr?: string): QuestionType {
+  if (!typeStr) return QuestionType.SINGLE_CORRECT;
+  const upper = typeStr.toUpperCase();
+  if (upper.includes("MULTI") && upper.includes("CORRECT")) return QuestionType.MULTIPLE_CORRECT;
+  if (upper.includes("INTEGER")) return QuestionType.INTEGER;
+  if (upper.includes("NUMERICAL")) return QuestionType.NUMERICAL;
+  if (upper.includes("STATEMENT")) return QuestionType.STATEMENT_BASED;
+  if (upper.includes("MATCH")) return QuestionType.MATCH_COLUMN;
+  if (upper.includes("ASSERTION")) return QuestionType.ASSERTION_REASON;
+  if (upper in QuestionType) return upper as QuestionType;
+  return QuestionType.SINGLE_CORRECT;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -173,6 +186,7 @@ export async function POST(request: NextRequest) {
       camDrawData,
       isPublished = true,
       dppId,
+      testId: bodyTestId,
       testSectionId,
       exerciseId,
       exerciseSectionId,
@@ -211,7 +225,7 @@ export async function POST(request: NextRequest) {
     // another slot or section) is refused. Checked again under a lock when
     // the question is linked, for two saves at the same moment.
     const fingerprint = contentFingerprint(statementEn?.trim() ? statementEn : statementHi, statementEn?.trim() ? optionsEn : optionsHi);
-    const testId = await testIdOfSection(prisma, testSectionId);
+    const testId = bodyTestId || (await testIdOfSection(prisma, testSectionId));
     const slot = typeof order === "number" && order > 0 ? order : typeof slotNumber === "number" && slotNumber > 0 ? slotNumber : null;
     if (testId) {
       const dup = await findInTest(prisma, testId, { fingerprint, exceptSlot: slot ? { sectionId: testSectionId, order: slot } : null });
@@ -262,7 +276,7 @@ export async function POST(request: NextRequest) {
         chapter: chapter?.trim() || null,
         topic: topic?.trim() || null,
         subTopic: subTopic?.trim() || null,
-        type: type as QuestionType,
+        type: mapQuestionType(type),
         difficulty: difficulty as Difficulty,
         imageUrl: figureUrl?.trim() || null, // STRICTLY for genuine question figure/diagram
         referenceImageUrl: referenceImageUrl?.trim() || null, // Editor-only reference image
@@ -418,18 +432,29 @@ export async function POST(request: NextRequest) {
               }),
             };
           }
-          const existingQuestionSecLink = await tx.sectionQuestion.findFirst({
-            where: { sectionId: testSectionId, questionId: question.id },
-          });
-          if (existingQuestionSecLink && existingQuestionSecLink.id !== existingAtSlot.id) {
-            await tx.sectionQuestion.delete({ where: { id: existingQuestionSecLink.id } });
+          if (testId) {
+            const existingInTest = await tx.sectionQuestion.findFirst({
+              where: { testId, questionId: question.id },
+            });
+            if (existingInTest && existingInTest.id !== existingAtSlot.id) {
+              await tx.sectionQuestion.delete({ where: { id: existingInTest.id } });
+            }
           }
           return { link: await tx.sectionQuestion.update({
             where: { id: existingAtSlot.id },
             data: {
               questionId: question.id,
+              testId: testId ?? existingAtSlot.testId,
             },
           }) };
+        }
+        if (testId) {
+          const existingInTest = await tx.sectionQuestion.findFirst({
+            where: { testId, questionId: question.id },
+          });
+          if (existingInTest) {
+            await tx.sectionQuestion.delete({ where: { id: existingInTest.id } });
+          }
         }
         return { link: await tx.sectionQuestion.upsert({
             where: {
@@ -440,6 +465,7 @@ export async function POST(request: NextRequest) {
             },
             update: {
               order: resolvedOrder,
+              testId: testId ?? undefined,
             },
             create: {
               testId,
@@ -531,6 +557,7 @@ export async function PUT(request: NextRequest) {
       camDrawData,
       tags = [],
       dppId,
+      testId: bodyTestId,
       testSectionId,
       exerciseId,
       exerciseSectionId,
@@ -553,7 +580,7 @@ export async function PUT(request: NextRequest) {
     // A test holds each question once — checked before anything is saved:
     // not this question in another section, nor the same question (its
     // statement + options after this edit) under another id.
-    const testId = await testIdOfSection(prisma, testSectionId);
+    const testId = bodyTestId || (await testIdOfSection(prisma, testSectionId));
     if (testId) {
       const en = existing.translations.find((t) => t.language === "ENGLISH");
       const hi = existing.translations.find((t) => t.language === "HINDI");
@@ -645,7 +672,7 @@ export async function PUT(request: NextRequest) {
         chapter: chapter !== undefined ? chapter?.trim() || null : existing.chapter,
         topic: topic !== undefined ? topic?.trim() || null : existing.topic,
         subTopic: subTopic !== undefined ? subTopic?.trim() || null : existing.subTopic,
-        type: type as QuestionType,
+        type: mapQuestionType(type),
         difficulty: difficulty as Difficulty,
         category: category !== undefined ? category?.trim() || null : existing.category,
         pyqExam: targetExam,
@@ -764,7 +791,7 @@ export async function PUT(request: NextRequest) {
     // Link to Test Section if requested
     if (testSectionId) {
       const sec = await prisma.section.findUnique({ where: { id: testSectionId }, select: { testId: true } });
-      const targetTestId = testId || sec?.testId;
+      const targetTestId = bodyTestId || testId || sec?.testId;
       const targetSecOrder =
         typeof order === "number" && order > 0
           ? order
@@ -817,23 +844,48 @@ export async function PUT(request: NextRequest) {
             },
           });
         } else {
-          // If this question had another link in the section, remove it first to avoid collision
-          if (existingQuestionSecLink && existingQuestionSecLink.id !== existingAtSlot.id) {
-            await prisma.sectionQuestion.delete({ where: { id: existingQuestionSecLink.id } });
+          // If this question had another link in the test, remove it first to avoid collision
+          if (targetTestId) {
+            const existingInTest = await prisma.sectionQuestion.findFirst({
+              where: { testId: targetTestId, questionId },
+            });
+            if (existingInTest && existingInTest.id !== existingAtSlot.id) {
+              await prisma.sectionQuestion.delete({ where: { id: existingInTest.id } }).catch(() => null);
+            }
           }
           sectionQuestion = await prisma.sectionQuestion.update({
             where: { id: existingAtSlot.id },
-            data: { questionId },
+            data: { questionId, testId: targetTestId ?? existingAtSlot.testId },
           });
         }
+      } else if (existingAtSlot) {
+        sectionQuestion = await prisma.sectionQuestion.update({
+          where: { id: existingAtSlot.id },
+          data: { testId: targetTestId ?? existingAtSlot.testId },
+        });
       } else if (existingQuestionSecLink) {
         sectionQuestion = await prisma.sectionQuestion.update({
           where: { id: existingQuestionSecLink.id },
-          data: { order: finalOrder },
+          data: { order: finalOrder, testId: targetTestId ?? existingQuestionSecLink.testId },
         });
       } else {
-        sectionQuestion = await prisma.sectionQuestion.create({
-          data: {
+        if (targetTestId) {
+          const existingInTest = await prisma.sectionQuestion.findFirst({
+            where: { testId: targetTestId, questionId },
+          });
+          if (existingInTest) {
+            await prisma.sectionQuestion.delete({ where: { id: existingInTest.id } }).catch(() => null);
+          }
+        }
+        sectionQuestion = await prisma.sectionQuestion.upsert({
+          where: {
+            sectionId_questionId: {
+              sectionId: testSectionId,
+              questionId,
+            },
+          },
+          update: { order: finalOrder, testId: targetTestId },
+          create: {
             testId: targetTestId,
             sectionId: testSectionId,
             questionId,

@@ -672,6 +672,7 @@ export function UnifiedQuestionEditor({
           figureUrl: diagramUrl || null,
           solutionImageUrl: solutionImageUrl || undefined,
           source,
+          testId: testId || undefined,
           testSectionId,
           order,
           slotNumber,
@@ -1206,8 +1207,10 @@ export function UnifiedQuestionEditor({
       errors.correctOption = true;
     }
 
-    // The metadata panel above Save must have been checked (✓ Confirm).
-    if (!errors.chapter && !errors.topic && !metadataConfirmed) errors.metadata = true;
+    // Auto-confirm metadata if chapter and topic are provided
+    if (!metadataConfirmed && !errors.chapter && !errors.topic) {
+      setMetadataConfirmed(true);
+    }
 
     if (Object.keys(errors).length > 0) {
       setMissingFieldErrors(errors);
@@ -1268,6 +1271,7 @@ export function UnifiedQuestionEditor({
         solutionImageUrl: solutionImageUrl || undefined,
         camDrawData: camDrawData || undefined,
         dppId,
+        testId: testId || undefined,
         testSectionId,
         exerciseId,
         exerciseSectionId,

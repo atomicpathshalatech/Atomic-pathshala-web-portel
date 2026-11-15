@@ -25,6 +25,7 @@ export function testLockedReason(test: EditableLike, now: Date = new Date()): st
   }
   return "This test is published — questions can no longer be changed.";
 }
+export const testStartedReason = testLockedReason;
 
 export function formatIst(d: Date | string): string {
   return new Date(d).toLocaleString("en-IN", {

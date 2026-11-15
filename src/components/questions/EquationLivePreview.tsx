@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { repairLatexControlChars, repairLostLatexBackslashes } from "@/lib/test-portal/formula";
+import { repairLatexControlChars, repairLostLatexBackslashes, renderFormulaContent } from "@/lib/test-portal/formula";
 
 interface EquationLivePreviewProps {
   content: string;
@@ -126,6 +126,9 @@ function sanitizeLatexFormulas(input: string): string {
  */
 function renderMathAndText(text: string): string {
   if (!text || !text.trim()) return "";
+  if (text.includes("|") && (/---|---|column|list|स्तम्भ|स्तंभ|कॉलम|कालम|सूची/i.test(text) || text.includes("\n"))) {
+    return renderFormulaContent(text);
+  }
 
   let processed = sanitizeLatexFormulas(repairLostLatexBackslashes(repairLatexControlChars(text.trim())));
 
