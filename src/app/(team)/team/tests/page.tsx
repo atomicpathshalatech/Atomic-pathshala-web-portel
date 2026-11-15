@@ -15,6 +15,7 @@ export const metadata: Metadata = {
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 import { TestDeleteButton } from "@/components/team-portal/TestDeleteButton";
 import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
+import { autoFinalizeExpiredAttempts } from "@/lib/test-engine/scoring";
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-surface-container-high text-on-surface-variant",
@@ -40,6 +41,8 @@ export default async function TestsListPage() {
   // opened but not submitted (still running, or left) is counted apart —
   // counting it in used to make this number bigger than the leaderboard's.
   const SUBMITTED = { status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] as AttemptStatus[] } };
+
+  await autoFinalizeExpiredAttempts().catch(() => {});
 
   let tests;
   if (isAdmin) {

@@ -151,3 +151,40 @@ export async function finalizeAttempt(attemptId: string, isLate: boolean) {
 
   return prisma.attempt.findUnique({ where: { id: attemptId } });
 }
+
+
+/**
+ * Automatically finalizes any IN_PROGRESS attempt whose deadline (startedAt + durationMin)
+ * or schedule end time has passed.
+ */
+export async function autoFinalizeExpiredAttempts(testIds?: string[]) {
+  const now = Date.now();
+  const where: any = { status: "IN_PROGRESS" };
+  if (testIds && testIds.length > 0) {
+    where.testId = { in: testIds };
+  }
+  const inProgress = await prisma.attempt.findMany({
+    where,
+    include: {
+      test: {
+        select: {
+          id: true,
+          durationMin: true,
+          batchSchedule: { select: { endsAt: true } },
+        },
+      },
+    },
+  });
+
+  const expired = inProgress.filter((a) => {
+    if (!a.test) return false;
+    const durMs = (a.test.durationMin || 180) * 60 * 1000;
+    const durationDeadline = new Date(a.startedAt).getTime() + durMs;
+    const scheduleEnd = a.test.batchSchedule?.endsAt ? new Date(a.test.batchSchedule.endsAt).getTime() : Infinity;
+    const deadline = Math.min(durationDeadline, scheduleEnd);
+    return now > deadline;
+  });
+
+  await Promise.allSettled(expired.map((a) => finalizeAttempt(a.id, true)));
+  return expired.length;
+}

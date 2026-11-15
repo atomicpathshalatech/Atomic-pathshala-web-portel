@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { autoFinalizeExpiredAttempts } from "@/lib/test-engine/scoring";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest } from "@/lib/test-engine/access";
@@ -50,6 +51,8 @@ export default async function TestDetailPage({ params }: { params: { id: string 
   const isDraft = isTestEditable(test);
 
   const sectionQuestions = test.sections.flatMap((s) => s.questions.map((sq) => ({ ...sq, section: s })));
+
+  await autoFinalizeExpiredAttempts([test.id]).catch(() => {});
 
   const results =
     test.status !== "DRAFT"
