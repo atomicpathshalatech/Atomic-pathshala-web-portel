@@ -123,11 +123,11 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
           Boolean(enTrans?.statement && /!\[.*?\]\(.*?\)/.test(enTrans.statement)) ||
           Boolean(hiTrans?.statement && /!\[.*?\]\(.*?\)/.test(hiTrans.statement));
 
-        let validDiagramUrl = diagramAsset?.publicUrl || null;
-        if (!validDiagramUrl && !statementHasImage) {
-          if (q.type === "MATCH_COLUMN" || !isReferenceImage) {
-            validDiagramUrl = q.imageUrl || q.referenceImageUrl || null;
-          }
+        let validDiagramUrl: string | null = null;
+        if (diagramAsset?.publicUrl) {
+          validDiagramUrl = diagramAsset.publicUrl;
+        } else if (q.imageUrl && !isReferenceImage && !statementHasImage && !q.imageUrl.includes("/questions/q_")) {
+          validDiagramUrl = q.imageUrl;
         }
 
         return {

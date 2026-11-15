@@ -79,7 +79,9 @@ export function examQuestions(test: ExamTest, selections: Record<string, string 
           q.category?.includes("AI_DRAFT") ||
           q.category?.includes("Source:") ||
           q.category?.includes("PYQ"));
-      const validDiagramUrl = diagramAsset?.publicUrl || (isReferenceImage ? null : q.imageUrl);
+      const validDiagramUrl =
+        diagramAsset?.publicUrl ||
+        (q.imageUrl && !isReferenceImage && !q.imageUrl.includes("/questions/q_") ? q.imageUrl : null);
       return {
         id: q.id,
         order: sq.order,

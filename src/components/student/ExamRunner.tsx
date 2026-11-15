@@ -128,6 +128,15 @@ function formatClock(totalSec: number) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
+const isReferenceImageUrl = (url?: string | null) => {
+  if (!url) return false;
+  return (
+    url.includes("/questions/q_") ||
+    url.includes("/ref_") ||
+    url.toLowerCase().includes("reference")
+  );
+};
+
 export function ExamRunner({
   testId,
   initialData,
@@ -850,8 +859,8 @@ export function ExamRunner({
                 </div>
               )}
 
-              {/* Student-Facing Question Diagram (if genuine diagram and no CamDraw vector) */}
-              {!currentQ?.camDrawData && currentQ?.imageUrl && (
+              {/* Student-Facing Question Diagram (if genuine diagram and no CamDraw vector; reference crops are never shown) */}
+              {!currentQ?.camDrawData && currentQ?.imageUrl && !isReferenceImageUrl(currentQ.imageUrl) && (
                 <div className="flex justify-center my-3 p-2 bg-white dark:bg-slate-950/40 rounded-2xl border border-slate-200 dark:border-slate-800">
                   <img
                     src={currentQ.imageUrl}

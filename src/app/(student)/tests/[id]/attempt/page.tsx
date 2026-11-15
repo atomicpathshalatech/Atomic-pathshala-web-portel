@@ -183,11 +183,13 @@ export default async function TestAttemptPage({
       Boolean(enTrans?.statement && /!\[.*?\]\(.*?\)/.test(enTrans.statement)) ||
       Boolean(hiTrans?.statement && /!\[.*?\]\(.*?\)/.test(hiTrans.statement));
 
-    let validDiagramUrl = diagramAsset?.publicUrl || null;
-    if (!validDiagramUrl && !statementHasImage) {
-      if (q.type === "MATCH_COLUMN" || !isReferenceImage) {
-        validDiagramUrl = q.imageUrl || q.referenceImageUrl || null;
-      }
+    // Reference images (source book crops) must NEVER be shown to students in a live exam.
+    // Only genuine diagrams (FIGURE/DIAGRAM assets or non-reference q.imageUrl) are valid.
+    let validDiagramUrl: string | null = null;
+    if (diagramAsset?.publicUrl) {
+      validDiagramUrl = diagramAsset.publicUrl;
+    } else if (q.imageUrl && !isReferenceImage && !statementHasImage && !q.imageUrl.includes("/questions/q_")) {
+      validDiagramUrl = q.imageUrl;
     }
 
     return {
