@@ -2682,6 +2682,7 @@ model Question {
   pyqYear       Int?
   pyqMonth      String?
   pyqQuestionNumber String?
+  slug          String?      @unique
   questionCode  String?      @unique
   solution      String?
   tags          String?
@@ -7559,6 +7560,24 @@ model PyqOccurrence {
   @@index([verificationStatus, examId, year])
   @@index([extractionJobId])
   @@map("pyq_occurrences")
+}
+
+model PyqSeoMetadata {
+  id             String    @id @default(cuid())
+  entityType     String    // "EXAM" | "YEAR" | "CHAPTER" | "QUESTION"
+  entitySlug     String    @unique
+  title          String
+  description    String
+  canonicalUrl   String
+  structuredData Json?
+  isIndexable    Boolean   @default(true)
+  indexStatus    String    @default("ELIGIBLE") // ELIGIBLE | NOINDEX | SUBMITTED | INDEXED
+  lastSubmitted  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([entityType, isIndexable])
+  @@map("pyq_seo_metadata")
 }
 
 // A printable practice module assembled from the PYQ Library (or any bank

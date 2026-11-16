@@ -412,7 +412,7 @@ export default async function StudentDashboardPage() {
           items={[
             { label: "NCERT Practice", icon: "menu_book", href: "/practice/ncert", accent: "emerald", badge: "NEW" },
             { label: "Topic-wise Question Practice", icon: "edit_note", href: "/practice", accent: "violet", badge: null },
-            { label: "PYQ Practice", icon: "history_edu", href: "/pyq", accent: "blue", badge: null },
+            { label: "PYQ Practice", icon: "history_edu", href: "/practice/pyq", accent: "blue", badge: null },
             { label: "Daily DPP", icon: "assignment", href: "/dpp", accent: "rose", badge: dppCount ? `${dppCount}` : null },
             { label: "Downloads", icon: "download", href: "/downloads", accent: "indigo", badge: downloadsCount ? `${downloadsCount}` : null },
           ]}

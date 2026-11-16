@@ -80,3 +80,74 @@ export async function examPatterns(): Promise<ExamPattern[]> {
     ...BUILTIN_EXAM_PATTERNS.map((p) => ({ ...p, examId: (p.slug && bySlug.get(p.slug)?.id) || null })),
   ];
 }
+
+/**
+ * Ensures standard NEET UG, JEE Main, and JEE Advanced records exist in pyq_exams.
+ */
+export async function ensureStandardExams(): Promise<PyqExam[]> {
+  const standards = [
+    {
+      slug: "neet-ug",
+      name: "NEET UG",
+      canonicalType: "NEET_UG",
+      legacyCode: "NEET",
+      sortOrder: 10,
+      aliases: ["neet", "neetug", "aipmt", "neet2024", "neet2025"],
+    },
+    {
+      slug: "jee-main",
+      name: "JEE Main",
+      canonicalType: "JEE_MAIN",
+      legacyCode: "JEE_MAINS",
+      sortOrder: 20,
+      aliases: ["jeemain", "jeemains", "aieee", "iitjeemain"],
+    },
+    {
+      slug: "jee-advanced",
+      name: "JEE Advanced",
+      canonicalType: "JEE_ADVANCED",
+      legacyCode: "JEE_ADVANCED",
+      sortOrder: 30,
+      aliases: ["jeeadvanced", "jeeadv", "iitjee", "iitjeeadvanced"],
+    },
+  ];
+
+  const results: PyqExam[] = [];
+  for (const item of standards) {
+    const existing = await prisma.pyqExam.findFirst({
+      where: {
+        OR: [{ slug: item.slug }, { canonicalType: item.canonicalType }, { legacyCode: item.legacyCode }],
+      },
+    });
+
+    if (existing) {
+      const updated = await prisma.pyqExam.update({
+        where: { id: existing.id },
+        data: {
+          slug: item.slug,
+          name: item.name,
+          canonicalType: item.canonicalType,
+          legacyCode: item.legacyCode,
+          sortOrder: item.sortOrder,
+          isActive: true,
+          aliases: Array.from(new Set([...existing.aliases, ...item.aliases])),
+        },
+      });
+      results.push(updated);
+    } else {
+      const created = await prisma.pyqExam.create({
+        data: {
+          slug: item.slug,
+          name: item.name,
+          canonicalType: item.canonicalType,
+          legacyCode: item.legacyCode,
+          sortOrder: item.sortOrder,
+          isActive: true,
+          aliases: item.aliases,
+        },
+      });
+      results.push(created);
+    }
+  }
+  return results;
+}

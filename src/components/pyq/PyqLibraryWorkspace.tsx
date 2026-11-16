@@ -8,6 +8,10 @@ import { FormulaText } from "@/components/test-portal/FormulaText";
 import { api, answerText, optionEntries, SUBJECTS, type LibraryItem } from "./api-client";
 import { AddToTargetDialog } from "./AddToTargetDialog";
 import { PyqStyles } from "./PyqStyles";
+import { PyqChapterWiseView } from "./PyqChapterWiseView";
+import { PyqDuplicatesManager } from "./PyqDuplicatesManager";
+import { PyqAnalyticsDashboard } from "./PyqAnalyticsDashboard";
+import { ManualQuestionDialog } from "./ManualQuestionDialog";
 
 type ExamNode = { id: string; name: string; canonicalType: string; total: number; years: { year: number | null; count: number }[] };
 type Facets = { sessions: string[]; shifts: string[]; papers: string[]; chapters: { subject: string; chapter: string }[]; imports: { id: string; sourceName: string }[] };
@@ -38,6 +42,8 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
   const [dialog, setDialog] = useState<null | "MODULE" | "TEST" | "DPP">(null);
   const [selectingAll, setSelectingAll] = useState(false);
   const [openExams, setOpenExams] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<"YEAR_WISE" | "CHAPTER_WISE" | "DUPLICATES" | "ANALYTICS">("YEAR_WISE");
+  const [manualModalOpen, setManualModalOpen] = useState(false);
 
   const get = (k: FilterKey) => sp.get(k) ?? "";
   const page = Math.max(1, Number(sp.get("page") || 1));
@@ -130,7 +136,100 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4">
+    <div className="space-y-4">
+      {/* Top Header & Navigation Tabs */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
+        <div>
+          <h1 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-600">history_edu</span>
+            Atomic PYQ Library & Discovery
+          </h1>
+          <p className="text-xs text-slate-500 font-medium">
+            Centralized NEET & JEE previous year questions with multi-exam mappings & duplicate control
+          </p>
+        </div>
+
+        {/* Global Quick Action Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setManualModalOpen(true)}
+            className="pyq-btn bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700"
+          >
+            <span className="material-symbols-outlined text-sm">add_circle</span>
+            Add Manually
+          </button>
+          {canImport && (
+            <Link href="/team/pyq-library/import" className="pyq-btn-primary">
+              <span className="material-symbols-outlined text-sm">upload_file</span>
+              Import PDF
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab("YEAR_WISE")}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition ${
+            activeTab === "YEAR_WISE"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">calendar_month</span>
+          Year-Wise PYQ
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("CHAPTER_WISE")}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition ${
+            activeTab === "CHAPTER_WISE"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">menu_book</span>
+          Chapter-Wise PYQ
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("DUPLICATES")}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition ${
+            activeTab === "DUPLICATES"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">content_copy</span>
+          Duplicate Control
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("ANALYTICS")}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition ${
+            activeTab === "ANALYTICS"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">insights</span>
+          Analytics & AI Cost
+        </button>
+      </div>
+
+      {/* Tab Views */}
+      {activeTab === "CHAPTER_WISE" && <PyqChapterWiseView exams={tree} canImport={canImport} />}
+      {activeTab === "DUPLICATES" && <PyqDuplicatesManager />}
+      {activeTab === "ANALYTICS" && <PyqAnalyticsDashboard />}
+
+      {activeTab === "YEAR_WISE" && (
+        <div className="flex flex-col lg:flex-row gap-4">
       {/* Exam -> Year tree */}
       <aside className="lg:w-64 shrink-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 h-fit lg:sticky lg:top-4">
         <div className="flex items-center justify-between mb-2">
@@ -428,6 +527,8 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
           </div>
         )}
       </section>
+        </div>
+      )}
 
       {dialog && (
         <AddToTargetDialog
@@ -438,6 +539,16 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
           onDone={() => setSelected(new Set())}
         />
       )}
+
+      {/* Manual Question Dialog */}
+      <ManualQuestionDialog
+        open={manualModalOpen}
+        onClose={() => setManualModalOpen(false)}
+        onSuccess={() => {
+          setParams({});
+        }}
+        exams={tree}
+      />
 
       <PyqStyles />
     </div>

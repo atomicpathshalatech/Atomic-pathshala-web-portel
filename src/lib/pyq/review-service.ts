@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { withNewQuestionCode, toQuestionType, toDifficulty, isOptionBasedType } from "@/lib/questions/create-with-code";
 import { buildOccurrenceKey, formatOccurrenceLabel } from "./keys";
 import { questionFingerprint } from "./fingerprint";
+import { buildQuestionSlug } from "./slug-generator";
 
 /**
  * Review of extracted PYQ questions. Nothing reaches the verified PYQ
@@ -201,9 +202,20 @@ export async function approveExtracted(ids: string[], userId: string, publish: b
       } else {
         const label = formatOccurrenceLabel({ examName: exam.name, year: eq.pyqYear, session: eq.pyqSession, shift: eq.pyqShift, paper: eq.pyqPaper });
         const now = new Date();
-        const created = await withNewQuestionCode(eq.subject, (questionCode) =>
-          prisma.question.create({
+        const created = await withNewQuestionCode(eq.subject, (questionCode) => {
+          const slug = buildQuestionSlug({
+            id: eq.id,
+            questionCode,
+            examName: exam.name,
+            examCanonicalType: exam.canonicalType,
+            year: eq.pyqYear,
+            subject: eq.subject,
+            chapter: eq.chapter,
+            originalNumber: eq.pyqQuestionNumber ?? eq.originalNumber,
+          });
+          return prisma.question.create({
             data: {
+              slug,
               questionCode,
               subject: eq.subject,
               chapter: eq.chapter,
@@ -238,8 +250,8 @@ export async function approveExtracted(ids: string[], userId: string, publish: b
                 ],
               },
             },
-          })
-        );
+          });
+        });
         questionId = created.id;
         if (eq.duplicateDecision === "KEEP_SEPARATE" && eq.duplicateOfQuestionId) {
           const [a, b] = [eq.duplicateOfQuestionId, questionId].sort();

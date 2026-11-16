@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { uploadFileToR2 } from "@/lib/storage/upload-client";
 import { getMasterNcertChapters } from "@/lib/academic/master-ncert-catalog";
@@ -35,30 +35,44 @@ const STATUS_STYLE: Record<string, string> = {
 
 export function PyqImportForm() {
   const router = useRouter();
+  const sp = useSearchParams();
   const [exams, setExams] = useState<Exam[]>([]);
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [file, setFile] = useState<File | null>(null);
-  const [examId, setExamId] = useState("");
+  const [examId, setExamId] = useState(sp.get("exam") || "");
   const [customExam, setCustomExam] = useState("");
   const [ambiguous, setAmbiguous] = useState<{ id: string; name: string }[] | null>(null);
-  const [yearMode, setYearMode] = useState<"SINGLE" | "MULTI">("SINGLE");
+  const [yearMode, setYearMode] = useState<"SINGLE" | "MULTI">(sp.get("chapter") ? "MULTI" : "SINGLE");
   const [year, setYear] = useState("");
   const [session, setSession] = useState("");
   const [shift, setShift] = useState("");
   const [paper, setPaper] = useState("");
-  const [subject, setSubject] = useState("");
-  const [chapter, setChapter] = useState("");
+  const [subject, setSubject] = useState(sp.get("subject") || "");
+  const [chapter, setChapter] = useState(sp.get("chapter") || "");
   const [language, setLanguage] = useState("ENGLISH");
   const [hasAnswerKey, setHasAnswerKey] = useState<"" | "yes" | "no">("");
   const [hasSolutions, setHasSolutions] = useState<"" | "yes" | "no">("");
-  const [sourceTitle, setSourceTitle] = useState("");
+  const [sourceTitle, setSourceTitle] = useState(
+    sp.get("chapter")
+      ? `${sp.get("subject") ? sp.get("subject") + " - " : ""}${sp.get("chapter")} PYQ Paper`
+      : ""
+  );
   const [sourceReference, setSourceReference] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    api<{ exams: Exam[] }>("/api/team/pyq/exams?verification=ALL").then((d) => setExams(d.exams)).catch((e) => toast.error(e.message));
+    api<{ exams: Exam[] }>("/api/team/pyq/exams?verification=ALL")
+      .then((d) => {
+        setExams(d.exams);
+        const urlEx = sp.get("exam");
+        if (urlEx) {
+          const match = d.exams.find((e) => e.id === urlEx || e.slug === urlEx || e.canonicalType === urlEx);
+          if (match) setExamId(match.id);
+        }
+      })
+      .catch((e) => toast.error(e.message));
     api<{ imports: ImportRow[] }>("/api/team/pyq/imports").then((d) => setImports(d.imports)).catch(() => undefined);
-  }, []);
+  }, [sp]);
 
   async function resolveCustomExam(name: string): Promise<string | null> {
     try {

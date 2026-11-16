@@ -4,12 +4,13 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { requireTeam } from "@/lib/pyq/api";
 import { libraryTree } from "@/lib/pyq/library-query";
-import { AmbiguousExamError, ensureExam, resolveExamLabel } from "@/lib/pyq/exams-service";
+import { AmbiguousExamError, ensureExam, ensureStandardExams, resolveExamLabel } from "@/lib/pyq/exams-service";
 
 /** GET — exams with year -> question counts (the library tree). */
 export async function GET(request: NextRequest) {
   try {
     await requireTeam(PERMISSIONS.QUESTION_READ);
+    await ensureStandardExams();
     const v = request.nextUrl.searchParams.get("verification");
     const tree = await libraryTree(v === "UNVERIFIED" || v === "ALL" ? v : "VERIFIED");
     return apiSuccess({ exams: tree });
