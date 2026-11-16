@@ -69,7 +69,7 @@ export default async function PublicPyqHomePage() {
         topic: true,
         pyqYear: true,
         translations: {
-          select: { language: true, statement: true, options: true },
+          select: { language: true, statement: true, options: true, correctOptionIds: true },
           take: 1,
         },
         pyqOccurrences: {

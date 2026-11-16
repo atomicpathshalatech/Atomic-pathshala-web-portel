@@ -56,15 +56,19 @@ export function buildQuestionSlug(input: QuestionSlugInput): string {
   }
 
   // 5. Question Number
-  if (input.originalNumber) {
-    parts.push(`q${input.originalNumber}`);
+  if (input.originalNumber !== undefined && input.originalNumber !== null) {
+    const rawNum = String(input.originalNumber).replace(/^question\s*/i, "").trim();
+    const cleanNum = slugify(rawNum);
+    if (cleanNum) {
+      parts.push(`q${cleanNum}`);
+    }
   }
 
   // 6. Unique suffix to ensure 100% collision resistance
   const uniqueCode = input.questionCode ? slugify(input.questionCode) : input.id.slice(-6).toLowerCase();
   parts.push(uniqueCode);
 
-  return parts.filter(Boolean).join("-");
+  return slugify(parts.filter(Boolean).join("-"));
 }
 
 export function buildChapterSlug(chapterTitle: string): string {

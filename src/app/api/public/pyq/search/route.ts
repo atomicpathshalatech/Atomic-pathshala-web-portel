@@ -82,8 +82,8 @@ export async function GET(request: NextRequest) {
               language: true,
               statement: true,
               options: true,
-              // Answer & solution protected:
-              correctOptionIds: isAuthorized,
+              // Answer keys for quiz mode, solution strictly protected:
+              correctOptionIds: true,
               solution: isAuthorized,
             },
           },

@@ -4,9 +4,9 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { FormulaText } from "@/components/test-portal/FormulaText";
 import { buildChapterSlug, buildExamSlug } from "@/lib/pyq/slug-generator";
 import { PublicQuestionCard } from "@/components/pyq/PublicQuestionCard";
+import { InteractiveQuestionQuiz } from "@/components/pyq/InteractiveQuestionQuiz";
 
 export const revalidate = 3600;
 
@@ -14,10 +14,28 @@ interface Props {
   params: { slug: string };
 }
 
+function buildSlugFilter(rawSlug: string) {
+  const decoded = decodeURIComponent(rawSlug || "").trim();
+  const normalized = decoded.toLowerCase().replace(/[\s_]+/g, "-");
+  const codeMatch = decoded.match(/([a-zA-Z]\d{8,12})/);
+  const extractedCode = codeMatch ? codeMatch[1].toUpperCase() : null;
+
+  return [
+    { slug: rawSlug },
+    { slug: decoded },
+    { slug: normalized },
+    { id: rawSlug },
+    { id: decoded },
+    { questionCode: rawSlug },
+    { questionCode: decoded },
+    ...(extractedCode ? [{ questionCode: extractedCode }, { slug: { contains: extractedCode.toLowerCase() } }] : []),
+  ];
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const question = await prisma.question.findFirst({
     where: {
-      OR: [{ slug: params.slug }, { id: params.slug }, { questionCode: params.slug }],
+      OR: buildSlugFilter(params.slug),
       isPublished: true,
     },
     select: {
@@ -48,7 +66,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return {
     title: `${examName} ${year} ${question.subject} – ${question.chapter || "Question"} | Atomic Pathshala`,
-    description: `${statementSnippet}... Practice this official ${examName} question with full options, verified answers, and step-by-step solution after login.`,
+    description: `${statementSnippet}... Practice this official ${examName} question with interactive quiz, instant answer check, and step-by-step solution after login.`,
     alternates: {
       canonical: `https://ap.atomicpathshala.in/pyq/question/${question.slug || question.id}`,
     },
@@ -67,7 +85,7 @@ export default async function IndividualQuestionPage({ params }: Props) {
 
   const question = await prisma.question.findFirst({
     where: {
-      OR: [{ slug: params.slug }, { id: params.slug }, { questionCode: params.slug }],
+      OR: buildSlugFilter(params.slug),
       isPublished: true,
     },
     select: {
@@ -92,7 +110,7 @@ export default async function IndividualQuestionPage({ params }: Props) {
           language: true,
           statement: true,
           options: true,
-          correctOptionIds: isAuthorized,
+          correctOptionIds: true, // Needed for quiz checking
           solution: isAuthorized,
         },
       },
@@ -139,7 +157,7 @@ export default async function IndividualQuestionPage({ params }: Props) {
       subject: true,
       chapter: true,
       pyqYear: true,
-      translations: { select: { language: true, statement: true, options: true }, take: 1 },
+      translations: { select: { language: true, statement: true, options: true, correctOptionIds: true }, take: 1 },
       pyqOccurrences: {
         where: { verificationStatus: "VERIFIED" },
         take: 1,
@@ -200,148 +218,47 @@ export default async function IndividualQuestionPage({ params }: Props) {
         </span>
       </nav>
 
-      {/* Main Canonical Question Container */}
-      <article className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
-        {/* Header Badges */}
-        <div className="flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4 text-xs flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            {question.pyqOccurrences.map((o) => (
-              <span
-                key={o.id}
-                className="font-black text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-3 py-1 rounded-xl"
-              >
-                {o.exam.name} {o.year} {o.session ? `(${o.session})` : ""}{" "}
-                {o.shift ? `[${o.shift}]` : ""} {o.questionNumber ? `Q.${o.questionNumber}` : ""}
-              </span>
-            ))}
-
-            <span className="font-bold text-slate-700 dark:text-slate-300">
-              {question.subject}
-            </span>
-
-            {question.chapter && (
-              <span className="text-slate-500 font-medium">
-                · {question.chapter}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 font-mono text-slate-400 text-xs">
-            <span>ID: {question.questionCode || question.id}</span>
-          </div>
-        </div>
-
-        {/* Question Statement */}
-        <div className="text-base sm:text-lg font-medium text-slate-900 dark:text-white leading-relaxed">
-          <FormulaText text={translation?.statement || "(Question text not available)"} />
-        </div>
-
-        {/* Diagram / Image */}
-        {question.imageUrl && (
-          <div className="my-4 max-w-md rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
-            <img src={question.imageUrl} alt="Question figure" className="w-full object-contain" />
-          </div>
-        )}
-
-        {/* Options */}
-        <div className="space-y-3 pt-2">
-          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">
-            Answer Choices:
-          </h3>
-          <div className="grid grid-cols-1 gap-2.5">
-            {["A", "B", "C", "D"].map((key) => {
-              const optText = options[key];
-              if (!optText) return null;
-              const isCorrect = isAuthorized && correctKeys.includes(key);
-
-              return (
-                <div
-                  key={key}
-                  className={`flex items-start gap-3 p-3.5 rounded-2xl border text-sm transition ${
-                    isCorrect
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-100 font-bold shadow-sm"
-                      : "bg-slate-50/70 border-slate-200/80 text-slate-800 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-200"
-                  }`}
-                >
-                  <span
-                    className={`font-black shrink-0 ${
-                      isCorrect ? "text-emerald-600" : "text-blue-600"
-                    }`}
-                  >
-                    ({key})
-                  </span>
-                  <div className="flex-1">
-                    <FormulaText text={optText} />
-                  </div>
-                  {isCorrect && (
-                    <span className="shrink-0 text-xs font-black uppercase text-emerald-600 flex items-center gap-1">
-                      <span className="material-symbols-outlined text-sm">check_circle</span>
-                      Correct Answer
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Solution Gating Section */}
-        <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
-          {isAuthorized ? (
-            <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl p-5 space-y-3">
-              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-black text-sm">
-                <span className="material-symbols-outlined">lightbulb</span>
-                <h4>Detailed Step-by-Step Verified Solution</h4>
-              </div>
-              <div className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
-                <FormulaText
-                  text={translation?.solution || question.solution || "Step-by-step derivation will be added shortly."}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-900 rounded-3xl p-6 text-center space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 flex items-center justify-center">
-                <span className="material-symbols-outlined text-2xl">lock</span>
-              </div>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">
-                Unlock Official Answer & Detailed Solution
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-                Log in with your Atomic Pathshala student account to reveal the verified correct answer, derivation steps, and key formula hints.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href={`/login?redirect=/pyq/question/${question.slug || question.id}`}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black transition shadow-md"
-                >
-                  <span className="material-symbols-outlined text-sm">login</span>
-                  Login to Reveal Answer & Solution
-                </Link>
-              </div>
-            </div>
-          )}
-        </div>
+      {/* Main Canonical Question Container with Interactive Quiz */}
+      <article className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm">
+        <InteractiveQuestionQuiz
+          questionId={question.id}
+          slug={question.slug}
+          questionCode={question.questionCode}
+          examName={occ?.exam?.name || question.pyqExam}
+          pyqYear={occ?.year || question.pyqYear}
+          session={occ?.session || question.pyqMonth}
+          shift={occ?.shift}
+          questionNumber={occ?.questionNumber || question.pyqQuestionNumber}
+          subject={question.subject}
+          chapter={question.chapter}
+          topic={question.topic}
+          statement={translation?.statement || "(Question text not available)"}
+          imageUrl={question.imageUrl}
+          options={options}
+          correctOptionIds={correctKeys}
+          solution={(translation?.solution || question.solution) as string | null}
+          isAuthorized={isAuthorized}
+          currentUrl={`/pyq/question/${question.slug || question.id}`}
+        />
       </article>
 
-      {/* Related Questions from the same chapter */}
+      {/* Related Questions from Same Chapter */}
       {relatedQuestions.length > 0 && (
-        <section className="space-y-4 pt-4">
+        <section className="space-y-4 pt-6 border-t border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-black text-slate-900 dark:text-white">
-              More Questions from {question.chapter || question.subject}
+            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="material-symbols-outlined text-blue-600">auto_stories</span>
+              More {question.chapter || question.subject} PYQs
             </h3>
-            {question.chapter && (
-              <Link
-                href={`/pyq/${examSlug}/${question.subject.toLowerCase()}/${chapterSlug}`}
-                className="text-xs font-bold text-blue-600 hover:underline"
-              >
-                View all chapter questions &rarr;
-              </Link>
-            )}
+            <Link
+              href={`/pyq/${examSlug}/${question.subject.toLowerCase()}/${chapterSlug}`}
+              className="text-xs font-bold text-blue-600 hover:text-blue-700"
+            >
+              View All &rarr;
+            </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {relatedQuestions.map((rq) => (
               <PublicQuestionCard key={rq.id} question={rq} isAuthorized={isAuthorized} />
             ))}
