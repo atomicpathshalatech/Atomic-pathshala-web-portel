@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
 
     if (q) {
       where.OR = [
-        { statement: { contains: q, mode: "insensitive" } },
         { questionCode: { contains: q, mode: "insensitive" } },
         { topic: { contains: q, mode: "insensitive" } },
         { tags: { contains: q, mode: "insensitive" } },
