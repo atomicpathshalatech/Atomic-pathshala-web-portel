@@ -32,16 +32,44 @@ export interface PublicQuestionCardProps {
     }[];
   };
   isAuthorized?: boolean;
+  defaultLang?: "ENGLISH" | "HINDI";
 }
 
-export function PublicQuestionCard({ question, isAuthorized = false }: PublicQuestionCardProps) {
+export function PublicQuestionCard({
+  question,
+  isAuthorized = false,
+  defaultLang,
+}: PublicQuestionCardProps) {
+  const translations = question.translations || [];
+  const enTrans = translations.find((t) => t.language?.toUpperCase() === "ENGLISH");
+  const hiTrans = translations.find(
+    (t) => t.language?.toUpperCase() === "HINDI" || /[ऀ-ॿ]/.test(t.statement || "")
+  );
+
+  const hasBoth = Boolean(enTrans && hiTrans);
+
+  // Initial language choice
+  const initial: "ENGLISH" | "HINDI" =
+    defaultLang ||
+    (hiTrans && !enTrans
+      ? "HINDI"
+      : translations[0] && /[ऀ-ॿ]/.test(translations[0].statement)
+      ? "HINDI"
+      : "ENGLISH");
+
+  const [activeLang, setActiveLang] = useState<"ENGLISH" | "HINDI">(initial);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
-  const translation = question.translations?.[0];
-  const options = (translation?.options || {}) as Record<string, string>;
-  const correctKeys = ((translation?.correctOptionIds || []) as string[]).map((k) =>
+  const activeTranslation =
+    activeLang === "HINDI" ? hiTrans || enTrans || translations[0] : enTrans || hiTrans || translations[0];
+
+  const statement = activeTranslation?.statement || "";
+  const options = (activeTranslation?.options || {}) as Record<string, string>;
+  const rawCorrect = activeTranslation?.correctOptionIds || [];
+  const correctKeys = (Array.isArray(rawCorrect) ? rawCorrect : []).map((k) =>
     String(k).trim().toUpperCase()
   );
+
   const occurrence = question.pyqOccurrences?.[0];
   const qSlug = question.slug || question.id;
 
@@ -83,15 +111,47 @@ export function PublicQuestionCard({ question, isAuthorized = false }: PublicQue
             )}
           </div>
 
-          <span className="font-mono text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded border border-slate-100 dark:border-slate-800">
-            {question.questionCode || question.id.slice(-6)}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {/* Language Switcher Mini Pill */}
+            {hasBoth && (
+              <div className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setActiveLang("ENGLISH")}
+                  className={`px-1.5 py-0.5 rounded font-black transition ${
+                    activeLang === "ENGLISH"
+                      ? "bg-white dark:bg-slate-900 text-blue-600 shadow-xs"
+                      : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  }`}
+                  title="Switch to English"
+                >
+                  EN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLang("HINDI")}
+                  className={`px-1.5 py-0.5 rounded font-black transition ${
+                    activeLang === "HINDI"
+                      ? "bg-white dark:bg-slate-900 text-emerald-600 shadow-xs"
+                      : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  }`}
+                  title="हिन्दी में देखें"
+                >
+                  हिन्दी
+                </button>
+              </div>
+            )}
+
+            <span className="font-mono text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded border border-slate-100 dark:border-slate-800">
+              {question.questionCode || question.id.slice(-6)}
+            </span>
+          </div>
         </div>
 
         {/* Statement */}
         <Link href={`/pyq/question/${qSlug}`} className="block group">
           <div className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-100 leading-relaxed my-2 group-hover:text-blue-600 transition">
-            <FormulaText text={translation?.statement || "(Question text not available)"} />
+            <FormulaText text={statement || "(Question text not available)"} />
           </div>
         </Link>
 
@@ -107,7 +167,7 @@ export function PublicQuestionCard({ question, isAuthorized = false }: PublicQue
           <div className="flex items-center justify-between text-[11px] text-slate-400 pb-1">
             <span className="font-bold flex items-center gap-1">
               <span className="material-symbols-outlined text-xs text-blue-600">touch_app</span>
-              Click an option to test yourself:
+              {activeLang === "HINDI" ? "उत्तर जांचने के लिए क्लिक करें:" : "Click an option to test yourself:"}
             </span>
             {hasAnswered && (
               <span
@@ -115,7 +175,13 @@ export function PublicQuestionCard({ question, isAuthorized = false }: PublicQue
                   isSelectedCorrect ? "text-emerald-600" : "text-rose-600"
                 }`}
               >
-                {isSelectedCorrect ? "Correct (+4)" : "Incorrect"}
+                {isSelectedCorrect
+                  ? activeLang === "HINDI"
+                    ? "सही उत्तर (+4)"
+                    : "Correct (+4)"
+                  : activeLang === "HINDI"
+                  ? "गलत उत्तर"
+                  : "Incorrect"}
               </span>
             )}
           </div>
@@ -184,7 +250,7 @@ export function PublicQuestionCard({ question, isAuthorized = false }: PublicQue
             className="font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
           >
             <span className="material-symbols-outlined text-sm">visibility</span>
-            View Verified Solution
+            {activeLang === "HINDI" ? "सत्यापित हल देखें" : "View Verified Solution"}
           </Link>
         ) : (
           <Link
@@ -192,7 +258,7 @@ export function PublicQuestionCard({ question, isAuthorized = false }: PublicQue
             className="font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
           >
             <span className="material-symbols-outlined text-sm">lock</span>
-            Unlock Detailed Solution
+            {activeLang === "HINDI" ? "विस्तृत हल अनलॉक करें" : "Unlock Detailed Solution"}
           </Link>
         )}
 
@@ -200,7 +266,7 @@ export function PublicQuestionCard({ question, isAuthorized = false }: PublicQue
           href={`/pyq/question/${qSlug}`}
           className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-semibold"
         >
-          Full Question & Solution &rarr;
+          {activeLang === "HINDI" ? "पूरा प्रश्न व हल देखें →" : "Full Question & Solution →"}
         </Link>
       </div>
     </article>

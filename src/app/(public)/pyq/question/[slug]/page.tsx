@@ -157,7 +157,7 @@ export default async function IndividualQuestionPage({ params }: Props) {
       subject: true,
       chapter: true,
       pyqYear: true,
-      translations: { select: { language: true, statement: true, options: true, correctOptionIds: true }, take: 1 },
+      translations: { select: { language: true, statement: true, options: true, correctOptionIds: true }, take: 2 },
       pyqOccurrences: {
         where: { verificationStatus: "VERIFIED" },
         take: 1,
@@ -232,6 +232,7 @@ export default async function IndividualQuestionPage({ params }: Props) {
           subject={question.subject}
           chapter={question.chapter}
           topic={question.topic}
+          translations={question.translations as any}
           statement={translation?.statement || "(Question text not available)"}
           imageUrl={question.imageUrl}
           options={options}

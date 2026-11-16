@@ -8,9 +8,10 @@ export const revalidate = 3600; // 1 hour ISR
 export const metadata: Metadata = {
   title: "NEET & JEE PYQ Library – Previous Year Questions with Solutions | Atomic Pathshala",
   description:
-    "Practice official NEET UG, JEE Main, and JEE Advanced previous year questions with chapter-wise and year-wise filters. Step-by-step verified solutions and formula derivations.",
+    "Practice official NEET UG, JEE Main, and JEE Advanced previous year questions in Hindi and English with chapter-wise and year-wise filters. Step-by-step verified solutions and formula derivations.",
   keywords: [
     "NEET PYQ",
+    "NEET Hindi PYQ",
     "JEE Main Previous Year Questions",
     "JEE Advanced PYQ",
     "Chapter-wise PYQ",
@@ -23,13 +24,92 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "NEET & JEE PYQ Library – Atomic Pathshala",
-    description: "Complete chapter-wise and year-wise question bank with verified solutions.",
+    description: "Complete chapter-wise and year-wise question bank in Hindi & English with verified solutions.",
     url: "https://ap.atomicpathshala.in/pyq",
     type: "website",
   },
 };
 
-export default async function PublicPyqHomePage() {
+interface Props {
+  searchParams?: {
+    q?: string;
+    lang?: string;
+  };
+}
+
+export default async function PublicPyqHomePage({ searchParams }: Props) {
+  const searchQuery = searchParams?.q?.trim() || "";
+  const langFilter = (searchParams?.lang || "ALL").toUpperCase();
+  const isHindiQuery = /[ऀ-ॿ]/.test(searchQuery);
+
+  // If a search query is present, perform bilingual search
+  let searchResults: any[] = [];
+  let isSearching = searchQuery.length > 0;
+
+  if (isSearching) {
+    const searchWhere: any = {
+      isPublished: true,
+      pyqOccurrences: { some: { verificationStatus: "VERIFIED" } },
+    };
+
+    if (langFilter === "HINDI") {
+      searchWhere.translations = {
+        some: {
+          OR: [{ language: "HINDI" }, { statement: { contains: "क", mode: "insensitive" } }],
+        },
+      };
+    } else if (langFilter === "ENGLISH") {
+      searchWhere.translations = {
+        some: { language: "ENGLISH" },
+      };
+    }
+
+    searchWhere.OR = [
+      { questionCode: { contains: searchQuery, mode: "insensitive" } },
+      { topic: { contains: searchQuery, mode: "insensitive" } },
+      { chapter: { contains: searchQuery, mode: "insensitive" } },
+      { subject: { contains: searchQuery, mode: "insensitive" } },
+      { tags: { contains: searchQuery, mode: "insensitive" } },
+      {
+        translations: {
+          some: {
+            statement: { contains: searchQuery, mode: "insensitive" },
+          },
+        },
+      },
+    ];
+
+    searchResults = await prisma.question.findMany({
+      where: searchWhere,
+      take: 40,
+      orderBy: [{ pyqYear: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        slug: true,
+        questionCode: true,
+        subject: true,
+        chapter: true,
+        topic: true,
+        pyqYear: true,
+        imageUrl: true,
+        translations: {
+          select: { language: true, statement: true, options: true, correctOptionIds: true },
+        },
+        pyqOccurrences: {
+          where: { verificationStatus: "VERIFIED" },
+          select: {
+            year: true,
+            session: true,
+            shift: true,
+            paper: true,
+            questionNumber: true,
+            exam: { select: { name: true, slug: true } },
+          },
+        },
+      },
+    });
+  }
+
   // Fetch real statistics from database
   const [neetCount, jeeMainCount, jeeAdvCount, recentQuestions] = await Promise.all([
     prisma.pyqOccurrence.count({
@@ -70,7 +150,6 @@ export default async function PublicPyqHomePage() {
         pyqYear: true,
         translations: {
           select: { language: true, statement: true, options: true, correctOptionIds: true },
-          take: 1,
         },
         pyqOccurrences: {
           where: { verificationStatus: "VERIFIED" },
@@ -90,7 +169,7 @@ export default async function PublicPyqHomePage() {
       title: "NEET UG",
       slug: "neet",
       tagline: "Medical Entrance Examination",
-      description: "Complete year-wise & chapter-wise papers for Physics, Chemistry, and Biology.",
+      description: "Complete year-wise & chapter-wise papers for Physics, Chemistry, and Biology in Hindi & English.",
       count: neetCount,
       subjects: ["Physics", "Chemistry", "Biology", "Botany", "Zoology"],
       badgeColor: "bg-blue-600 text-white",
@@ -133,25 +212,27 @@ export default async function PublicPyqHomePage() {
       <section className="text-center space-y-4 max-w-3xl mx-auto pt-4">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300 text-xs font-bold">
           <span className="material-symbols-outlined text-sm">verified</span>
-          Official Previous Year Question Engine
+          Official Bilingual Previous Year Question Engine (Hindi & English)
         </div>
         <h1 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-white tracking-tight">
           Master NEET & JEE with <span className="text-blue-600">Previous Year Questions</span>
         </h1>
         <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
-          Search over 30+ years of official examination questions organized chapter-wise and year-wise. Practice online with instant evaluation and detailed step-by-step solutions.
+          Search over 30+ years of official examination questions organized chapter-wise and year-wise. Practice in Hindi or English with instant quiz evaluation and detailed step-by-step solutions.
         </p>
 
         {/* Global Search Bar */}
-        <div className="max-w-2xl mx-auto pt-2">
+        <div className="max-w-2xl mx-auto pt-2 space-y-3">
           <form action="/pyq" method="GET" className="relative flex items-center">
             <span className="material-symbols-outlined absolute left-4 text-slate-400 text-xl">search</span>
             <input
               type="text"
               name="q"
-              placeholder="Search by topic, formula, or question keyword (e.g. Kinematics NEET, Mole Concept)..."
+              defaultValue={searchQuery}
+              placeholder="Search in Hindi or English (e.g. गोली, bullet, गति, kinematics, प्रकाश)..."
               className="w-full pl-12 pr-28 py-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
             />
+            {langFilter !== "ALL" && <input type="hidden" name="lang" value={langFilter} />}
             <button
               type="submit"
               className="absolute right-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm"
@@ -159,8 +240,90 @@ export default async function PublicPyqHomePage() {
               Search
             </button>
           </form>
+
+          {/* Bilingual Language Filter Pills */}
+          <div className="flex items-center justify-center gap-2 text-xs flex-wrap">
+            <span className="text-slate-400 font-medium mr-1">Language:</span>
+            <Link
+              href={`/pyq${searchQuery ? `?q=${encodeURIComponent(searchQuery)}&lang=ALL` : ""}`}
+              className={`px-3 py-1 rounded-xl font-bold transition ${
+                langFilter === "ALL"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+              }`}
+            >
+              All (सभी)
+            </Link>
+            <Link
+              href={`/pyq${searchQuery ? `?q=${encodeURIComponent(searchQuery)}&lang=HINDI` : "?lang=HINDI"}`}
+              className={`px-3 py-1 rounded-xl font-bold transition ${
+                langFilter === "HINDI"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+              }`}
+            >
+              हिन्दी माध्यम (Hindi)
+            </Link>
+            <Link
+              href={`/pyq${searchQuery ? `?q=${encodeURIComponent(searchQuery)}&lang=ENGLISH` : "?lang=ENGLISH"}`}
+              className={`px-3 py-1 rounded-xl font-bold transition ${
+                langFilter === "ENGLISH"
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+              }`}
+            >
+              English Medium
+            </Link>
+          </div>
         </div>
       </section>
+
+      {/* Live Search Results Section (If user searched) */}
+      {isSearching && (
+        <section className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-600">manage_search</span>
+                Search Results for &ldquo;{searchQuery}&rdquo;
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Found {searchResults.length} matching verified previous year questions.
+              </p>
+            </div>
+
+            <Link
+              href="/pyq"
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl transition"
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+              Clear Search
+            </Link>
+          </div>
+
+          {searchResults.length === 0 ? (
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3">
+              <span className="material-symbols-outlined text-4xl text-slate-300">search_off</span>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                No verified PYQs found matching &ldquo;{searchQuery}&rdquo;.
+              </p>
+              <p className="text-xs text-slate-400">
+                Try searching for related keywords in Hindi or English (e.g. &ldquo;गोली&rdquo;, &ldquo;कण&rdquo;, &ldquo;velocity&rdquo;, &ldquo;projectile&rdquo;).
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {searchResults.map((q) => (
+                <PublicQuestionCard
+                  key={q.id}
+                  question={q}
+                  defaultLang={isHindiQuery || langFilter === "HINDI" ? "HINDI" : "ENGLISH"}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Three Major Exam Cards */}
       <section className="space-y-4">
@@ -198,7 +361,7 @@ export default async function PublicPyqHomePage() {
                   {ex.subjects.map((sub) => (
                     <span
                       key={sub}
-                      className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                     >
                       {sub}
                     </span>
@@ -206,8 +369,8 @@ export default async function PublicPyqHomePage() {
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-bold text-blue-600 group-hover:translate-x-0.5 transition">
-                <span>Explore {ex.title} Questions</span>
+              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-bold text-blue-600 group-hover:translate-x-1 transition-transform">
+                <span>Browse {ex.title} Papers</span>
                 <span className="material-symbols-outlined text-sm">arrow_forward</span>
               </div>
             </Link>
@@ -215,7 +378,7 @@ export default async function PublicPyqHomePage() {
         </div>
       </section>
 
-      {/* Featured High-Yield Chapters */}
+      {/* High-Yield Chapter Collections */}
       <section className="space-y-4">
         <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
           <span className="material-symbols-outlined text-blue-600">stars</span>
@@ -244,7 +407,7 @@ export default async function PublicPyqHomePage() {
       </section>
 
       {/* Recent Approved Questions Preview */}
-      {recentQuestions.length > 0 && (
+      {recentQuestions.length > 0 && !isSearching && (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -273,7 +436,7 @@ export default async function PublicPyqHomePage() {
           Previous Year Questions (PYQs) represent the gold standard for NEET UG and JEE examination preparation. Analyzing past trends enables students to understand question patterns, recurring formulas, and the depth of conceptual understanding demanded by NTA (National Testing Agency).
         </p>
         <p>
-          Every question in the Atomic Pathshala database is canonical and duplicate-controlled: identical questions that appeared across multiple exam shifts or both NEET and JEE are unified into a single record with complete occurrence tracking. Our step-by-step solutions explain the underlying core NCERT concepts, mathematical derivations, and common student mistakes.
+          Every question in the Atomic Pathshala database is bilingual (Hindi & English), canonical, and duplicate-controlled: identical questions that appeared across multiple exam shifts or both NEET and JEE are unified into a single record with complete occurrence tracking. Our step-by-step solutions explain the underlying core NCERT concepts, mathematical derivations, and common student mistakes.
         </p>
       </section>
     </div>

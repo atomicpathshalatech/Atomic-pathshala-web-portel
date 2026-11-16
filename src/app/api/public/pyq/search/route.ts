@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const subject = sp.get("subject")?.trim();
     const chapter = sp.get("chapter")?.trim();
     const year = sp.get("year") ? parseInt(sp.get("year")!, 10) : null;
+    const lang = sp.get("lang")?.trim().toUpperCase(); // "ALL" | "HINDI" | "ENGLISH"
     const page = Math.max(1, Number(sp.get("page") || 1));
     const pageSize = Math.min(30, Math.max(1, Number(sp.get("pageSize") || 15)));
 
@@ -39,10 +40,24 @@ export async function GET(request: NextRequest) {
       ...(chapter ? { chapter: { contains: chapter, mode: "insensitive" } } : {}),
     };
 
+    if (lang === "HINDI") {
+      where.translations = {
+        some: {
+          OR: [{ language: "HINDI" }, { statement: { contains: "क", mode: "insensitive" } }],
+        },
+      };
+    } else if (lang === "ENGLISH") {
+      where.translations = {
+        some: { language: "ENGLISH" },
+      };
+    }
+
     if (q) {
       where.OR = [
         { questionCode: { contains: q, mode: "insensitive" } },
         { topic: { contains: q, mode: "insensitive" } },
+        { chapter: { contains: q, mode: "insensitive" } },
+        { subject: { contains: q, mode: "insensitive" } },
         { tags: { contains: q, mode: "insensitive" } },
         {
           translations: {
