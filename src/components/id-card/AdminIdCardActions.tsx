@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SendIndividualDocumentModal, RecipientProfile } from "./SendIndividualDocumentModal";
 
 /** Row actions on the admin ID-card list. Every action is re-checked on the server. */
 export function AdminIdCardActions({
@@ -10,16 +11,28 @@ export function AdminIdCardActions({
   status,
   printable,
   canAssignEmployeeId,
+  recipientDetails,
 }: {
   userId: string;
   kind: "STUDENT" | "TEAM";
   status: "ACTIVE" | "REVOKED" | null;
   printable: boolean;
   canAssignEmployeeId: boolean;
+  recipientDetails?: {
+    name: string;
+    email: string;
+    phone?: string | null;
+    photoUrl?: string | null;
+    employeeCode?: string | null;
+    designation?: string | null;
+    department?: string | null;
+    joiningDate?: string | null;
+  };
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sendDocOpen, setSendDocOpen] = useState(false);
 
   async function act(body: Record<string, unknown>) {
     setBusy(true);
@@ -48,6 +61,16 @@ export function AdminIdCardActions({
           PDF
         </a>
       )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => setSendDocOpen(true)}
+        className={`${btn} border-[#0f3a9e]/40 text-[#0f3a9e] hover:bg-[#0f3a9e]/5 flex items-center gap-1`}
+        title="Send ID card, Joining letter, Contract or Experience certificate"
+      >
+        <span className="material-symbols-outlined text-[12px]">send</span>
+        Send
+      </button>
       {canAssignEmployeeId && (
         <button type="button" disabled={busy} onClick={() => act({ action: "assignEmployeeId" })} className={`${btn} border-outline-variant hover:bg-surface-container`}>
           Assign employee ID
@@ -81,6 +104,30 @@ export function AdminIdCardActions({
         Reissue
       </button>
       {error && <span className="text-[11px] text-error w-full">{error}</span>}
+
+      {sendDocOpen && (
+        <SendIndividualDocumentModal
+          isOpen={sendDocOpen}
+          onClose={() => setSendDocOpen(false)}
+          defaultKind={kind}
+          initialRecipient={
+            recipientDetails
+              ? {
+                  id: userId,
+                  kind,
+                  name: recipientDetails.name,
+                  email: recipientDetails.email,
+                  phone: recipientDetails.phone,
+                  photoUrl: recipientDetails.photoUrl,
+                  employeeCode: recipientDetails.employeeCode,
+                  designation: recipientDetails.designation,
+                  department: recipientDetails.department,
+                  joiningDate: recipientDetails.joiningDate,
+                }
+              : null
+          }
+        />
+      )}
     </div>
   );
 }

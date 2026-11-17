@@ -11,6 +11,7 @@ import { formatEnrollmentNumber } from "@/lib/utils/id-generator";
 import { AdminIdCardActions } from "@/components/id-card/AdminIdCardActions";
 import { TeamCardDetailsEditor } from "@/components/id-card/TeamCardDetailsEditor";
 import { SendIdCardsButton } from "@/components/id-card/SendIdCardsButton";
+import { SendIndividualTriggerButton } from "@/components/id-card/SendIndividualTriggerButton";
 
 /** A stored date as yyyy-mm-dd in IST, for a date input. */
 const istYmd = (d: Date | null | undefined) => (d ? new Date(d.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10) : "");
@@ -74,6 +75,7 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
             id: true,
             name: true,
             email: true,
+            phone: true,
             photoUrl: true,
             status: true,
             position: true,
@@ -150,6 +152,16 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
                   status={card?.status ?? null}
                   printable={missing.length === 0}
                   canAssignEmployeeId={!empId}
+                  recipientDetails={{
+                    name: u.name,
+                    email: u.email,
+                    phone: u.phone,
+                    photoUrl: u.photoUrl,
+                    employeeCode: empId,
+                    designation: designation,
+                    department: u.department,
+                    joiningDate: istYmd(u.contractStart),
+                  }}
                 />
               )}
             </div>
@@ -188,6 +200,7 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
               select: {
                 name: true,
                 email: true,
+                phone: true,
                 photoUrl: true,
                 status: true,
                 ...(cards ? { idCards: { where: { kind: "STUDENT" as const }, ...cardSelect } } : {}),
@@ -239,7 +252,22 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
           </td>
           <td className={td}>
             {cardsReady && eligible && (
-              <AdminIdCardActions userId={s.userId} kind="STUDENT" status={card?.status ?? null} printable={Boolean(s.user.photoUrl)} canAssignEmployeeId={false} />
+              <AdminIdCardActions
+                userId={s.userId}
+                kind="STUDENT"
+                status={card?.status ?? null}
+                printable={Boolean(s.user.photoUrl)}
+                canAssignEmployeeId={false}
+                recipientDetails={{
+                  name: s.user.name,
+                  email: s.user.email,
+                  phone: s.user.phone,
+                  photoUrl: s.user.photoUrl,
+                  employeeCode: formatEnrollmentNumber(s.enrollmentNumber),
+                  designation: "Student",
+                  department: "Student",
+                }}
+              />
             )}
           </td>
         </tr>
@@ -261,7 +289,8 @@ export default async function IdCardsAdminPage({ searchParams }: { searchParams:
       </header>
 
       {cardsReady && (
-        <div className="flex flex-wrap items-start gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <SendIndividualTriggerButton key={`${tab}-individual`} kind={tab === "team" ? "TEAM" : "STUDENT"} />
           <SendIdCardsButton key={`${tab}-email`} kind={tab === "team" ? "TEAM" : "STUDENT"} channel="email" />
           <SendIdCardsButton key={`${tab}-wa`} kind={tab === "team" ? "TEAM" : "STUDENT"} channel="whatsapp" />
         </div>
