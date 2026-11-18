@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, isSuperAdminUser, hasPermission, ForbiddenError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { mediaUpdateSchema } from "@/lib/validation/media";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -12,8 +12,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.MEDIA_MANAGE);
-    await requireSuperAdmin(session.user.id);
+    const canEdit =
+      (await isSuperAdminUser(session.user.id)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.MEDIA_EDIT)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.MEDIA_MANAGE));
+    if (!canEdit) throw new ForbiddenError("You do not have permission to edit media assets.");
 
     const input = mediaUpdateSchema.parse(await request.json());
     const existing = await prisma.mediaAsset.findUnique({ where: { id: params.id } });
@@ -35,8 +38,11 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.MEDIA_MANAGE);
-    await requireSuperAdmin(session.user.id);
+    const canDelete =
+      (await isSuperAdminUser(session.user.id)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.MEDIA_DELETE)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.MEDIA_MANAGE));
+    if (!canDelete) throw new ForbiddenError("You do not have permission to delete media assets.");
 
     const existing = await prisma.mediaAsset.findUnique({ where: { id: params.id } });
     if (!existing) return apiError("Asset not found.", 404);

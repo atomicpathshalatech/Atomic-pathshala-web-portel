@@ -28,6 +28,19 @@ type PreloadedUserForPermission = {
   role: { name: string };
 };
 
+const PERMISSION_EQUIVALENTS: Record<string, string[]> = {
+  "batch.read": ["batches.view"],
+  "course.read": ["courses.view"],
+  "teacher.read": ["faculty.view"],
+  "cms.media.manage": ["media.view", "media.upload", "media.assets.manage"],
+  "analytics.view": [
+    "analytics.youtube.view",
+    "analytics.instagram.view",
+    "analytics.social.view",
+    "analytics.campaign.view",
+  ],
+};
+
 /**
  * Checks whether the given user holds the given permission,
  * factoring in:
@@ -99,10 +112,16 @@ export async function hasPermission(
     return true;
   }
 
+  // Check read equivalents if target permission has aliases
+  const equivalents = PERMISSION_EQUIVALENTS[permission] || [];
+  for (const eq of equivalents) {
+    if (roleDefaults.includes(eq as PermissionCode)) return true;
+  }
+
   // 6. Check Role permissions in DB
   const count = await prisma.rolePermission.count({
     where: {
-      permission: { code: permission },
+      permission: { code: { in: [permission, ...equivalents] } },
       role: { users: { some: { id: userId } } },
     },
   });

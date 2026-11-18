@@ -10,9 +10,11 @@ export const metadata: Metadata = { title: "Media Library — Website Builder" }
 
 export default async function MediaPage() {
   const { user } = await requireTeamSession();
-  if (!(await isSuperAdminUser(user.id))) return <SuperAdminOnlyNotice />;
+  const isSuper = await isSuperAdminUser(user.id);
   const canManage = await hasPermission(user.id, PERMISSIONS.MEDIA_MANAGE);
-  if (!canManage) {
+  const canView = await hasPermission(user.id, PERMISSIONS.MEDIA_VIEW);
+
+  if (!isSuper && !canManage && !canView) {
     return <div className="glass-card rounded-2xl p-8 text-center text-on-surface-variant font-body-md">You don&apos;t have access to the Media Library.</div>;
   }
 

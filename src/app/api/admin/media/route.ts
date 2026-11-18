@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, requireSuperAdmin, isSuperAdminUser, hasPermission, ForbiddenError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { uploadFile, StorageNotConfiguredError } from "@/lib/storage";
@@ -17,8 +17,11 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.MEDIA_MANAGE);
-    await requireSuperAdmin(session.user.id);
+    const canView =
+      (await isSuperAdminUser(session.user.id)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.MEDIA_VIEW)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.MEDIA_MANAGE));
+    if (!canView) throw new ForbiddenError("You do not have permission to view media assets.");
 
     const assets = await prisma.mediaAsset.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
     return apiSuccess({ assets });
@@ -31,8 +34,11 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.MEDIA_MANAGE);
-    await requireSuperAdmin(session.user.id);
+    const canUpload =
+      (await isSuperAdminUser(session.user.id)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.MEDIA_UPLOAD)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.MEDIA_MANAGE));
+    if (!canUpload) throw new ForbiddenError("You do not have permission to upload media assets.");
 
     const form = await request.formData();
     const file = form.get("file");

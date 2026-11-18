@@ -56,6 +56,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
   {
     title: "Website & App CMS",
     items: [
+      { href: "/team/website/media", label: "Media Library", icon: "photo_library", permission: PERMISSIONS.MEDIA_VIEW },
       { href: "/team/website/banners", label: "App & Web Banners", icon: "view_carousel", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
       { href: "/team/website/hero", label: "Homepage Hero Image", icon: "image", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
       { href: "/team/website/blog", label: "Blog", icon: "article", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },

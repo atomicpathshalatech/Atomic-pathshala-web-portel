@@ -142,6 +142,46 @@ const MODULE_DESCRIPTIONS_SOURCE = [
     ],
   },
   {
+    module: "Video & Media Management",
+    description: "Upload, manage, download, and organize video and image brand assets",
+    actions: [],
+  },
+  {
+    module: "YouTube Management",
+    description: "YouTube uploads, thumbnail management, playlists, analytics and community posts",
+    actions: [],
+  },
+  {
+    module: "Instagram & Social Media",
+    description: "Social media post creation, scheduling, publishing, stories and reels",
+    actions: [],
+  },
+  {
+    module: "Marketing & Promotions",
+    description: "Promotional campaigns, creatives, discount offers and campaign analytics",
+    actions: [],
+  },
+  {
+    module: "Content & SEO",
+    description: "SEO metadata optimization, content calendar and copywriting",
+    actions: [],
+  },
+  {
+    module: "Course Information (Read-Only)",
+    description: "Read-only access to courses, batches, faculty profiles and schedules",
+    actions: [],
+  },
+  {
+    module: "Growth Analytics",
+    description: "Performance metrics for YouTube, Instagram, social reach and campaign conversions",
+    actions: [],
+  },
+  {
+    module: "Communication & Approvals",
+    description: "Draft communication messages and submit for administrative approval",
+    actions: [],
+  },
+  {
     module: "Chapters",
     description: "Own chapters by default; \"All teachers' chapters\" lets this person see and edit every teacher's chapters",
     actions: [

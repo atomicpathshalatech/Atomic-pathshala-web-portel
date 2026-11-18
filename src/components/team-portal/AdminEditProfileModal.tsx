@@ -101,6 +101,7 @@ export const ROLE_OPTIONS = [
   { value: "FINANCE", label: "Finance" },
   { value: "HR", label: "Human Resources (HR)" },
   { value: "MARKETING", label: "Marketing" },
+  { value: "CONTENT_GROWTH_EXECUTIVE", label: "Content & Digital Growth Executive" },
   { value: "DESIGNER", label: "Designer" },
   { value: "VIDEO_EDITOR", label: "Video Editor" },
   { value: "STUDENT", label: "Student" },

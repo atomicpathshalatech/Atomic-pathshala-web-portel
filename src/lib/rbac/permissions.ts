@@ -273,6 +273,71 @@ export const PERMISSIONS = {
   MESSAGE_READ: "message.read",
   MESSAGE_SEND: "message.send",
   MESSAGE_READ_ANY: "message.read.any",
+
+  // Video & Media Management (Content & Digital Growth)
+  MEDIA_VIEW: "media.view",
+  MEDIA_UPLOAD: "media.upload",
+  MEDIA_EDIT: "media.edit",
+  MEDIA_DELETE: "media.delete",
+  MEDIA_DOWNLOAD: "media.download",
+  MEDIA_THUMBNAIL_MANAGE: "media.thumbnail.manage",
+  MEDIA_ASSETS_MANAGE: "media.assets.manage",
+
+  // YouTube Management
+  YOUTUBE_CONTENT_VIEW: "youtube.content.view",
+  YOUTUBE_CONTENT_CREATE: "youtube.content.create",
+  YOUTUBE_CONTENT_EDIT: "youtube.content.edit",
+  YOUTUBE_CONTENT_SCHEDULE: "youtube.content.schedule",
+  YOUTUBE_THUMBNAIL_MANAGE: "youtube.thumbnail.manage",
+  YOUTUBE_PLAYLIST_MANAGE: "youtube.playlist.manage",
+  YOUTUBE_ANALYTICS_VIEW: "youtube.analytics.view",
+  YOUTUBE_COMMUNITY_DRAFT: "youtube.community.draft",
+
+  // Instagram & Social Media
+  SOCIAL_CONTENT_VIEW: "social.content.view",
+  SOCIAL_CONTENT_CREATE: "social.content.create",
+  SOCIAL_CONTENT_EDIT: "social.content.edit",
+  SOCIAL_CONTENT_SCHEDULE: "social.content.schedule",
+  SOCIAL_CONTENT_PUBLISH: "social.content.publish",
+  SOCIAL_STORIES_MANAGE: "social.stories.manage",
+  SOCIAL_REELS_MANAGE: "social.reels.manage",
+  SOCIAL_ANALYTICS_VIEW: "social.analytics.view",
+
+  // Marketing & Promotions
+  MARKETING_CAMPAIGN_VIEW: "marketing.campaign.view",
+  MARKETING_CAMPAIGN_CREATE: "marketing.campaign.create",
+  MARKETING_CAMPAIGN_EDIT: "marketing.campaign.edit",
+  MARKETING_CREATIVE_MANAGE: "marketing.creative.manage",
+  MARKETING_OFFER_VIEW: "marketing.offer.view",
+  MARKETING_CAMPAIGN_ANALYTICS: "marketing.campaign.analytics",
+
+  // Content & SEO
+  SEO_METADATA_VIEW: "seo.metadata.view",
+  SEO_METADATA_CREATE: "seo.metadata.create",
+  SEO_METADATA_EDIT: "seo.metadata.edit",
+  CONTENT_CALENDAR_MANAGE: "content.calendar.manage",
+  CONTENT_COPYWRITING_MANAGE: "content.copywriting.manage",
+  CONTENT_LECTURE_METADATA_EDIT: "content.lecture.metadata.edit",
+
+  // Course Information (Read-Only)
+  COURSES_VIEW: "courses.view",
+  BATCHES_VIEW: "batches.view",
+  FACULTY_VIEW: "faculty.view",
+  SCHEDULE_VIEW: "schedule.view",
+  PROMOTIONAL_PRICING_VIEW: "promotional.pricing.view",
+
+  // Analytics
+  ANALYTICS_YOUTUBE_VIEW: "analytics.youtube.view",
+  ANALYTICS_INSTAGRAM_VIEW: "analytics.instagram.view",
+  ANALYTICS_SOCIAL_VIEW: "analytics.social.view",
+  ANALYTICS_CAMPAIGN_VIEW: "analytics.campaign.view",
+  ANALYTICS_REPORTS_EXPORT: "analytics.reports.export",
+
+  // Communication
+  COMMUNICATION_DRAFT_CREATE: "communication.draft.create",
+  COMMUNICATION_DRAFT_EDIT: "communication.draft.edit",
+  COMMUNICATION_APPROVAL_SUBMIT: "communication.approval.submit",
+  COMMUNICATION_CAMPAIGN_VIEW: "communication.campaign.view",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -399,6 +464,73 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.LECTURE_CREATE,
     PERMISSIONS.LECTURE_UPDATE,
     PERMISSIONS.CHAPTER_READ,
+  ],
+  CONTENT_GROWTH_EXECUTIVE: [
+    PERMISSIONS.TEAM_PORTAL_ACCESS,
+    // Video & Media Management
+    PERMISSIONS.MEDIA_VIEW,
+    PERMISSIONS.MEDIA_UPLOAD,
+    PERMISSIONS.MEDIA_EDIT,
+    PERMISSIONS.MEDIA_DELETE,
+    PERMISSIONS.MEDIA_DOWNLOAD,
+    PERMISSIONS.MEDIA_THUMBNAIL_MANAGE,
+    PERMISSIONS.MEDIA_ASSETS_MANAGE,
+    // YouTube Management
+    PERMISSIONS.YOUTUBE_CONTENT_VIEW,
+    PERMISSIONS.YOUTUBE_CONTENT_CREATE,
+    PERMISSIONS.YOUTUBE_CONTENT_EDIT,
+    PERMISSIONS.YOUTUBE_CONTENT_SCHEDULE,
+    PERMISSIONS.YOUTUBE_THUMBNAIL_MANAGE,
+    PERMISSIONS.YOUTUBE_PLAYLIST_MANAGE,
+    PERMISSIONS.YOUTUBE_ANALYTICS_VIEW,
+    PERMISSIONS.YOUTUBE_COMMUNITY_DRAFT,
+    // Instagram & Social Media
+    PERMISSIONS.SOCIAL_CONTENT_VIEW,
+    PERMISSIONS.SOCIAL_CONTENT_CREATE,
+    PERMISSIONS.SOCIAL_CONTENT_EDIT,
+    PERMISSIONS.SOCIAL_CONTENT_SCHEDULE,
+    PERMISSIONS.SOCIAL_CONTENT_PUBLISH,
+    PERMISSIONS.SOCIAL_STORIES_MANAGE,
+    PERMISSIONS.SOCIAL_REELS_MANAGE,
+    PERMISSIONS.SOCIAL_ANALYTICS_VIEW,
+    // Marketing & Promotions
+    PERMISSIONS.MARKETING_CAMPAIGN_VIEW,
+    PERMISSIONS.MARKETING_CAMPAIGN_CREATE,
+    PERMISSIONS.MARKETING_CAMPAIGN_EDIT,
+    PERMISSIONS.MARKETING_CREATIVE_MANAGE,
+    PERMISSIONS.MARKETING_OFFER_VIEW,
+    PERMISSIONS.MARKETING_CAMPAIGN_ANALYTICS,
+    // Content & SEO
+    PERMISSIONS.SEO_METADATA_VIEW,
+    PERMISSIONS.SEO_METADATA_CREATE,
+    PERMISSIONS.SEO_METADATA_EDIT,
+    PERMISSIONS.CONTENT_CALENDAR_MANAGE,
+    PERMISSIONS.CONTENT_COPYWRITING_MANAGE,
+    PERMISSIONS.CONTENT_LECTURE_METADATA_EDIT,
+    // Course Information (Read-only)
+    PERMISSIONS.COURSES_VIEW,
+    PERMISSIONS.BATCHES_VIEW,
+    PERMISSIONS.FACULTY_VIEW,
+    PERMISSIONS.SCHEDULE_VIEW,
+    PERMISSIONS.PROMOTIONAL_PRICING_VIEW,
+    // Analytics
+    PERMISSIONS.ANALYTICS_YOUTUBE_VIEW,
+    PERMISSIONS.ANALYTICS_INSTAGRAM_VIEW,
+    PERMISSIONS.ANALYTICS_SOCIAL_VIEW,
+    PERMISSIONS.ANALYTICS_CAMPAIGN_VIEW,
+    PERMISSIONS.ANALYTICS_REPORTS_EXPORT,
+    // Communication
+    PERMISSIONS.COMMUNICATION_DRAFT_CREATE,
+    PERMISSIONS.COMMUNICATION_DRAFT_EDIT,
+    PERMISSIONS.COMMUNICATION_APPROVAL_SUBMIT,
+    PERMISSIONS.COMMUNICATION_CAMPAIGN_VIEW,
+    // Baseline aliases so read-only batch/course/media pages work out of the box
+    PERMISSIONS.COURSE_READ,
+    PERMISSIONS.BATCH_READ,
+    PERMISSIONS.MEDIA_MANAGE,
+    PERMISSIONS.VIDEO_READ,
+    PERMISSIONS.DESIGN_READ,
+    PERMISSIONS.ANALYTICS_VIEW,
   ],
   ADMIN: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -649,6 +781,7 @@ export const VALID_GLOBAL_ROLES = [
   "TEACHER",
   "ACADEMIC_HEAD",
   "DEPARTMENT_HEAD",
+  "CONTENT_GROWTH_EXECUTIVE",
   "CONTENT_CREATOR",
   "CONTENT_TEAM",
   "QUESTION_TEAM",
@@ -692,6 +825,7 @@ export function parseGlobalRole(input: unknown): GlobalRoleName | null {
   if (upper.includes("SUB_ADMIN") || upper.includes("SUB ADMIN")) return "SUB_ADMIN";
   if (upper.includes("ADMIN")) return "ADMIN";
   if (upper.includes("TEACHER") || upper.includes("EDUCATOR") || upper.includes("FACULTY")) return "TEACHER";
+  if (upper.includes("CONTENT_GROWTH_EXECUTIVE") || upper.includes("CONTENT & DIGITAL GROWTH") || upper.includes("GROWTH EXECUTIVE")) return "CONTENT_GROWTH_EXECUTIVE";
   if (upper.includes("CONTENT_CREATOR") || upper.includes("CONTENT CREATOR")) return "CONTENT_CREATOR";
   if (upper.includes("CONTENT_TEAM") || upper.includes("CONTENT TEAM")) return "CONTENT_TEAM";
   if (upper.includes("QUESTION_TEAM") || upper.includes("QUESTION TEAM")) return "QUESTION_TEAM";

@@ -103,6 +103,95 @@ const MODULE_GROUPS = [
     ],
   },
   {
+    name: "Video & Media Management",
+    actions: [
+      { code: "media.view", label: "View Media" },
+      { code: "media.upload", label: "Upload Media" },
+      { code: "media.edit", label: "Edit Media" },
+      { code: "media.delete", label: "Delete Media" },
+      { code: "media.download", label: "Download Media" },
+      { code: "media.thumbnail.manage", label: "Manage Thumbnails" },
+      { code: "media.assets.manage", label: "Manage Brand Assets" },
+    ],
+  },
+  {
+    name: "YouTube Management",
+    actions: [
+      { code: "youtube.content.view", label: "View YouTube Content" },
+      { code: "youtube.content.create", label: "Create Content" },
+      { code: "youtube.content.edit", label: "Edit Content" },
+      { code: "youtube.content.schedule", label: "Schedule Uploads" },
+      { code: "youtube.thumbnail.manage", label: "Manage Thumbnails" },
+      { code: "youtube.playlist.manage", label: "Manage Playlists" },
+      { code: "youtube.analytics.view", label: "View YouTube Analytics" },
+      { code: "youtube.community.draft", label: "Draft Community Posts" },
+    ],
+  },
+  {
+    name: "Instagram & Social Media",
+    actions: [
+      { code: "social.content.view", label: "View Social Content" },
+      { code: "social.content.create", label: "Create Content" },
+      { code: "social.content.edit", label: "Edit Content" },
+      { code: "social.content.schedule", label: "Schedule Posts" },
+      { code: "social.content.publish", label: "Publish Content" },
+      { code: "social.stories.manage", label: "Manage Stories" },
+      { code: "social.reels.manage", label: "Manage Reels" },
+      { code: "social.analytics.view", label: "View Social Analytics" },
+    ],
+  },
+  {
+    name: "Marketing & Promotions",
+    actions: [
+      { code: "marketing.campaign.view", label: "View Campaigns" },
+      { code: "marketing.campaign.create", label: "Create Campaigns" },
+      { code: "marketing.campaign.edit", label: "Edit Campaigns" },
+      { code: "marketing.creative.manage", label: "Manage Creatives" },
+      { code: "marketing.offer.view", label: "View Promotional Offers" },
+      { code: "marketing.campaign.analytics", label: "Campaign Analytics" },
+    ],
+  },
+  {
+    name: "Content & SEO",
+    actions: [
+      { code: "seo.metadata.view", label: "View SEO Metadata" },
+      { code: "seo.metadata.create", label: "Create SEO Metadata" },
+      { code: "seo.metadata.edit", label: "Edit SEO Metadata" },
+      { code: "content.calendar.manage", label: "Manage Content Calendar" },
+      { code: "content.copywriting.manage", label: "Manage Copywriting" },
+      { code: "content.lecture.metadata.edit", label: "Edit Lecture Metadata" },
+    ],
+  },
+  {
+    name: "Course Information (Read-Only)",
+    actions: [
+      { code: "courses.view", label: "View Courses" },
+      { code: "batches.view", label: "View Batches" },
+      { code: "faculty.view", label: "View Faculty Profiles" },
+      { code: "schedule.view", label: "View Schedules" },
+      { code: "promotional.pricing.view", label: "View Promotional Pricing" },
+    ],
+  },
+  {
+    name: "Growth Analytics",
+    actions: [
+      { code: "analytics.youtube.view", label: "YouTube Analytics" },
+      { code: "analytics.instagram.view", label: "Instagram Analytics" },
+      { code: "analytics.social.view", label: "Social Reach Analytics" },
+      { code: "analytics.campaign.view", label: "Campaign Performance" },
+      { code: "analytics.reports.export", label: "Export Growth Reports" },
+    ],
+  },
+  {
+    name: "Communication & Approvals",
+    actions: [
+      { code: "communication.draft.create", label: "Create Drafts" },
+      { code: "communication.draft.edit", label: "Edit Drafts" },
+      { code: "communication.approval.submit", label: "Submit for Approval" },
+      { code: "communication.campaign.view", label: "View Campaigns" },
+    ],
+  },
+  {
     name: "Administration & RBAC",
     actions: [
       { code: "admin.user.read", label: "View Users" },
