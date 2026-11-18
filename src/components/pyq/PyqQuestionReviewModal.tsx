@@ -13,7 +13,6 @@ import {
 } from "@/lib/questions/classification-options";
 import {
   getMasterNcertChapters,
-  getMasterNcertTopics,
 } from "@/lib/academic/master-ncert-catalog";
 import {
   StructuredSolution,
@@ -97,6 +96,38 @@ const DEFAULT_CHECKLIST: ChecklistState = {
   examNameYear: false,
 };
 
+interface FormSnapshot {
+  enStatement: string;
+  hiStatement: string;
+  enOptions: Record<string, string>;
+  hiOptions: Record<string, string>;
+  correctKey: string;
+  structuredEn: StructuredSolution;
+  structuredHi: StructuredSolution;
+  editSubject: string;
+  editChapter: string;
+  editTopic: string;
+  editSubTopic: string;
+  editMicroConcept: string;
+  editBloomLevel: string;
+  editImportance: string;
+  editSolveTime: string;
+  editKeySkill: string;
+  editDifficulty: string;
+  editType: string;
+  editPyqExam: string;
+  editPyqYear: number | string;
+  editSession: string;
+  editShift: string;
+  editTags: string;
+  editNcertClass: string;
+  editNcertChapter: string;
+  editNcertPage: string;
+  editNcertSection: string;
+  editNcertRelevance: string;
+  editSyllabusInclusion: string;
+}
+
 interface PyqQuestionReviewModalProps {
   questionId: string | null;
   open: boolean;
@@ -146,13 +177,12 @@ export function PyqQuestionReviewModal({
   const [editSolveTime, setEditSolveTime] = useState("MODERATE");
   const [editKeySkill, setEditKeySkill] = useState("CONCEPTUAL_UNDERSTANDING");
 
-  // Form Fields - Exam Classification
+  // Form Fields - Exam Classification (Note: Question Number in Paper strictly excluded per Section 7)
   const [editPyqExam, setEditPyqExam] = useState("");
   const [editPyqYear, setEditPyqYear] = useState<number | string>("");
   const [editSession, setEditSession] = useState("");
   const [editShift, setEditShift] = useState("");
   const [editPaper, setEditPaper] = useState("");
-  const [editPyqQuestionNumber, setEditPyqQuestionNumber] = useState("");
   const [editType, setEditType] = useState("SINGLE_CORRECT");
   const [editDifficulty, setEditDifficulty] = useState("MEDIUM");
   const [editTags, setEditTags] = useState("");
@@ -179,10 +209,26 @@ export function PyqQuestionReviewModal({
   const [structuredHi, setStructuredHi] = useState<StructuredSolution>(createEmptyStructuredSolution());
   const [solutionLanguageTab, setSolutionLanguageTab] = useState<"en" | "hi" | "preview">("en");
 
-  // AI Solution Generation State
+  // AI Intelligence Engine State
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [aiDerivedOption, setAiDerivedOption] = useState<string | null>(null);
+  const [aiMeta, setAiMeta] = useState<{
+    correlationId: string;
+    modelUsed: string;
+    latencyMs: number;
+    estimatedCostInr: number;
+    source: string;
+  } | null>(null);
+  const [suggestedCorrections, setSuggestedCorrections] = useState<{
+    issues: string[];
+    suggestedEnStatement: string | null;
+    suggestedHiStatement: string | null;
+    suggestedEnOptions: Record<string, string> | null;
+    suggestedHiOptions: Record<string, string> | null;
+  } | null>(null);
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
+  const [previousSnapshot, setPreviousSnapshot] = useState<FormSnapshot | null>(null);
 
   // Checklist
   const [checklist, setChecklist] = useState<ChecklistState>(DEFAULT_CHECKLIST);
@@ -230,7 +276,6 @@ export function PyqQuestionReviewModal({
           setEditSession(q.pyqOccurrences?.[0]?.session || "");
           setEditShift(q.pyqOccurrences?.[0]?.shift || "");
           setEditPaper(q.pyqOccurrences?.[0]?.paper || "");
-          setEditPyqQuestionNumber(q.pyqQuestionNumber || (q.pyqOccurrences?.[0]?.questionNumber ?? ""));
           setEditType(q.type || "SINGLE_CORRECT");
           setEditDifficulty(q.difficulty || "MEDIUM");
           setEditTags(q.tags || "");
@@ -239,6 +284,8 @@ export function PyqQuestionReviewModal({
           setEditNcertChapter(q.ncertChapter || q.chapter || "");
           setEditNcertPage(q.ncertPage || "");
           setEditNcertSection(q.ncertSection || "");
+          setEditNcertRelevance("DIRECT");
+          setEditSyllabusInclusion("INCLUDED");
           setEditImageUrl(q.imageUrl || "");
 
           const en = q.translations.find((t) => t.language.toUpperCase() === "ENGLISH");
@@ -291,6 +338,10 @@ export function PyqQuestionReviewModal({
           setReviewComments("");
           setAiWarning(null);
           setAiDerivedOption(null);
+          setAiMeta(null);
+          setSuggestedCorrections(null);
+          setSuggestedTags([]);
+          setPreviousSnapshot(null);
         }
       })
       .catch((e) => toast.error(e.message))
@@ -322,48 +373,221 @@ export function PyqQuestionReviewModal({
   }
 
   /**
-   * AI Solution Generator Action
+   * Take current state snapshot before applying AI changes
    */
-  async function handleGenerateAiSolution(lang: "both" | "en" | "hi") {
+  function captureCurrentSnapshot(): FormSnapshot {
+    return {
+      enStatement,
+      hiStatement,
+      enOptions,
+      hiOptions,
+      correctKey,
+      structuredEn,
+      structuredHi,
+      editSubject,
+      editChapter,
+      editTopic,
+      editSubTopic,
+      editMicroConcept,
+      editBloomLevel,
+      editImportance,
+      editSolveTime,
+      editKeySkill,
+      editDifficulty,
+      editType,
+      editPyqExam,
+      editPyqYear,
+      editSession,
+      editShift,
+      editTags,
+      editNcertClass,
+      editNcertChapter,
+      editNcertPage,
+      editNcertSection,
+      editNcertRelevance,
+      editSyllabusInclusion,
+    };
+  }
+
+  /**
+   * Restore previous form snapshot
+   */
+  function handleRestoreOriginal() {
+    if (!previousSnapshot) return;
+    setEnStatement(previousSnapshot.enStatement);
+    setHiStatement(previousSnapshot.hiStatement);
+    setEnOptions(previousSnapshot.enOptions);
+    setHiOptions(previousSnapshot.hiOptions);
+    setCorrectKey(previousSnapshot.correctKey);
+    setStructuredEn(previousSnapshot.structuredEn);
+    setStructuredHi(previousSnapshot.structuredHi);
+    setEditSubject(previousSnapshot.editSubject);
+    setEditChapter(previousSnapshot.editChapter);
+    setEditTopic(previousSnapshot.editTopic);
+    setEditSubTopic(previousSnapshot.editSubTopic);
+    setEditMicroConcept(previousSnapshot.editMicroConcept);
+    setEditBloomLevel(previousSnapshot.editBloomLevel);
+    setEditImportance(previousSnapshot.editImportance);
+    setEditSolveTime(previousSnapshot.editSolveTime);
+    setEditKeySkill(previousSnapshot.editKeySkill);
+    setEditDifficulty(previousSnapshot.editDifficulty);
+    setEditType(previousSnapshot.editType);
+    setEditPyqExam(previousSnapshot.editPyqExam);
+    setEditPyqYear(previousSnapshot.editPyqYear);
+    setEditSession(previousSnapshot.editSession);
+    setEditShift(previousSnapshot.editShift);
+    setEditTags(previousSnapshot.editTags);
+    setEditNcertClass(previousSnapshot.editNcertClass);
+    setEditNcertChapter(previousSnapshot.editNcertChapter);
+    setEditNcertPage(previousSnapshot.editNcertPage);
+    setEditNcertSection(previousSnapshot.editNcertSection);
+    setEditNcertRelevance(previousSnapshot.editNcertRelevance);
+    setEditSyllabusInclusion(previousSnapshot.editSyllabusInclusion);
+    setAiMeta(null);
+    setAiWarning(null);
+    setSuggestedCorrections(null);
+    setSuggestedTags([]);
+    toast.info("Restored original question data.");
+  }
+
+  /**
+   * ONE-CLICK UNIFIED AI INTELLIGENCE ENGINE
+   * Single call populates all 5 tabs
+   */
+  async function handleOneClickAiIntelligence() {
     if (!activeQuestionId) return;
     setAiGenerating(true);
     setAiWarning(null);
+
+    // Save snapshot before applying AI changes
+    setPreviousSnapshot(captureCurrentSnapshot());
 
     try {
       const res = await fetch(`/api/team/pyq/questions/${activeQuestionId}/ai-solution`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          language: lang,
-          mode: "full",
-        }),
+        body: JSON.stringify({}),
       });
 
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error || "Failed to generate AI solution");
+        throw new Error(json.error || `AI processing failed with status ${res.status}`);
       }
 
-      if (json.data?.solutionEn && (lang === "both" || lang === "en")) {
-        setStructuredEn(json.data.solutionEn);
+      const intelligence = json.data;
+
+      // 1. Auto-populate Structured Solutions (Tab 2)
+      if (intelligence.structuredSolutions?.english) {
+        setStructuredEn(intelligence.structuredSolutions.english);
       }
-      if (json.data?.solutionHi && (lang === "both" || lang === "hi")) {
-        setStructuredHi(json.data.solutionHi);
+      if (intelligence.structuredSolutions?.hindi) {
+        setStructuredHi(intelligence.structuredSolutions.hindi);
       }
 
-      setAiDerivedOption(json.data?.derivedOption || null);
-      if (json.data?.mismatchWarning) {
-        setAiWarning(json.data.mismatchWarning);
-        toast.warning(json.data.mismatchWarning);
+      // 2. Auto-populate Academic & Exam Metadata (Tab 3)
+      if (intelligence.academicMetadata) {
+        const meta = intelligence.academicMetadata;
+        if (meta.subject) setEditSubject(meta.subject);
+        if (meta.class) setEditNcertClass(String(meta.class));
+        if (meta.chapter) setEditChapter(meta.chapter);
+        if (meta.topic) setEditTopic(meta.topic);
+        if (meta.subtopic) setEditSubTopic(meta.subtopic);
+        if (Array.isArray(meta.microConcepts)) setEditMicroConcept(meta.microConcepts.join(", "));
+        if (meta.difficulty) setEditDifficulty(meta.difficulty);
+        if (meta.questionType) setEditType(meta.questionType);
+        if (meta.bloomLevel) setEditBloomLevel(meta.bloomLevel);
+        if (meta.importance) setEditImportance(meta.importance);
+        if (meta.keySkill) setEditKeySkill(meta.keySkill);
+        if (meta.estimatedSolveTimeSeconds) {
+          const s = meta.estimatedSolveTimeSeconds;
+          setEditSolveTime(s <= 45 ? "QUICK" : s <= 90 ? "MODERATE" : "LENGTHY");
+        }
+      }
+
+      if (intelligence.examMetadata) {
+        const em = intelligence.examMetadata;
+        if (em.exam) setEditPyqExam(em.exam);
+        if (em.year) setEditPyqYear(em.year);
+        if (em.shift) setEditShift(em.shift);
+        if (em.session) setEditSession(em.session);
+      }
+
+      // 3. Auto-populate NCERT & Syllabus Mapping (Tab 4)
+      if (intelligence.ncertMapping) {
+        const nm = intelligence.ncertMapping;
+        if (nm.class) setEditNcertClass(String(nm.class));
+        if (nm.chapter) setEditNcertChapter(nm.chapter);
+        if (nm.section) setEditNcertSection(nm.section);
+        if (nm.pageNumber) setEditNcertPage(nm.pageNumber);
+        if (nm.relevance) setEditNcertRelevance(nm.relevance);
+        if (nm.syllabusStatus) setEditSyllabusInclusion(nm.syllabusStatus);
+      }
+
+      // 4. Auto-populate Question & Options (Tab 1)
+      if (intelligence.questionReview) {
+        const qr = intelligence.questionReview;
+        // If Hindi translation was missing, auto-fill it
+        if (!hiStatement && qr.suggestedHiStatement) {
+          setHiStatement(qr.suggestedHiStatement);
+        }
+        if (Object.keys(hiOptions).length === 0 || !hiOptions.A) {
+          if (qr.suggestedHiOptions && typeof qr.suggestedHiOptions === "object") {
+            setHiOptions(qr.suggestedHiOptions);
+          }
+        }
+        if (qr.issues && qr.issues.length > 0) {
+          setSuggestedCorrections(qr);
+        }
+      }
+
+      // 5. Tags preservation & suggestions
+      if (intelligence.tags?.suggested && Array.isArray(intelligence.tags.suggested)) {
+        setSuggestedTags(intelligence.tags.suggested);
+      }
+
+      // 6. Answer Key Verification & Sanity Check
+      const derived = intelligence.answerVerification?.suggestedAnswer || null;
+      setAiDerivedOption(derived);
+      if (intelligence.answerVerification?.mismatchWarning) {
+        setAiWarning(intelligence.answerVerification.mismatchWarning);
       } else {
-        toast.success("AI pedagogical solution generated successfully!");
+        setAiWarning(null);
       }
+
+      // Record performance metadata
+      if (intelligence.performance) {
+        setAiMeta(intelligence.performance);
+      }
+
       setIsEditing(true);
-      setActiveTab("solution");
+      toast.success(
+        `One-Click AI Question Intelligence Engine completed! (${intelligence.performance?.latencyMs || 0}ms)`
+      );
     } catch (err: any) {
-      toast.error(err.message || "AI solution generation failed");
+      console.error("[OneClickAI Error]", err);
+      toast.error(err.message || "Something went wrong during AI analysis. Please try again.");
     } finally {
       setAiGenerating(false);
+    }
+  }
+
+  function applySuggestedCorrections() {
+    if (!suggestedCorrections) return;
+    if (suggestedCorrections.suggestedEnStatement) setEnStatement(suggestedCorrections.suggestedEnStatement);
+    if (suggestedCorrections.suggestedHiStatement) setHiStatement(suggestedCorrections.suggestedHiStatement);
+    if (suggestedCorrections.suggestedEnOptions) setEnOptions(suggestedCorrections.suggestedEnOptions);
+    if (suggestedCorrections.suggestedHiOptions) setHiOptions(suggestedCorrections.suggestedHiOptions);
+    toast.success("Applied AI suggested text corrections.");
+    setSuggestedCorrections(null);
+  }
+
+  function addSuggestedTag(tag: string) {
+    const existing = editTags.split(",").map((t) => t.trim()).filter(Boolean);
+    if (!existing.includes(tag)) {
+      const updated = [...existing, tag].join(", ");
+      setEditTags(updated);
+      setSuggestedTags((prev) => prev.filter((t) => t !== tag));
+      toast.success(`Tag "${tag}" added.`);
     }
   }
 
@@ -422,7 +646,6 @@ export function PyqQuestionReviewModal({
           session: editSession || null,
           shift: editShift || null,
           paper: editPaper || null,
-          pyqQuestionNumber: editPyqQuestionNumber || null,
           english: {
             statement: enStatement,
             options: enOptions,
@@ -470,7 +693,7 @@ export function PyqQuestionReviewModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/80 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-7xl w-full h-[96vh] flex flex-col overflow-hidden">
         {/* TOP HEADER */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80">
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs font-black bg-blue-600 text-white px-3 py-1.5 rounded-xl shadow-xs">
               Q.{nav.currentIndex} / {nav.totalInChapter}
@@ -530,22 +753,21 @@ export function PyqQuestionReviewModal({
               </button>
             </div>
 
-            {/* AI Solution Quick Action */}
-            <div className="relative inline-flex items-center">
-              <button
-                type="button"
-                onClick={() => handleGenerateAiSolution("both")}
-                disabled={aiGenerating || loading}
-                className="px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs hover:from-purple-700 hover:to-indigo-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {aiGenerating ? (
-                  <span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>
-                ) : (
-                  <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
-                )}
-                <span>Generate AI Solution</span>
-              </button>
-            </div>
+            {/* ONE-CLICK AI INTELLIGENCE BUTTON */}
+            <button
+              type="button"
+              onClick={handleOneClickAiIntelligence}
+              disabled={aiGenerating || loading}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs hover:from-purple-700 hover:to-indigo-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="One-click AI intelligence: Complete Academic QC, Bilingual Solutions, and NCERT Mapping in 1 call"
+            >
+              {aiGenerating ? (
+                <span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>
+              ) : (
+                <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+              )}
+              <span>{aiGenerating ? "Analyzing Question…" : "Generate AI Solution"}</span>
+            </button>
 
             {/* Toggle Edit Mode */}
             <button
@@ -567,17 +789,73 @@ export function PyqQuestionReviewModal({
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition"
+              className="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
             >
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
         </div>
 
+        {/* AI INTELLIGENCE APPLIED TOP BANNER */}
+        {aiMeta && (
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 border-b border-indigo-200 dark:border-indigo-800/60 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="font-mono text-[10px] font-bold bg-indigo-600 text-white px-2 py-0.5 rounded-md flex items-center gap-1">
+                <span className="material-symbols-outlined text-[12px]">bolt</span>
+                <span>{aiMeta.source === "GEMINI_AI" ? "AI Intelligence Engine" : "Academic Synthesizer"}</span>
+              </span>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                All 5 Tabs Auto-Populated
+              </span>
+              <span className="text-[10px] font-mono text-slate-400">
+                • {aiMeta.latencyMs}ms • ₹{aiMeta.estimatedCostInr} • Ref: {aiMeta.correlationId.slice(-7)}
+              </span>
+
+              {/* Answer Key Match Status */}
+              {aiDerivedOption && (
+                <span
+                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 font-mono ${
+                    aiDerivedOption === correctKey
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                      : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[12px]">
+                    {aiDerivedOption === correctKey ? "verified" : "warning"}
+                  </span>
+                  <span>AI Key: Option ({aiDerivedOption}) {aiDerivedOption === correctKey ? "✓ Verified Match" : "✕ Mismatch"}</span>
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAiMeta(null);
+                  toast.success("AI suggestions confirmed for inspection.");
+                }}
+                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition cursor-pointer"
+              >
+                Accept All Suggestions
+              </button>
+              {previousSnapshot && (
+                <button
+                  type="button"
+                  onClick={handleRestoreOriginal}
+                  className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Restore Previous State
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* WORKSPACE NAVIGATION TABS */}
         <div className="flex items-center gap-1 px-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 overflow-x-auto">
           {[
-            { id: "content" as const, label: "Question & Options", icon: "quiz", badge: null },
+            { id: "content" as const, label: "Question & Options", icon: "quiz", badge: suggestedCorrections ? "Suggestions" : null },
             { id: "solution" as const, label: "Structured Solutions", icon: "psychology", badge: "6 Parts" },
             { id: "metadata" as const, label: "Academic & Exam Metadata", icon: "school", badge: null },
             { id: "ncert" as const, label: "NCERT & Syllabus Mapping", icon: "menu_book", badge: editNcertChapter ? "Mapped" : null },
@@ -621,8 +899,8 @@ export function PyqQuestionReviewModal({
             {aiWarning && (
               <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-2xl p-4 flex items-start gap-3">
                 <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-xl shrink-0 mt-0.5">warning</span>
-                <div className="text-xs">
-                  <h4 className="font-black text-amber-900 dark:text-amber-200">AI Sanity Check Warning</h4>
+                <div className="text-xs flex-1">
+                  <h4 className="font-black text-amber-900 dark:text-amber-200">POTENTIAL ANSWER KEY MISMATCH — HUMAN REVIEW REQUIRED</h4>
                   <p className="text-amber-800 dark:text-amber-300 font-medium mt-0.5">{aiWarning}</p>
                 </div>
               </div>
@@ -631,6 +909,28 @@ export function PyqQuestionReviewModal({
             {/* TAB 1: QUESTION & OPTIONS CONTENT */}
             {activeTab === "content" && (
               <div className="space-y-6">
+                {/* Suggested Corrections Alert Banner if Detected */}
+                {suggestedCorrections && (
+                  <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-blue-600">spellcheck</span>
+                      <div>
+                        <span className="font-bold text-blue-900 dark:text-blue-200 block">AI Detected Text or Formatting Improvements</span>
+                        <span className="text-[11px] text-blue-700 dark:text-blue-300">
+                          {suggestedCorrections.issues.join(", ") || "Standardized scientific notation and LaTeX formatting"}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={applySuggestedCorrections}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition cursor-pointer text-xs"
+                    >
+                      Apply Suggested Text
+                    </button>
+                  </div>
+                )}
+
                 {/* Quick Info Bar */}
                 <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-4 flex-wrap">
@@ -924,7 +1224,7 @@ export function PyqQuestionReviewModal({
                     )}
                     <button
                       type="button"
-                      onClick={() => handleGenerateAiSolution("both")}
+                      onClick={handleOneClickAiIntelligence}
                       disabled={aiGenerating}
                       className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
                     >
@@ -1186,13 +1486,13 @@ export function PyqQuestionReviewModal({
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Micro-concept</label>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Micro-concepts</label>
                       {isEditing ? (
                         <input
                           type="text"
                           value={editMicroConcept}
                           onChange={(e) => setEditMicroConcept(e.target.value)}
-                          placeholder="e.g. Taxonomic Hierarchy in Plants"
+                          placeholder="e.g. Taxonomic Hierarchy in Plants, Binomial Nomenclature Rules"
                           className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-semibold"
                         />
                       ) : (
@@ -1272,7 +1572,7 @@ export function PyqQuestionReviewModal({
                   </div>
                 </div>
 
-                {/* Exam Classification & Properties */}
+                {/* Exam Classification & Properties (Strictly hides Question Number in Paper per Section 7) */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xs space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
                     <span className="material-symbols-outlined text-purple-600 text-lg">history_edu</span>
@@ -1313,7 +1613,7 @@ export function PyqQuestionReviewModal({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Session / Phase</label>
                         {isEditing ? (
@@ -1329,7 +1629,7 @@ export function PyqQuestionReviewModal({
                         )}
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Shift</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Exam Shift</label>
                         {isEditing ? (
                           <input
                             type="text"
@@ -1340,20 +1640,6 @@ export function PyqQuestionReviewModal({
                           />
                         ) : (
                           <span className="font-bold text-slate-800 dark:text-slate-200">{editShift || "—"}</span>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Question # in Paper</label>
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editPyqQuestionNumber}
-                            onChange={(e) => setEditPyqQuestionNumber(e.target.value)}
-                            placeholder="e.g. Q.142"
-                            className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-semibold"
-                          />
-                        ) : (
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{editPyqQuestionNumber || "—"}</span>
                         )}
                       </div>
                     </div>
@@ -1394,15 +1680,32 @@ export function PyqQuestionReviewModal({
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tags (Comma-separated)</label>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tags</label>
                       {isEditing ? (
-                        <input
-                          type="text"
-                          value={editTags}
-                          onChange={(e) => setEditTags(e.target.value)}
-                          placeholder="e.g. Living World, Binomial Nomenclature, AIPMT 2012"
-                          className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-semibold"
-                        />
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={editTags}
+                            onChange={(e) => setEditTags(e.target.value)}
+                            placeholder="e.g. Living World, Binomial Nomenclature, AIPMT 2012"
+                            className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-semibold"
+                          />
+                          {suggestedTags.length > 0 && (
+                            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Suggested Tags:</span>
+                              {suggestedTags.map((st) => (
+                                <button
+                                  key={st}
+                                  type="button"
+                                  onClick={() => addSuggestedTag(st)}
+                                  className="text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition"
+                                >
+                                  <span>+ {st}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <span className="font-bold text-slate-800 dark:text-slate-200">{editTags || "—"}</span>
                       )}
@@ -1636,7 +1939,7 @@ export function PyqQuestionReviewModal({
                   { key: "chapterMapping" as const, label: "7. NCERT Mapping Verified", desc: "Class 11/12 chapter & page" },
                   { key: "topic" as const, label: "8. Topic Verified", desc: "Topic tag accurately classified" },
                   { key: "subtopic" as const, label: "9. Subtopic Verified", desc: "Micro-concept correctly assigned" },
-                  { key: "examNameYear" as const, label: "10. Exam Name & Year Verified", desc: "Year, shift & paper verified" },
+                  { key: "examNameYear" as const, label: "10. Exam Name & Year Verified", desc: "Year & shift verified" },
                 ].map((item) => {
                   const isChecked = checklist[item.key];
                   return (
