@@ -214,7 +214,7 @@ function fadeHighlighterOpacityAt(fadeExpiresAt: number, now: number): number {
 export const TEXT_FONT_SCALE = 8;
 
 const SHAPE_TOOLS: ShapeKind[] = SHAPE_DEFS.map((d) => d.id);
-function isShapeTool(tool: CanvasTool): tool is ShapeKind {
+export function isShapeTool(tool: CanvasTool): tool is ShapeKind {
   return (SHAPE_TOOLS as string[]).includes(tool);
 }
 
@@ -1126,6 +1126,7 @@ export class CanvasEngine {
     this.shapeStart = null;
     this.shapeEnd = null;
     this.lassoPath = null;
+    this.strokeRect = null;
     this.clearLayer(this.activeCtx);
   }
 
@@ -1225,17 +1226,10 @@ export class CanvasEngine {
       }
     }
 
-    if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
-      const predicted: PointerEvent[] =
-        typeof (e as any).getPredictedEvents === "function" ? (e as any).getPredictedEvents() : [];
-      this.predictedPoints = predicted
-        .slice(0, 2)
-        .map((evt) => this.getPoint(evt))
-        .filter((pt) => {
-          const last = this.activePoints[this.activePoints.length - 1];
-          return last ? Math.hypot(pt.x - last.x, pt.y - last.y) < 40 / this.viewZoom : false;
-        });
-    }
+    // Zero extrapolation / prediction jitter: Web browser getPredictedEvents() extrapolates linear velocity
+    // which causes severe sparkling / jittering at line tips during curved strokes or handwriting.
+    // Keeping predictedPoints empty ensures 100% faithful, stable, jitter-free ink tracing.
+    this.predictedPoints = [];
 
     if (
       this.currentTool === "pen" ||
@@ -1396,6 +1390,7 @@ export class CanvasEngine {
     this.resizeInitialBBox = null;
     this.shapeStart = null;
     this.shapeEnd = null;
+    this.strokeRect = null;
     this.clearLayer(this.activeCtx);
   }
 
@@ -2259,7 +2254,7 @@ export class CanvasEngine {
 
   private pushUndo(snapshot?: StrokeObject[]): void {
     this.undoStack.push(snapshot ?? this.cloneObjects());
-    if (this.undoStack.length > 100) this.undoStack.shift();
+    if (this.undoStack.length > 50) this.undoStack.shift();
     this.redoStack = [];
     this.onHistoryPush?.();
   }

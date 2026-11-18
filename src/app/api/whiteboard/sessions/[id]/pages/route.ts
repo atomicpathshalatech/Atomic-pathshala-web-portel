@@ -59,7 +59,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const after = body.afterPageNumber;
     const insertAfter = after !== undefined && after < pageCount ? after : null;
     const nextPageNumber = insertAfter !== null ? insertAfter + 1 : pageCount + 1;
-    const objects = source?.objects ?? body.objects ?? [];
+    const rawObjects = source?.objects ?? body.objects ?? [];
+    const objects =
+      body.duplicateOfPageId && Array.isArray(rawObjects)
+        ? rawObjects.map((obj: any) =>
+            obj && typeof obj === "object" ? { ...obj, id: crypto.randomUUID() } : obj
+          )
+        : rawObjects;
     const background = source?.background ?? body.background;
 
     // Slides behind the new one move back by one — last first, so two slides
