@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ArrowUpRight, Loader2 } from "lucide-react";
 
 type SearchResult = {
   type: string;
@@ -137,17 +136,17 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
         onClick={() => setOpen(true)}
         className={
           compact
-            ? "flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
-            : "group flex items-center gap-2 h-9 w-full max-w-md rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 text-left text-xs text-slate-400 hover:bg-white hover:border-slate-300 transition-colors"
+            ? "flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+            : "group flex items-center gap-2 h-10 w-full max-w-md rounded-xl border border-slate-200 bg-slate-50 px-3 text-left text-sm text-slate-400 hover:bg-white hover:border-slate-300 transition-colors"
         }
         aria-label="Open search"
         title="Search (Ctrl+K)"
       >
-        <Search className="w-4 h-4 text-slate-400 shrink-0" />
+        <span className="material-symbols-outlined text-[20px]">search</span>
         {!compact && (
           <>
             <span className="flex-1 truncate">{PLACEHOLDER}</span>
-            <kbd className="hidden md:inline text-[10px] font-mono font-semibold text-slate-400 border border-slate-200 bg-white rounded px-1.5 py-0.5 shadow-2xs">
+            <kbd className="hidden md:inline text-[10px] font-sans font-semibold text-slate-400 border border-slate-200 rounded px-1 py-0.5">
               Ctrl K
             </kbd>
           </>
@@ -156,115 +155,40 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
 
       {!open ? null : (
         <div
-          className="fixed inset-0 z-[999] flex items-start justify-center bg-slate-900/40 backdrop-blur-xs p-4 pt-[10vh]"
+          className="fixed inset-0 z-[999] flex items-start justify-center bg-slate-900/40 backdrop-blur-sm p-4 pt-[10vh]"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setOpen(false);
           }}
         >
-          <div className="w-full max-w-xl rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 overflow-hidden">
             {/* Input row */}
-            <div className="flex items-center gap-2.5 border-b border-slate-100 px-3.5">
-              <Search className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-2 border-b border-slate-100 px-4">
+              <span className="material-symbols-outlined text-slate-400 text-[22px]">search</span>
               <input
                 ref={inputRef}
                 value={q}
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={onKeyDown}
                 placeholder={PLACEHOLDER}
-                className="flex-1 py-3 text-xs outline-none placeholder-slate-400 text-slate-900"
+                className="flex-1 py-3.5 text-sm outline-none placeholder-slate-400 text-slate-900"
               />
               {loading && (
-                <Loader2 className="w-4 h-4 text-slate-400 animate-spin shrink-0" />
+                <span className="material-symbols-outlined text-slate-300 text-[20px] animate-spin">
+                  progress_activity
+                </span>
               )}
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-[11px] font-semibold px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50"
+                className="text-slate-400 hover:text-slate-700 text-xs font-semibold px-1.5"
               >
                 ESC
               </button>
             </div>
 
             <div className="max-h-[55vh] overflow-y-auto">
-              {q.trim().length === 0 && (
-                <div className="p-3 space-y-4">
-                  <div>
-                    <div className="px-2 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      Quick Command Actions
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {[
-                        { title: "Create Test", href: "/team/tests/new", icon: "quiz", badge: "Assessment" },
-                        { title: "Add Question", href: "/team/questions/new", icon: "add_circle", badge: "Questions" },
-                        { title: "Create Batch", href: "/team/batches", icon: "group_add", badge: "Academics" },
-                        { title: "Schedule Class", href: "/team/my-schedule", icon: "calendar_add_on", badge: "Timetable" },
-                        { title: "Onboard Student", href: "/team/students", icon: "person_add", badge: "Students" },
-                        { title: "Add CRM Lead", href: "/team/leads", icon: "person_search", badge: "CRM" },
-                      ].map((act) => (
-                        <button
-                          key={act.title}
-                          type="button"
-                          onClick={() => {
-                            setOpen(false);
-                            router.push(act.href);
-                          }}
-                          className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 hover:bg-blue-50 text-left transition group border border-slate-100"
-                        >
-                          <span className="material-symbols-outlined text-[18px] text-blue-600 group-hover:scale-110 transition-transform">
-                            {act.icon}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <span className="block text-xs font-bold text-slate-800 truncate group-hover:text-blue-600">
-                              {act.title}
-                            </span>
-                            <span className="block text-[10px] text-slate-400">{act.badge}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="px-2 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      Frequently Accessed Modules
-                    </div>
-                    <div className="space-y-0.5">
-                      {[
-                        { title: "Question Bank & QC", href: "/team/questions", icon: "database", desc: "NEET & JEE Questions" },
-                        { title: "Student Management & ID Cards", href: "/team/id-cards", icon: "badge", desc: "Verify and dispatch ID cards" },
-                        { title: "Finance & Invoices", href: "/team/finance", icon: "payments", desc: "Transactions & payment reconciliation" },
-                        { title: "Live Classroom (Studio)", href: "/team/live-studio", icon: "videocam", desc: "Start whiteboard live session" },
-                      ].map((mod) => (
-                        <button
-                          key={mod.title}
-                          type="button"
-                          onClick={() => {
-                            setOpen(false);
-                            router.push(mod.href);
-                          }}
-                          className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 text-left transition"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <span className="material-symbols-outlined text-[18px] text-slate-400">
-                              {mod.icon}
-                            </span>
-                            <div>
-                              <span className="block text-xs font-bold text-slate-800">{mod.title}</span>
-                              <span className="block text-[10px] text-slate-400">{mod.desc}</span>
-                            </div>
-                          </div>
-                          <span className="material-symbols-outlined text-[14px] text-slate-300">
-                            arrow_forward
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {groups.length === 0 && q.trim().length >= 2 && !loading && (
-                <div className="px-4 py-8 text-center text-sm text-slate-400">No matches found for &quot;{q}&quot;.</div>
+                <div className="px-4 py-8 text-center text-sm text-slate-400">No matches.</div>
               )}
 
               {groups.map((group) => (
@@ -294,7 +218,9 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
                             <span className="block truncate text-xs text-slate-400">{r.subtitle}</span>
                           )}
                         </span>
-                        <ArrowUpRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                        <span className="material-symbols-outlined text-[16px] text-slate-300">
+                          north_east
+                        </span>
                       </button>
                     );
                   })}
