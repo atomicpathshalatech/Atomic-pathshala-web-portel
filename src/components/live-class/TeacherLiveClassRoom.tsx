@@ -10,7 +10,6 @@ import {
   VIRTUAL_WIDTH,
   VIRTUAL_HEIGHT,
   ERASER_SIZES,
-  isShapeTool,
 } from "@/lib/canvas/canvas-engine";
 import { BoardSaveQueue } from "@/lib/whiteboard/board-save-queue";
 import { openStageLink, STAGE_LINK_PING_MS, type BoardView, type StageLinkMessage } from "@/lib/live-class/stage-link";
@@ -331,7 +330,7 @@ function formatDurationFriendly(totalSec: number) {
 }
 
 type SettingsTab = "audio" | "chatpoll" | "broadcast" | "shortcuts";
-type PopupId = "pen" | "highlight" | "eraser" | "shapes" | "pages" | "slides" | "zoom" | "more" | "pollMenu" | "palette" | "size" | null;
+type PopupId = "pen" | "highlight" | "eraser" | "shapes" | "pages" | "zoom" | "more" | "pollMenu" | null;
 
 export function TeacherLiveClassRoom({
   batchScheduleId,
@@ -1148,12 +1147,72 @@ export function TeacherLiveClassRoom({
   const [studentCount, setStudentCount] = useState(0);
   const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseQueueItem[]>([]);
   const [connectedStudents, setConnectedStudents] = useState<TeacherConnectedStudent[]>([]);
-  const [rightTab, setRightTab] = useState<"slides" | "messages" | "questions" | "roster">("slides");
+  const [rightTab, setRightTab] = useState<"messages" | "questions" | "roster">("messages");
   const [unreadMessages, setUnreadMessages] = useState(0);
 
-  // Slide drag and drop reordering state
+  // Slide drag and drop reordering state & continuous auto-scroll
   const [draggedSlideId, setDraggedSlideId] = useState<string | null>(null);
   const [dragOverSlideIndex, setDragOverSlideIndex] = useState<number | null>(null);
+  const slideListScrollRef = useRef<HTMLDivElement | null>(null);
+  const dragScrollRafRef = useRef<number | null>(null);
+  const dragScrollSpeedRef = useRef<number>(0);
+
+  const stopAutoScroll = useCallback(() => {
+    dragScrollSpeedRef.current = 0;
+    if (dragScrollRafRef.current != null) {
+      cancelAnimationFrame(dragScrollRafRef.current);
+      dragScrollRafRef.current = null;
+    }
+  }, []);
+
+  const startAutoScrollIfNeeded = useCallback(() => {
+    if (dragScrollRafRef.current != null) return;
+    const loop = () => {
+      if (dragScrollSpeedRef.current !== 0 && slideListScrollRef.current) {
+        slideListScrollRef.current.scrollTop += dragScrollSpeedRef.current;
+        dragScrollRafRef.current = requestAnimationFrame(loop);
+      } else {
+        dragScrollRafRef.current = null;
+      }
+    };
+    dragScrollRafRef.current = requestAnimationFrame(loop);
+  }, []);
+
+  const handleSlideListDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const container = slideListScrollRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const y = e.clientY;
+    const edgeZone = 80;
+    const maxSpeed = 26;
+
+    if (y < rect.top + edgeZone && y >= rect.top - 20) {
+      // Near top: scroll UP
+      const distFromTop = Math.max(0, y - rect.top);
+      const factor = Math.max(0.15, (edgeZone - distFromTop) / edgeZone);
+      dragScrollSpeedRef.current = -Math.round(factor * maxSpeed);
+      startAutoScrollIfNeeded();
+    } else if (y > rect.bottom - edgeZone && y <= rect.bottom + 20) {
+      // Near bottom: scroll DOWN
+      const distFromBottom = Math.max(0, rect.bottom - y);
+      const factor = Math.max(0.15, (edgeZone - distFromBottom) / edgeZone);
+      dragScrollSpeedRef.current = Math.round(factor * maxSpeed);
+      startAutoScrollIfNeeded();
+    } else {
+      dragScrollSpeedRef.current = 0;
+    }
+  }, [startAutoScrollIfNeeded]);
+
+  useEffect(() => {
+    return () => {
+      if (dragScrollRafRef.current != null) {
+        cancelAnimationFrame(dragScrollRafRef.current);
+      }
+    };
+  }, []);
 
   const [activeQuiz, setActiveQuiz] = useState<ActiveQuiz | null>(null);
   useEffect(() => {
@@ -2278,25 +2337,49 @@ export function TeacherLiveClassRoom({
     await deletePageById(currentPage);
   }
 
-  async function movePage(page: WhiteboardPage, direction: "up" | "down") {
+  async function movePage(page: WhiteboardPage, direction: "up" | "down" | "top" | "bottom") {
     if (!wbSession) return;
     const before = sortedPageIds();
     const from = before.indexOf(page.id);
-    const to = direction === "up" ? from - 1 : from + 1;
-    if (from < 0 || to < 0 || to >= before.length) return;
+    if (from < 0) return;
+    let to = from;
+    if (direction === "up") to = from - 1;
+    else if (direction === "down") to = from + 1;
+    else if (direction === "top") to = 0;
+    else if (direction === "bottom") to = before.length - 1;
+
+    if (to < 0 || to >= before.length || to === from) return;
     const after = [...before];
     after.splice(from, 1);
     after.splice(to, 0, page.id);
+
+    // Optimistic UI update for instantaneous fluid feel
+    const sorted = [...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber);
+    const movedIdx = sorted.findIndex((p) => p.id === page.id);
+    if (movedIdx !== -1) {
+      const nextPages = [...sorted];
+      const [movedPg] = nextPages.splice(movedIdx, 1);
+      nextPages.splice(to, 0, movedPg!);
+      const updatedSorted = nextPages.map((pg, idx) => ({ ...pg, pageNumber: idx + 1 }));
+      let newActiveNumber = wbSession.activePageNumber;
+      if (page.pageNumber === wbSession.activePageNumber) {
+        newActiveNumber = to + 1;
+      }
+      setPages(updatedSorted, newActiveNumber);
+    }
+
     try {
       await applySlideOrder(after);
       recordBoardStep({ kind: "slide-order", before, after });
     } catch (err) {
       console.error("[movePage error]", err);
+      setPages(sorted, wbSession.activePageNumber);
       setLoadError(err instanceof Error ? err.message : "Could not reorder slides.");
     }
   }
 
   async function handleDropReorder(targetIndex: number) {
+    stopAutoScroll();
     if (!wbSession || !draggedSlideId) return;
     const sorted = [...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber);
     const fromIndex = sorted.findIndex((p) => p.id === draggedSlideId);
@@ -3400,13 +3483,12 @@ export function TeacherLiveClassRoom({
         className="hidden"
       />
 
-      {/* Left rail — Primary Drawing Toolbar on the LEFT */}
-      <aside className="live-rail border-r border-[#2d2e3b] bg-[#141520] flex-col items-center py-2.5 px-1.5 select-none z-40 overflow-y-auto overflow-x-visible custom-scrollbar gap-1">
-        {/* Brand Logo */}
+      {/* Left rail */}
+      <aside className="live-rail border-r border-[#2d2e3b] bg-[#1a1b23] flex-col items-center py-4">
         <button
           type="button"
           onClick={() => router.push("/team/batches")}
-          className="w-10 h-10 rounded-xl overflow-hidden p-1 hover:opacity-85 transition-opacity shrink-0 mb-1"
+          className="w-10 h-10 rounded-xl overflow-hidden p-1 hover:opacity-85 transition-opacity"
           title="Atomic Pathshala"
         >
           <img
@@ -3414,578 +3496,6 @@ export function TeacherLiveClassRoom({
             alt="Atomic Pathshala Logo"
             className="w-full h-full object-contain"
           />
-        </button>
-
-        <div className="w-8 h-[1px] bg-[#2a2c3d] shrink-0 my-0.5" />
-
-        {/* 1. Pen Tool with Popover */}
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setTool("pen");
-              setOpenPopup((p) => (p === "pen" ? null : "pen"));
-            }}
-            className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center transition-all relative ${
-              tool === "pen"
-                ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 ring-2 ring-blue-400"
-                : "text-gray-400 hover:text-white hover:bg-gray-800/80"
-            }`}
-            title="Pen Tool (Click to configure)"
-          >
-            <span className="material-symbols-outlined text-xl">
-              {PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
-            </span>
-            <span
-              className="w-2 h-2 rounded-full absolute bottom-1 right-1 border border-black/40"
-              style={{ backgroundColor: tool === "pen" ? color : inkMemoryRef.current.pen.color }}
-            />
-          </button>
-
-          {openPopup === "pen" && (
-            <div className="absolute left-full top-0 ml-3 z-50 bg-[#141624] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-64 flex flex-col gap-2.5 text-white animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between border-b border-[#2d2e3b]/80 pb-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-blue-400 text-sm">
-                    {PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
-                  </span>
-                  <h3 className="text-xs font-bold text-gray-100">
-                    {PEN_STYLES.find((s) => s.id === penStyle)?.label || "Pen"} Tool
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setOpenPopup(null)}
-                  className="text-gray-400 hover:text-white transition"
-                >
-                  <span className="material-symbols-outlined text-sm">close</span>
-                </button>
-              </div>
-
-              {/* Stroke Size */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold text-gray-400">Thickness</span>
-                  <span className="text-[10px] font-mono font-bold text-blue-400">{size.toFixed(1)}px</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min={0.3}
-                    max={8}
-                    step={0.1}
-                    value={size}
-                    onChange={(e) => setSize(Number(e.target.value))}
-                    className="flex-1 accent-blue-500 h-1 bg-gray-700 rounded cursor-pointer"
-                  />
-                  <div
-                    className="w-3.5 h-3.5 rounded-full border border-white/30 shrink-0"
-                    style={{ backgroundColor: color }}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#242634]/60">
-                  {[1.0, 1.8, 3.0, 5.0].map((sz) => (
-                    <button
-                      key={sz}
-                      type="button"
-                      onClick={() => setSize(sz)}
-                      className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold transition ${
-                        Math.abs(size - sz) < 0.1
-                          ? "bg-blue-600 text-white"
-                          : "bg-[#1b1c28] text-gray-400 hover:text-white"
-                      }`}
-                    >
-                      {sz}px
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Color Swatches Grid */}
-              <div className="bg-[#0e101a] border border-[#242634] rounded-xl p-2 flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold text-gray-400">Color</span>
-                  <label className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer">
-                    <span className="material-symbols-outlined text-xs">colorize</span>
-                    <span>Custom</span>
-                    <input
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="opacity-0 w-0 h-0 absolute"
-                    />
-                  </label>
-                </div>
-                <div className="grid grid-cols-6 gap-1 place-items-center">
-                  {PEN_PALETTE_COLORS.slice(0, 12).map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setColor(c)}
-                      className={`w-5 h-5 rounded-md border transition transform hover:scale-110 ${
-                        color.toLowerCase() === c.toLowerCase()
-                          ? "ring-2 ring-blue-500 border-white"
-                          : "border-transparent"
-                      }`}
-                      style={{ backgroundColor: c }}
-                      title={c}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Pen Style selector */}
-              <div className="grid grid-cols-4 gap-1">
-                {PEN_STYLES.map((ps) => (
-                  <button
-                    key={ps.id}
-                    type="button"
-                    onClick={() => setPenStyle(ps.id)}
-                    className={`flex flex-col items-center justify-center py-1 px-0.5 rounded-lg border text-[9px] transition ${
-                      penStyle === ps.id
-                        ? "bg-blue-600/30 border-blue-500 text-white font-bold"
-                        : "bg-[#0e101a] border-[#2d2e3b] text-gray-400 hover:text-gray-200"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm">{ps.icon}</span>
-                    <span className="truncate max-w-[45px]">{ps.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 2. Highlighter Tool with Popover */}
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setTool((prev) => (prev === "highlighter-fade" ? "highlighter-fade" : "highlighter"));
-              setOpenPopup((p) => (p === "highlight" ? null : "highlight"));
-            }}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-              tool === "highlighter" || tool === "highlighter-fade"
-                ? "bg-amber-600 text-white shadow-lg shadow-amber-600/30 ring-2 ring-amber-400"
-                : "text-gray-400 hover:text-white hover:bg-gray-800/80"
-            }`}
-            title="Highlighter Tool"
-          >
-            <span className="material-symbols-outlined text-xl">border_color</span>
-          </button>
-
-          {openPopup === "highlight" && (
-            <div className="absolute left-full top-0 ml-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-col gap-2.5 min-w-max text-white animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex rounded-lg bg-[#0d0e16] border border-[#2d2e3b] p-0.5 gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => setTool("highlighter")}
-                  className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
-                    tool === "highlighter" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
-                  }`}
-                >
-                  Permanent
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTool("highlighter-fade")}
-                  className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
-                    tool === "highlighter-fade" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
-                  }`}
-                >
-                  Fades Away
-                </button>
-              </div>
-              <div className="flex flex-row items-center gap-2">
-                {HIGHLIGHT_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setColor(c)}
-                    className={`w-6 h-6 rounded-full border shadow-md transition transform hover:scale-110 ${
-                      color.toLowerCase() === c.toLowerCase()
-                        ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
-                        : "border-gray-600/60 opacity-85 hover:opacity-100"
-                    }`}
-                    style={{ backgroundColor: c }}
-                    title={c}
-                  />
-                ))}
-              </div>
-              <div className="flex flex-col gap-1.5 pt-1 border-t border-[#2d2e3b]">
-                <div className="flex items-center gap-1.5">
-                  {HIGHLIGHTER_SIZES.map((h) => (
-                    <button
-                      key={h.label}
-                      type="button"
-                      onClick={() => setSize(h.size)}
-                      title={`${h.label} highlighter`}
-                      className={`flex-1 h-8 rounded-lg border flex items-center justify-center transition ${
-                        size === h.size ? "border-blue-500 bg-blue-600/20" : "border-[#2d2e3b] hover:border-gray-500"
-                      }`}
-                    >
-                      <span className="block rounded-full" style={{ width: 22, height: Math.max(3, Math.round(h.size * 0.8)), backgroundColor: color, opacity: 0.55 }} />
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-400 w-12">Thickness</span>
-                  <input
-                    type="range"
-                    min={2}
-                    max={30}
-                    value={size}
-                    onChange={(e) => setSize(Number(e.target.value))}
-                    className="flex-1 accent-blue-500 h-1 bg-gray-700 rounded cursor-pointer"
-                  />
-                  <span className="text-[10px] font-mono text-gray-300 w-5 text-right">{size}</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 3. Shapes Tool with Popover */}
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => setOpenPopup((p) => (p === "shapes" ? null : "shapes"))}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-              isShapeTool(tool) || openPopup === "shapes"
-                ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30 ring-2 ring-purple-400"
-                : "text-gray-400 hover:text-white hover:bg-gray-800/80"
-            }`}
-            title="Geometric & Science Shapes"
-          >
-            <span className="material-symbols-outlined text-xl">
-              {isShapeTool(tool) ? SHAPE_DEFS.find((d) => d.id === tool)?.icon || "category" : "category"}
-            </span>
-          </button>
-
-          {openPopup === "shapes" && (
-            <div className="absolute left-full top-0 ml-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-72 flex flex-col gap-2 text-white animate-in fade-in zoom-in-95 duration-150">
-              <div className="grid grid-cols-4 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
-                {(
-                  [
-                    { id: "general", label: "General", icon: "square_foot" },
-                    { id: "phys", label: "Phys", icon: "bolt" },
-                    { id: "chem", label: "Chem", icon: "science" },
-                    { id: "bio", label: "Bio", icon: "grain" },
-                  ] as const
-                ).map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setShapeSubjectTab(tab.id)}
-                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                      shapeSubjectTab === tab.id
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">{tab.icon}</span>
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {shapeSubjectTab === "chem" && (
-                <div className="flex flex-wrap gap-1">
-                  {CHEM_SUBCATEGORY_ORDER.map((sub) => (
-                    <button
-                      key={sub}
-                      type="button"
-                      onClick={() => setChemSubcategory(sub)}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
-                        chemSubcategory === sub
-                          ? "bg-emerald-600 text-white"
-                          : "bg-[#10111a] text-gray-400 hover:text-white border border-[#242634]"
-                      }`}
-                    >
-                      {CHEM_SUBCATEGORY_LABELS[sub]}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                {SHAPE_DEFS.filter(
-                  (s) =>
-                    s.category === shapeSubjectTab &&
-                    (shapeSubjectTab !== "chem" || s.subcategory === chemSubcategory)
-                ).map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => {
-                      setTool(s.id);
-                      setOpenPopup(null);
-                    }}
-                    className={`flex items-center gap-2 p-2 rounded-xl border text-xs text-left transition ${
-                      tool === s.id
-                        ? "bg-blue-600/20 border-blue-500 text-white font-bold"
-                        : "bg-[#10111a] border-[#242634] text-gray-300 hover:border-gray-500"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm text-blue-400 shrink-0">{s.icon}</span>
-                    <span className="truncate">{s.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 4. Eraser Tool with Popover */}
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => setOpenPopup((p) => (p === "eraser" ? null : "eraser"))}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-              tool === "stroke-eraser" || tool === "object-eraser" || openPopup === "eraser"
-                ? "bg-rose-600 text-white shadow-lg shadow-rose-600/30 ring-2 ring-rose-400"
-                : "text-gray-400 hover:text-white hover:bg-gray-800/80"
-            }`}
-            title="Eraser Tool"
-          >
-            <span className="material-symbols-outlined text-xl">ink_eraser</span>
-          </button>
-
-          {openPopup === "eraser" && (
-            <div className="absolute left-full top-0 ml-3 z-50 bg-[#1a1b23] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl w-56 flex flex-col gap-2 text-white animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex flex-col gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTool("stroke-eraser");
-                    setOpenPopup(null);
-                  }}
-                  className={`flex items-center gap-2.5 p-2 rounded-xl text-xs font-semibold text-left transition ${
-                    tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base text-blue-400">ink_eraser</span>
-                  Stroke Eraser
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTool("object-eraser");
-                    setOpenPopup(null);
-                  }}
-                  className={`flex items-center gap-2.5 p-2 rounded-xl text-xs font-semibold text-left transition ${
-                    tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base text-blue-400">delete_sweep</span>
-                  Object Eraser
-                </button>
-              </div>
-
-              <div className="border-t border-[#2d2e3b] pt-2">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Eraser Size</span>
-                <div className="mt-1.5 flex gap-1.5">
-                  {ERASER_SIZES.map((sz) => (
-                    <button
-                      key={sz.id}
-                      type="button"
-                      onClick={() => {
-                        setEraserRadius(sz.radius);
-                        if (tool !== "stroke-eraser" && tool !== "object-eraser") setTool("stroke-eraser");
-                      }}
-                      className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg text-[10px] font-bold transition ${
-                        eraserRadius === sz.radius
-                          ? "bg-blue-600 text-white ring-1 ring-blue-400"
-                          : "bg-white/5 text-gray-300 hover:bg-white/10"
-                      }`}
-                    >
-                      <span
-                        className="rounded-full bg-current"
-                        style={{ width: Math.min(18, sz.radius / 3), height: Math.min(18, sz.radius / 3) }}
-                      />
-                      {sz.id}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 5. Text Tool */}
-        <button
-          type="button"
-          onClick={() => {
-            setTool("text");
-            setOpenPopup(null);
-          }}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${
-            tool === "text"
-              ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30 ring-2 ring-blue-400"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/80"
-          }`}
-          title="Text Tool"
-        >
-          <span className="material-symbols-outlined text-xl">text_fields</span>
-        </button>
-
-        {/* 6. Laser Pointer */}
-        <button
-          type="button"
-          onClick={() => {
-            setTool("laser");
-            setOpenPopup(null);
-          }}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${
-            tool === "laser"
-              ? "bg-red-600 text-white shadow-lg shadow-red-600/30 ring-2 ring-red-400"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/80"
-          }`}
-          title="Laser Pointer (Auto-fades, student-synced)"
-        >
-          <span className="material-symbols-outlined text-xl">my_location</span>
-        </button>
-
-        {/* 7. Select / Move Tool */}
-        <button
-          type="button"
-          onClick={() => {
-            setTool("select");
-            setOpenPopup(null);
-          }}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${
-            tool === "select"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-indigo-400"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/80"
-          }`}
-          title="Select / Lasso / Move Tool"
-        >
-          <span className="material-symbols-outlined text-xl">arrow_selector_tool</span>
-        </button>
-
-        {/* 8. Paint Bucket (Fill) Tool */}
-        <button
-          type="button"
-          onClick={() => {
-            setTool("fill");
-            setOpenPopup(null);
-          }}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${
-            tool === "fill"
-              ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30 ring-2 ring-amber-300"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/80"
-          }`}
-          title="Paint Bucket (Color Fill Tool)"
-        >
-          <span className="material-symbols-outlined text-xl">format_color_fill</span>
-        </button>
-
-        <div className="w-8 h-[1px] bg-[#2a2c3d] shrink-0 my-0.5" />
-
-        {/* Quick Color Swatch Button & Popover */}
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => setOpenPopup((p) => (p === "palette" ? null : "palette"))}
-            className="w-8 h-8 rounded-full border-2 border-white/80 shadow-md transition transform hover:scale-110 flex items-center justify-center"
-            style={{ backgroundColor: color }}
-            title="Pick Inking Color"
-          >
-            <span className="material-symbols-outlined text-[10px] text-black drop-shadow">palette</span>
-          </button>
-
-          {openPopup === "palette" && (
-            <div className="absolute left-full top-0 ml-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-52 flex flex-col gap-2 text-white animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between pb-1 border-b border-[#2d2e3b]">
-                <span className="text-[11px] font-bold text-gray-300">Palette</span>
-                <label className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer">
-                  <span className="material-symbols-outlined text-xs">colorize</span>
-                  <span>Custom</span>
-                  <input
-                    type="color"
-                    value={color}
-                    onChange={(e) => setColor(e.target.value)}
-                    className="opacity-0 w-0 h-0 absolute"
-                  />
-                </label>
-              </div>
-              <div className="grid grid-cols-4 gap-1.5 place-items-center">
-                {PEN_PALETTE_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => {
-                      setColor(c);
-                      setOpenPopup(null);
-                    }}
-                    className={`w-7 h-7 rounded-lg border transition transform hover:scale-110 ${
-                      color.toLowerCase() === c.toLowerCase()
-                        ? "ring-2 ring-blue-500 border-white"
-                        : "border-transparent"
-                    }`}
-                    style={{ backgroundColor: c }}
-                    title={c}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="w-8 h-[1px] bg-[#2a2c3d] shrink-0 my-0.5" />
-
-        {/* Undo, Redo, Clear */}
-        <button
-          type="button"
-          disabled={!canUndoRedo.canUndo}
-          onClick={() => void stepBoardHistory("undo")}
-          className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-20 transition shrink-0 cursor-pointer"
-          title="Undo (Ctrl+Z)"
-        >
-          <span className="material-symbols-outlined text-lg">undo</span>
-        </button>
-
-        <button
-          type="button"
-          disabled={!canUndoRedo.canRedo}
-          onClick={() => void stepBoardHistory("redo")}
-          className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-20 transition shrink-0 cursor-pointer"
-          title="Redo (Ctrl+Y)"
-        >
-          <span className="material-symbols-outlined text-lg">redo</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => engineRef.current?.clearInk()}
-          className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-red-400 hover:bg-gray-800 transition shrink-0 cursor-pointer"
-          title="Clear all ink on current slide"
-        >
-          <span className="material-symbols-outlined text-lg">layers_clear</span>
-        </button>
-
-        <div className="w-8 h-[1px] bg-[#2a2c3d] shrink-0 my-0.5" />
-
-        {/* Pan Hand Tool */}
-        <button
-          type="button"
-          onClick={() => setPanModeActive((p) => !p)}
-          className={`w-9 h-9 rounded-xl flex items-center justify-center transition shrink-0 cursor-pointer ${
-            panModeActive ? "bg-amber-600 text-white ring-2 ring-amber-400" : "text-gray-400 hover:text-white hover:bg-gray-800"
-          }`}
-          title="Hand / Pan Tool"
-        >
-          <span className="material-symbols-outlined text-lg">pan_tool</span>
-        </button>
-
-        {/* Slide Templates */}
-        <button
-          type="button"
-          onClick={() => setSlideTemplatesOpen(true)}
-          className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:text-amber-400 hover:bg-gray-800 transition shrink-0 cursor-pointer"
-          title="Slide Templates & Ruled Grids (Ctrl+D)"
-        >
-          <span className="material-symbols-outlined text-lg">grid_view</span>
         </button>
       </aside>
 
@@ -4563,51 +4073,140 @@ export function TeacherLiveClassRoom({
           </div>
         )}
 
-        {/* Selection actions floating capsule — only when objects are selected on canvas */}
-        {selectionCount > 0 && (
-          <aside className="absolute top-4 left-1/2 -translate-x-1/2 z-40 select-none pointer-events-auto animate-in fade-in slide-in-from-top-2 duration-150">
-            <div className="flex items-center gap-2 py-1.5 px-3 bg-[#141624]/95 backdrop-blur-md rounded-full border border-blue-500/60 shadow-2xl text-white text-xs">
-              <span className="font-semibold text-blue-300 flex items-center gap-1">
-                <span className="material-symbols-outlined text-sm">check_circle</span>
-                {selectionCount} Selected
-              </span>
-              <div className="w-[1px] h-4 bg-gray-700/80" />
-              <button
-                type="button"
-                onClick={() => engineRef.current?.copySelected()}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white transition cursor-pointer"
-                title={`Copy ${selectionCount} selected`}
-              >
-                <span className="material-symbols-outlined text-sm">content_copy</span>
-                <span>Copy</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  engineRef.current?.duplicateSelected();
-                  setUndoRedoTick();
-                }}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600 text-blue-200 hover:text-white transition cursor-pointer"
-                title={`Duplicate ${selectionCount} selected`}
-              >
-                <span className="material-symbols-outlined text-sm">library_add</span>
-                <span>Duplicate</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  engineRef.current?.deleteSelected();
-                  setUndoRedoTick();
-                }}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white transition cursor-pointer"
-                title={`Delete ${selectionCount} selected`}
-              >
-                <span className="material-symbols-outlined text-sm">delete</span>
-                <span>Delete</span>
-              </button>
+        {/* Left Floating Quick Tool Palette Capsule (Screenshot 1) */}
+        <aside className="absolute left-2 sm:left-3.5 top-1/2 -translate-y-1/2 z-30 select-none pointer-events-auto">
+          <div className="flex flex-col items-center py-2 px-1.5 bg-[#141624]/95 backdrop-blur-md rounded-full border border-[#292d42] shadow-2xl gap-2">
+            {/* Pen — always here, always the pen as it was last set (colour,
+                thickness, style). Other tools never change it. */}
+            <button
+              type="button"
+              onClick={() => {
+                setTool("pen");
+                setOpenPopup((cur) => (cur === "pages" ? cur : null));
+              }}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "pen" ? "bg-blue-600 text-white ring-2 ring-blue-400" : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Pen (your last pen)"
+            >
+              <span className="material-symbols-outlined text-sm">{PEN_STYLES.find((ps) => ps.id === penStyle)?.icon || "edit"}</span>
+            </button>
+            <span
+              className="w-3 h-3 rounded-full border border-white/40"
+              style={{ backgroundColor: tool === "pen" ? color : inkMemoryRef.current.pen.color }}
+              title="Pen colour"
+            />
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* Color Swatches (Screenshot 1 & 4) */}
+            <div className="flex flex-col gap-1.5">
+              {LEFT_BAR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={`w-4 h-4 rounded-full transition transform hover:scale-125 ${
+                    color.toLowerCase() === c.toLowerCase()
+                      ? "ring-2 ring-white ring-offset-1 ring-offset-[#141624]"
+                      : "opacity-85 hover:opacity-100"
+                  }`}
+                  style={{ backgroundColor: c }}
+                  title={c}
+                />
+              ))}
             </div>
-          </aside>
-        )}
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* 3 Size Dots (Screenshot 1 & 4) */}
+            <div className="flex flex-col gap-2 items-center py-1">
+              {[2, 3, 5].map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setSize(sz)}
+                  className={`rounded-full transition flex items-center justify-center ${
+                    size === sz ? "ring-2 ring-blue-400 ring-offset-1 ring-offset-[#141624]" : ""
+                  }`}
+                  style={{
+                    width: `${Math.max(6, sz * 2.2)}px`,
+                    height: `${Math.max(6, sz * 2.2)}px`,
+                    backgroundColor: color,
+                  }}
+                  title={`${sz}px stroke size`}
+                />
+              ))}
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* Paint Bucket (Color Fill) Tool Button */}
+            <button
+              type="button"
+              onClick={() => setTool("fill")}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "fill"
+                  ? "bg-amber-500 text-white ring-2 ring-amber-300"
+                  : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Paint Bucket (Color Fill Tool)"
+            >
+              <span className="material-symbols-outlined text-sm">format_color_fill</span>
+            </button>
+
+            {/* Freehand Lasso Selection Tool Button */}
+            <button
+              type="button"
+              onClick={() => setTool("select")}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "select"
+                  ? "bg-blue-600 text-white ring-2 ring-blue-400"
+                  : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Selection / Lasso Tool"
+            >
+              <span className="material-symbols-outlined text-sm">gesture</span>
+            </button>
+
+            {/* Selection actions — only while something is selected */}
+            {selectionCount > 0 && (
+              <>
+                <div className="w-4 h-[1px] bg-gray-700/60" />
+                <button
+                  type="button"
+                  onClick={() => engineRef.current?.copySelected()}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10 text-gray-300 hover:text-white transition shadow"
+                  title={`Copy ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    engineRef.current?.duplicateSelected();
+                    setUndoRedoTick();
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10 text-gray-300 hover:text-white transition shadow"
+                  title={`Duplicate ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">library_add</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    engineRef.current?.deleteSelected();
+                    setUndoRedoTick();
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-red-500/20 text-red-300 hover:bg-red-500/30 hover:text-white transition shadow"
+                  title={`Delete ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                </button>
+              </>
+            )}
+          </div>
+        </aside>
 
         <div
           ref={stageContainerRef}
@@ -4885,19 +4484,6 @@ export function TeacherLiveClassRoom({
         <div className="flex border-b border-[#2d2e3b] px-3 pt-3 shrink-0 gap-1 overflow-x-auto">
           <button
             type="button"
-            onClick={() => setRightTab("slides")}
-            className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors relative whitespace-nowrap flex items-center gap-1.5 ${
-              rightTab === "slides" ? "border-blue-500 text-blue-400" : "border-transparent text-gray-400 hover:text-white"
-            }`}
-          >
-            <span className="material-symbols-outlined text-sm">view_carousel</span>
-            Slides
-            <span className="bg-blue-950/80 text-blue-300 border border-blue-700/50 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-              {wbSession.pages.length}
-            </span>
-          </button>
-          <button
-            type="button"
             onClick={() => {
               setRightTab("messages");
               setUnreadMessages(0);
@@ -4945,301 +4531,765 @@ export function TeacherLiveClassRoom({
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {rightTab === "slides" ? (
-            <div className="flex-1 min-h-0 flex flex-col bg-[#14151e]/60">
-              {/* Slides Actions Bar */}
-              <div className="p-2.5 border-b border-[#2d2e3b] flex items-center justify-between gap-2 bg-[#171923]">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={addPage}
-                    className="h-7 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center gap-1 shadow-md transition active:scale-95 cursor-pointer"
-                    title="New blank slide after the current one (Shift+N)"
-                  >
-                    <span className="material-symbols-outlined text-sm">add</span>
-                    <span>New Slide</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSlideTemplatesOpen(true)}
-                    className="h-7 px-2 rounded-lg bg-[#222432] hover:bg-[#2d3042] text-gray-200 border border-[#34374c] text-[11px] font-medium flex items-center gap-1 transition cursor-pointer"
-                    title="Choose slide background template (Ctrl+D)"
-                  >
-                    <span className="material-symbols-outlined text-xs text-amber-400">palette</span>
-                    <span>Templates</span>
-                  </button>
-                </div>
-                <span className="text-[11px] font-mono font-medium text-gray-400">
-                  {wbSession.activePageNumber} / {wbSession.pages.length}
-                </span>
-              </div>
-
-              {/* Vertical PowerPoint Slide List with Drag-and-Drop */}
-              <div className="flex-1 overflow-y-auto p-2.5 flex flex-col gap-2.5 custom-scrollbar">
-                {[...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p, idx, arr) => {
-                  const active = p.pageNumber === wbSession.activePageNumber;
-                  const isDragging = draggedSlideId === p.id;
-                  const isDragOver = dragOverSlideIndex === idx && !isDragging;
-
-                  return (
-                    <div
-                      key={p.id}
-                      draggable={true}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData("text/plain", p.id);
-                        e.dataTransfer.effectAllowed = "move";
-                        setDraggedSlideId(p.id);
-                      }}
-                      onDragEnd={() => {
-                        setDraggedSlideId(null);
-                        setDragOverSlideIndex(null);
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                        if (dragOverSlideIndex !== idx) {
-                          setDragOverSlideIndex(idx);
-                        }
-                      }}
-                      onDragLeave={() => {
-                        if (dragOverSlideIndex === idx) {
-                          setDragOverSlideIndex(null);
-                        }
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        handleDropReorder(idx);
-                      }}
-                      className={`relative rounded-xl p-2 border transition-all duration-150 select-none group/slide ${
-                        isDragging
-                          ? "opacity-30 scale-95 border-dashed border-blue-400 bg-blue-950/30"
-                          : isDragOver
-                          ? "border-t-4 border-t-blue-500 border-x-transparent border-b-transparent bg-blue-500/10 scale-[1.02]"
-                          : active
-                          ? "border-blue-500 bg-blue-900/25 shadow-lg ring-2 ring-blue-500/40"
-                          : "border-[#2d2e3b]/80 hover:border-gray-500 bg-[#161722]/80 hover:bg-[#1a1b28]"
-                      }`}
-                    >
-                      {/* Drop indicator bar */}
-                      {isDragOver && (
-                        <div className="absolute -top-1.5 left-0 right-0 h-1 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)] z-10" />
-                      )}
-
-                      {/* Top Header of Slide Card */}
-                      <div className="flex items-center justify-between mb-1.5 px-0.5">
-                        <div className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing">
-                          <span
-                            className="material-symbols-outlined text-sm text-gray-400 hover:text-white"
-                            title="Drag to reorder slide"
-                          >
-                            drag_indicator
-                          </span>
-                          <span className={`text-xs font-bold ${active ? "text-blue-400" : "text-gray-300"}`}>
-                            Slide {p.pageNumber}
-                          </span>
-                          {active && (
-                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" title="Active on board" />
-                          )}
-                        </div>
-
-                        {/* Quick action buttons */}
-                        <div className="flex items-center gap-1 opacity-70 group-hover/slide:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              duplicatePage(p);
-                            }}
-                            className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700/80 transition cursor-pointer"
-                            title="Duplicate (copy) this slide"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">content_copy</span>
-                          </button>
-                          <button
-                            type="button"
-                            disabled={arr.length <= 1}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deletePageById(p);
-                            }}
-                            className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-400 hover:bg-gray-700/80 disabled:opacity-20 transition cursor-pointer"
-                            title="Delete this slide"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">delete</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Thumbnail Preview: Click to Switch */}
-                      <button
-                        type="button"
-                        onClick={() => switchToPage(p.pageNumber)}
-                        className="block w-full cursor-pointer rounded-lg overflow-hidden border border-black/40 hover:opacity-95 transition focus:outline-none"
-                        title={`Switch to slide ${p.pageNumber}`}
-                      >
-                        <PageThumbnail background={p.background} objects={p.objects} />
-                      </button>
-
-                      {/* Bottom action controls */}
-                      <div className="mt-1.5 flex items-center justify-between px-0.5 text-[11px] text-gray-400">
-                        <span className="text-[10px] text-gray-500">
-                          {p.objects?.length ?? 0} {p.objects?.length === 1 ? "stroke" : "strokes"}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              movePage(p, "up");
-                            }}
-                            className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-20 cursor-pointer"
-                            title="Move slide up"
-                          >
-                            <span className="material-symbols-outlined text-[13px]">arrow_upward</span>
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === arr.length - 1}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              movePage(p, "down");
-                            }}
-                            className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-20 cursor-pointer"
-                            title="Move slide down"
-                          >
-                            <span className="material-symbols-outlined text-[13px]">arrow_downward</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Bottom Quick Add Bar */}
-              <div className="p-2.5 border-t border-[#2d2e3b] bg-[#171923]">
-                <button
-                  type="button"
-                  onClick={addPage}
-                  className="w-full h-8 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg transition active:scale-98 cursor-pointer"
-                  title="New blank slide after the current one (Shift+N)"
-                >
-                  <span className="material-symbols-outlined text-base">add</span>
-                  <span>Add Slide (Shift+N)</span>
-                </button>
-              </div>
-            </div>
-          ) : rightTab === "messages" ? (
-            <div className="flex-1 min-h-0 p-4 flex flex-col">
-              <MessagesPanel
-                whiteboardSessionId={wbSession.id}
-                currentUserId={currentUserId}
-                role="TEACHER"
-                theme="dark"
-                showOwnToggle={false}
-              />
-            </div>
+        <div className="flex-1 min-h-0 p-4 flex flex-col">
+          {rightTab === "messages" ? (
+            <MessagesPanel
+              whiteboardSessionId={wbSession.id}
+              currentUserId={currentUserId}
+              role="TEACHER"
+              theme="dark"
+              showOwnToggle={false}
+            />
           ) : rightTab === "questions" ? (
-            <div className="flex-1 min-h-0 p-4 flex flex-col">
-              <HandRaisePanel
-                queue={handRaiseQueue}
-                onResolve={resolveHandRaise}
-                onAction={handleHandRaiseAction}
-                onPick={handlePickDoubt}
-                onDelete={handleDeleteHandRaise}
-                enabled={wbSession.handRaiseEnabled}
-              />
-            </div>
+            <HandRaisePanel
+              queue={handRaiseQueue}
+              onResolve={resolveHandRaise}
+              onAction={handleHandRaiseAction}
+              onPick={handlePickDoubt}
+              onDelete={handleDeleteHandRaise}
+              enabled={wbSession.handRaiseEnabled}
+            />
           ) : (
-            <div className="flex-1 min-h-0 p-4 flex flex-col">
-              <ParticipantsPanel
-                whiteboardSessionId={wbSession.id}
-                theme="dark"
-              />
-            </div>
+            <ParticipantsPanel
+              whiteboardSessionId={wbSession.id}
+              theme="dark"
+            />
           )}
         </div>
       </aside>
 
-      {/* Bottom presentation toolbar */}
-      <footer className="live-toolbar flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 border-t border-[#2d2e3b] bg-[#141520] relative min-w-0">
-        {openPopup && openPopup !== "pages" && openPopup !== "slides" && (
-          <div className="fixed inset-0 z-30" onClick={() => setOpenPopup(null)} />
-        )}
+      {/* Bottom toolbar */}
+      <footer className="live-toolbar flex items-center justify-between gap-1 px-2 sm:px-4 lg:px-6 border-t border-[#2d2e3b] bg-[#1a1b23] relative min-w-0">
+        {/* The slide panel stays open while the teacher writes: no click-away layer for it. */}
+        {openPopup && openPopup !== "pages" && <div className="fixed inset-0 z-30" onClick={() => setOpenPopup(null)} />}
 
-        {/* Left: Cloud autosave status */}
-        <div className="flex items-center gap-2">
-          {saveState === "saving" ? (
-            <span className="flex items-center gap-1.5 text-xs text-amber-400 font-medium">
-              <span className="material-symbols-outlined text-sm animate-spin">sync</span>
-              <span className="hidden sm:inline">Saving…</span>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-              <span className="material-symbols-outlined text-sm">cloud_done</span>
-              <span className="hidden sm:inline">All Saved</span>
-            </span>
-          )}
+        {/* Tools group. relative + z-40: see the backdrop-stacking comment
+            above the backdrop div — without this, every button here (and
+            in the Navigation/Action groups below) needed two clicks
+            whenever a popup was already open. */}
+        {/* No `overflow-x-auto` here: it makes `overflow-y` compute to auto
+            too, which clipped every tool's `bottom-full` popover (pen /
+            highlighter / eraser / shapes / fill). The row is a fixed set of
+            small buttons that fits any desktop width. */}
+        <div className="relative z-40 flex items-center gap-1 min-w-0 flex-wrap sm:flex-nowrap">
+          {/* Pen tool with Screenshot 3 customizer */}
+          <div className="relative">
+            <ToolbarBtn
+              icon={PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
+              label="Pen"
+              active={tool === "pen"}
+              onClick={() => {
+                setTool("pen");
+                setOpenPopup((p) => (p === "pen" ? null : "pen"));
+              }}
+            />
+            {openPopup === "pen" && (
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#141622] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-60 flex flex-col gap-2.5 text-white">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-[#2d2e3b]/80 pb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-blue-400 text-sm">
+                      {PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
+                    </span>
+                    <h3 className="text-xs font-bold text-gray-100">
+                      {PEN_STYLES.find((s) => s.id === penStyle)?.label || "Pen"} Tool
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenPopup(null)}
+                    className="text-gray-400 hover:text-white transition"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+
+                {/* Thickness Slider with Presets */}
+                <div className="bg-[#0e101a] border border-[#242634] rounded-xl p-2 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-gray-400 font-semibold">Width</span>
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={8}
+                      step={0.1}
+                      value={size}
+                      onChange={(e) => setSize(Number(e.target.value))}
+                      className="flex-1 accent-blue-500 h-1 bg-gray-700 rounded cursor-pointer"
+                    />
+                    <span className="text-[10px] font-mono font-bold text-gray-200 w-8 text-right">{size.toFixed(1)}px</span>
+                    <div
+                      className="w-3.5 h-3.5 rounded-full border border-white/30 shrink-0"
+                      style={{ backgroundColor: color }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#242634]/60">
+                    {[1.0, 1.8, 3.0, 5.0].map((sz) => (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => setSize(sz)}
+                        className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold transition ${
+                          Math.abs(size - sz) < 0.1
+                            ? "bg-blue-600 text-white"
+                            : "bg-[#1b1c28] text-gray-400 hover:text-white"
+                        }`}
+                      >
+                        {sz}px
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Color Swatches Grid */}
+                <div className="bg-[#0e101a] border border-[#242634] rounded-xl p-2 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-gray-400">Color</span>
+                    <label className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer">
+                      <span className="material-symbols-outlined text-xs">colorize</span>
+                      <span>Custom</span>
+                      <input
+                        type="color"
+                        value={color}
+                        onChange={(e) => setColor(e.target.value)}
+                        className="opacity-0 w-0 h-0 absolute"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-6 gap-1 place-items-center">
+                    {PEN_PALETTE_COLORS.slice(0, 12).map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setColor(c)}
+                        className={`w-5 h-5 rounded-md border transition transform hover:scale-110 ${
+                          color.toLowerCase() === c.toLowerCase()
+                            ? "ring-2 ring-blue-500 border-white"
+                            : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: c }}
+                        title={c}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pen Style selector */}
+                <div className="grid grid-cols-4 gap-1">
+                  {PEN_STYLES.map((ps) => (
+                    <button
+                      key={ps.id}
+                      type="button"
+                      onClick={() => setPenStyle(ps.id)}
+                      className={`flex flex-col items-center justify-center py-1 px-0.5 rounded-lg border text-[9px] transition ${
+                        penStyle === ps.id
+                          ? "bg-blue-600/30 border-blue-500 text-white font-bold"
+                          : "bg-[#0e101a] border-[#2d2e3b] text-gray-400 hover:text-gray-200"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">{ps.icon}</span>
+                      <span className="truncate max-w-[45px]">{ps.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Highlight tool with floating pill (Screenshot 4) */}
+          <div className="relative">
+            <ToolbarBtn
+              icon="border_color"
+              label="Highlight"
+              active={tool === "highlighter" || tool === "highlighter-fade"}
+              onClick={() => {
+                setTool((prev) => (prev === "highlighter-fade" ? "highlighter-fade" : "highlighter"));
+                setOpenPopup((p) => (p === "highlight" ? null : "highlight"));
+              }}
+            />
+            {openPopup === "highlight" && (
+              <div className="absolute bottom-full left-0 mb-3 z-40 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-col gap-2.5 min-w-max">
+                {/* Two highlighter variants: stays until erased, or fades on
+                    its own after a few seconds (like the laser pointer, but
+                    a real synced stroke, not a teacher-local-only effect). */}
+                <div className="flex rounded-lg bg-[#0d0e16] border border-[#2d2e3b] p-0.5 gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setTool("highlighter")}
+                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
+                      tool === "highlighter" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    Permanent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTool("highlighter-fade")}
+                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
+                      tool === "highlighter-fade" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    Fades Away
+                  </button>
+                </div>
+                <div className="flex flex-row items-center gap-2.5">
+                  {HIGHLIGHT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setColor(c);
+                      }}
+                      className={`w-7 h-7 rounded-full border shadow-md transition transform hover:scale-110 ${
+                        color.toLowerCase() === c.toLowerCase()
+                          ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
+                          : "border-gray-600/60 opacity-85 hover:opacity-100"
+                      }`}
+                      style={{ backgroundColor: c }}
+                      title={c}
+                    />
+                  ))}
+                </div>
+                {/* Highlighter thickness: four presets + any width in between.
+                    The ink stays translucent at every size (see strokePath). */}
+                <div className="flex flex-col gap-1.5 pt-1 border-t border-[#2d2e3b]">
+                  <div className="flex items-center gap-1.5">
+                    {HIGHLIGHTER_SIZES.map((h) => (
+                      <button
+                        key={h.label}
+                        type="button"
+                        onClick={() => setSize(h.size)}
+                        title={`${h.label} highlighter`}
+                        className={`flex-1 h-9 rounded-lg border flex items-center justify-center transition ${
+                          size === h.size ? "border-blue-500 bg-blue-600/20" : "border-[#2d2e3b] hover:border-gray-500"
+                        }`}
+                      >
+                        <span className="block rounded-full" style={{ width: 26, height: Math.max(3, Math.round(h.size * 0.9)), backgroundColor: color, opacity: 0.55 }} />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-400 w-12">Thickness</span>
+                    <input
+                      type="range"
+                      min={2}
+                      max={30}
+                      value={size}
+                      onChange={(e) => setSize(Number(e.target.value))}
+                      className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
+                    />
+                    <span className="text-[10px] font-mono text-gray-300 w-6 text-right">{size}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Laser pointer — transient glow, auto-fades, never saved */}
+          <div className="relative">
+            <ToolbarBtn
+              icon="my_location"
+              label="Laser"
+              active={tool === "laser"}
+              onClick={() => {
+                setTool("laser");
+                setOpenPopup(null);
+              }}
+            />
+          </div>
+
+          <div className="relative">
+            <ToolbarBtn
+              icon="ink_eraser"
+              label="Eraser"
+              active={tool === "stroke-eraser" || tool === "object-eraser"}
+              onClick={() => setOpenPopup((p) => (p === "eraser" ? null : "eraser"))}
+            />
+            {openPopup === "eraser" && (
+              <div className="absolute bottom-full left-0 mb-2 z-50 bg-[#1a1b23] border border-[#2d2e3b] rounded-2xl p-2 shadow-2xl w-56 flex flex-col gap-2 text-white">
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTool("stroke-eraser");
+                      setOpenPopup(null);
+                    }}
+                    className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                      tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base text-blue-400">ink_eraser</span> Stroke Eraser
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTool("object-eraser");
+                      setOpenPopup(null);
+                    }}
+                    className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                      tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base text-blue-400">delete_sweep</span> Object Eraser
+                  </button>
+                </div>
+
+                <div className="border-t border-[#2d2e3b] pt-2">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Eraser Size</span>
+                  <div className="mt-1.5 flex gap-1.5">
+                    {ERASER_SIZES.map((sz) => (
+                      <button
+                        key={sz.id}
+                        type="button"
+                        onClick={() => {
+                          setEraserRadius(sz.radius);
+                          if (tool !== "stroke-eraser" && tool !== "object-eraser") setTool("stroke-eraser");
+                        }}
+                        className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg text-[10px] font-bold transition ${
+                          eraserRadius === sz.radius
+                            ? "bg-blue-600 text-white ring-1 ring-blue-400"
+                            : "bg-white/5 text-gray-300 hover:bg-white/10"
+                        }`}
+                      >
+                        <span
+                          className="rounded-full bg-current"
+                          style={{ width: Math.min(18, sz.radius / 3), height: Math.min(18, sz.radius / 3) }}
+                        />
+                        {sz.id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Subject-Wise Smart Shapes (Screenshot 5) */}
+          <div className="relative">
+            <ToolbarBtn
+              icon="category"
+              label="Shapes"
+              active={openPopup === "shapes"}
+              onClick={() => setOpenPopup((p) => (p === "shapes" ? null : "shapes"))}
+            />
+            {openPopup === "shapes" && (
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-72 flex flex-col gap-2 text-white">
+                {/* Category Switcher Tabs: General, Phys, Chem, Bio */}
+                <div className="grid grid-cols-4 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
+                  {(
+                    [
+                      { id: "general", label: "General", icon: "square_foot" },
+                      { id: "phys", label: "Phys", icon: "bolt" },
+                      { id: "chem", label: "Chem", icon: "science" },
+                      { id: "bio", label: "Bio", icon: "grain" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setShapeSubjectTab(tab.id)}
+                      className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                        shapeSubjectTab === tab.id
+                          ? "bg-blue-600 text-white shadow-md"
+                          : "text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-xs">{tab.icon}</span>
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Chemistry gets a second row of subcategory pills — the
+                    library is too large (~48 structures) for one flat grid,
+                    per the categorized-submenu requirement. */}
+                {shapeSubjectTab === "chem" && (
+                  <div className="flex flex-wrap gap-1">
+                    {CHEM_SUBCATEGORY_ORDER.map((sub) => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => setChemSubcategory(sub)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
+                          chemSubcategory === sub
+                            ? "bg-emerald-600 text-white"
+                            : "bg-[#10111a] text-gray-400 hover:text-white border border-[#242634]"
+                        }`}
+                      >
+                        {CHEM_SUBCATEGORY_LABELS[sub]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* 2-Column Grid of Shapes, sourced from the one authoritative
+                    registry (src/lib/canvas/shapes/registry.ts) — every id
+                    here is unique and maps 1:1 to a real renderer. */}
+                <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
+                  {SHAPE_DEFS.filter(
+                    (s) =>
+                      s.category === shapeSubjectTab &&
+                      (shapeSubjectTab !== "chem" || s.subcategory === chemSubcategory)
+                  ).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setTool(s.id);
+                        setOpenPopup(null);
+                      }}
+                      className={`flex items-center gap-2 p-2 rounded-xl border text-xs text-left transition ${
+                        tool === s.id
+                          ? "bg-blue-600/20 border-blue-500 text-white font-bold"
+                          : "bg-[#10111a] border-[#242634] text-gray-300 hover:border-gray-500"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm text-blue-400 shrink-0">{s.icon}</span>
+                      <span className="truncate">{s.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="w-px h-6 bg-[#2d2e3b] mx-2" />
+
+          <button
+            type="button"
+            onClick={() => setTool("fill")}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              tool === "fill" ? "text-amber-400 bg-amber-900/30 ring-1 ring-amber-500/50" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+            title="Paint Bucket (Color Fill Tool)"
+          >
+            <span className="material-symbols-outlined text-lg">format_color_fill</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTool("text")}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              tool === "text" ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+            title="Text"
+          >
+            <span className="material-symbols-outlined text-lg">text_fields</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTool("select")}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              tool === "select" ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+            title="Select / Move"
+          >
+            <span className="material-symbols-outlined text-lg">arrow_selector_tool</span>
+          </button>
+          <button
+            type="button"
+            disabled={!canUndoRedo.canUndo}
+            onClick={() => void stepBoardHistory("undo")}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
+            title="Undo (Ctrl+Z)"
+          >
+            <span className="material-symbols-outlined text-lg">undo</span>
+          </button>
+          <button
+            type="button"
+            disabled={!canUndoRedo.canRedo}
+            onClick={() => void stepBoardHistory("redo")}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
+            title="Redo (Ctrl+Y)"
+          >
+            <span className="material-symbols-outlined text-lg">redo</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => engineRef.current?.clearInk()}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            title="Clear page"
+          >
+            <span className="material-symbols-outlined text-lg">layers_clear</span>
+          </button>
         </div>
 
-        {/* Center: PowerPoint-style Slide Stepper */}
+        {/* Navigation group */}
         <div className="relative z-40 flex items-center gap-1">
           <button
             type="button"
             disabled={!canGoPrev}
             onClick={() => switchToPage(wbSession.activePageNumber - 1)}
-            className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 disabled:opacity-20 transition-colors cursor-pointer"
-            title="Previous Slide"
+            className="text-gray-400 hover:text-white p-2 rounded hover:bg-gray-800 disabled:opacity-30 transition-colors"
           >
             <span className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenPopup((p) => (p === "pages" ? null : "pages"))}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                openPopup === "pages"
+                  ? "bg-blue-600/25 border-blue-500 text-white shadow-sm ring-1 ring-blue-500/30"
+                  : "bg-[#10131b] border-[#2d2e3b] text-gray-200 hover:border-gray-500"
+              }`}
+              title="Click to view and manage slides deck"
+            >
+              <span className="material-symbols-outlined text-blue-400 text-xs">view_carousel</span>
+              <span className="text-xs font-semibold">
+                Slide {wbSession.activePageNumber} <span className="text-gray-500 font-normal">/</span> {wbSession.pages.length}
+              </span>
+            </button>
+            {/* PowerPoint-style Slide Deck Drawer */}
+            {openPopup === "pages" && (
+              <div className="fixed right-3 lg:right-[calc(var(--live-panel-w)+0.75rem)] top-16 bottom-20 z-50 w-[285px] sm:w-[305px] bg-[#161722]/98 backdrop-blur-xl border border-[#2d2e3b] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                {/* Header */}
+                <div className="px-3.5 py-3 border-b border-[#2d2e3b] flex items-center justify-between gap-1 bg-[#12131d]/90">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-blue-400 text-base">view_carousel</span>
+                    <span className="text-xs font-bold text-white tracking-wide">
+                      Slides Deck <span className="text-blue-400 font-semibold">({wbSession.pages.length})</span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stopAutoScroll();
+                      setOpenPopup(null);
+                    }}
+                    className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition cursor-pointer"
+                    title="Close Slides Panel"
+                  >
+                    <span className="material-symbols-outlined text-base">close</span>
+                  </button>
+                </div>
 
-          <button
-            type="button"
-            onClick={() => setRightTab("slides")}
-            className="flex items-center gap-2 bg-[#1b1c28] px-3 py-1 rounded-lg border border-[#2d2e3b] hover:border-blue-500 transition-colors cursor-pointer"
-            title="Click to view full slide deck in right panel"
-          >
-            <span className="material-symbols-outlined text-blue-400 text-xs">view_carousel</span>
-            <span className="text-xs font-semibold text-gray-200">
-              Slide {wbSession.activePageNumber} <span className="text-gray-500 font-normal">/</span> {wbSession.pages.length}
-            </span>
-          </button>
+                {/* Slide List Container with Continuous Auto-Scroll on Drag */}
+                <div
+                  ref={slideListScrollRef}
+                  onDragOver={handleSlideListDragOver}
+                  onDragLeave={(e) => {
+                    const rect = slideListScrollRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      if (e.clientY < rect.top || e.clientY > rect.bottom || e.clientX < rect.left || e.clientX > rect.right) {
+                        stopAutoScroll();
+                      }
+                    }
+                  }}
+                  onDrop={() => stopAutoScroll()}
+                  className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 custom-scrollbar scroll-smooth"
+                >
+                  {[...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p, idx, arr) => {
+                    const active = p.pageNumber === wbSession.activePageNumber;
+                    const isDragging = draggedSlideId === p.id;
+                    const isDragOver = dragOverSlideIndex === idx && !isDragging;
 
+                    return (
+                      <div
+                        key={p.id}
+                        draggable={true}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", p.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          setDraggedSlideId(p.id);
+                        }}
+                        onDragEnd={() => {
+                          stopAutoScroll();
+                          setDraggedSlideId(null);
+                          setDragOverSlideIndex(null);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (dragOverSlideIndex !== idx) {
+                            setDragOverSlideIndex(idx);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleDropReorder(idx);
+                        }}
+                        className={`group/slide relative rounded-xl p-2 border transition-all duration-150 select-none ${
+                          isDragging
+                            ? "opacity-30 scale-95 border-dashed border-blue-400 bg-blue-950/40"
+                            : isDragOver
+                            ? "border-t-2 border-t-blue-500 border-x-[#2d2e3b] border-b-[#2d2e3b] bg-blue-500/10 scale-[1.01]"
+                            : active
+                            ? "border-blue-500/90 bg-blue-900/20 shadow-lg ring-1 ring-blue-500/40"
+                            : "border-[#2d2e3b]/80 hover:border-gray-500 bg-[#14151e]/60 hover:bg-[#14151e]"
+                        }`}
+                      >
+                        {/* Slide Card Header */}
+                        <div className="flex items-center justify-between mb-1.5 px-0.5">
+                          <div className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing">
+                            <span
+                              className="material-symbols-outlined text-[15px] text-gray-500 group-hover/slide:text-gray-300 transition-colors"
+                              title="Drag to reorder slide across deck"
+                            >
+                              drag_indicator
+                            </span>
+                            <span className={`text-xs font-bold ${active ? "text-blue-400" : "text-gray-200"}`}>
+                              Slide {p.pageNumber}
+                            </span>
+                          </div>
+                          {active && (
+                            <span className="text-[10px] font-bold text-blue-400 bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 rounded-full">
+                              Active
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Slide Thumbnail Preview */}
+                        <button
+                          type="button"
+                          onClick={() => switchToPage(p.pageNumber)}
+                          className="block w-full cursor-pointer rounded-lg overflow-hidden border border-black/50 hover:opacity-95 transition focus:outline-none"
+                          title={`Open slide ${p.pageNumber}`}
+                        >
+                          <PageThumbnail background={p.background} objects={p.objects} />
+                        </button>
+
+                        {/* Slide Card Actions Bar */}
+                        <div className="mt-2 flex items-center justify-between px-0.5 text-gray-400">
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void movePage(p, "top");
+                              }}
+                              className="w-6 h-6 rounded flex items-center justify-center hover:text-white hover:bg-gray-800 disabled:opacity-20 cursor-pointer transition"
+                              title="Move to top (#1)"
+                            >
+                              <span className="material-symbols-outlined text-sm">vertical_align_top</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void movePage(p, "up");
+                              }}
+                              className="w-6 h-6 rounded flex items-center justify-center hover:text-white hover:bg-gray-800 disabled:opacity-20 cursor-pointer transition"
+                              title="Move up 1 slide"
+                            >
+                              <span className="material-symbols-outlined text-sm">arrow_upward</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === arr.length - 1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void movePage(p, "down");
+                              }}
+                              className="w-6 h-6 rounded flex items-center justify-center hover:text-white hover:bg-gray-800 disabled:opacity-20 cursor-pointer transition"
+                              title="Move down 1 slide"
+                            >
+                              <span className="material-symbols-outlined text-sm">arrow_downward</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === arr.length - 1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void movePage(p, "bottom");
+                              }}
+                              className="w-6 h-6 rounded flex items-center justify-center hover:text-white hover:bg-gray-800 disabled:opacity-20 cursor-pointer transition"
+                              title={`Move to bottom (#${arr.length})`}
+                            >
+                              <span className="material-symbols-outlined text-sm">vertical_align_bottom</span>
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void duplicatePage(p);
+                              }}
+                              className="w-6 h-6 rounded flex items-center justify-center hover:text-white hover:bg-gray-800 cursor-pointer transition"
+                              title="Duplicate this slide"
+                            >
+                              <span className="material-symbols-outlined text-sm">content_copy</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={arr.length <= 1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deletePageById(p);
+                              }}
+                              className="w-6 h-6 rounded flex items-center justify-center hover:text-red-400 hover:bg-red-500/10 disabled:opacity-20 cursor-pointer transition"
+                              title="Delete this slide"
+                            >
+                              <span className="material-symbols-outlined text-sm">delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Deck Footer Actions */}
+                <div className="p-2.5 border-t border-[#2d2e3b] bg-[#12131d]/90 flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={addPage}
+                    className="h-9 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg transition cursor-pointer"
+                    title="New blank slide after the current one, in the same theme (Shift+N)"
+                  >
+                    <span className="material-symbols-outlined text-base">add</span>
+                    New blank slide
+                  </button>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => currentPage && void duplicatePage(currentPage)}
+                      className="flex-1 h-8 rounded-lg bg-[#1d2030] hover:bg-[#262a3d] border border-[#2d2e3b] text-gray-200 text-[11px] font-semibold flex items-center justify-center gap-1 transition cursor-pointer"
+                      title="Copy of this slide, right after it (Ctrl+D)"
+                    >
+                      <span className="material-symbols-outlined text-sm">content_copy</span>
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSlideTemplatesOpen(true)}
+                      className="flex-1 h-8 rounded-lg bg-[#1d2030] hover:bg-[#262a3d] border border-[#2d2e3b] text-gray-200 text-[11px] font-semibold flex items-center justify-center gap-1 transition cursor-pointer"
+                      title="Slide templates"
+                    >
+                      <span className="material-symbols-outlined text-sm">dashboard</span>
+                      Templates
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             disabled={!canGoNext}
             onClick={() => switchToPage(wbSession.activePageNumber + 1)}
-            className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 disabled:opacity-20 transition-colors cursor-pointer"
-            title="Next Slide"
+            className="text-gray-400 hover:text-white p-2 rounded hover:bg-gray-800 disabled:opacity-30 transition-colors"
           >
             <span className="material-symbols-outlined text-lg">chevron_right</span>
           </button>
-
-          <div className="w-px h-5 bg-[#2d2e3b] mx-1.5" />
-
-          <button
-            type="button"
-            onClick={addPage}
-            className="h-7 px-2.5 rounded-lg bg-blue-600/25 hover:bg-blue-600 border border-blue-500/40 text-blue-300 hover:text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
-            title="New blank slide after the current one (Shift+N)"
-          >
-            <span className="material-symbols-outlined text-sm">add</span>
-            <span className="hidden sm:inline">Add Slide</span>
-          </button>
-
-          <button
-            type="button"
+          <div className="w-px h-6 bg-[#2d2e3b] mx-2" />
+          <ToolbarBtn icon="add" label="Add" onClick={addPage} />
+          <ToolbarBtn
+            icon="download"
+            label={exportingPdf ? "Exporting…" : "Export"}
             onClick={exportBoardAsPdf}
-            disabled={exportingPdf}
-            className="h-7 px-2.5 rounded-lg bg-[#1f2130] hover:bg-[#282a3d] border border-[#2d2e3b] text-gray-300 hover:text-white text-xs font-medium flex items-center gap-1 transition cursor-pointer"
             title="Export the whole lecture as a PDF"
-          >
-            <span className="material-symbols-outlined text-sm">download</span>
-            <span className="hidden md:inline">{exportingPdf ? "Exporting…" : "Export PDF"}</span>
-          </button>
+          />
+          <ToolbarBtn
+            icon="delete"
+            label="Delete"
+            onClick={deleteCurrentPage}
+            disabled={wbSession.pages.length <= 1}
+            className="hover:text-red-400"
+          />
         </div>
 
         {/* Action group */}

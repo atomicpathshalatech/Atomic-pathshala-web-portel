@@ -11,9 +11,10 @@ import { whiteboardPageCreateSchema } from "@/lib/validation/whiteboard";
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) throw new UnauthorizedError();
+    const userId = (session?.user as { id?: string } | undefined)?.id;
+    if (!userId) throw new UnauthorizedError();
 
-    const access = await resolveWhiteboardAccess(session.user.id, params.id);
+    const access = await resolveWhiteboardAccess(userId, params.id);
     if (!access || access.role !== "TEACHER") throw new ForbiddenError();
 
     const pages = await prisma.whiteboardPage.findMany({
@@ -36,9 +37,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) throw new UnauthorizedError();
+    const userId = (session?.user as { id?: string } | undefined)?.id;
+    if (!userId) throw new UnauthorizedError();
 
-    const access = await resolveWhiteboardAccess(session.user.id, params.id);
+    const access = await resolveWhiteboardAccess(userId, params.id);
     if (!access || access.role !== "TEACHER") throw new ForbiddenError();
 
     const wbSession = await prisma.whiteboardSession.findUnique({ where: { id: params.id } });

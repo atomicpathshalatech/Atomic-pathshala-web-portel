@@ -219,9 +219,9 @@
 
 .live-shell {
   --live-header-h: 3rem; /* 48px */
-  --live-toolbar-h: 2.75rem; /* 44px */
-  --live-rail-w: 4.25rem; /* 68px */
-  --live-panel-w: 21rem; /* 336px */
+  --live-toolbar-h: 3.5rem; /* 56px */
+  --live-rail-w: 3.25rem; /* 52px */
+  --live-panel-w: 20rem; /* 320px */
 
   display: grid;
   width: 100%;
@@ -287,9 +287,8 @@
 /* Tablet: the rail comes back, the panel is still an overlay. */
 @media (min-width: 768px) {
   .live-shell {
-    --live-header-h: 3.25rem;
-    --live-toolbar-h: 2.75rem;
-    --live-rail-w: 4.25rem;
+    --live-header-h: 3.5rem; /* 56px */
+    --live-toolbar-h: 4rem; /* 64px */
     grid-template-columns: var(--live-rail-w) minmax(0, 1fr);
     grid-template-areas:
       "rail header"
@@ -301,10 +300,11 @@
   }
 }
 
-/* Laptop: the panel joins the grid, comfortably displaying slides */
+/* Laptop: the panel joins the grid, slightly narrower than on desktop so
+   the board keeps a usable share of a 1024px screen. */
 @media (min-width: 1024px) {
   .live-shell {
-    --live-panel-w: 18rem; /* 288px */
+    --live-panel-w: 15rem; /* 240px — trimmed so the white board gets more width */
     grid-template-columns: var(--live-rail-w) minmax(0, 1fr) var(--live-panel-w);
     grid-template-areas:
       "rail header header"
@@ -315,7 +315,7 @@
 
 @media (min-width: 1280px) {
   .live-shell {
-    --live-panel-w: 21rem; /* 336px */
+    --live-panel-w: 20rem; /* 320px */
   }
 }
 
