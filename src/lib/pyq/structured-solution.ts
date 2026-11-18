@@ -9,6 +9,11 @@
  * 5. Option-wise Explanation
  * 6. Important Takeaway
  * 
+ * Supports subject-adaptive rendering:
+ * - For direct/concise conceptual questions (e.g. simple Biology MCQs, 2–4 sentences),
+ *   renders cleanly without artificial section headers or filler.
+ * - For numerical/multi-part questions, renders headings only for populated sections.
+ * 
  * Serializes into clean GitHub Flavored Markdown / KaTeX format that renders
  * identically in the Student Test Portal, Live Classes, and PDF Exports.
  */
@@ -46,28 +51,49 @@ export function isEmptyStructuredSolution(sol: StructuredSolution | null | undef
 }
 
 /**
- * Formats a StructuredSolution into canonical markdown.
+ * Formats a StructuredSolution into canonical markdown adaptively.
+ * - If only 1 section is populated (e.g. direct 2–4 sentence Biology solution in stepByStep),
+ *   returns the direct text without artificial section headers.
+ * - If multiple sections are populated, renders headings only for non-empty sections.
  */
 export function formatStructuredSolution(sol: StructuredSolution): string {
+  if (!sol) return '';
+
+  const c = sol.concept.trim();
+  const f = sol.formula.trim();
+  const s = sol.stepByStep.trim();
+  const a = sol.finalAnswer.trim();
+  const o = sol.optionExplanation.trim();
+  const t = sol.takeaway.trim();
+
+  const filled = [c, f, s, a, o, t].filter(Boolean);
+  if (filled.length === 0) return '';
+
+  // Adaptive: Single coherent explanation does not need artificial headings
+  if (filled.length === 1) {
+    return c || f || s || a || o || t;
+  }
+
   const parts: string[] = [];
 
-  if (sol.concept.trim()) {
-    parts.push(`### 1. Concept / Theory\n${sol.concept.trim()}`);
+  if (c) {
+    parts.push(`### Concept / Theory\n${c}`);
   }
-  if (sol.formula.trim()) {
-    parts.push(`### 2. Formula & Rules\n${sol.formula.trim()}`);
+  if (f) {
+    parts.push(`### Formula & Rules\n${f}`);
   }
-  if (sol.stepByStep.trim()) {
-    parts.push(`### 3. Step-by-Step Solution\n${sol.stepByStep.trim()}`);
+  if (s) {
+    const heading = (c || f) ? '### Step-by-Step Solution' : '### Solution & Explanation';
+    parts.push(`${heading}\n${s}`);
   }
-  if (sol.finalAnswer.trim()) {
-    parts.push(`### 4. Final Answer Explanation\n${sol.finalAnswer.trim()}`);
+  if (a) {
+    parts.push(`### Final Answer\n${a}`);
   }
-  if (sol.optionExplanation.trim()) {
-    parts.push(`### 5. Option Analysis\n${sol.optionExplanation.trim()}`);
+  if (o) {
+    parts.push(`### Option Analysis\n${o}`);
   }
-  if (sol.takeaway.trim()) {
-    parts.push(`### 6. Key Takeaway & Tips\n${sol.takeaway.trim()}`);
+  if (t) {
+    parts.push(`### Key Takeaway & Tips\n${t}`);
   }
 
   return parts.join('\n\n');
@@ -101,12 +127,12 @@ export function parseStructuredSolution(raw: string | null | undefined): Structu
 
   // Regex patterns to identify sections in markdown
   const patterns = [
-    { key: 'concept' as const, regex: /(?:^|\n)#{1,4}\s*(?:1[.)]?\s*)?(?:Concept(?:\s*[\/&]\s*Theory)?|अवधारणा|सिद्धांत)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'formula' as const, regex: /(?:^|\n)#{1,4}\s*(?:2[.)]?\s*)?(?:Formula(?:s)?(?:\s*[\/&]\s*Rules)?|सूत्र|नियम)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'stepByStep' as const, regex: /(?:^|\n)#{1,4}\s*(?:3[.)]?\s*)?(?:Step-by-Step\s*(?:Solution)?|Steps|Detailed\s*Solution|चरणबद्ध\s*हल|हल)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'finalAnswer' as const, regex: /(?:^|\n)#{1,4}\s*(?:4[.)]?\s*)?(?:Final\s*Answer(?:\s*Explanation)?|Conclusion|अंतिम\s*उत्तर)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'optionExplanation' as const, regex: /(?:^|\n)#{1,4}\s*(?:5[.)]?\s*)?(?:Option(?:-wise)?\s*(?:Analysis|Explanation|Details)?|विकल्प\s*विश्लेषण)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'takeaway' as const, regex: /(?:^|\n)#{1,4}\s*(?:6[.)]?\s*)?(?:(?:Key\s*)?Takeaway(?:s)?|Important\s*(?:Note|Tips|Takeaway)|महत्वपूर्ण\s*बिंदु)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: 'concept' as const, regex: /(?:^|\n)#{1,4}\s*(?:1[.)]?\s*)?(?:Concept(?:\s*[\/&]\s*Theory)?|अवधारणा|सिद्धांत)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: 'formula' as const, regex: /(?:^|\n)#{1,4}\s*(?:2[.)]?\s*)?(?:Formula(?:s)?(?:\s*[\/&]\s*Rules)?|सूत्र|नियम)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: 'stepByStep' as const, regex: /(?:^|\n)#{1,4}\s*(?:3[.)]?\s*)?(?:Step-by-Step\s*(?:Solution)?|Solution\s*&?\s*Explanation|Steps|Detailed\s*Solution|चरणबद्ध\s*हल|हल)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: 'finalAnswer' as const, regex: /(?:^|\n)#{1,4}\s*(?:4[.)]?\s*)?(?:Final\s*Answer(?:\s*Explanation)?|Conclusion|अंतिम\s*उत्तर)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: 'optionExplanation' as const, regex: /(?:^|\n)#{1,4}\s*(?:5[.)]?\s*)?(?:Option(?:-wise)?\s*(?:Analysis|Explanation|Details)?|विकल्प\s*विश्लेषण)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: 'takeaway' as const, regex: /(?:^|\n)#{1,4}\s*(?:6[.)]?\s*)?(?:(?:Key\s*)?Takeaway(?:s)?|Important\s*(?:Note|Tips|Takeaway)|महत्वपूर्ण\s*बिंदु)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
   ];
 
   let matchedAny = false;
