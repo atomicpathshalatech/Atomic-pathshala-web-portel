@@ -311,11 +311,23 @@
       "rail canvas panel"
       "rail toolbar panel";
   }
+
+  .live-shell[data-panel-collapsed="true"] {
+    grid-template-columns: var(--live-rail-w) minmax(0, 1fr) !important;
+    grid-template-areas:
+      "rail header"
+      "rail canvas"
+      "rail toolbar" !important;
+  }
+
+  .live-shell[data-panel-collapsed="true"] .live-panel {
+    display: none !important;
+  }
 }
 
 @media (min-width: 1280px) {
   .live-shell {
-    --live-panel-w: 20rem; /* 320px */
+    --live-panel-w: 19rem; /* 304px */
   }
 }
 

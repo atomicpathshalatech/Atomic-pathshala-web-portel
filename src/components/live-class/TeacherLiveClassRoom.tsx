@@ -468,51 +468,75 @@ export function TeacherLiveClassRoom({
   const [panModeActive, setPanModeActive] = useState(false);
   const panDragRef = useRef<{ x: number; y: number } | null>(null);
   // Below lg the right panel slides in over the canvas rather than holding
-  // a fixed 320px column open on a phone. It is never unmounted - see the
-  // .live-panel rules in globals.css and the VideoStrip note below.
+  // a fixed column open on a phone. On desktop, teachers can also collapse
+  // the right panel anytime to give the whiteboard maximum writeable area.
   const [panelOpen, setPanelOpen] = useState(false);
+  const [desktopPanelCollapsed, setDesktopPanelCollapsed] = useState(false);
   const mainCanvasContainerRef = useRef<HTMLElement>(null);
   const [stageDimensions, setStageDimensions] = useState<{ width: number; height: number }>({ width: 960, height: 540 });
 
-  useEffect(() => {
-    if (!mainCanvasContainerRef.current) return;
-    const computeStage = () => {
-      const el = mainCanvasContainerRef.current;
-      if (!el) return;
-      const { clientWidth, clientHeight } = el;
-      if (clientWidth <= 0 || clientHeight <= 0) return;
-      // 16:9 board using nearly all of the area (a thin margin only): the
-      // writing area was noticeably smaller than the space it had.
-      const availW = Math.max(200, clientWidth - 8);
-      const availH = Math.max(150, clientHeight - 8);
-      let w = availW;
-      let h = Math.round(w * (9 / 16));
-      if (h > availH) {
-        h = availH;
-        w = Math.round(h * (16 / 9));
+  const computeStage = useCallback(() => {
+    const el = mainCanvasContainerRef.current;
+    if (!el) return;
+    const { clientWidth, clientHeight } = el;
+    if (clientWidth <= 0 || clientHeight <= 0) return;
+    // 16:9 board using the full available container area with minimal 2px margin
+    const availW = Math.max(200, clientWidth - 4);
+    const availH = Math.max(150, clientHeight - 4);
+    let w = availW;
+    let h = Math.round(w * (9 / 16));
+    if (h > availH) {
+      h = availH;
+      w = Math.round(h * (16 / 9));
+    }
+    setStageDimensions((prev) =>
+      prev.width === w && prev.height === h ? prev : { width: w, height: h }
+    );
+  }, []);
+
+  const setMainCanvasRef = useCallback((node: HTMLElement | null) => {
+    mainCanvasContainerRef.current = node;
+    if (node) {
+      const { clientWidth, clientHeight } = node;
+      if (clientWidth > 0 && clientHeight > 0) {
+        const availW = Math.max(200, clientWidth - 4);
+        const availH = Math.max(150, clientHeight - 4);
+        let w = availW;
+        let h = Math.round(w * (9 / 16));
+        if (h > availH) {
+          h = availH;
+          w = Math.round(h * (16 / 9));
+        }
+        setStageDimensions({ width: w, height: h });
       }
-      setStageDimensions((prev) =>
-        prev.width === w && prev.height === h ? prev : { width: w, height: h }
-      );
-    };
-    // Recompute now, on the next frame, and again after layout settles — the
-    // grid tracks (rail / panel) can still be resolving on the first pass,
-    // which is what left the board smaller than its container.
+    }
+  }, []);
+
+  useEffect(() => {
     computeStage();
-    const raf = requestAnimationFrame(computeStage);
-    const t1 = window.setTimeout(computeStage, 150);
-    const t2 = window.setTimeout(computeStage, 500);
-    const ro = new ResizeObserver(computeStage);
-    ro.observe(mainCanvasContainerRef.current);
+    const raf1 = requestAnimationFrame(computeStage);
+    const raf2 = requestAnimationFrame(() => requestAnimationFrame(computeStage));
+    const t1 = window.setTimeout(computeStage, 80);
+    const t2 = window.setTimeout(computeStage, 200);
+    const t3 = window.setTimeout(computeStage, 500);
+
+    let ro: ResizeObserver | null = null;
+    if (mainCanvasContainerRef.current) {
+      ro = new ResizeObserver(computeStage);
+      ro.observe(mainCanvasContainerRef.current);
+    }
     window.addEventListener("resize", computeStage);
+
     return () => {
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
+      window.clearTimeout(t3);
       window.removeEventListener("resize", computeStage);
-      ro.disconnect();
+      ro?.disconnect();
     };
-  }, [panelOpen]);
+  }, [computeStage, starting, Boolean(wbSession), panelOpen, desktopPanelCollapsed]);
   const [uploadingBackground, setUploadingBackground] = useState(false);
   // Surfaces real progress/errors for "load the uploaded presentation onto
   // the board as pages" — deliberately visible state, not console.error,
@@ -3473,6 +3497,7 @@ export function TeacherLiveClassRoom({
     <div
       ref={containerRef}
       data-open={panelOpen ? "true" : "false"}
+      data-panel-collapsed={desktopPanelCollapsed ? "true" : "false"}
       className="live-shell fixed inset-0 bg-[#10131b] text-white overflow-hidden select-none z-modal"
     >
       <input
@@ -3995,7 +4020,7 @@ export function TeacherLiveClassRoom({
 
       {/* Main canvas area */}
       <main
-        ref={mainCanvasContainerRef}
+        ref={setMainCanvasRef}
         className="live-canvas relative overflow-hidden bg-[#10131b] flex items-center justify-center min-w-0 min-h-0"
       >
         {/* Pan-capture overlay — only rendered while Pan mode is on, sits
@@ -4420,6 +4445,18 @@ export function TeacherLiveClassRoom({
         </div>
       </main>
 
+      {/* Expand button on desktop when panel is collapsed */}
+      {desktopPanelCollapsed && (
+        <button
+          type="button"
+          onClick={() => setDesktopPanelCollapsed(false)}
+          className="hidden lg:flex fixed right-0 top-1/2 -translate-y-1/2 z-30 w-8 h-16 rounded-l-xl bg-[#1a1b23] border border-r-0 border-[#2d2e3b] text-gray-300 hover:text-white items-center justify-center shadow-2xl transition hover:bg-gray-800 cursor-pointer"
+          title="Expand Chat & Questions panel"
+        >
+          <span className="material-symbols-outlined text-xl">first_page</span>
+        </button>
+      )}
+
       {/* Panel toggle + scrim, below lg only. The panel itself is never
           conditionally rendered: VideoStrip holds the room's single LiveKit
           connection, and remounting it opens a second one under the same
@@ -4481,53 +4518,63 @@ export function TeacherLiveClassRoom({
           </div>
         )}
 
-        <div className="flex border-b border-[#2d2e3b] px-3 pt-3 shrink-0 gap-1 overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => {
-              setRightTab("messages");
-              setUnreadMessages(0);
-            }}
-            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap ${
-              rightTab === "messages" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
-            }`}
-          >
-            Messages
-            {unreadMessages > 0 && (
-              <span className="ml-1.5 bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">
-                {unreadMessages}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setRightTab("questions")}
-            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap ${
-              rightTab === "questions" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
-            }`}
-          >
-            Questions
-            {!wbSession.handRaiseEnabled ? (
-              <span className="bg-gray-800 text-gray-400 text-[10px] px-1.5 py-0.5 rounded ml-1.5">OFF</span>
-            ) : (
-              handRaiseQueue.length > 0 && (
+        <div className="flex items-center justify-between border-b border-[#2d2e3b] px-3 pt-2.5 shrink-0 gap-1">
+          <div className="flex gap-1 overflow-x-auto min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                setRightTab("messages");
+                setUnreadMessages(0);
+              }}
+              className={`px-2.5 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap cursor-pointer ${
+                rightTab === "messages" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
+              }`}
+            >
+              Messages
+              {unreadMessages > 0 && (
                 <span className="ml-1.5 bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">
-                  {handRaiseQueue.length}
+                  {unreadMessages}
                 </span>
-              )
-            )}
-          </button>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightTab("questions")}
+              className={`px-2.5 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap cursor-pointer ${
+                rightTab === "questions" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
+              }`}
+            >
+              Questions
+              {!wbSession.handRaiseEnabled ? (
+                <span className="bg-gray-800 text-gray-400 text-[10px] px-1.5 py-0.5 rounded ml-1.5">OFF</span>
+              ) : (
+                handRaiseQueue.length > 0 && (
+                  <span className="ml-1.5 bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                    {handRaiseQueue.length}
+                  </span>
+                )
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightTab("roster")}
+              className={`px-2.5 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                rightTab === "roster" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
+              }`}
+            >
+              Students
+              <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-800/40 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                {studentCount}
+              </span>
+            </button>
+          </div>
           <button
             type="button"
-            onClick={() => setRightTab("roster")}
-            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap flex items-center gap-1.5 ${
-              rightTab === "roster" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
-            }`}
+            onClick={() => setDesktopPanelCollapsed(true)}
+            className="hidden lg:flex items-center justify-center text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition cursor-pointer shrink-0"
+            title="Collapse chat panel (Maximize whiteboard canvas)"
           >
-            Students
-            <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-800/40 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-              {studentCount}
-            </span>
+            <span className="material-symbols-outlined text-base">last_page</span>
           </button>
         </div>
 
