@@ -100,6 +100,31 @@ export interface UnifiedQuestionIntelligence {
 }
 
 /**
+ * Safely parses question tags whether stored as a JSON array, a JSON string,
+ * or a plain comma-separated string (e.g. "PYQ, NEET 2024, Biology").
+ */
+function safeParseTags(tags: unknown): string[] {
+  if (Array.isArray(tags)) {
+    return tags.map(String).map((t) => t.trim()).filter(Boolean);
+  }
+  if (typeof tags === "string" && tags.trim()) {
+    const raw = tags.trim();
+    if (raw.startsWith("[") && raw.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.map(String).map((t) => t.trim()).filter(Boolean);
+        }
+      } catch {
+        // Fall back to comma-separated parsing below
+      }
+    }
+    return raw.split(",").map((t) => t.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+  }
+  return [];
+}
+
+/**
  * Strips generic filler phrases and enforces subject-adaptive structure on solution objects.
  */
 function sanitizeAndAdaptSolution(
@@ -235,11 +260,7 @@ export async function runOneClickQuestionIntelligence(
   const examShift = occ?.shift || null;
   const examSession = occ?.session || null;
 
-  const existingTagsList: string[] = Array.isArray(question.tags)
-    ? (question.tags as string[])
-    : typeof question.tags === "string"
-    ? JSON.parse(question.tags || "[]")
-    : [];
+  const existingTagsList = safeParseTags(question.tags);
 
   // 2. Pre-indexed NCERT & Syllabus Context Retrieval (Zero AI Calls)
   const masterChapters = getMasterNcertChapters(question.subject || "Biology");
