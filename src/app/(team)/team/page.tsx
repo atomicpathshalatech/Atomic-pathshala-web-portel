@@ -8,32 +8,12 @@ import { CalendarWidget } from "@/components/team-portal/CalendarWidget";
 import { TeacherCommandCenter } from "@/components/team-portal/TeacherCommandCenter";
 import { getTeacherCommandCenterData } from "@/lib/teacher-dashboard/analytics";
 import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
+import { getExecutiveDashboardData } from "@/lib/dashboard/executive-analytics";
+import { ExecutiveDashboard } from "@/components/team-portal/ExecutiveDashboard";
 
 export const metadata: Metadata = {
-  title: "Team Portal",
+  title: "Executive Dashboard — Atomic OPS",
 };
-
-const MODULE_CARDS = [
-  { href: "/team/exercises", label: "Exercise Builder", icon: "assignment", description: "Build chapter-wise and topic-wise practice modules, bilingual printable PDFs with answer keys, and student online practice sheets.", permission: PERMISSIONS.QUESTION_READ, available: true },
-  { href: "/team/students", label: "Student Management & Course Access", icon: "school", description: "Manage student directory, academic status, and grant/revoke batch and course access.", permission: PERMISSIONS.STUDENT_READ_ANY, available: true },
-  { href: "/team/users", label: "Team & Staff Management", icon: "badge", description: "Super Admin console for educator directory, staff provisioning, and role assignment.", permission: PERMISSIONS.USER_READ, available: true },
-  { href: "/team/roles", label: "Roles & Permission Matrix", icon: "security", description: "Visual action-permission matrix across primary and custom roles.", permission: PERMISSIONS.ROLE_MANAGE, available: true },
-  { href: "/team/departments", label: "Departments & Positions", icon: "corporate_fare", description: "Standardize organizational hierarchy, job titles, and default role suggestions.", permission: PERMISSIONS.DEPARTMENT_MANAGE, available: true },
-  { href: "/team/communication", label: "Communication Center", icon: "forum", description: "Registration/enrollment emails, birthday automation, and email delivery logs.", permission: PERMISSIONS.COMMUNICATION_CENTER_ACCESS, available: true },
-  { href: "/team/live-studio", label: "Live Classroom (Whiteboard Studio)", icon: "videocam", description: "Start live whiteboard classes with webcam PiP, smart pen palette, slide themes, polls, and live doubt desk.", permission: PERMISSIONS.WHITEBOARD_ACCESS, available: true },
-  { href: "/team/batches", label: "Batches", icon: "groups", description: "Create batches, assign teachers, enroll students, and build the class timetable.", permission: PERMISSIONS.BATCH_READ, available: true },
-  { href: "/team/tests", label: "Tests", icon: "quiz", description: "Build timed mock tests from the Question Bank and publish them to a batch.", permission: PERMISSIONS.TEST_READ, available: true },
-  { href: "/team/questions", label: "Question Bank", icon: "database", description: "Create, verify, and organize NEET/JEE question papers.", permission: PERMISSIONS.QUESTION_READ, available: true },
-  { href: "/team/question-extract", label: "Question Extract", icon: "document_scanner", description: "Upload PDF papers (ALLEN, RACE, NCERT), extract questions/tables/images, and move verified to Drafts.", permission: PERMISSIONS.QUESTION_CREATE, available: true },
-  { href: "/team/doubts", label: "Doubt Desk", icon: "live_help", description: "Resolve student doubts flagged from live classes and DPPs.", permission: PERMISSIONS.DOUBT_READ, available: true },
-  { href: "/team/faculty", label: "Faculty", icon: "school", description: "Onboard educators and manage faculty profiles.", permission: PERMISSIONS.FACULTY_DIRECTORY, available: true },
-  { href: "/team/coupons", label: "Coupon Management", icon: "confirmation_number", description: "Create and track discount codes and campaign performance.", permission: PERMISSIONS.COUPON_READ, available: true },
-  { href: "/team/notifications", label: "Bulk Notifications", icon: "campaign", description: "Compose and schedule broadcasts to student segments.", permission: PERMISSIONS.NOTIFICATION_READ, available: true },
-  { href: "/team/leads", label: "CRM / Leads", icon: "person_search", description: "Track and assign prospective-student leads.", permission: PERMISSIONS.LEAD_READ, available: true },
-  { href: "/team/finance", label: "Finance", icon: "payments", description: "Invoices, refunds, and payment reconciliation.", permission: PERMISSIONS.FINANCE_READ, available: true },
-  { href: "/team/analytics", label: "Analytics", icon: "analytics", description: "Cross-portal performance and enrollment analytics.", permission: PERMISSIONS.ANALYTICS_VIEW, available: true },
-  { href: "/team/website", label: "Website Builder", icon: "web", description: "Build the public homepage, banners, testimonials, FAQs, footer and SEO.", permission: PERMISSIONS.HOME_VIEW, available: true },
-];
 
 const SCHEDULE_TYPE_LABEL: Record<string, string> = {
   LIVE_CLASS: "Live Class",
@@ -51,9 +31,19 @@ export default async function TeamHomePage() {
   const { user } = await requireTeamSession();
   const permissions = await getUserPermissionCodes(user.id);
   const superAdmin = await isSuperAdminUser(user.id);
-  // The Website Builder is the Super Admin's alone.
-  const cards = MODULE_CARDS.filter((c) => permissions.has(c.permission) && (c.href !== "/team/website" || superAdmin));
 
+  const isExecutive =
+    superAdmin ||
+    user.role?.name === "SUPER_ADMIN" ||
+    user.role?.name === "FOUNDER" ||
+    user.role?.name === "ADMIN" ||
+    permissions.has(PERMISSIONS.ANALYTICS_VIEW) ||
+    permissions.has(PERMISSIONS.FOUNDER_DASHBOARD_VIEW);
+
+  // Load Executive Dashboard telemetry if authorized
+  const executiveData = isExecutive ? await getExecutiveDashboardData() : null;
+
+  // Teacher Profile & Schedule Data
   const teacherProfile = await prisma.teacher.findUnique({ where: { userId: user.id } });
   const commandCenterData = teacherProfile ? await getTeacherCommandCenterData(teacherProfile.id) : null;
 
@@ -112,167 +102,76 @@ export default async function TeamHomePage() {
   const calendarEvents = upcoming.map((s) => ({ date: toIsoDate(s.startsAt) }));
 
   return (
-    <div className="space-y-stack-lg max-w-7xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface">
-            Welcome, {user.name.split(" ")[0]}
-          </h1>
-          <p className="font-body-md text-body-md text-on-surface-variant">
-            {user.role?.label ?? ""} — here&apos;s what you have access to.
-          </p>
-        </div>
-        {teacherProfile && (
-          <Link
-            href="/team/profile"
-            className="text-primary font-label-md text-label-md hover:underline flex items-center gap-1 shrink-0"
-          >
-            <span className="material-symbols-outlined text-lg">edit</span>
-            Edit My Profile
-          </Link>
-        )}
-      </div>
+    <div className="space-y-6">
+      {/* 1. New Executive Overview Dashboard for Super Admin & Leadership */}
+      {executiveData && (
+        <ExecutiveDashboard
+          data={executiveData}
+          userName={user.name}
+          userRoleLabel={user.role?.label || "Super Admin"}
+        />
+      )}
 
-      {commandCenterData && <TeacherCommandCenter data={commandCenterData} />}
-
-      {/* Mobile Companion Apps Quick Download Banners */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Atomic Calling Staff Companion App */}
-        <div className="p-4 sm:p-5 rounded-2xl border border-primary/20 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-surface flex flex-col justify-between gap-3 shadow-xs">
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-sm">
-              <span className="material-symbols-outlined text-xl">phone_iphone</span>
-            </div>
+      {/* 2. Educator Command Center */}
+      {commandCenterData && (
+        <div className="space-y-4 pt-4 border-t border-slate-200">
+          <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm font-bold text-on-surface">Atomic Calling — Android SIM Dialer (v1.0.2)</h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase tracking-wide">
-                  Auto-Update Ready
-                </span>
-              </div>
-              <p className="text-xs text-on-surface-variant mt-0.5">
-                Install on your office phone for direct CRM cellular calls with automatic sync &amp; in-app auto updates.
+              <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-600">co_present</span>
+                Educator Command Center &amp; Live Teaching Analytics
+              </h2>
+              <p className="text-xs text-slate-500">
+                Your assigned subjects, student doubt resolutions, and upcoming live classes.
               </p>
             </div>
+            {teacherProfile && (
+              <Link
+                href="/team/profile"
+                className="text-blue-600 font-bold text-xs hover:underline flex items-center gap-1 shrink-0"
+              >
+                <span className="material-symbols-outlined text-[16px]">edit</span>
+                Edit Educator Profile
+              </Link>
+            )}
           </div>
-          <div className="flex items-center gap-2 pt-1">
-            <a
-              href="/downloads/AtomicCalling.apk"
-              download="AtomicCalling.apk"
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition shadow-sm active:scale-95"
-            >
-              <span className="material-symbols-outlined text-base">download</span>
-              Download Calling APK (40 MB)
-            </a>
-            <Link
-              href="/team/leads"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/30 bg-surface hover:bg-surface-container text-xs font-semibold text-on-surface transition"
-            >
-              Open CRM
-            </Link>
-          </div>
+          <TeacherCommandCenter data={commandCenterData} />
         </div>
+      )}
 
-        {/* Atomic Pathshala Student App */}
-        <div className="p-4 sm:p-5 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-50/70 via-teal-50/40 to-surface flex flex-col justify-between gap-3 shadow-xs">
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-              <span className="material-symbols-outlined text-xl">school</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm font-bold text-on-surface">Atomic Pathshala — Student App (v1.0.2)</h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase tracking-wide">
-                  Live Poll &amp; Class
-                </span>
-              </div>
-              <p className="text-xs text-on-surface-variant mt-0.5">
-                Student mobile app with floating live polls over YouTube classes, real-time leaderboard, and portrait video calls.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <a
-              href="/downloads/AtomicPathshala.apk"
-              download="AtomicPathshala.apk"
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition shadow-sm active:scale-95"
-            >
-              <span className="material-symbols-outlined text-base">download</span>
-              Download Student APK (9 MB)
-            </a>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
-        <div className="lg:col-span-8 space-y-stack-lg">
-          {cards.length === 0 ? (
-            <div className="glass-card rounded-2xl p-8 text-center text-on-surface-variant font-body-md">
-              Your role doesn&apos;t have any team-portal modules assigned yet. Contact a Super Admin
-              if this looks wrong.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-gutter">
-              {cards.map((card) =>
-                card.available ? (
-                  <Link
-                    key={card.href}
-                    href={card.href}
-                    className="glass-card rounded-2xl p-6 space-y-3 hover:shadow-lg hover:-translate-y-0.5 transition-all"
-                  >
-                    <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
-                      <span className="material-symbols-outlined">{card.icon}</span>
-                    </div>
-                    <h3 className="font-headline-md text-headline-md text-on-surface">{card.label}</h3>
-                    <p className="text-label-sm font-label-sm text-on-surface-variant">{card.description}</p>
-                  </Link>
-                ) : (
-                  <div key={card.href} className="glass-card rounded-2xl p-6 space-y-3 opacity-70">
-                    <div className="flex items-start justify-between">
-                      <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
-                        <span className="material-symbols-outlined">{card.icon}</span>
-                      </div>
-                      <span className="text-[10px] bg-surface-container-high px-2 py-0.5 rounded-full font-bold uppercase tracking-wide text-on-surface-variant">
-                        Coming Soon
-                      </span>
-                    </div>
-                    <h3 className="font-headline-md text-headline-md text-on-surface">{card.label}</h3>
-                    <p className="text-label-sm font-label-sm text-on-surface-variant">{card.description}</p>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-        </div>
-
-        {teacherProfile && (
-          <aside className="lg:col-span-4 space-y-stack-md">
+      {/* 3. Non-Executive Educator Timetable View */}
+      {!executiveData && teacherProfile && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8">
             <CalendarWidget todayIso={toIsoDate(now)} events={calendarEvents} />
+          </div>
 
-            <div className="glass-card rounded-xl p-stack-md">
-              <h3 className="font-headline-md text-headline-md mb-3 flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">event_upcoming</span>
+          <aside className="lg:col-span-4 space-y-4">
+            <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 mb-3 flex items-center gap-2">
+                <span className="material-symbols-outlined text-purple-600">event_upcoming</span>
                 Coming Up
               </h3>
               {upcoming.length === 0 ? (
-                <p className="text-label-sm text-on-surface-variant">Nothing on your timetable in the next 60 days.</p>
+                <p className="text-xs text-slate-400">Nothing on your timetable in the next 60 days.</p>
               ) : (
                 <ul className="space-y-2">
                   {upcoming.slice(0, 5).map((s) => (
                     <li key={s.id}>
                       <Link
                         href={s.href}
-                        className="block bg-surface-container-lowest hover:bg-surface-container-low rounded-lg px-3 py-2 transition"
+                        className="block bg-slate-50 hover:bg-slate-100 rounded-lg p-2.5 transition"
                       >
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[10px] font-bold uppercase tracking-wide bg-secondary/10 text-secondary px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] font-bold uppercase tracking-wide bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
                             {SCHEDULE_TYPE_LABEL[s.type] ?? s.type}
                           </span>
-                          <span className="text-label-sm text-on-surface-variant truncate">{s.batch.name}</span>
+                          <span className="text-xs text-slate-500 truncate">{s.batch.name}</span>
                         </div>
-                        <p className="font-label-md text-label-md text-on-surface truncate">{s.title}</p>
-                        <p className="text-label-sm text-on-surface-variant">
-                          {s.startsAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", 
+                        <p className="text-xs font-bold text-slate-800 truncate">{s.title}</p>
+                        <p className="text-[11px] text-slate-400">
+                          {s.startsAt.toLocaleString("en-IN", {
+                            timeZone: "Asia/Kolkata",
                             month: "short",
                             day: "numeric",
                             hour: "numeric",
@@ -286,8 +185,8 @@ export default async function TeamHomePage() {
               )}
             </div>
           </aside>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
