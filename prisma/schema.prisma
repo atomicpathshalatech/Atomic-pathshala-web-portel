@@ -193,6 +193,12 @@ model User {
   xpRuleVersionsCreated   XPRuleVersion[]       @relation("XPRuleVersionCreator")
   xpAuditLogsPerformed    XPAuditLog[]          @relation("XPAuditLogAdmin")
 
+  pyqVerifiedQuestions Question[]               @relation("QuestionPyqVerifiedBy")
+  assignedPyqAssignments PyqAssignment[]         @relation("PyqAssignedTo")
+  createdPyqAssignments  PyqAssignment[]         @relation("PyqAssignedBy")
+  pyqReviews             PyqReview[]             @relation("PyqReviewedBy")
+  pyqReviewHistories     PyqReviewHistory[]      @relation("PyqReviewHistoryUser")
+
   @@index([roleId])
   @@index([status])
   @@map("users")
@@ -2752,6 +2758,15 @@ model Question {
   // duplicate detection across imports. Never used to delete anything.
   contentFingerprint      String?
 
+  // PYQ Verification System
+  pyqVerificationStatus String?                  @default("UNVERIFIED") // UNVERIFIED | ASSIGNED | IN_REVIEW | NEEDS_CORRECTION | VERIFIED
+  pyqVerifiedById       String?
+  pyqVerifiedAt         DateTime?
+  pyqVerifiedBy         User?                    @relation("QuestionPyqVerifiedBy", fields: [pyqVerifiedById], references: [id])
+  pyqAssignments        PyqAssignmentQuestion[]
+  pyqReviews            PyqReview[]
+  pyqReviewHistories    PyqReviewHistory[]
+
   createdBy             User?                 @relation("QuestionCreatedBy", fields: [createdById], references: [id])
   publishedBy           User?                 @relation("QuestionPublishedBy", fields: [publishedById], references: [id])
   review1By             User?                 @relation("QuestionReview1By", fields: [review1ById], references: [id])
@@ -2794,6 +2809,8 @@ model Question {
   @@index([aiVerified])
   @@index([aiAuditStatus])
   @@index([qcStatus])
+  @@index([pyqVerificationStatus])
+  @@index([pyqVerificationStatus, subject, chapter])
   @@map("questions")
 }
 
@@ -7518,6 +7535,8 @@ model PyqExam {
   extractionJobs     ExtractionJob[]
   extractedQuestions ExtractedQuestion[]
 
+  pyqAssignments     PyqAssignment[]
+
   @@index([canonicalType])
   @@map("pyq_exams")
 }
@@ -8987,4 +9006,99 @@ model TestAuditLog {
   @@index([reportId])
   @@index([action])
   @@map("test_audit_logs")
+}
+
+model PyqAssignment {
+  id              String                   @id @default(cuid())
+  title           String?
+  subject         String
+  chapter         String
+  examId          String?
+  assignmentType  String                   @default("CHAPTER") // CHAPTER | SELECTED_QUESTIONS | SELF
+  priority        String                   @default("NORMAL")  // NORMAL | HIGH | URGENT
+  deadline        DateTime?
+  instructions    String?                  @db.Text
+  status          String                   @default("ASSIGNED") // ASSIGNED | IN_PROGRESS | COMPLETED | CANCELLED
+  totalQuestions  Int                      @default(0)
+  pendingCount    Int                      @default(0)
+  inReviewCount   Int                      @default(0)
+  verifiedCount   Int                      @default(0)
+  rejectedCount   Int                      @default(0)
+  assignedToId    String
+  assignedById    String
+  assignedAt      DateTime                 @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  assignedTo      User                     @relation("PyqAssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
+  assignedBy      User                     @relation("PyqAssignedBy", fields: [assignedById], references: [id], onDelete: Cascade)
+  exam            PyqExam?                 @relation(fields: [examId], references: [id], onDelete: SetNull)
+  questions       PyqAssignmentQuestion[]
+
+  @@index([assignedToId, status])
+  @@index([assignedById])
+  @@index([subject, chapter])
+  @@index([status])
+  @@map("pyq_assignments")
+}
+
+model PyqAssignmentQuestion {
+  id            String         @id @default(cuid())
+  assignmentId  String
+  questionId    String
+  status        String         @default("PENDING") // PENDING | IN_REVIEW | NEEDS_CORRECTION | VERIFIED
+  reviewedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  assignment    PyqAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  question      Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, questionId])
+  @@index([questionId])
+  @@index([status])
+  @@map("pyq_assignment_questions")
+}
+
+model PyqReview {
+  id                 String    @id @default(cuid())
+  questionId         String
+  reviewerId         String
+  assignmentId       String?
+  verificationStatus String    @default("UNVERIFIED") // UNVERIFIED | ASSIGNED | IN_REVIEW | NEEDS_CORRECTION | VERIFIED
+  checklistData      Json?     // { englishStatement: boolean, hindiTranslation: boolean, allOptions: boolean, correctAnswer: boolean, explanation: boolean, imagesDiagrams: boolean, chapterMapping: boolean, topic: boolean, subtopic: boolean, examNameYear: boolean }
+  reviewComments     String?   @db.Text
+  flaggedIssue       String?   // ANSWER_KEY_WRONG | TRANSLATION_INCORRECT | DIAGRAM_MISSING | TOPIC_MISMATCH | QUESTION_AMBIGUOUS | OTHER
+  correctionsNeeded  String?   @db.Text
+  reviewedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  question           Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  reviewer           User      @relation("PyqReviewedBy", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([reviewerId])
+  @@index([verificationStatus])
+  @@map("pyq_reviews")
+}
+
+model PyqReviewHistory {
+  id           String    @id @default(cuid())
+  questionId   String
+  reviewerId   String
+  action       String    // ASSIGNED | REASSIGNED | STARTED_REVIEW | SAVED_PROGRESS | FLAGGED_CORRECTION | VERIFIED | EDITED_REOPENED | STATUS_OVERRIDDEN
+  previousData Json?
+  updatedData  Json?
+  comments     String?   @db.Text
+  timestamp    DateTime  @default(now())
+
+  question     Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  reviewer     User      @relation("PyqReviewHistoryUser", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([reviewerId])
+  @@index([action])
+  @@map("pyq_review_histories")
 }

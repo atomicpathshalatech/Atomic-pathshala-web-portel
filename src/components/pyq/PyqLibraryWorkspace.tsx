@@ -12,6 +12,7 @@ import { PyqChapterWiseView } from "./PyqChapterWiseView";
 import { PyqDuplicatesManager } from "./PyqDuplicatesManager";
 import { PyqAnalyticsDashboard } from "./PyqAnalyticsDashboard";
 import { ManualQuestionDialog } from "./ManualQuestionDialog";
+import { PyqMyAssignedReviewsView } from "./PyqMyAssignedReviewsView";
 
 type ExamNode = { id: string; name: string; canonicalType: string; total: number; years: { year: number | null; count: number }[] };
 type Facets = { sessions: string[]; shifts: string[]; papers: string[]; chapters: { subject: string; chapter: string }[]; imports: { id: string; sourceName: string }[] };
@@ -42,7 +43,9 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
   const [dialog, setDialog] = useState<null | "MODULE" | "TEST" | "DPP">(null);
   const [selectingAll, setSelectingAll] = useState(false);
   const [openExams, setOpenExams] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<"YEAR_WISE" | "CHAPTER_WISE" | "DUPLICATES" | "ANALYTICS">("YEAR_WISE");
+  const [activeTab, setActiveTab] = useState<"YEAR_WISE" | "CHAPTER_WISE" | "MY_REVIEWS" | "DUPLICATES" | "ANALYTICS">(
+    sp.get("tab") === "my-reviews" ? "MY_REVIEWS" : "YEAR_WISE"
+  );
   const [manualModalOpen, setManualModalOpen] = useState(false);
 
   const get = (k: FilterKey) => sp.get(k) ?? "";
@@ -198,6 +201,19 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
 
         <button
           type="button"
+          onClick={() => setActiveTab("MY_REVIEWS")}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition ${
+            activeTab === "MY_REVIEWS"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">fact_check</span>
+          My Assigned Reviews
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("DUPLICATES")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition ${
             activeTab === "DUPLICATES"
@@ -225,6 +241,14 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
 
       {/* Tab Views */}
       {activeTab === "CHAPTER_WISE" && <PyqChapterWiseView exams={tree} canImport={canImport} />}
+      {activeTab === "MY_REVIEWS" && (
+        <PyqMyAssignedReviewsView
+          onSelectChapter={(subject, chapter) => {
+            setParams({ subject, chapter });
+            setActiveTab("CHAPTER_WISE");
+          }}
+        />
+      )}
       {activeTab === "DUPLICATES" && <PyqDuplicatesManager />}
       {activeTab === "ANALYTICS" && <PyqAnalyticsDashboard />}
 

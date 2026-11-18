@@ -5,6 +5,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { ManualQuestionDialog } from "./ManualQuestionDialog";
+import { PyqAssignmentDialog } from "./PyqAssignmentDialog";
+import { PyqQuestionReviewModal } from "./PyqQuestionReviewModal";
 
 type Exam = { id: string; name: string; canonicalType: string; slug: string };
 type ChapterSummary = {
@@ -15,12 +17,25 @@ type ChapterSummary = {
   classNumber: number;
   count: number;
 };
+
+type Metrics = {
+  totalQuestions: number;
+  unverifiedCount: number;
+  verifiedCount: number;
+  assignedCount: number;
+  unassignedCount: number;
+  inReviewCount: number;
+  needsCorrectionCount: number;
+};
+
 type ChapterDetail = {
   subject: string;
   chapter: string;
   examId: string | null;
   examName: string | null;
-  totalQuestions: number;
+  tab: "unverified" | "verified";
+  statusFilter: string;
+  metrics: Metrics;
   yearDistribution: { year: number; count: number }[];
   topicDistribution: { topic: string; count: number }[];
   questions: any[];
@@ -43,18 +58,32 @@ export function PyqChapterWiseView({
       ? ["Physics", "Chemistry", "Biology", "Botany", "Zoology"]
       : ["Physics", "Chemistry", "Mathematics"];
 
-  const [selectedSubject, setSelectedSubject] = useState<string>("Physics");
+  const [selectedSubject, setSelectedSubject] = useState<string>("Biology");
   const [chapters, setChapters] = useState<ChapterSummary[]>([]);
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [detail, setDetail] = useState<ChapterDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Active Verification Tab inside Chapter
+  const [verificationTab, setVerificationTab] = useState<"unverified" | "verified">("unverified");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
+  // Selection for batch assignment
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
+
+  // Modals
   const [showManualModal, setShowManualModal] = useState(false);
+  const [assignmentModal, setAssignmentModal] = useState<{
+    open: boolean;
+    mode: "CHAPTER" | "SELECTED_QUESTIONS" | "SELF";
+  }>({ open: false, mode: "CHAPTER" });
+  const [reviewModalQuestionId, setReviewModalQuestionId] = useState<string | null>(null);
 
   // Switch subject when exam changes if current subject is not valid for exam
   useEffect(() => {
     if (!subjects.includes(selectedSubject)) {
-      setSelectedSubject("Physics");
+      setSelectedSubject(subjects[0] || "Physics");
     }
   }, [selectedExam]);
 
@@ -82,36 +111,51 @@ export function PyqChapterWiseView({
   }, [selectedExam.id, selectedSubject]);
 
   // Fetch details for selected chapter
-  useEffect(() => {
+  const fetchChapterDetails = () => {
     if (!selectedChapter) {
       setDetail(null);
       return;
     }
     setDetailLoading(true);
-    fetch(
-      `/api/team/pyq/chapter-view?exam=${selectedExam.id}&subject=${encodeURIComponent(
-        selectedSubject
-      )}&chapter=${encodeURIComponent(selectedChapter)}`
-    )
+    const params = new URLSearchParams();
+    params.set("exam", selectedExam.id);
+    params.set("subject", selectedSubject);
+    params.set("chapter", selectedChapter);
+    params.set("tab", verificationTab);
+    if (statusFilter !== "ALL") params.set("status", statusFilter);
+
+    fetch(`/api/team/pyq/chapter-view?${params.toString()}`)
       .then((r) => r.json())
       .then((j) => {
         if (j.success) {
           setDetail(j.data);
+          // Clear stale selection
+          setSelectedQuestionIds(new Set());
         }
       })
       .catch((e) => toast.error(e.message))
       .finally(() => setDetailLoading(false));
-  }, [selectedExam.id, selectedSubject, selectedChapter]);
+  };
 
-  function refreshCurrent() {
-    if (selectedChapter) {
-      fetch(
-        `/api/team/pyq/chapter-view?exam=${selectedExam.id}&subject=${encodeURIComponent(
-          selectedSubject
-        )}&chapter=${encodeURIComponent(selectedChapter)}`
-      )
-        .then((r) => r.json())
-        .then((j) => j.success && setDetail(j.data));
+  useEffect(() => {
+    fetchChapterDetails();
+  }, [selectedExam.id, selectedSubject, selectedChapter, verificationTab, statusFilter]);
+
+  function toggleQuestionSelection(id: string) {
+    setSelectedQuestionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (!detail?.questions) return;
+    if (selectedQuestionIds.size === detail.questions.length) {
+      setSelectedQuestionIds(new Set());
+    } else {
+      setSelectedQuestionIds(new Set(detail.questions.map((q) => q.id)));
     }
   }
 
@@ -173,7 +217,7 @@ export function PyqChapterWiseView({
       {/* Main Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left: Master NCERT Chapter List */}
-        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col h-[75vh]">
+        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col h-[78vh]">
           <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100 dark:border-slate-800">
             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
               {selectedSubject} Syllabus
@@ -226,7 +270,7 @@ export function PyqChapterWiseView({
           )}
         </div>
 
-        {/* Right: Chapter Detail, Metrics & Question List */}
+        {/* Right: Chapter Detail, Verification Tabs, Metrics & Question List */}
         <div className="lg:col-span-8 space-y-4">
           {detailLoading ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 h-64 flex items-center justify-center">
@@ -254,20 +298,41 @@ export function PyqChapterWiseView({
                       {detail.chapter}
                     </h2>
                     <p className="text-xs text-slate-500 font-medium">
-                      {detail.totalQuestions} verified previous year question(s) recorded in database
+                      {detail.metrics.totalQuestions} total recorded question(s) •{" "}
+                      <span className="text-emerald-600 font-bold">{detail.metrics.verifiedCount} Verified</span> •{" "}
+                      <span className="text-blue-600 font-bold">{detail.metrics.unverifiedCount} Unverified</span>
                     </p>
                   </div>
 
-                  {/* Chapter Actions */}
+                  {/* Top Chapter Actions */}
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
+                      onClick={() => setAssignmentModal({ open: true, mode: "CHAPTER" })}
+                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">assignment_ind</span>
+                      <span>Assign Chapter</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAssignmentModal({ open: true, mode: "SELF" })}
+                      className="px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 hover:bg-blue-100 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">person</span>
+                      <span>Self Assign</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => setShowManualModal(true)}
-                      className="pyq-btn bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700"
+                      className="pyq-btn bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 cursor-pointer"
                     >
                       <span className="material-symbols-outlined text-sm">add_circle</span>
-                      Add Question
+                      <span>Add Question</span>
                     </button>
+
                     {canImport && (
                       <Link
                         href={`/team/pyq-library/import?exam=${selectedExam.id}&subject=${encodeURIComponent(
@@ -276,7 +341,7 @@ export function PyqChapterWiseView({
                         className="pyq-btn-primary"
                       >
                         <span className="material-symbols-outlined text-sm">upload_file</span>
-                        Upload Chapter PDF
+                        <span>Import PDF</span>
                       </Link>
                     )}
                   </div>
@@ -330,45 +395,225 @@ export function PyqChapterWiseView({
                 </div>
               </div>
 
+              {/* TWO PRIMARY TABS: Unverified Questions vs Verified Questions */}
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerificationTab("unverified");
+                      setStatusFilter("ALL");
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                      verificationTab === "unverified"
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">pending_actions</span>
+                    <span>Unverified Questions ({detail.metrics.unverifiedCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerificationTab("verified");
+                      setStatusFilter("ALL");
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                      verificationTab === "verified"
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">verified</span>
+                    <span>Verified Questions ({detail.metrics.verifiedCount})</span>
+                  </button>
+                </div>
+
+                {/* Batch Actions when Checkboxes are checked */}
+                {selectedQuestionIds.size > 0 && (
+                  <div className="flex items-center gap-2 animate-in fade-in">
+                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                      {selectedQuestionIds.size} selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAssignmentModal({
+                          open: true,
+                          mode: "SELECTED_QUESTIONS",
+                        })
+                      }
+                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">assignment_turned_in</span>
+                      <span>Assign Selected ({selectedQuestionIds.size})</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* KPI Metrics Bar for Unverified Questions */}
+              {verificationTab === "unverified" && (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("ALL")}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                      statusFilter === "ALL"
+                        ? "bg-blue-50 dark:bg-blue-950/60 border-blue-400 font-bold"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Unverified</span>
+                    <span className="font-mono font-black text-slate-900 dark:text-white text-sm">
+                      {detail.metrics.unverifiedCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("ASSIGNED")}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                      statusFilter === "ASSIGNED"
+                        ? "bg-blue-50 dark:bg-blue-950/60 border-blue-400 font-bold"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <span className="text-[10px] text-blue-500 uppercase font-bold block">Assigned</span>
+                    <span className="font-mono font-black text-blue-600 dark:text-blue-400 text-sm">
+                      {detail.metrics.assignedCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("UNASSIGNED")}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                      statusFilter === "UNASSIGNED"
+                        ? "bg-slate-100 dark:bg-slate-800 border-slate-400 font-bold"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <span className="text-[10px] text-slate-500 uppercase font-bold block">Unassigned</span>
+                    <span className="font-mono font-black text-slate-700 dark:text-slate-300 text-sm">
+                      {detail.metrics.unassignedCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("IN_REVIEW")}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                      statusFilter === "IN_REVIEW"
+                        ? "bg-amber-50 dark:bg-amber-950/60 border-amber-400 font-bold"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <span className="text-[10px] text-amber-500 uppercase font-bold block">In Review</span>
+                    <span className="font-mono font-black text-amber-600 dark:text-amber-400 text-sm">
+                      {detail.metrics.inReviewCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("NEEDS_CORRECTION")}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                      statusFilter === "NEEDS_CORRECTION"
+                        ? "bg-rose-50 dark:bg-rose-950/60 border-rose-400 font-bold"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <span className="text-[10px] text-rose-500 uppercase font-bold block">Needs Correction</span>
+                    <span className="font-mono font-black text-rose-600 dark:text-rose-400 text-sm">
+                      {detail.metrics.needsCorrectionCount}
+                    </span>
+                  </button>
+
+                  <div className="p-2.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center flex flex-col justify-center">
+                    <button
+                      type="button"
+                      onClick={toggleSelectAll}
+                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                    >
+                      {selectedQuestionIds.size === detail.questions.length && detail.questions.length > 0
+                        ? "Deselect All"
+                        : "Select All Page"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* KPI Metrics Bar for Verified Questions */}
+              {verificationTab === "verified" && (
+                <div className="bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-2xl p-4 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-black text-emerald-900 dark:text-emerald-200 text-sm block">
+                      Total Verified Questions: {detail.metrics.verifiedCount}
+                    </span>
+                    <span className="text-emerald-700/80 dark:text-emerald-400 text-[11px]">
+                      Passed 100% human verification, checklist verified, official key verified.
+                    </span>
+                  </div>
+                  <div className="text-right text-[11px] text-emerald-800 dark:text-emerald-300 font-mono">
+                    All verified questions are published &amp; active in Practice, Tests &amp; DPPs.
+                  </div>
+                </div>
+              )}
+
               {/* Questions List */}
               <div className="space-y-3">
                 {detail.questions.length === 0 ? (
                   <div className="bg-white dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
-                    <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">history_edu</span>
+                    <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">
+                      {verificationTab === "verified" ? "verified" : "pending_actions"}
+                    </span>
                     <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                      No Questions in {detail.chapter}
+                      No {verificationTab === "verified" ? "Verified" : "Unverified"} Questions Found
                     </h4>
                     <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                      Add the first question manually or upload an entire chapter PDF to automatically extract and verify questions.
+                      {verificationTab === "verified"
+                        ? "No questions have been approved yet in this chapter. Start review in the Unverified tab to approve questions."
+                        : "All questions in this chapter are either verified or no questions match the selected filter."}
                     </p>
-                    <div className="mt-4 flex justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowManualModal(true)}
-                        className="pyq-btn"
-                      >
-                        + Add Question Manually
-                      </button>
-                    </div>
                   </div>
                 ) : (
                   detail.questions.map((q, idx) => {
-                    const translation = q.translations?.[0];
-                    const options = (translation?.options || {}) as Record<string, string>;
-                    const answers = (translation?.correctOptionIds || []) as string[];
+                    const enTrans = q.translations?.find((t: any) => t.language?.toUpperCase() === "ENGLISH");
+                    const hiTrans = q.translations?.find((t: any) => t.language?.toUpperCase() === "HINDI");
+                    const currentTrans = enTrans || q.translations?.[0];
+                    const options = (currentTrans?.options || {}) as Record<string, string>;
+                    const answers = (currentTrans?.correctOptionIds || []) as string[];
                     const occ = q.pyqOccurrences?.[0];
+                    const isSelected = selectedQuestionIds.has(q.id);
+                    const isVerified = q.pyqVerificationStatus === "VERIFIED";
 
                     return (
                       <div
                         key={q.id}
-                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition"
+                        className={`bg-white dark:bg-slate-900 border rounded-2xl p-4 shadow-sm transition hover:border-slate-300 dark:hover:border-slate-700 ${
+                          isSelected
+                            ? "border-blue-500 ring-1 ring-blue-500 bg-blue-50/20"
+                            : "border-slate-200 dark:border-slate-800"
+                        }`}
                       >
-                        {/* Header Badges */}
+                        {/* Header Badges & Actions */}
                         <div className="flex items-center justify-between text-xs mb-2">
                           <div className="flex items-center gap-2 flex-wrap">
+                            {/* Checkbox for batch select */}
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleQuestionSelection(q.id)}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+
                             <span className="font-mono font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md">
                               Q.{idx + 1}
                             </span>
+
                             {occ ? (
                               <span className="font-bold text-slate-700 dark:text-slate-300">
                                 {occ.exam?.name} {occ.year} {occ.session ? `(${occ.session})` : ""}{" "}
@@ -379,36 +624,99 @@ export function PyqChapterWiseView({
                                 {q.pyqExam} {q.pyqYear}
                               </span>
                             ) : null}
+
+                            {/* Translation Pills */}
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold">
+                              EN ✓
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                hiTrans?.statement
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                  : "bg-amber-100 text-amber-800"
+                              }`}
+                            >
+                              {hiTrans?.statement ? "HI ✓" : "HI Missing ✕"}
+                            </span>
+
+                            {/* Diagram Pill */}
+                            {q.imageUrl && (
+                              <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 text-[10px] font-bold flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[12px]">image</span>
+                                Diagram
+                              </span>
+                            )}
+
                             {q.topic && (
                               <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[11px]">
                                 {q.topic}
                               </span>
                             )}
                           </div>
+
+                          {/* Verification Status & Review Button */}
                           <div className="flex items-center gap-2">
                             <span
                               className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                                q.isPublished
+                                isVerified
                                   ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                  : q.pyqVerificationStatus === "NEEDS_CORRECTION"
+                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                                  : q.pyqVerificationStatus === "IN_REVIEW"
+                                  ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                  : q.pyqVerificationStatus === "ASSIGNED"
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                  : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                               }`}
                             >
-                              {q.isPublished ? "Published" : "Draft"}
+                              {q.pyqVerificationStatus || "UNVERIFIED"}
                             </span>
-                            <span className="font-mono text-[10px] text-slate-400">
-                              {q.questionCode || q.id.slice(-6)}
-                            </span>
+
+                            {/* Launch Review Modal */}
+                            <button
+                              type="button"
+                              onClick={() => setReviewModalQuestionId(q.id)}
+                              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                isVerified
+                                  ? "bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                  : "bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-[14px]">
+                                {isVerified ? "visibility" : "rate_review"}
+                              </span>
+                              <span>{isVerified ? "Inspect / Reopen" : "Review Question"}</span>
+                            </button>
                           </div>
+                        </div>
+
+                        {/* Assignee / Verification info chip */}
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 mb-2">
+                          {isVerified && q.pyqVerifiedBy?.name ? (
+                            <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                              Verified by {q.pyqVerifiedBy.name} on{" "}
+                              {new Date(q.pyqVerifiedAt || "").toLocaleDateString()}
+                            </span>
+                          ) : q.assignedTo?.name ? (
+                            <span className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[14px]">person</span>
+                              Assigned to {q.assignedTo.name}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">Unassigned</span>
+                          )}
                         </div>
 
                         {/* Question Statement */}
                         <div className="text-xs text-slate-800 dark:text-slate-100 font-medium leading-relaxed my-2">
-                          <FormulaText text={translation?.statement || "(No statement)"} />
+                          <FormulaText text={currentTrans?.statement || "(No statement)"} />
                         </div>
 
                         {/* Question Image */}
                         {q.imageUrl && (
                           <div className="my-2 max-w-sm rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={q.imageUrl} alt="Question figure" className="w-full object-contain" />
                           </div>
                         )}
@@ -452,12 +760,37 @@ export function PyqChapterWiseView({
       <ManualQuestionDialog
         open={showManualModal}
         onClose={() => setShowManualModal(false)}
-        onSuccess={refreshCurrent}
+        onSuccess={fetchChapterDetails}
         defaultExamId={selectedExam.id}
         defaultSubject={selectedSubject}
         defaultChapter={selectedChapter || ""}
         exams={exams}
       />
+
+      {/* Assignment Modal */}
+      {assignmentModal.open && (
+        <PyqAssignmentDialog
+          open={assignmentModal.open}
+          onClose={() => setAssignmentModal({ open: false, mode: "CHAPTER" })}
+          onSuccess={fetchChapterDetails}
+          subject={selectedSubject}
+          chapter={selectedChapter || ""}
+          examId={selectedExam.id}
+          mode={assignmentModal.mode}
+          selectedQuestionIds={Array.from(selectedQuestionIds)}
+          totalQuestionsCount={detail?.metrics.unverifiedCount || 0}
+        />
+      )}
+
+      {/* Question Review Modal */}
+      {reviewModalQuestionId && (
+        <PyqQuestionReviewModal
+          questionId={reviewModalQuestionId}
+          open={Boolean(reviewModalQuestionId)}
+          onClose={() => setReviewModalQuestionId(null)}
+          onRefresh={fetchChapterDetails}
+        />
+      )}
     </div>
   );
 }
