@@ -1,155 +1,27 @@
 import { requireTeamSession } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { TeamShell, type TeamNavSection } from "@/components/team-portal/TeamShell";
-
-/**
- * Grouped nav with strict role & permission gating.
- * "Contracts" is strictly an Admin/HR management tool (CONTRACT_READ_ANY)
- * placed under "People", completely hidden from educator self profiles.
- */
-// superAdminOnly: Super Admin / Founder only — ADMIN passes every permission, so a permission can't express it.
-const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon: string; permission: string; superAdminOnly?: boolean }[] }[] = [
-  {
-    items: [
-      { href: "/team", label: "Dashboard", icon: "space_dashboard", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
-      { href: "/team/messages", label: "Messages & Inbox", icon: "forum", permission: PERMISSIONS.MESSAGE_READ },
-      { href: "/", label: "Website Homepage", icon: "public", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
-    ],
-  },
-  {
-    title: "Teaching",
-    items: [
-      { href: "/team/my-schedule", label: "My Schedule", icon: "calendar_month", permission: PERMISSIONS.WHITEBOARD_ACCESS },
-      { href: "/team/doubt-booking", label: "Doubt Book Session", icon: "event_available", permission: PERMISSIONS.WHITEBOARD_ACCESS },
-      { href: "/team/batches", label: "Batches", icon: "groups", permission: PERMISSIONS.BATCH_READ },
-      { href: "/team/chapters", label: "Chapters", icon: "auto_stories", permission: PERMISSIONS.CHAPTER_READ },
-      { href: "/team/recorded-lectures", label: "Recorded Lectures", icon: "video_library", permission: PERMISSIONS.LECTURE_READ, superAdminOnly: true },
-      { href: "/team/study-material", label: "Study Material", icon: "folder_open", permission: PERMISSIONS.STUDY_MATERIAL_MANAGE },
-      { href: "/team/tests", label: "Tests", icon: "quiz", permission: PERMISSIONS.TEST_READ },
-      { href: "/team/test-series", label: "Test Series", icon: "collections_bookmark", permission: PERMISSIONS.TEST_READ },
-      { href: "/team/exercises", label: "Exercise Builder (Modules)", icon: "assignment", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/whiteboard", label: "Whiteboard", icon: "draw", permission: PERMISSIONS.WHITEBOARD_ACCESS },
-      { href: "/team/dpp", label: "DPP", icon: "task_alt", permission: PERMISSIONS.DPP_READ },
-      { href: "/team/ncert", label: "NCERT Practice Hub", icon: "menu_book", permission: PERMISSIONS.CHAPTER_READ },
-      { href: "/team/board-exam", label: "Board Exam Hub", icon: "school", permission: PERMISSIONS.CHAPTER_READ },
-      { href: "/team/download-center", label: "Download Center", icon: "download_for_offline", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
-      { href: "/team/doubts", label: "Doubt Desk", icon: "live_help", permission: PERMISSIONS.DOUBT_READ },
-    ],
-  },
-  {
-    // Everything about questions in one place (it used to be mixed into Teaching).
-    title: "Question Bank",
-    items: [
-      { href: "/team/questions", label: "Question Bank", icon: "database", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/questions/atomic", label: "Atomic Question Bank", icon: "verified", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/exercises", label: "Exercise Builder", icon: "assignment", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/my-question-bank", label: "My Assigned Questions", icon: "assignment_turned_in", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/questions/reports", label: "Question Reports", icon: "flag", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/qc", label: "Question QC", icon: "verified_user", permission: PERMISSIONS.QUESTION_VERIFY },
-      { href: "/team/questions/collections", label: "Question Collections", icon: "folder_special", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/questions/ai-generated", label: "AI Generated Questions", icon: "psychology", permission: PERMISSIONS.QUESTION_CREATE },
-      { href: "/team/question-extract", label: "Question Extract", icon: "document_scanner", permission: PERMISSIONS.QUESTION_CREATE },
-      { href: "/team/pyq-library", label: "PYQ Library", icon: "history_edu", permission: PERMISSIONS.QUESTION_READ },
-      { href: "/team/pyq-library/import", label: "Import PYQ PDF", icon: "upload_file", permission: PERMISSIONS.QUESTION_IMPORT },
-    ],
-  },
-  {
-    title: "Website & App CMS",
-    items: [
-      { href: "/team/website/banners", label: "App & Web Banners", icon: "view_carousel", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
-      { href: "/team/website/hero", label: "Homepage Hero Image", icon: "image", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
-      { href: "/team/website/blog", label: "Blog", icon: "article", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
-      { href: "/team/website/testimonials", label: "Student Feedback / Reviews", icon: "rate_review", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
-      { href: "/team/website/faqs", label: "FAQs (फेक प्रश्न/उत्तर)", icon: "help_center", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
-      { href: "/team/website", label: "Website Builder", icon: "web", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
-      { href: "/team/apps", label: "App Releases (Windows / Android)", icon: "install_mobile", permission: PERMISSIONS.APP_RELEASE_MANAGE },
-      { href: "/team/account-deletions", label: "Account Deletions", icon: "person_remove", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
-    ],
-  },
-  {
-    title: "Content Studio",
-    items: [
-      { href: "/team/modules/redesign", label: "Module Redesign Studio", icon: "auto_fix_high", permission: PERMISSIONS.MODULE_READ },
-      { href: "/team/modules", label: "Module Studio", icon: "picture_as_pdf", permission: PERMISSIONS.MODULE_READ },
-      { href: "/team/pyq-modules", label: "Question Modules (PYQ)", icon: "library_books", permission: PERMISSIONS.MODULE_READ },
-      { href: "/team/brand-profiles", label: "Brand Profiles", icon: "palette", permission: PERMISSIONS.MODULE_BRAND_PROFILE_MANAGE },
-    ],
-  },
-  {
-    title: "Administration & People",
-    items: [
-      { href: "/team/students", label: "Student Management", icon: "school", permission: PERMISSIONS.STUDENT_READ_ANY },
-      { href: "/team/users", label: "Team & Staff Management", icon: "badge", permission: PERMISSIONS.USER_READ },
-      { href: "/team/id-cards", label: "ID Cards", icon: "id_card", permission: PERMISSIONS.USER_STATUS_MANAGE },
-      { href: "/team/invitations", label: "Staff Invitations", icon: "mail", permission: PERMISSIONS.STAFF_INVITE },
-      { href: "/team/roles", label: "Roles & Permissions", icon: "security", permission: PERMISSIONS.ROLE_MANAGE },
-      { href: "/team/devices", label: "Login Devices", icon: "devices", permission: PERMISSIONS.SECURITY_DEVICE_MANAGE },
-      { href: "/team/departments", label: "Departments & Positions", icon: "corporate_fare", permission: PERMISSIONS.DEPARTMENT_MANAGE },
-      { href: "/team/communication", label: "Communication Center", icon: "forum", permission: PERMISSIONS.COMMUNICATION_CENTER_ACCESS },
-      { href: "/team/creatives", label: "Creative Management", icon: "palette", permission: PERMISSIONS.COMMUNICATION_CENTER_ACCESS },
-    ],
-  },
-  {
-    title: "People",
-    items: [
-      { href: "/team/faculty", label: "Faculty", icon: "school", permission: PERMISSIONS.FACULTY_DIRECTORY },
-      { href: "/team/employees", label: "Employee ID Verification", icon: "badge", permission: PERMISSIONS.FACULTY_DIRECTORY },
-      { href: "/team/contracts", label: "Contracts & Agreements", icon: "description", permission: PERMISSIONS.CONTRACT_READ_ANY },
-      { href: "/team/onboarding", label: "Onboarding", icon: "pending_actions", permission: PERMISSIONS.ONBOARDING_REVIEW },
-      { href: "/team/leaderboard", label: "Leaderboard", icon: "leaderboard", permission: PERMISSIONS.LEADERBOARD_READ },
-    ],
-  },  {
-    title: "Gamification",
-    items: [
-      { href: "/team/gamification/xp", label: "XP Management", icon: "military_tech", permission: PERMISSIONS.GAMIFICATION_MANAGE },
-    ],
-  },
-
-  {
-    title: "Growth",
-    items: [
-      { href: "/team/leads", label: "CRM / Leads", icon: "person_search", permission: PERMISSIONS.LEAD_READ },
-      { href: "/team/whatsapp", label: "WhatsApp Automation", icon: "chat", permission: PERMISSIONS.WHATSAPP_READ },
-      { href: "/team/coupons", label: "Coupons", icon: "confirmation_number", permission: PERMISSIONS.COUPON_READ },
-      { href: "/team/notifications", label: "Notifications", icon: "campaign", permission: PERMISSIONS.NOTIFICATION_READ },
-    ],
-  },
-  {
-    title: "Finance & Insights",
-    items: [
-      { href: "/team/finance", label: "Finance", icon: "payments", permission: PERMISSIONS.FINANCE_READ },
-      { href: "/team/subscriptions", label: "Subscriptions", icon: "workspace_premium", permission: PERMISSIONS.FINANCE_READ },
-      { href: "/team/analytics", label: "Analytics", icon: "analytics", permission: PERMISSIONS.ANALYTICS_VIEW },
-      { href: "/team/performance", label: "Performance Boards", icon: "monitoring", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
-      { href: "/team/live-diagnostics", label: "Live Class Diagnostics", icon: "monitor_heart", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
-      { href: "/team/security", label: "Security Center", icon: "security", permission: PERMISSIONS.SECURITY_CONFIG_MANAGE },
-      { href: "/team/predictor", label: "Rank/College Predictor", icon: "insights", permission: PERMISSIONS.PREDICTOR_DATA_MANAGE },
-    ],
-  },
-  {
-    title: "My Account",
-    items: [
-      { href: "/team/id-card", label: "My ID Card", icon: "id_card", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
-      { href: "/team/documents", label: "My Documents", icon: "badge", permission: PERMISSIONS.DOCUMENT_UPLOAD_SELF },
-      { href: "/team/compliance", label: "Compliance", icon: "gavel", permission: PERMISSIONS.PENALTY_READ_SELF },
-    ],
-  },
-];
+import { TeamShell } from "@/components/team-portal/TeamShell";
+import { ATOMIC_OPS_DEPARTMENTS, TeamNavDepartment } from "@/lib/navigation/team-nav-departments";
 
 export default async function TeamPortalLayout({ children }: { children: React.ReactNode }) {
-  // `permissions` and the teacher-profile probe both come from
-  // requireTeamSession() now (cached, shared with every page in this render)
-  // — this layout makes zero additional DB round trips.
+  // `permissions` and teacher-profile probe come from requireTeamSession() (cached in request context)
   const { user, permissions } = await requireTeamSession();
   const hasTeacherProfile = Boolean(user.teacher);
-  const superAdmin = user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER" || user.role?.name === "ADMIN";
+  const superAdmin =
+    user.role?.name === "SUPER_ADMIN" ||
+    user.role?.name === "FOUNDER" ||
+    user.role?.name === "ADMIN";
 
-  const visibleSections: TeamNavSection[] = NAV_SECTIONS.map((section) => ({
-    title: section.title,
-    items: section.items
-      .filter((item) => (!item.superAdminOnly || superAdmin) && (superAdmin || permissions.has(item.permission as (typeof PERMISSIONS)[keyof typeof PERMISSIONS])))
-      .map(({ href, label, icon }) => ({ href, label, icon })),
-  })).filter((section) => section.items.length > 0);
+  // Filter 12 departments and their submenus strictly by user permissions and roles
+  const visibleDepartments: TeamNavDepartment[] = ATOMIC_OPS_DEPARTMENTS.map((dept) => ({
+    ...dept,
+    items: dept.items.filter(
+      (item) =>
+        (!item.superAdminOnly || superAdmin) &&
+        (superAdmin ||
+          permissions.has(item.permission as (typeof PERMISSIONS)[keyof typeof PERMISSIONS]))
+    ),
+  })).filter((dept) => dept.items.length > 0);
 
   return (
     <TeamShell
@@ -157,7 +29,7 @@ export default async function TeamPortalLayout({ children }: { children: React.R
       userRoleLabel={user.role?.label ?? ""}
       hasTeacherProfile={hasTeacherProfile}
       canViewAsStudent={permissions.has(PERMISSIONS.STUDENT_VIEW_AS)}
-      sections={visibleSections}
+      departments={visibleDepartments}
     >
       {children}
     </TeamShell>

@@ -187,8 +187,85 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
             </div>
 
             <div className="max-h-[55vh] overflow-y-auto">
+              {q.trim().length === 0 && (
+                <div className="p-3 space-y-4">
+                  <div>
+                    <div className="px-2 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Quick Command Actions
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { title: "Create Test", href: "/team/tests/new", icon: "quiz", badge: "Assessment" },
+                        { title: "Add Question", href: "/team/questions/new", icon: "add_circle", badge: "Questions" },
+                        { title: "Create Batch", href: "/team/batches", icon: "group_add", badge: "Academics" },
+                        { title: "Schedule Class", href: "/team/my-schedule", icon: "calendar_add_on", badge: "Timetable" },
+                        { title: "Onboard Student", href: "/team/students", icon: "person_add", badge: "Students" },
+                        { title: "Add CRM Lead", href: "/team/leads", icon: "person_search", badge: "CRM" },
+                      ].map((act) => (
+                        <button
+                          key={act.title}
+                          type="button"
+                          onClick={() => {
+                            setOpen(false);
+                            router.push(act.href);
+                          }}
+                          className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 hover:bg-blue-50 text-left transition group border border-slate-100"
+                        >
+                          <span className="material-symbols-outlined text-[18px] text-blue-600 group-hover:scale-110 transition-transform">
+                            {act.icon}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <span className="block text-xs font-bold text-slate-800 truncate group-hover:text-blue-600">
+                              {act.title}
+                            </span>
+                            <span className="block text-[10px] text-slate-400">{act.badge}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="px-2 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Frequently Accessed Modules
+                    </div>
+                    <div className="space-y-0.5">
+                      {[
+                        { title: "Question Bank & QC", href: "/team/questions", icon: "database", desc: "NEET & JEE Questions" },
+                        { title: "Student Management & ID Cards", href: "/team/id-cards", icon: "badge", desc: "Verify and dispatch ID cards" },
+                        { title: "Finance & Invoices", href: "/team/finance", icon: "payments", desc: "Transactions & payment reconciliation" },
+                        { title: "Live Classroom (Studio)", href: "/team/live-studio", icon: "videocam", desc: "Start whiteboard live session" },
+                      ].map((mod) => (
+                        <button
+                          key={mod.title}
+                          type="button"
+                          onClick={() => {
+                            setOpen(false);
+                            router.push(mod.href);
+                          }}
+                          className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 text-left transition"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className="material-symbols-outlined text-[18px] text-slate-400">
+                              {mod.icon}
+                            </span>
+                            <div>
+                              <span className="block text-xs font-bold text-slate-800">{mod.title}</span>
+                              <span className="block text-[10px] text-slate-400">{mod.desc}</span>
+                            </div>
+                          </div>
+                          <span className="material-symbols-outlined text-[14px] text-slate-300">
+                            arrow_forward
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {groups.length === 0 && q.trim().length >= 2 && !loading && (
-                <div className="px-4 py-8 text-center text-sm text-slate-400">No matches.</div>
+                <div className="px-4 py-8 text-center text-sm text-slate-400">No matches found for &quot;{q}&quot;.</div>
               )}
 
               {groups.map((group) => (
