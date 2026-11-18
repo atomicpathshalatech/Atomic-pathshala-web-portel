@@ -1,266 +1,236 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  User,
+  CreditCard,
+  ChevronsUpDown,
+} from "lucide-react";
+import { LucideIcon } from "@/components/common/LucideIcon";
 import { LogoutButton } from "@/components/student/LogoutButton";
-import type { TeamNavDepartment } from "@/lib/navigation/team-nav-departments";
+import type { TeamNavGroup } from "@/lib/navigation/team-nav-departments";
 
 interface AtomicSidebarNavProps {
-  departments: TeamNavDepartment[];
+  groups: TeamNavGroup[];
+  userName: string;
+  userRoleLabel: string;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onNavigate?: () => void;
-  onOpenDownloadApp?: () => void;
 }
 
 export function AtomicSidebarNav({
-  departments,
+  groups,
+  userName,
+  userRoleLabel,
   collapsed = false,
   onToggleCollapse,
   onNavigate,
-  onOpenDownloadApp,
 }: AtomicSidebarNavProps) {
   const pathname = usePathname();
-
-  // Expanded departments state (persisted in localStorage)
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-  // Active hover tooltip for collapsed mode
-  const [hoveredDept, setHoveredDept] = useState<TeamNavDepartment | null>(null);
-  const [hoverPosition, setHoverPosition] = useState<number>(0);
-
-  // Initialize expanded state based on current pathname
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("atomic_ops_sidebar_expanded");
-      const initial: Record<string, boolean> = saved ? JSON.parse(saved) : {};
-
-      // Ensure department containing current route is expanded
-      departments.forEach((dept) => {
-        const containsActive = dept.items.some((item) =>
-          item.href === "/team"
-            ? pathname === "/team"
-            : pathname === item.href || pathname.startsWith(`${item.href}/`)
-        );
-        if (containsActive) {
-          initial[dept.id] = true;
-        } else if (initial[dept.id] === undefined) {
-          // Default Overview and Academic open initially
-          initial[dept.id] = dept.id === "overview";
-        }
-      });
-
-      setExpanded(initial);
-    } catch {
-      // fallback
-    }
-  }, [pathname, departments]);
-
-  const toggleDept = (deptId: string) => {
-    setExpanded((prev) => {
-      const next = { ...prev, [deptId]: !prev[deptId] };
-      try {
-        localStorage.setItem("atomic_ops_sidebar_expanded", JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
+  const [hoveredItem, setHoveredItem] = useState<{ label: string; group: string; top: number } | null>(null);
+  const [orgDropdownOpen, setOrgDropdownOpen] = useState(false);
 
   const isItemActive = (href: string) =>
     href === "/team" ? pathname === "/team" : pathname === href || pathname.startsWith(`${href}/`);
 
-  return (
-    <nav className="flex flex-col justify-between h-full bg-[#102C50] text-slate-100 select-none">
-      {/* Scrollable Departments list */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-1.5 custom-scrollbar">
-        {departments.map((dept) => {
-          const isOpen = Boolean(expanded[dept.id]);
-          const hasActiveItem = dept.items.some((item) => isItemActive(item.href));
+  const userInitial = userName.trim().charAt(0).toUpperCase() || "A";
 
-          if (collapsed) {
-            // Collapsed rail mode: Icon only with hover popover
-            return (
-              <div
-                key={dept.id}
-                className="relative flex justify-center py-1"
-                onMouseEnter={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setHoverPosition(rect.top);
-                  setHoveredDept(dept);
-                }}
-                onMouseLeave={() => setHoveredDept(null)}
-              >
+  return (
+    <div className="flex flex-col h-full bg-[#0B132B] text-slate-300 select-none border-r border-slate-800/80">
+      {/* 1. TOP SECTION: Brand Logo & Organization Selector */}
+      <div className="p-3 border-b border-slate-800/80 shrink-0 bg-[#080E21]">
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            href="/team"
+            onClick={onNavigate}
+            className="flex items-center gap-2.5 min-w-0 group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0 p-1">
+              <img
+                src="/brand/logo.png"
+                alt="Atomic Pathshala"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            {!collapsed && (
+              <div className="min-w-0 truncate">
+                <div className="flex items-center gap-1.5 leading-none">
+                  <span className="font-black text-sm text-white tracking-tight">ATOMIC</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-600 text-white">
+                    OPS
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400 truncate block mt-0.5 font-medium">
+                  Enterprise Portal
+                </span>
+              </div>
+            )}
+          </Link>
+
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="hidden lg:flex w-7 h-7 rounded-md items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+
+        {/* Workspace Selector */}
+        {!collapsed && (
+          <div className="relative mt-2.5">
+            <button
+              type="button"
+              onClick={() => setOrgDropdownOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-900 border border-slate-800 text-left transition group"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Building2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span className="text-[11px] font-semibold text-slate-200 truncate">
+                  Atomic Pathshala · Main
+                </span>
+              </div>
+              <ChevronsUpDown className="w-3 h-3 text-slate-500 group-hover:text-slate-300 shrink-0" />
+            </button>
+
+            {orgDropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 rounded-lg bg-slate-900 border border-slate-700 shadow-xl p-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-500">
+                  Organizations
+                </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (dept.items.length === 1 && dept.items[0]) {
-                      window.location.href = dept.items[0].href;
-                    } else if (onToggleCollapse) {
-                      onToggleCollapse();
-                      toggleDept(dept.id);
-                    }
-                  }}
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                    hasActiveItem
-                      ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-400/40"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white"
-                  }`}
-                  title={dept.title}
+                  onClick={() => setOrgDropdownOpen(false)}
+                  className="w-full text-left px-2 py-1.5 rounded text-xs font-semibold text-white bg-blue-600/20 text-blue-400 flex items-center justify-between"
                 >
-                  <span className="material-symbols-outlined text-[20px]">{dept.icon}</span>
+                  <span>Atomic Pathshala (Live)</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
                 </button>
               </div>
-            );
-          }
+            )}
+          </div>
+        )}
+      </div>
 
-          // Expanded mode: Accordion department with sub-items
+      {/* 2. NAVIGATION GROUPS & ITEMS */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2 space-y-4 custom-scrollbar">
+        {groups.map((group) => {
+          if (group.items.length === 0) return null;
+
           return (
-            <div key={dept.id} className="space-y-0.5">
-              <button
-                type="button"
-                onClick={() => toggleDept(dept.id)}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all text-left ${
-                  hasActiveItem
-                    ? "text-blue-300 bg-white/5 font-extrabold"
-                    : "text-slate-300 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <span
-                    className={`material-symbols-outlined text-[18px] shrink-0 ${
-                      hasActiveItem ? "text-blue-400" : "text-slate-400"
-                    }`}
-                  >
-                    {dept.icon}
-                  </span>
-                  <span className="truncate tracking-wide uppercase text-[11px] font-bold">
-                    {dept.title}
-                  </span>
-                </div>
-                <span
-                  className={`material-symbols-outlined text-[16px] text-slate-400 transition-transform duration-200 ${
-                    isOpen ? "rotate-180" : ""
-                  }`}
-                >
-                  expand_more
-                </span>
-              </button>
-
-              {isOpen && (
-                <div className="pl-6 pr-1 py-0.5 space-y-0.5 border-l border-white/10 ml-4 animate-in fade-in duration-150">
-                  {dept.items.map((item) => {
-                    const active = isItemActive(item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={onNavigate}
-                        title={item.label}
-                        className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                          active
-                            ? "bg-blue-600 text-white font-bold shadow-xs"
-                            : "text-slate-300 hover:text-white hover:bg-white/10"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 truncate min-w-0">
-                          <span
-                            className={`material-symbols-outlined text-[15px] shrink-0 ${
-                              active ? "text-white" : "text-slate-400 group-hover:text-slate-200"
-                            }`}
-                          >
-                            {item.icon}
-                          </span>
-                          <span className="truncate">{item.label}</span>
-                        </div>
-                        {item.badge && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-white/20 text-white shrink-0">
-                            {item.badge}
-                          </span>
-                        )}
-                      </Link>
-                    );
-                  })}
+            <div key={group.id} className="space-y-0.5">
+              {!collapsed && (
+                <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  {group.title}
                 </div>
               )}
+
+              {group.items.map((item) => {
+                const active = isItemActive(item.href);
+
+                return (
+                  <div
+                    key={item.href}
+                    className="relative"
+                    onMouseEnter={(e) => {
+                      if (collapsed) {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setHoveredItem({ label: item.label, group: group.title, top: rect.top });
+                      }
+                    }}
+                    onMouseLeave={() => setHoveredItem(null)}
+                  >
+                    <Link
+                      href={item.href}
+                      onClick={onNavigate}
+                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs transition-colors ${
+                        collapsed ? "justify-center px-0" : ""
+                      } ${
+                        active
+                          ? "bg-blue-600 text-white font-semibold shadow-xs"
+                          : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.06] font-medium"
+                      }`}
+                    >
+                      <LucideIcon
+                        name={item.icon}
+                        className={`w-4 h-4 shrink-0 ${active ? "text-white" : "text-slate-400"}`}
+                        strokeWidth={active ? 2.2 : 1.8}
+                      />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                      {!collapsed && item.badge && (
+                        <span className="ml-auto text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
       </div>
 
-      {/* Floating Flyout Menu when Hovering in Collapsed Mode */}
-      {collapsed && hoveredDept && (
+      {/* Floating Tooltip in Collapsed Mode */}
+      {collapsed && hoveredItem && (
         <div
-          style={{ top: Math.max(10, hoverPosition - 10) }}
-          className="fixed left-[4.8rem] z-[999] w-56 rounded-xl bg-[#0f2442] border border-slate-700/60 shadow-2xl p-2 text-white animate-in fade-in zoom-in-95 duration-100"
-          onMouseEnter={() => setHoveredDept(hoveredDept)}
-          onMouseLeave={() => setHoveredDept(null)}
+          style={{ top: Math.max(8, hoveredItem.top) }}
+          className="fixed left-[4.5rem] z-[999] rounded-md bg-slate-900 border border-slate-700/80 shadow-xl px-2.5 py-1.5 text-white pointer-events-none animate-in fade-in duration-75"
         >
-          <div className="px-2.5 py-1.5 border-b border-white/10 mb-1">
-            <p className="text-xs font-bold text-blue-300 uppercase tracking-wide">
-              {hoveredDept.title}
-            </p>
-            <p className="text-[10px] text-slate-400">{hoveredDept.description}</p>
-          </div>
-          <div className="space-y-0.5 max-h-64 overflow-y-auto">
-            {hoveredDept.items.map((sub) => {
-              const active = isItemActive(sub.href);
-              return (
-                <Link
-                  key={sub.href}
-                  href={sub.href}
-                  onClick={() => setHoveredDept(null)}
-                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    active ? "bg-blue-600 text-white font-bold" : "text-slate-200 hover:bg-white/10"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[16px] text-slate-400">
-                    {sub.icon}
-                  </span>
-                  <span className="truncate">{sub.label}</span>
-                </Link>
-              );
-            })}
-          </div>
+          <div className="text-[10px] font-bold uppercase text-slate-400">{hoveredItem.group}</div>
+          <div className="text-xs font-semibold text-slate-100">{hoveredItem.label}</div>
         </div>
       )}
 
-      {/* Bottom Footer Section: App Download & Collapse Toggle */}
-      <div className="p-2 border-t border-white/10 space-y-1.5 bg-[#0c223e]">
-        {onOpenDownloadApp && !collapsed && (
-          <button
-            type="button"
-            onClick={onOpenDownloadApp}
-            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 text-xs font-semibold border border-white/10 transition-colors text-left"
-          >
-            <span className="material-symbols-outlined text-amber-400 text-[18px]">
-              install_desktop
-            </span>
-            <div className="truncate min-w-0">
-              <span className="block text-xs font-bold text-white">Download Apps</span>
-              <span className="block text-[10px] text-slate-400">Windows & Android APK</span>
+      {/* 3. BOTTOM USER PROFILE & ACTIONS SECTION */}
+      <div className="p-2 border-t border-slate-800/80 bg-[#080E21] shrink-0">
+        <div className={`flex items-center gap-2.5 p-1.5 rounded-lg ${collapsed ? "justify-center" : ""}`}>
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+            {userInitial}
+          </div>
+
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-white truncate leading-tight">{userName}</p>
+              <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">{userRoleLabel}</p>
             </div>
-          </button>
-        )}
-
-        {onToggleCollapse && (
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="w-full flex items-center justify-center gap-2 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors text-xs font-semibold"
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              {collapsed ? "chevron_right" : "chevron_left"}
-            </span>
-            {!collapsed && <span>Collapse Sidebar</span>}
-          </button>
-        )}
-
-        <div className="md:hidden px-1 pt-1 [&_button]:!text-slate-300 [&_button:hover]:!text-white">
-          <LogoutButton />
+          )}
         </div>
+
+        {!collapsed && (
+          <div className="flex items-center justify-between gap-1 mt-1 pt-1 border-t border-slate-800/60 px-1 text-slate-400 text-xs">
+            <Link
+              href="/team/profile"
+              onClick={onNavigate}
+              className="p-1 rounded hover:text-white hover:bg-slate-800 transition"
+              title="My Profile"
+            >
+              <User className="w-3.5 h-3.5" />
+            </Link>
+            <Link
+              href="/team/id-cards"
+              onClick={onNavigate}
+              className="p-1 rounded hover:text-white hover:bg-slate-800 transition"
+              title="ID Cards & Documents"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+            </Link>
+            <div className="[&_button]:!p-1 [&_button]:!text-slate-400 [&_button:hover]:!text-rose-400">
+              <LogoutButton />
+            </div>
+          </div>
+        )}
       </div>
-    </nav>
+    </div>
   );
 }

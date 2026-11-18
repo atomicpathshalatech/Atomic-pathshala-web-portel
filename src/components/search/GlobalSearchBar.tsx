@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search, ArrowUpRight, Loader2 } from "lucide-react";
 
 type SearchResult = {
   type: string;
@@ -136,17 +137,17 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
         onClick={() => setOpen(true)}
         className={
           compact
-            ? "flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
-            : "group flex items-center gap-2 h-10 w-full max-w-md rounded-xl border border-slate-200 bg-slate-50 px-3 text-left text-sm text-slate-400 hover:bg-white hover:border-slate-300 transition-colors"
+            ? "flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+            : "group flex items-center gap-2 h-9 w-full max-w-md rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 text-left text-xs text-slate-400 hover:bg-white hover:border-slate-300 transition-colors"
         }
         aria-label="Open search"
         title="Search (Ctrl+K)"
       >
-        <span className="material-symbols-outlined text-[20px]">search</span>
+        <Search className="w-4 h-4 text-slate-400 shrink-0" />
         {!compact && (
           <>
             <span className="flex-1 truncate">{PLACEHOLDER}</span>
-            <kbd className="hidden md:inline text-[10px] font-sans font-semibold text-slate-400 border border-slate-200 rounded px-1 py-0.5">
+            <kbd className="hidden md:inline text-[10px] font-mono font-semibold text-slate-400 border border-slate-200 bg-white rounded px-1.5 py-0.5 shadow-2xs">
               Ctrl K
             </kbd>
           </>
@@ -155,32 +156,30 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
 
       {!open ? null : (
         <div
-          className="fixed inset-0 z-[999] flex items-start justify-center bg-slate-900/40 backdrop-blur-sm p-4 pt-[10vh]"
+          className="fixed inset-0 z-[999] flex items-start justify-center bg-slate-900/40 backdrop-blur-xs p-4 pt-[10vh]"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setOpen(false);
           }}
         >
-          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 overflow-hidden">
+          <div className="w-full max-w-xl rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
             {/* Input row */}
-            <div className="flex items-center gap-2 border-b border-slate-100 px-4">
-              <span className="material-symbols-outlined text-slate-400 text-[22px]">search</span>
+            <div className="flex items-center gap-2.5 border-b border-slate-100 px-3.5">
+              <Search className="w-4 h-4 text-slate-400 shrink-0" />
               <input
                 ref={inputRef}
                 value={q}
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={onKeyDown}
                 placeholder={PLACEHOLDER}
-                className="flex-1 py-3.5 text-sm outline-none placeholder-slate-400 text-slate-900"
+                className="flex-1 py-3 text-xs outline-none placeholder-slate-400 text-slate-900"
               />
               {loading && (
-                <span className="material-symbols-outlined text-slate-300 text-[20px] animate-spin">
-                  progress_activity
-                </span>
+                <Loader2 className="w-4 h-4 text-slate-400 animate-spin shrink-0" />
               )}
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-xs font-semibold px-1.5"
+                className="text-slate-400 hover:text-slate-700 text-[11px] font-semibold px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50"
               >
                 ESC
               </button>
@@ -295,9 +294,7 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
                             <span className="block truncate text-xs text-slate-400">{r.subtitle}</span>
                           )}
                         </span>
-                        <span className="material-symbols-outlined text-[16px] text-slate-300">
-                          north_east
-                        </span>
+                        <ArrowUpRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                       </button>
                     );
                   })}

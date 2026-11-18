@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { PanelLeft, Menu, X } from "lucide-react";
 import { TeamProfileMenu } from "@/components/team-portal/TeamProfileMenu";
-import { OpsBackButton } from "@/components/common/OpsBackButton";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { NotificationBell } from "@/components/student/NotificationBell";
 import { NotificationPopupLayer } from "@/components/common/NotificationPopupLayer";
@@ -13,26 +13,21 @@ import { PortalSwitch } from "@/components/common/PortalSwitch";
 import { TeamBreadcrumb } from "@/components/team-portal/TeamBreadcrumb";
 import { QuickActionsMenu } from "@/components/team-portal/QuickActionsMenu";
 import { AtomicSidebarNav } from "@/components/team-portal/AtomicSidebarNav";
-import type { TeamNavDepartment } from "@/lib/navigation/team-nav-departments";
-
-export type TeamNavItem = { href: string; label: string; icon: string };
-export type TeamNavSection = { title?: string; items: TeamNavItem[] };
+import type { TeamNavGroup } from "@/lib/navigation/team-nav-departments";
 
 export function TeamShell({
   userName,
   userRoleLabel,
   hasTeacherProfile,
   canViewAsStudent = false,
-  departments,
-  sections,
+  groups,
   children,
 }: {
   userName: string;
   userRoleLabel: string;
   hasTeacherProfile: boolean;
   canViewAsStudent?: boolean;
-  departments?: TeamNavDepartment[];
-  sections?: TeamNavSection[];
+  groups?: TeamNavGroup[];
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -40,13 +35,12 @@ export function TeamShell({
   const [collapsed, setCollapsed] = useState(false);
 
   const pathname = usePathname();
-  const isRootTeam = pathname === "/team";
   const isLiveStudio =
     pathname?.startsWith("/team/live-class") ||
     pathname?.startsWith("/team/live-studio") ||
     pathname?.startsWith("/team/whiteboard/test");
 
-  // Load saved sidebar state
+  // Load saved sidebar collapsed state
   useEffect(() => {
     try {
       const saved = localStorage.getItem("atomic_ops_sidebar_collapsed");
@@ -66,23 +60,6 @@ export function TeamShell({
     });
   };
 
-  // Convert legacy sections to departments if departments prop is not passed directly
-  const activeDepartments: TeamNavDepartment[] =
-    departments && departments.length > 0
-      ? departments
-      : (sections ?? []).map((sec, idx) => ({
-          id: `section-${idx}`,
-          title: sec.title || "General",
-          icon: sec.items[0]?.icon || "folder",
-          description: sec.title || "Navigation",
-          items: sec.items.map((it) => ({
-            href: it.href,
-            label: it.label,
-            icon: it.icon,
-            permission: "team.portal.access",
-          })),
-        }));
-
   if (isLiveStudio) {
     return (
       <div className="fixed inset-0 overflow-hidden bg-[#10131b]">
@@ -91,148 +68,118 @@ export function TeamShell({
     );
   }
 
+  const activeGroups = groups || [];
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col antialiased">
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] shadow-xs">
-        <div className="h-16 px-4 sm:px-6 flex items-center justify-between gap-3">
-          {/* Left: Brand & Breadcrumbs */}
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex antialiased">
+      {/* 1. FIXED DESKTOP VERTICAL SIDEBAR (FULL HEIGHT) */}
+      <aside
+        className={`hidden lg:flex flex-col shrink-0 h-screen sticky top-0 transition-all duration-200 z-40 ${
+          collapsed ? "w-[4.5rem]" : "w-64"
+        }`}
+      >
+        <AtomicSidebarNav
+          groups={activeGroups}
+          userName={userName}
+          userRoleLabel={userRoleLabel}
+          collapsed={collapsed}
+          onToggleCollapse={handleToggleCollapse}
+        />
+      </aside>
+
+      {/* 2. MOBILE DRAWER NAVIGATION */}
+      {drawerOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 animate-fade-in">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between p-3 bg-[#080E21] border-b border-slate-800 text-white">
+              <div className="flex items-center gap-2">
+                <img src="/brand/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
+                <span className="font-bold text-xs tracking-tight">Atomic OPS</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <AtomicSidebarNav
+                groups={activeGroups}
+                userName={userName}
+                userRoleLabel={userRoleLabel}
+                collapsed={false}
+                onNavigate={() => setDrawerOpen(false)}
+              />
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* 3. MAIN WORKSPACE CONTAINER */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* PREMIUM COMPACT TOPBAR */}
+        <header className="sticky top-0 z-30 h-14 bg-white border-b border-[#E2E8F0] px-4 sm:px-6 flex items-center justify-between gap-4">
+          {/* Left: Sidebar toggle (Mobile/Desktop) & Breadcrumbs */}
           <div className="flex items-center gap-3 min-w-0">
-            {/* Mobile menu button */}
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
-              className="lg:hidden shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-              aria-label="Open navigation menu"
+              className="lg:hidden w-8 h-8 rounded-md flex items-center justify-center text-slate-600 hover:bg-slate-100 transition"
+              aria-label="Open menu"
             >
-              <span className="material-symbols-outlined text-2xl">menu</span>
+              <Menu className="w-5 h-5" />
             </button>
 
-            {/* Brand Logo */}
-            <Link
-              href="/team"
-              className="flex items-center gap-2.5 font-bold text-slate-900 shrink-0 group"
+            <button
+              type="button"
+              onClick={handleToggleCollapse}
+              className="hidden lg:flex w-8 h-8 rounded-md items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              <img
-                src="/brand/logo.png"
-                alt="Atomic OPS"
-                className="w-8 h-8 rounded-lg object-contain shrink-0 group-hover:scale-105 transition-transform"
-              />
-              <div className="flex items-center gap-1.5 font-black tracking-tight leading-none">
-                <span className="text-sm font-black text-[#102C50]">ATOMIC</span>
-                <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-black tracking-wider uppercase">
-                  OPS 2.0
-                </span>
-              </div>
-            </Link>
+              <PanelLeft className="w-4 h-4" />
+            </button>
 
-            {/* Back button when not on root */}
-            {!isRootTeam && (
-              <div className="hidden sm:flex items-center pl-2 border-l border-slate-200">
-                <OpsBackButton label="Back" fallbackHref="/team" />
-              </div>
-            )}
+            <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
-            {/* Breadcrumb Navigation */}
-            <div className="hidden lg:flex items-center pl-3 border-l border-slate-200">
-              <TeamBreadcrumb />
-            </div>
+            <TeamBreadcrumb />
           </div>
 
-          {/* Center: Global Search & Command Palette */}
-          <div className="hidden md:flex flex-1 max-w-md justify-center px-2">
+          {/* Center: Global Search Bar */}
+          <div className="hidden md:flex flex-1 max-w-md justify-center">
             <GlobalSearchBar />
           </div>
 
-          {/* Right: Quick Actions, Notifications, Profile */}
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Right: Quick Create, Notifications, Portal Switch, Profile */}
+          <div className="flex items-center gap-2 shrink-0">
             <div className="md:hidden">
               <GlobalSearchBar compact />
             </div>
 
-            {/* Quick Actions Dropdown */}
             <QuickActionsMenu />
 
-            {/* View as Student toggle */}
             {canViewAsStudent && <PortalSwitch current="team" />}
 
-            {/* Notifications */}
             <NotificationBell />
 
-            {/* Profile Dropdown */}
-            <div className="pl-1 border-l border-slate-200">
-              <TeamProfileMenu
-                userName={userName}
-                userRoleLabel={userRoleLabel}
-                hasTeacherProfile={hasTeacherProfile}
-              />
-            </div>
-          </div>
-        </div>
-      </header>
+            <div className="h-4 w-px bg-slate-200" />
 
-      {/* Main Workspace with Persistent Left Sidebar */}
-      <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
-        {/* Desktop Sidebar */}
-        <aside
-          className={`hidden lg:block shrink-0 border-r border-[#0d223f] bg-[#102C50] sticky top-16 h-[calc(100vh-4rem)] transition-all duration-200 z-30 shadow-md ${
-            collapsed ? "w-[4.8rem]" : "w-64"
-          }`}
-        >
-          <AtomicSidebarNav
-            departments={activeDepartments}
-            collapsed={collapsed}
-            onToggleCollapse={handleToggleCollapse}
-            onOpenDownloadApp={() => setDownloadAppOpen(true)}
-          />
-        </aside>
-
-        {/* Mobile / Tablet Drawer */}
-        {drawerOpen && (
-          <div className="lg:hidden fixed inset-0 z-50 animate-fade-in">
-            <div
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs"
-              onClick={() => setDrawerOpen(false)}
+            <TeamProfileMenu
+              userName={userName}
+              userRoleLabel={userRoleLabel}
+              hasTeacherProfile={hasTeacherProfile}
             />
-            <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-[#102C50] text-white shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-200">
-              <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/10 bg-[#0d223f]">
-                <div className="flex items-center gap-2">
-                  <img src="/brand/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
-                  <span className="font-bold text-sm tracking-tight text-white">Atomic OPS 2.0</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDrawerOpen(false)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-                  aria-label="Close menu"
-                >
-                  <span className="material-symbols-outlined text-xl">close</span>
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto">
-                <AtomicSidebarNav
-                  departments={activeDepartments}
-                  collapsed={false}
-                  onNavigate={() => setDrawerOpen(false)}
-                  onOpenDownloadApp={() => {
-                    setDrawerOpen(false);
-                    setDownloadAppOpen(true);
-                  }}
-                />
-              </div>
-            </aside>
           </div>
-        )}
+        </header>
 
-        {/* Main Content Area */}
-        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-6 lg:py-8 bg-[#F8FAFC]">
-          <div className="mx-auto w-full min-w-0 max-w-screen-2xl">
-            {!isRootTeam && (
-              <div className="sm:hidden mb-3">
-                <OpsBackButton label="Back" fallbackHref="/team" />
-              </div>
-            )}
+        {/* WORKSPACE PAGE CONTENT */}
+        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-6 bg-[#F8FAFC]">
+          <div className="mx-auto w-full max-w-screen-2xl">
             {children}
           </div>
         </main>
