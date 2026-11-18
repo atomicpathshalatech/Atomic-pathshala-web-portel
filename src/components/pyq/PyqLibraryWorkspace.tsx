@@ -540,7 +540,7 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
         />
       )}
 
-      {/* Manual Question Dialog */}
+      {/* Manual Question Dialog - Reusing Shared UnifiedQuestionEditor */}
       <ManualQuestionDialog
         open={manualModalOpen}
         onClose={() => setManualModalOpen(false)}
@@ -548,6 +548,13 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
           setParams({});
         }}
         exams={tree}
+        defaultExamId={get("exam") || (tree[0]?.id ?? "")}
+        defaultSubject={get("subject") || undefined}
+        defaultChapter={get("chapter") || undefined}
+        defaultYear={get("years") || undefined}
+        defaultSession={get("session") || undefined}
+        defaultShift={get("shift") || undefined}
+        defaultPaper={get("paper") || undefined}
       />
 
       <PyqStyles />

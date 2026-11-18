@@ -1283,7 +1283,71 @@ export function UnifiedQuestionEditor({
 
       let res;
       const targetId = questionId || currentDraftId || initialQuestion?.id;
-      if (targetId) {
+      if (mode === "pyq") {
+        let resolvedExamId = pyqExamId;
+        if (!resolvedExamId && pyqExams && pyqExams.length > 0) {
+          const match = pyqExams.find(
+            (e) =>
+              e.id === pyqExam ||
+              e.canonicalType === pyqExam ||
+              e.name.toLowerCase().includes(pyqExam.toLowerCase())
+          );
+          if (match) resolvedExamId = match.id;
+        }
+
+        res = await fetch("/api/team/pyq/questions/manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            questionId: targetId || undefined,
+            examId: resolvedExamId || undefined,
+            pyqExam: pyqExam || undefined,
+            year: pyqYear ? parseInt(pyqYear, 10) : undefined,
+            session: pyqMonth?.trim() || undefined,
+            shift: pyqShift?.trim() || undefined,
+            paper: pyqPaper?.trim() || undefined,
+            questionNumber: pyqQuestionNumber?.trim() || undefined,
+            subject: subject.trim(),
+            chapter: chapter.trim() || undefined,
+            topic: topic.trim() || undefined,
+            subTopic: subTopic.trim() || undefined,
+            type: questionType,
+            difficulty,
+            statement: statementEn.trim() || statementHi.trim(),
+            statementEn: statementEn.trim() || undefined,
+            statementHi: statementHi.trim() || undefined,
+            options: {
+              A: optionAEn.trim() || optionAHi.trim(),
+              B: optionBEn.trim() || optionBHi.trim(),
+              C: optionCEn.trim() || optionCHi.trim(),
+              D: optionDEn.trim() || optionDHi.trim(),
+            },
+            optionsEn: {
+              A: optionAEn.trim(),
+              B: optionBEn.trim(),
+              C: optionCEn.trim(),
+              D: optionDEn.trim(),
+            },
+            optionsHi: {
+              A: optionAHi.trim(),
+              B: optionBHi.trim(),
+              C: optionCHi.trim(),
+              D: optionDHi.trim(),
+            },
+            correctAnswer: correctOption,
+            solution: solutionEn.trim() || solutionHi.trim() || undefined,
+            solutionEn: solutionEn.trim() || undefined,
+            solutionHi: solutionHi.trim() || undefined,
+            imageUrl: diagramUrl || referenceImageUrl || undefined,
+            referenceImageUrl: referenceImageUrl || undefined,
+            solutionImageUrl: solutionImageUrl || undefined,
+            camDrawData: camDrawData || undefined,
+            marks,
+            negativeMarks,
+            publish: true,
+          }),
+        });
+      } else if (targetId) {
         res = await fetch("/api/team/questions/engine", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -1302,7 +1366,7 @@ export function UnifiedQuestionEditor({
         throw new Error(json.error?.message || json.error || "Failed to save question.");
       }
 
-      const savedQ = json.data?.question;
+      const savedQ = json.data?.question || { id: json.data?.questionId };
       if (json.data?.exerciseNote) toast.error(json.data.exerciseNote);
       if (savedQ?.id) {
         setCurrentDraftId(savedQ.id);
@@ -1312,7 +1376,9 @@ export function UnifiedQuestionEditor({
       }
 
       toast.success(
-        submitToReview
+        mode === "pyq"
+          ? (json.data?.message || "PYQ Question saved and published successfully!")
+          : submitToReview
           ? "Question saved to Question Bank and submitted to Stage 1 Review!"
           : "Question saved successfully!"
       );
@@ -1322,14 +1388,14 @@ export function UnifiedQuestionEditor({
       }
 
       // Automatically advance to the next question slot in test / DPP mode
-      if (mode !== "bank" && onNext) {
+      if (mode !== "bank" && mode !== "pyq" && onNext) {
         if (slotNumber < totalSlots) {
           onNext();
         } else {
           toast.success("All question slots completed!");
         }
       } else if (mode === "bank") {
-        router.push("/team/questions");
+        router.push(onCancelHref);
         router.refresh();
       }
     } catch (err: any) {
@@ -1370,8 +1436,14 @@ export function UnifiedQuestionEditor({
         setPyqYear={setPyqYear}
         pyqMonth={pyqMonth}
         setPyqMonth={setPyqMonth}
+        pyqShift={pyqShift}
+        setPyqShift={setPyqShift}
+        pyqPaper={pyqPaper}
+        setPyqPaper={setPyqPaper}
         pyqQuestionNumber={pyqQuestionNumber}
         setPyqQuestionNumber={setPyqQuestionNumber}
+        pyqExams={pyqExams}
+        isPyqMode={mode === "pyq"}
         marks={marks}
         setMarks={setMarks}
         negativeMarks={negativeMarks}
@@ -2389,11 +2461,19 @@ export function UnifiedQuestionEditor({
               }
             : null
         }
-        pyqLabel={pyqExam ? `${pyqExam.replace("_", " ")} ${pyqYear}${pyqMonth && pyqExam === "JEE_MAINS" ? ` ${pyqMonth}` : ""}` : null}
-        onClearPyq={() => {
-          setPyqExam("");
-          setCategory("NCERT Canonical");
-        }}
+        pyqLabel={
+          pyqExam
+            ? `${pyqExam.replace("_", " ")} ${pyqYear}${pyqMonth ? ` · ${pyqMonth}` : ""}${pyqShift ? ` · ${pyqShift}` : ""}${pyqPaper ? ` · ${pyqPaper}` : ""}`
+            : null
+        }
+        onClearPyq={
+          mode === "pyq"
+            ? undefined
+            : () => {
+                setPyqExam("");
+                setCategory("NCERT Canonical");
+              }
+        }
       />
 
       {/* 5. STICKY BOTTOM ACTION BAR (Save & Slot Navigation) */}
@@ -2415,6 +2495,14 @@ export function UnifiedQuestionEditor({
               className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition cursor-pointer"
             >
               ← Back to Exercise
+            </button>
+          ) : mode === "pyq" ? (
+            <button
+              type="button"
+              onClick={onClose || (() => router.back())}
+              className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition cursor-pointer"
+            >
+              Close
             </button>
           ) : (
             <div className="flex items-center gap-2">
@@ -2482,10 +2570,14 @@ export function UnifiedQuestionEditor({
             <span>
               {isSaving
                 ? "Saving..."
+                : mode === "pyq"
+                ? "Save & Publish PYQ"
                 : mode === "bank"
                 ? "Save & Submit to Review (Stage 1)"
                 : mode === "exercise"
                 ? "Save & Add to Exercise"
+                : slotNumber < totalSlots
+                ? "Save & Next Question →"
                 : "Save Question"}
             </span>
           </button>

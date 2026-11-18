@@ -20,6 +20,11 @@ function buildSlugFilter(rawSlug: string) {
   const codeMatch = decoded.match(/([a-zA-Z]\d{8,12})/);
   const extractedCode = codeMatch ? codeMatch[1].toUpperCase() : null;
 
+  // Extract last hyphen segment (e.g. b260002497 or cuid)
+  const segments = normalized.split("-").filter(Boolean);
+  const lastSegment = segments[segments.length - 1] || "";
+  const candidateCode = lastSegment.length >= 6 ? lastSegment.toUpperCase() : null;
+
   return [
     { slug: rawSlug },
     { slug: decoded },
@@ -28,7 +33,19 @@ function buildSlugFilter(rawSlug: string) {
     { id: decoded },
     { questionCode: rawSlug },
     { questionCode: decoded },
-    ...(extractedCode ? [{ questionCode: extractedCode }, { slug: { contains: extractedCode.toLowerCase() } }] : []),
+    ...(extractedCode
+      ? [
+          { questionCode: extractedCode },
+          { slug: { contains: extractedCode.toLowerCase() } },
+        ]
+      : []),
+    ...(candidateCode && candidateCode !== extractedCode
+      ? [
+          { questionCode: candidateCode },
+          { id: lastSegment },
+          { slug: { endsWith: lastSegment } },
+        ]
+      : []),
   ];
 }
 
