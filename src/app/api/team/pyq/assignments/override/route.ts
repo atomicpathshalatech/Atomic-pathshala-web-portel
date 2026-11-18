@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { requireTeamUser } from "@/lib/pyq/api";
+import { isSuperAdmin } from "@/lib/rbac/super-admin";
 
 /**
  * POST /api/team/pyq/assignments/override
@@ -14,7 +15,8 @@ export async function POST(request: NextRequest) {
     const isSuperOrAdmin =
       sessionUser.role === "SUPER_ADMIN" ||
       sessionUser.role === "ADMIN" ||
-      sessionUser.role === "FOUNDER";
+      sessionUser.role === "FOUNDER" ||
+      (await isSuperAdmin(sessionUser.id));
     if (!isSuperOrAdmin) {
       return apiError("Only Super Admin or Admin can override verification status", 403);
     }

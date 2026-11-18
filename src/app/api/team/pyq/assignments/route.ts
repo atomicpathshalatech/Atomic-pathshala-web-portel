@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { requireTeamUser, can } from "@/lib/pyq/api";
+import { isSuperAdmin } from "@/lib/rbac/super-admin";
 
 /**
  * GET /api/team/pyq/assignments
@@ -23,10 +24,13 @@ export async function GET(request: NextRequest) {
     const priorityFilter = sp.get("priority")?.toUpperCase();
 
     // Determine target user filter
-    const isSuperOrAdmin =
+    const isSuper =
       sessionUser.role === "SUPER_ADMIN" ||
-      sessionUser.role === "ADMIN" ||
       sessionUser.role === "FOUNDER" ||
+      (await isSuperAdmin(sessionUser.id));
+    const isSuperOrAdmin =
+      isSuper ||
+      sessionUser.role === "ADMIN" ||
       (await can(sessionUser.id, PERMISSIONS.QUESTION_ASSIGN));
     const showAll = filter === "all" && isSuperOrAdmin;
 
@@ -147,16 +151,20 @@ export async function POST(request: NextRequest) {
       return apiError("Target reviewer is required", 400);
     }
 
-    // Check permissions: only Admins / Super Admins / Founders / users with QUESTION_ASSIGN can assign to others; self-assignment allowed for any reviewer
+    // Check permissions: Super Admin / Founder / Admin / users with QUESTION_ASSIGN can assign to others; self-assignment allowed for any reviewer
     const isSelf = targetUserId === sessionUser.id;
-    const canAssignOthers =
+    const isSuper =
       sessionUser.role === "SUPER_ADMIN" ||
-      sessionUser.role === "ADMIN" ||
       sessionUser.role === "FOUNDER" ||
+      (await isSuperAdmin(sessionUser.id));
+
+    const canAssignOthers =
+      isSuper ||
+      sessionUser.role === "ADMIN" ||
       (await can(sessionUser.id, PERMISSIONS.QUESTION_ASSIGN));
 
     if (!isSelf && !canAssignOthers) {
-      return apiError("Permission denied: only Admins can assign questions to other team members", 403);
+      return apiError("Permission denied: only Super Admin or Admins can assign questions to other team members", 403);
     }
 
     // Find the questions to assign
