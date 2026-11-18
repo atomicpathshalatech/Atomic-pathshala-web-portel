@@ -139,7 +139,16 @@ export function UnifiedQuestionEditor({
   onNext,
   onPrev,
   onCancelHref = "/team/questions",
+  onClose,
   syllabus,
+  pyqExamId: initialPyqExamId,
+  pyqExamName,
+  pyqYear: initialPyqYearProp,
+  pyqSession,
+  pyqShift: initialPyqShift,
+  pyqPaper: initialPyqPaper,
+  pyqQuestionNumber: initialPyqQuestionNumber,
+  pyqExams,
 }: UnifiedQuestionEditorProps) {
   const router = useRouter();
   // Metadata is checked at the bottom, just before Save. A question already
@@ -194,18 +203,32 @@ export function UnifiedQuestionEditor({
   const [negativeMarks, setNegativeMarks] = useState<number>(initialQuestion?.negativeMarks || 1);
 
   // PYQ Metadata States
+  const [pyqExamId, setPyqExamId] = useState<string>(
+    initialQuestion?.pyqExamId || initialPyqExamId || ""
+  );
   const [pyqExam, setPyqExam] = useState<string>(
+    pyqExamName ||
     initialQuestion?.pyqExam ||
     (initialQuestion?.category === "NEET_PYQ" ? "NEET" :
      initialQuestion?.category === "JEE_MAINS_PYQ" ? "JEE_MAINS" :
-     initialQuestion?.category === "JEE_ADVANCED_PYQ" ? "JEE_ADVANCED" : "")
+     initialQuestion?.category === "JEE_ADVANCED_PYQ" ? "JEE_ADVANCED" :
+     (mode === "pyq" ? "NEET" : ""))
   );
   const [pyqYear, setPyqYear] = useState<string>(
-    initialQuestion?.pyqYear ? String(initialQuestion.pyqYear) : "2025"
+    initialPyqYearProp ? String(initialPyqYearProp) :
+    initialQuestion?.pyqYear ? String(initialQuestion.pyqYear) : "2026"
   );
-  const [pyqMonth, setPyqMonth] = useState<string>(initialQuestion?.pyqMonth || "January");
+  const [pyqMonth, setPyqMonth] = useState<string>(
+    pyqSession || initialQuestion?.pyqMonth || "January"
+  );
+  const [pyqShift, setPyqShift] = useState<string>(
+    initialPyqShift || initialQuestion?.pyqShift || ""
+  );
+  const [pyqPaper, setPyqPaper] = useState<string>(
+    initialPyqPaper || initialQuestion?.pyqPaper || ""
+  );
   const [pyqQuestionNumber, setPyqQuestionNumber] = useState<string>(
-    initialQuestion?.pyqQuestionNumber || "Question 01"
+    initialPyqQuestionNumber || initialQuestion?.pyqQuestionNumber || "Question 01"
   );
 
   // Taxonomy Lists (Dynamic from Master NCERT Catalog + Memory)
