@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { requireTeam } from "@/lib/pyq/api";
+import { requireTeamUser } from "@/lib/pyq/api";
 
 /**
  * POST /api/team/pyq/assignments/override
@@ -10,8 +10,12 @@ import { requireTeam } from "@/lib/pyq/api";
  */
 export async function POST(request: NextRequest) {
   try {
-    const sessionUser = await requireTeam(PERMISSIONS.QUESTION_APPROVE);
-    if (sessionUser.role !== "SUPER_ADMIN" && sessionUser.role !== "ADMIN") {
+    const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_APPROVE);
+    const isSuperOrAdmin =
+      sessionUser.role === "SUPER_ADMIN" ||
+      sessionUser.role === "ADMIN" ||
+      sessionUser.role === "FOUNDER";
+    if (!isSuperOrAdmin) {
       return apiError("Only Super Admin or Admin can override verification status", 403);
     }
 

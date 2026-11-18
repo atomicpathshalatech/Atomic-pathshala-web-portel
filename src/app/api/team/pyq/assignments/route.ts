@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { requireTeam } from "@/lib/pyq/api";
+import { requireTeamUser, can } from "@/lib/pyq/api";
 
 /**
  * GET /api/team/pyq/assignments
@@ -14,7 +14,7 @@ import { requireTeam } from "@/lib/pyq/api";
  */
 export async function GET(request: NextRequest) {
   try {
-    const sessionUser = await requireTeam(PERMISSIONS.QUESTION_READ);
+    const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_READ);
     const sp = request.nextUrl.searchParams;
     const filter = sp.get("filter")?.toLowerCase() || "mine";
     const statusFilter = sp.get("status")?.toUpperCase();
@@ -24,7 +24,10 @@ export async function GET(request: NextRequest) {
 
     // Determine target user filter
     const isSuperOrAdmin =
-      sessionUser.role === "SUPER_ADMIN" || sessionUser.role === "ADMIN";
+      sessionUser.role === "SUPER_ADMIN" ||
+      sessionUser.role === "ADMIN" ||
+      sessionUser.role === "FOUNDER" ||
+      (await can(sessionUser.id, PERMISSIONS.QUESTION_ASSIGN));
     const showAll = filter === "all" && isSuperOrAdmin;
 
     const assignmentWhere: any = {
@@ -116,7 +119,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const sessionUser = await requireTeam(PERMISSIONS.QUESTION_READ);
+    const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_READ);
     const body = await request.json();
     const {
       assignmentType = "CHAPTER", // CHAPTER | SELECTED_QUESTIONS | SELF
@@ -144,9 +147,15 @@ export async function POST(request: NextRequest) {
       return apiError("Target reviewer is required", 400);
     }
 
-    // Check permissions: only Admins can assign to others; self-assignment allowed for any reviewer
+    // Check permissions: only Admins / Super Admins / Founders / users with QUESTION_ASSIGN can assign to others; self-assignment allowed for any reviewer
     const isSelf = targetUserId === sessionUser.id;
-    if (!isSelf && sessionUser.role !== "SUPER_ADMIN" && sessionUser.role !== "ADMIN") {
+    const canAssignOthers =
+      sessionUser.role === "SUPER_ADMIN" ||
+      sessionUser.role === "ADMIN" ||
+      sessionUser.role === "FOUNDER" ||
+      (await can(sessionUser.id, PERMISSIONS.QUESTION_ASSIGN));
+
+    if (!isSelf && !canAssignOthers) {
       return apiError("Permission denied: only Admins can assign questions to other team members", 403);
     }
 

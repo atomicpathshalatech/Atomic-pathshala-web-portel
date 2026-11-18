@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { requireTeam } from "@/lib/pyq/api";
+import { requireTeamUser } from "@/lib/pyq/api";
 
 const MANDATORY_CHECKLIST_KEYS = [
   "englishStatement",
@@ -30,7 +30,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const sessionUser = await requireTeam(PERMISSIONS.QUESTION_READ);
+    const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_READ);
     const { id } = params;
 
     const question = await prisma.question.findUnique({
@@ -137,7 +137,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const sessionUser = await requireTeam(PERMISSIONS.QUESTION_READ);
+    const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_READ);
     const { id } = params;
     const body = await request.json();
 
