@@ -192,14 +192,47 @@ export async function POST(
             chapter: editedQuestion.chapter || existingQuestion.chapter,
             topic: editedQuestion.topic !== undefined ? editedQuestion.topic : existingQuestion.topic,
             subTopic: editedQuestion.subTopic !== undefined ? editedQuestion.subTopic : existingQuestion.subTopic,
+            microConcept: editedQuestion.microConcept !== undefined ? editedQuestion.microConcept : existingQuestion.microConcept,
             difficulty: editedQuestion.difficulty || existingQuestion.difficulty,
             type: editedQuestion.type || existingQuestion.type,
             imageUrl: editedQuestion.imageUrl !== undefined ? editedQuestion.imageUrl : existingQuestion.imageUrl,
+            referenceImageUrl: editedQuestion.referenceImageUrl !== undefined ? editedQuestion.referenceImageUrl : existingQuestion.referenceImageUrl,
             solution: editedQuestion.solution !== undefined ? editedQuestion.solution : existingQuestion.solution,
+            bloomLevel: editedQuestion.bloomLevel !== undefined ? editedQuestion.bloomLevel : existingQuestion.bloomLevel,
+            importance: editedQuestion.importance !== undefined ? editedQuestion.importance : existingQuestion.importance,
+            solveTime: editedQuestion.solveTime !== undefined ? editedQuestion.solveTime : existingQuestion.solveTime,
+            keySkill: editedQuestion.keySkill !== undefined ? editedQuestion.keySkill : existingQuestion.keySkill,
+            ncertBook: editedQuestion.ncertBook !== undefined ? editedQuestion.ncertBook : existingQuestion.ncertBook,
+            ncertClass: editedQuestion.ncertClass !== undefined ? editedQuestion.ncertClass : existingQuestion.ncertClass,
+            ncertChapter: editedQuestion.ncertChapter !== undefined ? editedQuestion.ncertChapter : existingQuestion.ncertChapter,
+            ncertPage: editedQuestion.ncertPage !== undefined ? editedQuestion.ncertPage : existingQuestion.ncertPage,
+            ncertSection: editedQuestion.ncertSection !== undefined ? editedQuestion.ncertSection : existingQuestion.ncertSection,
+            ncertLine: editedQuestion.ncertLine !== undefined ? editedQuestion.ncertLine : existingQuestion.ncertLine,
+            tags: editedQuestion.tags !== undefined ? editedQuestion.tags : existingQuestion.tags,
+            pyqExam: editedQuestion.pyqExam !== undefined ? editedQuestion.pyqExam : existingQuestion.pyqExam,
+            pyqYear: editedQuestion.pyqYear !== undefined ? (editedQuestion.pyqYear ? parseInt(editedQuestion.pyqYear, 10) : null) : existingQuestion.pyqYear,
+            pyqMonth: editedQuestion.pyqMonth !== undefined ? editedQuestion.pyqMonth : existingQuestion.pyqMonth,
+            pyqQuestionNumber: editedQuestion.pyqQuestionNumber !== undefined ? editedQuestion.pyqQuestionNumber : existingQuestion.pyqQuestionNumber,
+            pyqSource: editedQuestion.pyqSource !== undefined ? editedQuestion.pyqSource : existingQuestion.pyqSource,
             editedById: sessionUser.id,
             editedAt: new Date(),
           },
         });
+
+        // Update PyqOccurrence if present
+        if (existingQuestion.pyqOccurrences.length > 0 && (editedQuestion.pyqYear || editedQuestion.pyqExam || editedQuestion.session || editedQuestion.shift || editedQuestion.paper)) {
+          const occ = existingQuestion.pyqOccurrences[0];
+          await tx.pyqOccurrence.update({
+            where: { id: occ.id },
+            data: {
+              year: editedQuestion.pyqYear ? parseInt(editedQuestion.pyqYear, 10) : occ.year,
+              session: editedQuestion.session !== undefined ? editedQuestion.session : occ.session,
+              shift: editedQuestion.shift !== undefined ? editedQuestion.shift : occ.shift,
+              paper: editedQuestion.paper !== undefined ? editedQuestion.paper : occ.paper,
+              questionNumber: editedQuestion.pyqQuestionNumber !== undefined ? editedQuestion.pyqQuestionNumber : occ.questionNumber,
+            },
+          });
+        }
 
         // Update English translation
         if (editedQuestion.english) {
@@ -211,7 +244,7 @@ export async function POST(
                 statement: editedQuestion.english.statement || eng.statement,
                 options: editedQuestion.english.options || eng.options,
                 correctOptionIds: editedQuestion.english.correctOptionIds || eng.correctOptionIds,
-                solution: editedQuestion.english.solution || eng.solution,
+                solution: editedQuestion.english.solution !== undefined ? editedQuestion.english.solution : eng.solution,
               },
             });
           }
@@ -227,7 +260,7 @@ export async function POST(
                 statement: editedQuestion.hindi.statement || hin.statement,
                 options: editedQuestion.hindi.options || hin.options,
                 correctOptionIds: editedQuestion.hindi.correctOptionIds || hin.correctOptionIds,
-                solution: editedQuestion.hindi.solution || hin.solution,
+                solution: editedQuestion.hindi.solution !== undefined ? editedQuestion.hindi.solution : hin.solution,
               },
             });
           } else if (editedQuestion.hindi.statement) {
