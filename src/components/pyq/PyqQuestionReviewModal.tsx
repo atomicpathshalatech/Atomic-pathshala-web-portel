@@ -75,25 +75,32 @@ interface ChecklistState {
   hindiTranslation: boolean;
   allOptions: boolean;
   correctAnswer: boolean;
-  explanation: boolean;
+  solution: boolean;
   imagesDiagrams: boolean;
-  chapterMapping: boolean;
-  topic: boolean;
-  subtopic: boolean;
-  examNameYear: boolean;
+  // Legacy fields for backward compatibility:
+  explanation?: boolean;
+  chapterMapping?: boolean;
+  topic?: boolean;
+  subtopic?: boolean;
+  examNameYear?: boolean;
 }
+
+const CANONICAL_CHECKLIST_KEYS: (keyof ChecklistState)[] = [
+  "englishStatement",
+  "hindiTranslation",
+  "allOptions",
+  "correctAnswer",
+  "solution",
+  "imagesDiagrams",
+];
 
 const DEFAULT_CHECKLIST: ChecklistState = {
   englishStatement: false,
   hindiTranslation: false,
   allOptions: false,
   correctAnswer: false,
-  explanation: false,
+  solution: false,
   imagesDiagrams: false,
-  chapterMapping: false,
-  topic: false,
-  subtopic: false,
-  examNameYear: false,
 };
 
 interface FormSnapshot {
@@ -337,21 +344,26 @@ export function PyqQuestionReviewModal({
           setStructuredHi(parseStructuredSolution(initialHiSolution));
 
           // Load previous checklist if available or reset
-          const savedChecklist = q.pyqReviews?.[0]?.checklistData as ChecklistState | undefined;
+          const savedChecklist = q.pyqReviews?.[0]?.checklistData as any;
           if (savedChecklist && typeof savedChecklist === "object") {
-            setChecklist(savedChecklist);
+            setChecklist({
+              englishStatement: Boolean(savedChecklist.englishStatement),
+              hindiTranslation: Boolean(savedChecklist.hindiTranslation),
+              allOptions: Boolean(savedChecklist.allOptions),
+              correctAnswer: Boolean(savedChecklist.correctAnswer),
+              solution: Boolean(savedChecklist.solution ?? savedChecklist.explanation),
+              imagesDiagrams: Boolean(savedChecklist.imagesDiagrams),
+              explanation: Boolean(savedChecklist.solution ?? savedChecklist.explanation),
+            });
           } else if (q.pyqVerificationStatus === "VERIFIED") {
             setChecklist({
               englishStatement: true,
               hindiTranslation: true,
               allOptions: true,
               correctAnswer: true,
-              explanation: true,
+              solution: true,
               imagesDiagrams: true,
-              chapterMapping: true,
-              topic: true,
-              subtopic: true,
-              examNameYear: true,
+              explanation: true,
             });
           } else {
             setChecklist(DEFAULT_CHECKLIST);
@@ -374,11 +386,19 @@ export function PyqQuestionReviewModal({
 
   if (!open) return null;
 
-  const allChecksPassed = Object.values(checklist).every(Boolean);
-  const checkedCount = Object.values(checklist).filter(Boolean).length;
+  const allChecksPassed = CANONICAL_CHECKLIST_KEYS.every((k) => Boolean(checklist[k]));
+  const checkedCount = CANONICAL_CHECKLIST_KEYS.filter((k) => Boolean(checklist[k])).length;
 
   function toggleCheck(key: keyof ChecklistState) {
-    setChecklist((prev) => ({ ...prev, [key]: !prev[key] }));
+    setChecklist((prev) => {
+      const nextVal = !prev[key];
+      return {
+        ...prev,
+        [key]: nextVal,
+        ...(key === "solution" ? { explanation: nextVal } : {}),
+        ...(key === "explanation" ? { solution: nextVal } : {}),
+      };
+    });
   }
 
   function markAllChecks() {
@@ -387,12 +407,9 @@ export function PyqQuestionReviewModal({
       hindiTranslation: true,
       allOptions: true,
       correctAnswer: true,
+      solution: true,
       explanation: true,
       imagesDiagrams: true,
-      chapterMapping: true,
-      topic: true,
-      subtopic: true,
-      examNameYear: true,
     });
   }
 
@@ -622,7 +639,7 @@ export function PyqQuestionReviewModal({
     if (!activeQuestionId) return;
 
     if (action === "VERIFY" && !allChecksPassed) {
-      toast.error("All 10 verification checklist items must be verified before approving.");
+      toast.error("All 6 verification checklist items must be verified before approving.");
       return;
     }
 
@@ -1274,54 +1291,33 @@ export function PyqQuestionReviewModal({
                   </div>
                 </div>
 
-                {/* Sub-view: English or Hindi Structured Solution Editor */}
+                {/* Sub-view: English or Hindi Structured Solution Editor (3 Clean Sections) */}
                 {(solutionLanguageTab === "en" || solutionLanguageTab === "hi") && (
                   <div className="space-y-4">
                     {[
                       {
                         key: "concept" as const,
                         number: "1",
-                        title: solutionLanguageTab === "en" ? "Concept & Core Theory" : "अवधारणा एवं सिद्धांत",
-                        desc: solutionLanguageTab === "en" ? "Underlying scientific principles, theorems, and mechanisms." : "मूल वैज्ञानिक सिद्धांत, नियम व अवधारणाएं।",
-                        placeholder: solutionLanguageTab === "en" ? "Explain the primary theoretical concept here..." : "यहाँ मुख्य वैज्ञानिक अवधारणा व सिद्धांत दर्ज करें...",
+                        title: solutionLanguageTab === "en" ? "Core Concept & Theory (Optional)" : "मुख्य अवधारणा एवं सिद्धांत (वैकल्पिक)",
+                        desc: solutionLanguageTab === "en" ? "Brief underlying scientific principle or definition (only when genuinely needed)." : "संक्षिप्त मूल वैज्ञानिक सिद्धांत या परिभाषा (केवल आवश्यक होने पर)।",
+                        placeholder: solutionLanguageTab === "en" ? "Explain the primary theoretical concept here (optional for direct recall)..." : "यहाँ मुख्य वैज्ञानिक अवधारणा दर्ज करें...",
                       },
                       {
-                        key: "formula" as const,
+                        key: "solution" as const,
                         number: "2",
-                        title: solutionLanguageTab === "en" ? "Required Formulas & Rules" : "आवश्यक सूत्र एवं नियम",
-                        desc: solutionLanguageTab === "en" ? "Equations, standard laws, or reaction schemes in LaTeX KaTeX ($...$). " : "संबंधित गणितीय व रासायनिक सूत्र LaTeX KaTeX ($...$) में।",
-                        placeholder: solutionLanguageTab === "en" ? "State relevant formulas, e.g. $F = ma$ or reaction equations..." : "प्रासंगिक सूत्र दर्ज करें, जैसे $v = u + at$...",
-                      },
-                      {
-                        key: "stepByStep" as const,
-                        number: "3",
-                        title: solutionLanguageTab === "en" ? "Step-by-Step Solution" : "चरणबद्ध विस्तृत हल",
-                        desc: solutionLanguageTab === "en" ? "Detailed logical working and algebraic steps leading to the answer." : "उत्तर तक पहुँचने की क्रमिक व तार्किक गणना।",
-                        placeholder: solutionLanguageTab === "en" ? "Write the detailed step-by-step working here..." : "यहाँ चरणबद्ध हल दर्ज करें...",
-                      },
-                      {
-                        key: "finalAnswer" as const,
-                        number: "4",
-                        title: solutionLanguageTab === "en" ? "Final Answer Conclusion" : "अंतिम उत्तर व्याख्या",
-                        desc: solutionLanguageTab === "en" ? "Explicit conclusion confirming the correct option and key derivation." : "सही विकल्प की पुष्टि करने वाला संक्षिप्त निष्कर्ष।",
-                        placeholder: solutionLanguageTab === "en" ? `Hence, Option (${correctKey}) is the correct answer because...` : `अतः विकल्प (${correctKey}) सही उत्तर है क्योंकि...`,
+                        title: solutionLanguageTab === "en" ? "Question Solution & Working" : "प्रश्न हल एवं व्याख्या",
+                        desc: solutionLanguageTab === "en" ? "Complete, question-specific explanation. Includes formulas & calculation for Physics/Chem; direct factual explanation for Biology." : "प्रत्यक्ष एवं संपूर्ण हल। भौतिकी/रसायन के सूत्र व गणना, या जीव विज्ञान का सीधा वैज्ञानिक कारण।",
+                        placeholder: solutionLanguageTab === "en" ? "Write the direct, complete solution here..." : "यहाँ विस्तृत एवं स्पष्ट हल दर्ज करें...",
                       },
                       {
                         key: "optionExplanation" as const,
-                        number: "5",
+                        number: "3",
                         title: solutionLanguageTab === "en" ? "Option-wise Analysis" : "विकल्पवार विश्लेषण",
-                        desc: solutionLanguageTab === "en" ? "Why the correct option is right, and why the other options are distractors." : "सही विकल्प क्यों सही है और अन्य विकल्प क्यों गलत हैं।",
+                        desc: solutionLanguageTab === "en" ? "Why the correct option is right and why distractors are incorrect." : "सही विकल्प क्यों सही है और अन्य विकल्प क्यों गलत हैं।",
                         placeholder: solutionLanguageTab === "en" ? "Option (A): ... \nOption (B): ... \nOption (C): ... \nOption (D): ..." : "विकल्प (A): ... \nविकल्प (B): ...",
                       },
-                      {
-                        key: "takeaway" as const,
-                        number: "6",
-                        title: solutionLanguageTab === "en" ? "Important Takeaway & Pitfalls" : "महत्वपूर्ण बिंदु व ट्रिक्स",
-                        desc: solutionLanguageTab === "en" ? "High-yield memory tip, common student mistakes to avoid, or mnemonic." : "महत्वपूर्ण परीक्षा सुझाव, सामान्य गलतियाँ व याद रखने की ट्रिक।",
-                        placeholder: solutionLanguageTab === "en" ? "Exam Tip / Common Trap: Students often confuse..." : "परीक्षा सुझाव / सामान्य भूल: विद्यार्थी अक्सर...",
-                      },
                     ].map((sec) => {
-                      const curVal = solutionLanguageTab === "en" ? structuredEn[sec.key] : structuredHi[sec.key];
+                      const curVal = ((solutionLanguageTab === "en" ? structuredEn[sec.key] : structuredHi[sec.key]) || "") as string;
                       return (
                         <div
                           key={sec.key}
@@ -1340,7 +1336,7 @@ export function PyqQuestionReviewModal({
                               </div>
                             </div>
                             <span className="text-[10px] font-bold text-slate-400 uppercase">
-                              {curVal.trim() ? "Completed ✓" : "Optional"}
+                              {curVal.trim() ? "Completed ✓" : sec.key === "concept" ? "Optional" : "Required"}
                             </span>
                           </div>
 
@@ -1350,13 +1346,21 @@ export function PyqQuestionReviewModal({
                               onChange={(e) => {
                                 const val = e.target.value;
                                 if (solutionLanguageTab === "en") {
-                                  setStructuredEn((prev) => ({ ...prev, [sec.key]: val }));
+                                  setStructuredEn((prev) => ({
+                                    ...prev,
+                                    [sec.key]: val,
+                                    ...(sec.key === "solution" ? { stepByStep: val } : {}),
+                                  }));
                                 } else {
-                                  setStructuredHi((prev) => ({ ...prev, [sec.key]: val }));
+                                  setStructuredHi((prev) => ({
+                                    ...prev,
+                                    [sec.key]: val,
+                                    ...(sec.key === "solution" ? { stepByStep: val } : {}),
+                                  }));
                                 }
                               }}
                               placeholder={sec.placeholder}
-                              rows={3}
+                              rows={sec.key === "solution" ? 5 : 3}
                               className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-medium focus:ring-2 focus:ring-blue-500 resize-y"
                             />
                           ) : (
@@ -1934,7 +1938,7 @@ export function PyqQuestionReviewModal({
               </div>
             )}
 
-            {/* MANDATORY 10-POINT VERIFICATION CHECKLIST (Always Visible at Bottom of Form) */}
+            {/* MANDATORY 6-POINT VERIFICATION CHECKLIST (Always Visible at Bottom of Form) */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-2xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
@@ -1945,11 +1949,11 @@ export function PyqQuestionReviewModal({
                     <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-2">
                       Mandatory Verification Checklist
                       <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full ${allChecksPassed ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-amber-100 text-amber-800"}`}>
-                        {checkedCount} / 10 Verified
+                        {checkedCount} / 6 Verified
                       </span>
                     </h4>
                     <p className="text-[11px] text-slate-400">
-                      All 10 checks must be confirmed by reviewer before approving into the Verified Questions collection.
+                      All 6 checks must be confirmed by reviewer before approving into the Verified Questions collection.
                     </p>
                   </div>
                 </div>
@@ -1959,23 +1963,19 @@ export function PyqQuestionReviewModal({
                   onClick={markAllChecks}
                   className="self-start sm:self-auto px-3 py-1 rounded-xl text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 transition cursor-pointer"
                 >
-                  Mark All 10 Checked
+                  Mark All 6 Checked
                 </button>
               </div>
 
-              {/* Checklist Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs">
+              {/* Checklist Grid (6 canonical checks) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5 text-xs">
                 {[
                   { key: "englishStatement" as const, label: "1. English Statement Verified", desc: "Scientific phrasing & symbols" },
                   { key: "hindiTranslation" as const, label: "2. Hindi Translation Verified", desc: "Grammar & Hindi terminology" },
                   { key: "allOptions" as const, label: "3. All Options Verified", desc: "A, B, C, D complete & matched" },
                   { key: "correctAnswer" as const, label: "4. Correct Answer Key Verified", desc: "Official key match" },
-                  { key: "explanation" as const, label: "5. Structured Solution Verified", desc: "6-part pedagogical logic" },
+                  { key: "solution" as const, label: "5. Solution Verified", desc: "Direct, complete & subject-adaptive" },
                   { key: "imagesDiagrams" as const, label: "6. Images & Diagrams Verified", desc: "Clarity, cropping & labels" },
-                  { key: "chapterMapping" as const, label: "7. NCERT Mapping Verified", desc: "Class 11/12 chapter & page" },
-                  { key: "topic" as const, label: "8. Topic Verified", desc: "Topic tag accurately classified" },
-                  { key: "subtopic" as const, label: "9. Subtopic Verified", desc: "Micro-concept correctly assigned" },
-                  { key: "examNameYear" as const, label: "10. Exam Name & Year Verified", desc: "Year & shift verified" },
                 ].map((item) => {
                   const isChecked = checklist[item.key];
                   return (
@@ -2115,7 +2115,7 @@ export function PyqQuestionReviewModal({
                     ? "bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
                     : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
                 }`}
-                title={allChecksPassed ? "Confirm all 10 checks and mark verified" : "All 10 checks must be marked to approve"}
+                title={allChecksPassed ? "Confirm all 6 checks and mark verified" : "All 6 checks must be marked to approve"}
               >
                 {submitting ? (
                   <span className="material-symbols-outlined text-sm animate-spin">refresh</span>

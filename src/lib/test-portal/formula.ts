@@ -1,6 +1,11 @@
 import katex from "katex";
 
-type Segment = { type: "text" | "inline" | "block" | "image" | "bold" | "italic"; content: string; width?: string };
+type Segment = {
+  type: "text" | "inline" | "block" | "image" | "bold" | "italic" | "heading";
+  content: string;
+  width?: string;
+  level?: number;
+};
 
 /**
  * LaTeX that went through JSON without its backslashes escaped: "\rho" was
@@ -216,9 +221,8 @@ export function sanitizeLatexFormulas(input: string): string {
 /** `sanitized` must already have been through sanitizeLatexFormulas (renderFormulaContent does it once). */
 function parseSegments(sanitized: string): Segment[] {
   const segments: Segment[] = [];
-  // image | $$block$$ | $inline$ | **bold** | *italic* (a word-bounded single-asterisk
-  // span, as in "*Penicillium*" — never "a * b", which OCR cleanup already strips)
-  const regex = /!\[(.*?)\]\((.+?)\)|\$\$(.+?)\$\$|\$(.+?)\$|\*\*(.+?)\*\*|(?<![\w*])\*(?![\s*])([^*\n]+?)(?<!\s)\*(?![\w*])/gs;
+  // image | $$block$$ | $inline$ | **bold** | *italic* | ### heading
+  const regex = /!\[(.*?)\]\((.+?)\)|\$\$(.+?)\$\$|\$(.+?)\$|\*\*(.+?)\*\*|(?<![\w*])\*(?![\s*])([^*\n]+?)(?<!\s)\*(?![\w*])|(?:^|\n)(#{1,4})[ \t]+([^\n]+)/gs;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -236,6 +240,11 @@ function parseSegments(sanitized: string): Segment[] {
       segments.push({ type: "bold", content: match[5] });
     } else if (match[6] !== undefined) {
       segments.push({ type: "italic", content: match[6] });
+    } else if (match[7] !== undefined && match[8] !== undefined) {
+      segments.push({ type: "heading", content: match[8].trim(), level: match[7].length });
+      if (sanitized[regex.lastIndex] === "\n") {
+        regex.lastIndex++;
+      }
     }
     lastIndex = regex.lastIndex;
   }
@@ -258,8 +267,8 @@ function escapeHtml(s: string): string {
  * Renders any residual inline LaTeX expressions inside plain text chunks
  */
 function renderResidualLatexInText(raw: string, bulleted = false): string {
-  // Markdown-style list lines in solutions ("- (i) ...") → a real bullet (once, on the whole text).
-  const text = bulleted ? raw : raw.replace(/(^|\n)[ \t]*-[ \t]+(?=\S)/g, "$1• ");
+  // Markdown-style list lines in solutions ("- (i) ..." or "* ...") → a real bullet (once, on the whole text).
+  const text = bulleted ? raw : raw.replace(/(^|\n)[ \t]*(?:-|\*|•)[ \t]+(?=\S)/g, "$1• ");
   // Text-mode commands outside $…$ ("\textbf{Statement-A :} …") are plain
   // formatting, not maths: make them HTML first (the maths scanner below cut
   // them apart at "-" and showed a red KaTeX error).
@@ -498,6 +507,16 @@ function renderSegments(segments: Segment[]): string {
           }
         }
         return renderResidualLatexInText(seg.content);
+      }
+      if (seg.type === "heading") {
+        const clean = seg.content.trim();
+        let accentColor = "#2563eb"; // blue for concept
+        if (/solution|हल/i.test(clean)) accentColor = "#10b981"; // emerald for solution
+        else if (/option|विकल्प/i.test(clean)) accentColor = "#6366f1"; // indigo for option analysis
+        else if (/takeaway|tip|महत्वपूर्ण/i.test(clean)) accentColor = "#f59e0b"; // amber for key takeaway
+        else if (/formula|सूत्र/i.test(clean)) accentColor = "#8b5cf6"; // purple for formula
+
+        return `<div class="solution-heading" style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.925rem;margin-top:14px;margin-bottom:6px;color:#0f172a;"><span style="display:inline-block;width:4px;height:14px;border-radius:9999px;background-color:${accentColor};flex-shrink:0;"></span><span>${escapeHtml(clean)}</span></div>`;
       }
       if (seg.type === "bold") {
         return `<strong>${escapeHtml(seg.content).replace(/\n/g, "<br/>")}</strong>`;

@@ -9,12 +9,8 @@ const MANDATORY_CHECKLIST_KEYS = [
   "hindiTranslation",
   "allOptions",
   "correctAnswer",
-  "explanation",
+  "solution",
   "imagesDiagrams",
-  "chapterMapping",
-  "topic",
-  "subtopic",
-  "examNameYear",
 ] as const;
 
 /**
@@ -55,7 +51,6 @@ export async function GET(
         pyqAssignments: {
           where: { assignment: { status: { not: "CANCELLED" } } },
           orderBy: { createdAt: "desc" },
-          take: 1,
           include: {
             assignment: {
               select: {
@@ -63,6 +58,7 @@ export async function GET(
                 priority: true,
                 deadline: true,
                 instructions: true,
+                assignedToId: true,
                 assignedTo: { select: { id: true, name: true } },
               },
             },
@@ -91,7 +87,9 @@ export async function GET(
       const isAssigned =
         question.assignedToId === sessionUser.id ||
         question.pyqAssignments.some(
-          (pa) => pa.assignment?.assignedTo?.id === sessionUser.id
+          (pa) =>
+            pa.assignment?.assignedTo?.id === sessionUser.id ||
+            pa.assignment?.assignedToId === sessionUser.id
         );
       if (!isAssigned) {
         return apiError("This question is not assigned to you for review.", 403);
@@ -194,7 +192,6 @@ export async function POST(
         pyqAssignments: {
           where: { assignment: { status: { not: "CANCELLED" } } },
           orderBy: { createdAt: "desc" },
-          take: 1,
           include: {
             assignment: { select: { id: true, assignedToId: true } },
           },
@@ -210,27 +207,32 @@ export async function POST(
     const isSuperAdmin =
       roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
 
+    const assignmentJunction =
+      existingQuestion.pyqAssignments.find(
+        (pa) => pa.assignment?.assignedToId === sessionUser.id
+      ) || existingQuestion.pyqAssignments[0];
+
     if (!isSuperAdmin) {
       const isAssigned =
         existingQuestion.assignedToId === sessionUser.id ||
-        existingQuestion.pyqAssignments.some(
-          (pa) => pa.assignment?.assignedToId === sessionUser.id
-        );
+        Boolean(assignmentJunction && assignmentJunction.assignment?.assignedToId === sessionUser.id);
       if (!isAssigned) {
         return apiError("You cannot review or verify a question that is not assigned to you.", 403);
       }
     }
 
-    const assignmentJunction = existingQuestion.pyqAssignments[0];
-
-    // 1. If action is VERIFY, validate mandatory checklist
+    // 1. If action is VERIFY, validate mandatory checklist (6 canonical checks)
     if (action === "VERIFY") {
+      const normalizedChecklist: Record<string, boolean> = {
+        ...checklistData,
+        solution: Boolean(checklistData.solution ?? checklistData.explanation),
+      };
       const missingChecks = MANDATORY_CHECKLIST_KEYS.filter(
-        (key) => !checklistData[key]
+        (key) => !normalizedChecklist[key]
       );
       if (missingChecks.length > 0) {
         return apiError(
-          `All 10 verification checklist items must be verified before approving. Missing: ${missingChecks.join(", ")}`,
+          `All 6 verification checklist items must be verified before approving. Missing: ${missingChecks.join(", ")}`,
           400
         );
       }
@@ -360,6 +362,8 @@ export async function POST(
 
         // Update assignment junction row if exists
         if (assignmentJunction) {
+          const wasAlreadyVerified = assignmentJunction.status === "VERIFIED";
+
           await tx.pyqAssignmentQuestion.update({
             where: { id: assignmentJunction.id },
             data: {
@@ -368,15 +372,22 @@ export async function POST(
             },
           });
 
-          // Update assignment counts
-          await tx.pyqAssignment.update({
-            where: { id: assignmentJunction.assignmentId },
-            data: {
-              verifiedCount: { increment: 1 },
-              pendingCount: { decrement: 1 },
-              status: "IN_PROGRESS",
-            },
-          });
+          // Update assignment counts safely
+          if (!wasAlreadyVerified && assignmentJunction.assignmentId) {
+            const currentAssignment = await tx.pyqAssignment.findUnique({
+              where: { id: assignmentJunction.assignmentId },
+              select: { pendingCount: true },
+            });
+
+            await tx.pyqAssignment.update({
+              where: { id: assignmentJunction.assignmentId },
+              data: {
+                verifiedCount: { increment: 1 },
+                pendingCount: Math.max(0, (currentAssignment?.pendingCount ?? 1) - 1),
+                status: "IN_PROGRESS",
+              },
+            });
+          }
 
           // Check if all questions in assignment are verified
           const remainingPending = await tx.pyqAssignmentQuestion.count({

@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
 
     // Team members who are not Super Admin/Admin can only see questions assigned to them
-    const userAssignmentScope: any = !isSuperAdmin
+    const userAssignmentCondition = !isSuperAdmin
       ? {
           OR: [
             { assignedToId: sessionUser.id },
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
             },
           ],
         }
-      : {};
+      : null;
 
     const sp = request.nextUrl.searchParams;
     const examParam = sp.get("exam")?.trim();
@@ -71,19 +71,19 @@ export async function GET(request: NextRequest) {
 
     // If no chapter selected, return the subject chapter list with question counts
     if (!chapterParam) {
+      const chapterAndClauses: any[] = [
+        { subject: { equals: normSubject, mode: "insensitive" } },
+      ];
+      if (examId) {
+        chapterAndClauses.push({ pyqOccurrences: { some: { examId } } });
+      }
+      if (userAssignmentCondition) {
+        chapterAndClauses.push(userAssignmentCondition);
+      }
+
       const chapterCounts = await prisma.question.groupBy({
         by: ["chapter"],
-        where: {
-          subject: { equals: normSubject, mode: "insensitive" },
-          ...(examId
-            ? {
-                pyqOccurrences: {
-                  some: { examId },
-                },
-              }
-            : {}),
-          ...userAssignmentScope,
-        },
+        where: { AND: chapterAndClauses },
         _count: { id: true },
       });
 
@@ -117,18 +117,18 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. For a specific chapter, get detailed counts, distribution and questions
-    const baseChapterWhere: any = {
-      subject: { equals: normSubject, mode: "insensitive" },
-      chapter: { contains: chapterParam, mode: "insensitive" },
-      ...(examId
-        ? {
-            pyqOccurrences: {
-              some: { examId },
-            },
-          }
-        : {}),
-      ...userAssignmentScope,
-    };
+    const baseAndClauses: any[] = [
+      { subject: { equals: normSubject, mode: "insensitive" } },
+      { chapter: { contains: chapterParam, mode: "insensitive" } },
+    ];
+    if (examId) {
+      baseAndClauses.push({ pyqOccurrences: { some: { examId } } });
+    }
+    if (userAssignmentCondition) {
+      baseAndClauses.push(userAssignmentCondition);
+    }
+
+    const baseChapterWhere: any = { AND: baseAndClauses };
 
     // Calculate metrics across all questions in this chapter
     const [
@@ -142,16 +142,16 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       prisma.question.count({ where: baseChapterWhere }),
       prisma.question.count({
-        where: { ...baseChapterWhere, pyqVerificationStatus: "VERIFIED" },
+        where: { AND: [...baseAndClauses, { pyqVerificationStatus: "VERIFIED" }] },
       }),
       prisma.question.count({
-        where: { ...baseChapterWhere, pyqVerificationStatus: "ASSIGNED" },
+        where: { AND: [...baseAndClauses, { pyqVerificationStatus: "ASSIGNED" }] },
       }),
       prisma.question.count({
-        where: { ...baseChapterWhere, pyqVerificationStatus: "IN_REVIEW" },
+        where: { AND: [...baseAndClauses, { pyqVerificationStatus: "IN_REVIEW" }] },
       }),
       prisma.question.count({
-        where: { ...baseChapterWhere, pyqVerificationStatus: "NEEDS_CORRECTION" },
+        where: { AND: [...baseAndClauses, { pyqVerificationStatus: "NEEDS_CORRECTION" }] },
       }),
       prisma.question.groupBy({
         by: ["topic"],
@@ -161,10 +161,7 @@ export async function GET(request: NextRequest) {
       prisma.pyqOccurrence.findMany({
         where: {
           ...(examId ? { examId } : {}),
-          question: {
-            subject: { equals: normSubject, mode: "insensitive" },
-            chapter: { contains: chapterParam, mode: "insensitive" },
-          },
+          question: baseChapterWhere,
         },
         select: {
           year: true,
@@ -180,30 +177,39 @@ export async function GET(request: NextRequest) {
 
     // Build query for current tab
     const isVerifiedTab = tabParam === "verified";
-    let tabWhere: any = { ...baseChapterWhere };
+    const tabAndClauses: any[] = [...baseAndClauses];
 
     if (isVerifiedTab) {
-      tabWhere.pyqVerificationStatus = "VERIFIED";
+      tabAndClauses.push({ pyqVerificationStatus: "VERIFIED" });
     } else {
       if (statusParam === "ASSIGNED") {
-        tabWhere.pyqVerificationStatus = "ASSIGNED";
+        tabAndClauses.push({ pyqVerificationStatus: "ASSIGNED" });
       } else if (statusParam === "IN_REVIEW") {
-        tabWhere.pyqVerificationStatus = "IN_REVIEW";
+        tabAndClauses.push({ pyqVerificationStatus: "IN_REVIEW" });
       } else if (statusParam === "NEEDS_CORRECTION") {
-        tabWhere.pyqVerificationStatus = "NEEDS_CORRECTION";
+        tabAndClauses.push({ pyqVerificationStatus: "NEEDS_CORRECTION" });
       } else if (statusParam === "UNASSIGNED") {
-        tabWhere.AND = [
-          { OR: [{ pyqVerificationStatus: "UNVERIFIED" }, { pyqVerificationStatus: null }] },
-          { assignedToId: null },
-        ];
+        if (!isSuperAdmin) {
+          // Team members have no unassigned questions
+          tabAndClauses.push({ id: "__NO_UNASSIGNED_ACCESS__" });
+        } else {
+          tabAndClauses.push({
+            OR: [{ pyqVerificationStatus: "UNVERIFIED" }, { pyqVerificationStatus: null }],
+            assignedToId: null,
+          });
+        }
       } else {
         // ALL unverified
-        tabWhere.OR = [
-          { pyqVerificationStatus: { not: "VERIFIED" } },
-          { pyqVerificationStatus: null },
-        ];
+        tabAndClauses.push({
+          OR: [
+            { pyqVerificationStatus: { not: "VERIFIED" } },
+            { pyqVerificationStatus: null },
+          ],
+        });
       }
     }
+
+    const tabWhere: any = { AND: tabAndClauses };
 
     const questions = await prisma.question.findMany({
       where: tabWhere,

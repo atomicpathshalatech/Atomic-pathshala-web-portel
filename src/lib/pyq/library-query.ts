@@ -103,6 +103,9 @@ export function questionWhere(f: LibraryFilters): Prisma.QuestionWhereInput {
       OR: [
         { questionCode: { contains: f.q, mode: "insensitive" } },
         { translations: { some: { statement: { contains: f.q, mode: "insensitive" } } } },
+        { translations: { some: { solution: { contains: f.q, mode: "insensitive" } } } },
+        { topic: { contains: f.q, mode: "insensitive" } },
+        { subTopic: { contains: f.q, mode: "insensitive" } },
       ],
     });
   }

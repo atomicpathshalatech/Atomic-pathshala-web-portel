@@ -135,6 +135,7 @@ function sanitizeAndAdaptSolution(
   let concept = (sol?.concept || "").trim();
   let formula = (sol?.formula_rules || sol?.formula || "").trim();
   let stepByStep = (sol?.step_by_step || sol?.stepByStep || "").trim();
+  let solution = (sol?.solution || "").trim();
   let finalAnswer = (sol?.final_answer || sol?.finalAnswer || "").trim();
   let optionExplanation = (sol?.option_explanations || sol?.optionExplanation || "").trim();
   let takeaway = (sol?.important_takeaway || sol?.takeaway || "").trim();
@@ -164,6 +165,7 @@ function sanitizeAndAdaptSolution(
   for (const pat of patterns) {
     if (pat.test(concept)) concept = "";
     if (pat.test(formula)) formula = "";
+    if (pat.test(solution)) solution = "";
     stepByStep = stepByStep.replace(pat, "").trim();
     if (pat.test(takeaway)) takeaway = "";
   }
@@ -173,17 +175,23 @@ function sanitizeAndAdaptSolution(
     formula = "";
   }
 
-  // 3. If stepByStep is empty but concept has the actual explanation, promote it
-  if (!stepByStep && concept) {
-    stepByStep = concept;
+  // 3. Synthesize clean unified solution if solution field was not directly set
+  if (!solution) {
+    const parts = [formula, stepByStep, finalAnswer].filter(Boolean);
+    solution = parts.join("\n\n").trim();
+  }
+  if (!solution && concept) {
+    solution = concept;
+    concept = "";
   }
 
   return {
     concept,
-    formula,
-    stepByStep,
-    finalAnswer,
+    solution,
     optionExplanation,
+    formula,
+    stepByStep: solution || stepByStep,
+    finalAnswer,
     takeaway,
   };
 }
@@ -305,23 +313,23 @@ ${JSON.stringify(existingTagsList)}
 ================================================================================
 CRITICAL DIRECTIVE — STUDENT-CENTRIC, PEDAGOGICAL & ACCURATE SOLUTION:
 Students use these solutions to learn and master NEET UG / IIT-JEE concepts.
-The solution MUST be easy to understand, crystal clear, strictly aligned with NCERT, and directly solve the question without generic filler.
+The solution MUST be easy to understand, crystal clear, strictly aligned with NCERT, and directly solve the question without generic filler or forced sections.
 
-EVERY SOLUTION MUST POPULATE ALL 6 CANONICAL PARTS:
-1. "concept": Core Concept / Theory tested (1-2 clear, approachable sentences explaining the fundamental definition or principle so the student immediately grasps what the question tests).
-2. "formula_rules":
-   - Physics / Physical Chemistry / Maths: Exact governing formula in KaTeX ($...$), units, and conditions.
-   - Biology / Inorganic / General: The governing NCERT biological rule, taxonomic hierarchy, chemical equation, or trend.
-3. "step_by_step": Detailed step-by-step deduction. Connect the question's premise directly to the answer with crystal-clear logical progression. If numerical, show calculation steps line by line.
-4. "option_explanations": MANDATORY OPTION ANALYSIS FOR STUDENTS!
-   Explain EACH option (A, B, C, D) clearly:
-   - Option (A): Explain why it is correct or incorrect.
-   - Option (B): Explain why it is correct or incorrect.
-   - Option (C): Explain why it is correct or incorrect.
-   - Option (D): Explain why it is correct or incorrect.
-   (Students frequently confuse distractors. This section is vital for high learning value!)
-5. "final_answer": A clear, decisive concluding statement (e.g., "Hence, the correct answer is Option (B).").
-6. "important_takeaway": A high-yield mnemonic, NCERT textbook line citation, or common student pitfall to avoid in the exam.
+GENERATE A 3-PART SUBJECT-ADAPTIVE SOLUTION:
+1. "concept": Core Concept / NCERT Theory
+   - Brief, relevant theoretical definition or principle (1-2 sentences) ONLY when genuinely needed to understand the question.
+   - For direct factual questions (e.g. direct Biology recall), keep it minimal or empty if the main solution directly addresses it.
+2. "solution": Direct, Complete, Question-Specific Explanation
+   - Biology: State the direct biological facts, NCERT text reasoning, and taxonomic/physiological evidence to reach the correct answer. DO NOT invent formulas, mathematical steps, or artificial numbered procedures.
+   - Physics: Integrate the governing formula in KaTeX ($...$), given values, step-by-step substitution, and clear conclusion into this single coherent explanation.
+   - Chemistry: Integrate balanced reactions, equations, mechanism/reasoning, and calculation steps cleanly into this single coherent explanation.
+3. "option_explanations": Comprehensive Option Analysis
+   - Explain why the correct option is right AND why EACH incorrect distractor is wrong, citing the exact scientific, factual, or calculation reason (avoid generic "Incorrect as per NCERT").
+   - Format:
+     Option (A): ...
+     Option (B): ...
+     Option (C): ...
+     Option (D): ...
 
 BILINGUAL STANDARD:
 - English and Hindi solutions must explain the same scientific reasoning.
@@ -364,20 +372,14 @@ RETURN A STRICT JSON OBJECT ONLY WITH THIS EXACT SCHEMA:
   },
   "structured_solutions": {
     "english": {
-      "concept": "string (1-2 clear, approachable sentences explaining the core theory/concept)",
-      "formula_rules": "string (governing formulas in KaTeX or NCERT taxonomic/scientific rules)",
-      "step_by_step": "string (detailed step-by-step logical deduction connecting the question to the answer)",
-      "final_answer": "string (decisive conclusion, e.g. Hence, the correct answer is Option (B).)",
-      "option_explanations": "string (mandatory breakdown of options A, B, C, D explaining why each is right or wrong)",
-      "important_takeaway": "string (high-yield exam tip, mnemonic, or NCERT textbook reference)"
+      "concept": "string (brief core concept only if needed, else empty)",
+      "solution": "string (direct, complete question-specific solution with formulas/working if physics/chemistry)",
+      "option_explanations": "string (clear breakdown for Options A, B, C, D explaining why each is correct or incorrect)"
     },
     "hindi": {
-      "concept": "string (मुख्य अवधारणा: 1-2 सरल वाक्य जो सिद्धांत को स्पष्ट करें)",
-      "formula_rules": "string (सूत्र एवं नियम: KaTeX समीकरण या NCERT संवर्ग/वैज्ञानिक नियम)",
-      "step_by_step": "string (चरणबद्ध विस्तृत हल: प्रश्न से उत्तर तक का तार्किक स्पष्टीकरण)",
-      "final_answer": "string (अंतिम निष्कर्ष: अतः सही उत्तर विकल्प (...) है।)",
-      "option_explanations": "string (विकल्प विश्लेषण: सभी विकल्पों A, B, C, D का स्पष्ट विश्लेषण कि कौन सही है और कौन गलत)",
-      "important_takeaway": "string (परीक्षा टिप / याद रखने योग्य ट्रिक / NCERT संदर्भ)"
+      "concept": "string (मुख्य अवधारणा: केवल आवश्यक होने पर 1-2 संक्षिप्त वाक्य)",
+      "solution": "string (प्रत्यक्ष एवं सम्पूर्ण हल: भौतिकी/रसायन के सूत्र व गणना सहित, जीव विज्ञान का सीधा वैज्ञानिक कारण)",
+      "option_explanations": "string (विकल्प विश्लेषण: सभी विकल्पों A, B, C, D का स्पष्ट विश्लेषण कि कौन सही है और कौन गलत)"
     }
   },
   "academic_metadata": {
@@ -677,27 +679,45 @@ function buildAcademicKnowledgeEngineFallback(ctx: {
     enSolution = {
       concept:
         "Taxonomic hierarchy is the systematic arrangement of various taxonomic categories in biological classification in a definite succession, ranging from the fundamental lowest category (Species) to the highest category (Kingdom).",
-      formula:
-        "**Standard Taxonomic Hierarchy Sequence:**\n\n- **Ascending Order (Lowest to Highest):**\n$$\\text{Species} \\rightarrow \\text{Genus} \\rightarrow \\text{Family} \\rightarrow \\text{Order} \\rightarrow \\text{Class} \\rightarrow \\text{Phylum/Division} \\rightarrow \\text{Kingdom}$$\n\n- **Descending Order (Highest to Lowest):**\n$$\\text{Kingdom} \\rightarrow \\text{Phylum/Division} \\rightarrow \\text{Class} \\rightarrow \\text{Order} \\rightarrow \\text{Family} \\rightarrow \\text{Genus} \\rightarrow \\text{Species}$$",
-      stepByStep:
-        "Let us arrange the given taxonomic categories in ascending order (from lowest rank to highest rank):\n\n1. **(g) Species (जाति)** - Basic fundamental taxonomic category.\n2. **(a) Genus (वंश)** - An assemblage of closely related species.\n3. **(e) Family (कुल)** - A group of related genera sharing common vegetative & reproductive traits.\n4. **(c) Order (गण)** - Group of related families sharing a few similar characteristics.\n5. **(b) Class (वर्ग)** - Group of related orders.\n6. **(d) Phylum (संघ)** - Broad category encompassing related classes.\n7. **(f) Kingdom (जगत)** - Highest taxonomic category in biological classification.\n\nPutting these together in ascending order gives:\n**(g) → (a) → (e) → (c) → (b) → (d) → (f)**",
-      finalAnswer: `Hence, the correct ascending order corresponds to Option (${ctx.officialAnswer}): "${correctOptTextEn}".`,
+      solution:
+        "Arranging the given taxonomic categories in ascending order (from lowest rank to highest rank):\n\n" +
+        "1. **(g) Species** — Basic fundamental taxonomic category.\n" +
+        "2. **(a) Genus** — An assemblage of closely related species.\n" +
+        "3. **(e) Family** — A group of related genera sharing common vegetative & reproductive traits.\n" +
+        "4. **(c) Order** — Group of related families sharing a few similar characteristics.\n" +
+        "5. **(b) Class** — Group of related orders.\n" +
+        "6. **(d) Phylum** — Broad category encompassing related classes.\n" +
+        "7. **(f) Kingdom** — Highest taxonomic category in biological classification.\n\n" +
+        "**Ascending Hierarchy:**\n" +
+        "$$\\text{Species (g)} \\rightarrow \\text{Genus (a)} \\rightarrow \\text{Family (e)} \\rightarrow \\text{Order (c)} \\rightarrow \\text{Class (b)} \\rightarrow \\text{Phylum (d)} \\rightarrow \\text{Kingdom (f)}$$\n\n" +
+        `Hence, the correct ascending order corresponds to Option (${ctx.officialAnswer}): "${correctOptTextEn}".`,
       optionExplanation: enOptionBreakdown,
-      takeaway:
-        "High-Yield Memory Trick: 'Kings Play Chess On Fine Glass Sets' (Kingdom → Phylum → Class → Order → Family → Genus → Species). For ascending order, simply read backwards from Species to Kingdom!",
+      formula: "",
+      stepByStep: "",
+      finalAnswer: "",
+      takeaway: "",
     };
 
     hiSolution = {
       concept:
         "वर्गिकी पदानुक्रम (Taxonomic Hierarchy) जीवों के वर्गीकरण में प्रयुक्त विभिन्न संवर्गों की क्रमिक व्यवस्था है, जो निम्नतम आधारभूत संवर्ग जाति (Species) से लेकर सर्वोच्च संवर्ग जगत (Kingdom) तक विस्तृत होती है।",
-      formula:
-        "**वर्गिकी संवर्गों का मानक अनुक्रम:**\n\n- **आरोही क्रम (निम्नतम से उच्चतम):**\n$$\\text{जाति (Species)} \\rightarrow \\text{वंश (Genus)} \\rightarrow \\text{कुल (Family)} \\rightarrow \\text{गण (Order)} \\rightarrow \\text{वर्ग (Class)} \\rightarrow \\text{संघ (Phylum)} \\rightarrow \\text{जगत (Kingdom)}$$\n\n- **अवरोही क्रम (उच्चतम से निम्नतम):**\n$$\\text{जगत (Kingdom)} \\rightarrow \\text{संघ (Phylum)} \\rightarrow \\text{वर्ग (Class)} \\rightarrow \\text{गण (Order)} \\rightarrow \\text{कुल (Family)} \\rightarrow \\text{वंश (Genus)} \\rightarrow \\text{जाति (Species)}$$",
-      stepByStep:
-        "दिए गए वर्गिकी संवर्गों को आरोही क्रम (निम्नतम से उच्चतम स्तर) में व्यवस्थित करने पर:\n\n1. **(g) जाति (Species)** - वर्गीकरण की आधारभूत एवं निम्नतम इकाई।\n2. **(a) वंश (Genus)** - आपस में संबंधित जातियों का समूह।\n3. **(e) कुल (Family)** - समान लक्षणों वाले वंशों का समूह।\n4. **(c) गण (Order)** - समान लक्षणों वाले कुलों का समुच्चय।\n5. **(b) वर्ग (Class)** - संबंधित गणों का समूह।\n6. **(d) संघ (Phylum)** - संबंधित वर्गों का व्यापक समूह।\n7. **(f) जगत (Kingdom)** - जीवों के वर्गीकरण की सर्वोच्च इकाई।\n\nअतः सही आरोही अनुक्रम प्राप्त होता है:\n**(g) → (a) → (e) → (c) → (b) → (d) → (f)**",
-      finalAnswer: `अतः सही आरोही क्रम विकल्प (${ctx.officialAnswer}) में दिया गया है: "${correctOptTextHi}"।`,
+      solution:
+        "दिए गए वर्गिकी संवर्गों को आरोही क्रम (निम्नतम से उच्चतम स्तर) में व्यवस्थित करने पर:\n\n" +
+        "1. **(g) जाति (Species)** — वर्गीकरण की आधारभूत एवं निम्नतम इकाई।\n" +
+        "2. **(a) वंश (Genus)** — आपस में संबंधित जातियों का समूह।\n" +
+        "3. **(e) कुल (Family)** — समान लक्षणों वाले वंशों का समूह।\n" +
+        "4. **(c) गण (Order)** — समान लक्षणों वाले कुलों का समुच्चय।\n" +
+        "5. **(b) वर्ग (Class)** — संबंधित गणों का समूह।\n" +
+        "6. **(d) संघ (Phylum)** — संबंधित वर्गों का व्यापक समूह।\n" +
+        "7. **(f) जगत (Kingdom)** — जीवों के वर्गीकरण की सर्वोच्च इकाई।\n\n" +
+        "**मानक आरोही क्रम:**\n" +
+        "$$\\text{जाति (g)} \\rightarrow \\text{वंश (a)} \\rightarrow \\text{कुल (e)} \\rightarrow \\text{गण (c)} \\rightarrow \\text{वर्ग (b)} \\rightarrow \\text{संघ (d)} \\rightarrow \\text{जगत (f)}$$\n\n" +
+        `अतः सही आरोही क्रम विकल्प (${ctx.officialAnswer}) में दिया गया है: "${correctOptTextHi}"।`,
       optionExplanation: hiOptionBreakdown,
-      takeaway:
-        "परीक्षा टिप: 'Kings Play Chess On Fine Glass Sets' (Kingdom → Phylum → Class → Order → Family → Genus → Species) से पदानुक्रम याद रखें। आरोही (Ascending) क्रम पूछे जाने पर इसे जाति से जगत की ओर पढ़ें!",
+      formula: "",
+      stepByStep: "",
+      finalAnswer: "",
+      takeaway: "",
     };
   } else if (isNegative) {
     const enOptionBreakdown = Object.entries(ctx.optionsEn)
@@ -720,20 +740,30 @@ function buildAcademicKnowledgeEngineFallback(ctx: {
 
     enSolution = {
       concept: `According to NCERT Class ${ctx.ncertClass} (${ctx.ncertChapterTitle}), this question tests precise conceptual accuracy and the ability to identify incorrect claims.`,
-      formula: `Standard NCERT Rule for ${matchedTopic}: All biological rules and classification criteria must be applied without reversing terms or relationships.`,
-      stepByStep: `1. The question explicitly asks to identify the statement that is **not true / incorrect**.\n2. Reviewing statement (${ctx.officialAnswer}) "${correctOptTextEn}": This statement contradicts verified NCERT facts.\n3. The remaining statements are completely accurate according to NCERT Class ${ctx.ncertClass}.\n4. Therefore, option (${ctx.officialAnswer}) is the correct choice because it represents the false claim.`,
-      finalAnswer: `Hence, the incorrect statement is Option (${ctx.officialAnswer}).`,
+      solution:
+        `1. The question explicitly asks to identify the statement that is **not true / incorrect**.\n` +
+        `2. Evaluating statement (${ctx.officialAnswer}) "${correctOptTextEn}": This statement contradicts verified NCERT facts.\n` +
+        `3. The remaining statements are completely accurate according to NCERT Class ${ctx.ncertClass}.\n\n` +
+        `Hence, the incorrect statement is Option (${ctx.officialAnswer}).`,
       optionExplanation: enOptionBreakdown,
-      takeaway: `NEET Exam Strategy: Always circle negative keywords like 'NOT', 'INCORRECT', 'EXCEPT', or 'FALSE' in the question stem before evaluating options.`,
+      formula: "",
+      stepByStep: "",
+      finalAnswer: "",
+      takeaway: "",
     };
 
     hiSolution = {
       concept: `NCERT कक्षा ${ctx.ncertClass} (${ctx.ncertChapterTitle}) के अनुसार, यह प्रश्न अवधारणात्मक स्पष्टता तथा असत्य कथनों की पहचान करने की क्षमता का परीक्षण करता है।`,
-      formula: `${matchedTopic} के लिए NCERT मानक नियम: वैज्ञानिक सिद्धांतों एवं वर्गीकरण के नियमों का यथार्थ रूप से पालन किया जाता है।`,
-      stepByStep: `1. प्रश्न में स्पष्ट रूप से **असत्य / गलत कथन** का चयन करने को कहा गया है।\n2. विकल्प (${ctx.officialAnswer}) "${correctOptTextHi}" का परीक्षण करने पर ज्ञात होता है कि यह NCERT के वैज्ञानिक तथ्यों के विपरीत है।\n3. अन्य सभी विकल्प NCERT कक्षा ${ctx.ncertClass} के अनुसार पूर्णतः सत्य एवं प्रमाणित हैं।\n4. अतः विकल्प (${ctx.officialAnswer}) ही अभीष्ट उत्तर है।`,
-      finalAnswer: `अतः असत्य कथन विकल्प (${ctx.officialAnswer}) में है।`,
+      solution:
+        `1. प्रश्न में स्पष्ट रूप से **असत्य / गलत कथन** का चयन करने को कहा गया है।\n` +
+        `2. विकल्प (${ctx.officialAnswer}) "${correctOptTextHi}" का परीक्षण करने पर ज्ञात होता है कि यह NCERT के वैज्ञानिक तथ्यों के विपरीत है।\n` +
+        `3. अन्य सभी विकल्प NCERT कक्षा ${ctx.ncertClass} के अनुसार पूर्णतः सत्य एवं प्रमाणित हैं।\n\n` +
+        `अतः असत्य कथन विकल्प (${ctx.officialAnswer}) में है।`,
       optionExplanation: hiOptionBreakdown,
-      takeaway: `परीक्षा टिप: प्रश्न में 'गलत', 'असत्य', 'नहीं' जैसे शब्दों पर विशेष ध्यान दें ताकि सही विकल्प का चयन हो सके।`,
+      formula: "",
+      stepByStep: "",
+      finalAnswer: "",
+      takeaway: "",
     };
   } else {
     // General conceptual question
@@ -756,21 +786,27 @@ function buildAcademicKnowledgeEngineFallback(ctx: {
       .join("\n");
 
     enSolution = {
-      concept: `This question evaluates core concepts from NCERT Class ${ctx.ncertClass} Biology, Chapter: "${ctx.ncertChapterTitle}", Topic: "${matchedTopic}".`,
-      formula: `NCERT Class ${ctx.ncertClass} Textbook Reference Principle: Focus on direct scientific terminology and established facts.`,
-      stepByStep: `1. Analyze the statement and the options provided in the question.\n2. Statement (${ctx.officialAnswer}) "${correctOptTextEn}" directly aligns with verified NCERT Class ${ctx.ncertClass} facts.\n3. Evaluating the distractors reveals that other options contain inaccuracies or mismatches.\n4. Therefore, statement (${ctx.officialAnswer}) correctly answers the question.`,
-      finalAnswer: `Hence, the correct answer is Option (${ctx.officialAnswer}).`,
+      concept: "",
+      solution:
+        `Statement (${ctx.officialAnswer}) "${correctOptTextEn}" directly aligns with verified NCERT Class ${ctx.ncertClass} facts (${ctx.ncertChapterTitle}).\n\n` +
+        `Hence, the correct answer is Option (${ctx.officialAnswer}).`,
       optionExplanation: enOptionBreakdown,
-      takeaway: `Direct NCERT Citation: Make sure to read every line of NCERT Class ${ctx.ncertClass} (${ctx.ncertChapterTitle}) as NEET directly frames factual MCQs from textbook text.`,
+      formula: "",
+      stepByStep: "",
+      finalAnswer: "",
+      takeaway: "",
     };
 
     hiSolution = {
-      concept: `यह प्रश्न NCERT कक्षा ${ctx.ncertClass} जीव विज्ञान, अध्याय: "${ctx.ncertChapterTitle}", विषय: "${matchedTopic}" की मुख्य अवधारणा पर आधारित है।`,
-      formula: `NCERT मानक सिद्धांत: वैज्ञानिक शब्दावली तथा निर्धारित पाठ्यपुस्तक तथ्यों का सीधा अनुप्रयोग।`,
-      stepByStep: `1. प्रश्न कथन तथा दिए गए विकल्पों का सावधानीपूर्वक विश्लेषण करने पर:\n2. विकल्प (${ctx.officialAnswer}) "${correctOptTextHi}" NCERT पाठ्यपुस्तक के तथ्यों के पूर्णतः अनुरूप है।\n3. अन्य विकल्पों में तथ्यात्मक विसंगतियाँ हैं।\n4. अतः विकल्प (${ctx.officialAnswer}) ही सही उत्तर सिद्ध होता है।`,
-      finalAnswer: `अतः सही उत्तर विकल्प (${ctx.officialAnswer}) है।`,
+      concept: "",
+      solution:
+        `विकल्प (${ctx.officialAnswer}) "${correctOptTextHi}" NCERT कक्षा ${ctx.ncertClass} (${ctx.ncertChapterTitle}) के तथ्यों के पूर्णतः अनुरूप है।\n\n` +
+        `अतः सही उत्तर विकल्प (${ctx.officialAnswer}) है।`,
       optionExplanation: hiOptionBreakdown,
-      takeaway: `परीक्षा टिप: NCERT कक्षा ${ctx.ncertClass} के मुख्य तथ्यों और उदाहरणों का नियमित पुनरावलोकन करें।`,
+      formula: "",
+      stepByStep: "",
+      finalAnswer: "",
+      takeaway: "",
     };
   }
 

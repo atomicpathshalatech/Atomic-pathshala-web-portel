@@ -1,106 +1,105 @@
 /**
  * Structured Solution Definition and Serialization for Atomic Pathshala PYQ & Question Bank.
  * 
- * Provides 6 canonical pedagogical sections:
- * 1. Concept / Theory
- * 2. Required Formula / Rules
- * 3. Step-by-Step Solution
- * 4. Final Answer Explanation
- * 5. Option-wise Explanation
- * 6. Important Takeaway
+ * Provides a clean, pedagogical, subject-adaptive 3-part structure:
+ * 1. Concept: Brief, essential theoretical/NCERT context (only when genuinely needed).
+ * 2. Solution: Direct, complete, question-specific explanation:
+ *    - Biology: Direct biological reasoning/fact without artificial formulas or procedures.
+ *    - Physics: Formula, calculation, and reasoning integrated into one coherent solution.
+ *    - Chemistry: Reactions, mechanisms, equations, and calculations integrated cleanly.
+ * 3. Option Analysis: Meaningful explanation of why the correct option is right and incorrect options are wrong.
  * 
- * Supports subject-adaptive rendering:
- * - For direct/concise conceptual questions (e.g. simple Biology MCQs, 2–4 sentences),
- *   renders cleanly without artificial section headers or filler.
- * - For numerical/multi-part questions, renders headings only for populated sections.
- * 
- * Serializes into clean GitHub Flavored Markdown / KaTeX format that renders
- * identically in the Student Test Portal, Live Classes, and PDF Exports.
+ * Backward compatibility:
+ * Seamlessly parses and displays legacy 6-section solutions without data loss.
  */
 
 export interface StructuredSolution {
+  /** Core theoretical / NCERT concept (only when needed; minimal or omitted for direct factual questions) */
   concept: string;
-  formula: string;
-  stepByStep: string;
-  finalAnswer: string;
+  /** Direct, comprehensive, question-specific explanation */
+  solution: string;
+  /** Option-by-option analysis (why correct is correct, why incorrect are wrong) */
   optionExplanation: string;
-  takeaway: string;
+
+  // Backward-compatibility fields for legacy 6-part questions:
+  formula?: string;
+  stepByStep?: string;
+  finalAnswer?: string;
+  takeaway?: string;
 }
 
 export function createEmptyStructuredSolution(): StructuredSolution {
   return {
-    concept: '',
-    formula: '',
-    stepByStep: '',
-    finalAnswer: '',
-    optionExplanation: '',
-    takeaway: '',
+    concept: "",
+    solution: "",
+    optionExplanation: "",
+    formula: "",
+    stepByStep: "",
+    finalAnswer: "",
+    takeaway: "",
   };
 }
 
 export function isEmptyStructuredSolution(sol: StructuredSolution | null | undefined): boolean {
   if (!sol) return true;
   return (
-    !sol.concept.trim() &&
-    !sol.formula.trim() &&
-    !sol.stepByStep.trim() &&
-    !sol.finalAnswer.trim() &&
-    !sol.optionExplanation.trim() &&
-    !sol.takeaway.trim()
+    !(sol.concept || "").trim() &&
+    !(sol.solution || "").trim() &&
+    !(sol.stepByStep || "").trim() &&
+    !(sol.formula || "").trim() &&
+    !(sol.finalAnswer || "").trim() &&
+    !(sol.optionExplanation || "").trim() &&
+    !(sol.takeaway || "").trim()
   );
 }
 
 /**
- * Formats a StructuredSolution into canonical markdown adaptively.
- * - If only 1 section is populated (e.g. direct 2–4 sentence Biology solution in stepByStep),
- *   returns the direct text without artificial section headers.
- * - If multiple sections are populated, renders headings only for non-empty sections.
+ * Formats a StructuredSolution into clean, student-friendly markdown adaptively:
+ * - If only a single direct explanation exists, returns it without artificial headers.
+ * - Otherwise renders clean headers: ### Concept, ### Solution, ### Option Analysis.
  */
 export function formatStructuredSolution(sol: StructuredSolution): string {
-  if (!sol) return '';
+  if (!sol) return "";
 
-  const c = sol.concept.trim();
-  const f = sol.formula.trim();
-  const s = sol.stepByStep.trim();
-  const a = sol.finalAnswer.trim();
-  const o = sol.optionExplanation.trim();
-  const t = sol.takeaway.trim();
+  const c = (sol.concept || "").trim();
+  const mainSolution = (
+    sol.solution?.trim() ||
+    [sol.formula?.trim(), sol.stepByStep?.trim(), sol.finalAnswer?.trim()]
+      .filter(Boolean)
+      .join("\n\n")
+  ).trim();
+  const o = (sol.optionExplanation || "").trim();
+  const t = (sol.takeaway || "").trim();
 
-  const filled = [c, f, s, a, o, t].filter(Boolean);
-  if (filled.length === 0) return '';
+  const populated = [c, mainSolution, o, t].filter(Boolean);
+  if (populated.length === 0) return "";
 
-  // Adaptive: Single coherent explanation does not need artificial headings
-  if (filled.length === 1) {
-    return c || f || s || a || o || t;
+  // Single coherent explanation without multiple sections
+  if (populated.length === 1 && mainSolution) {
+    return mainSolution;
   }
 
   const parts: string[] = [];
 
   if (c) {
-    parts.push(`### Concept / Theory\n${c}`);
+    parts.push(`### Concept\n${c}`);
   }
-  if (f) {
-    parts.push(`### Formula & Rules\n${f}`);
-  }
-  if (s) {
-    const heading = (c || f) ? '### Step-by-Step Solution' : '### Solution & Explanation';
-    parts.push(`${heading}\n${s}`);
-  }
-  if (a) {
-    parts.push(`### Final Answer\n${a}`);
+  if (mainSolution) {
+    parts.push(`### Solution\n${mainSolution}`);
   }
   if (o) {
     parts.push(`### Option Analysis\n${o}`);
   }
   if (t) {
-    parts.push(`### Key Takeaway & Tips\n${t}`);
+    parts.push(`### Key Takeaway\n${t}`);
   }
 
-  return parts.join('\n\n');
+  return parts.join("\n\n");
 }
 
 /**
  * Parses raw solution string (Markdown or JSON) into StructuredSolution.
+ * Robust against legacy 6-part and new 3-part formats.
  */
 export function parseStructuredSolution(raw: string | null | undefined): StructuredSolution {
   const result: StructuredSolution = createEmptyStructuredSolution();
@@ -108,31 +107,40 @@ export function parseStructuredSolution(raw: string | null | undefined): Structu
 
   const trimmed = raw.trim();
 
-  // Try parsing JSON if stored as JSON string
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+  // 1. JSON-stored format
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     try {
       const parsed = JSON.parse(trimmed);
+      const concept = String(parsed.concept || parsed.conceptTheory || "");
+      const formula = String(parsed.formula || parsed.formulaRules || "");
+      const stepByStep = String(parsed.stepByStep || parsed.steps || "");
+      const solution = String(parsed.solution || [formula, stepByStep].filter(Boolean).join("\n\n") || "");
+      const finalAnswer = String(parsed.finalAnswer || parsed.answerExplanation || "");
+      const optionExplanation = String(parsed.optionExplanation || parsed.optionsAnalysis || parsed.option_explanations || "");
+      const takeaway = String(parsed.takeaway || parsed.keyTakeaway || parsed.important_takeaway || "");
+
       return {
-        concept: String(parsed.concept || parsed.conceptTheory || ''),
-        formula: String(parsed.formula || parsed.formulaRules || ''),
-        stepByStep: String(parsed.stepByStep || parsed.steps || parsed.solution || ''),
-        finalAnswer: String(parsed.finalAnswer || parsed.answerExplanation || ''),
-        optionExplanation: String(parsed.optionExplanation || parsed.optionsAnalysis || ''),
-        takeaway: String(parsed.takeaway || parsed.keyTakeaway || ''),
+        concept,
+        solution: solution || stepByStep || formula,
+        optionExplanation,
+        formula,
+        stepByStep: stepByStep || solution,
+        finalAnswer,
+        takeaway,
       };
     } catch {
-      // fallback to markdown parsing
+      // fallback to markdown parsing below
     }
   }
 
-  // Regex patterns to identify sections in markdown
+  // 2. Markdown sections regex
   const patterns = [
-    { key: 'concept' as const, regex: /(?:^|\n)#{1,4}\s*(?:1[.)]?\s*)?(?:Concept(?:\s*[\/&]\s*Theory)?|अवधारणा|सिद्धांत)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'formula' as const, regex: /(?:^|\n)#{1,4}\s*(?:2[.)]?\s*)?(?:Formula(?:s)?(?:\s*[\/&]\s*Rules)?|सूत्र|नियम)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'stepByStep' as const, regex: /(?:^|\n)#{1,4}\s*(?:3[.)]?\s*)?(?:Step-by-Step\s*(?:Solution)?|Solution\s*&?\s*Explanation|Steps|Detailed\s*Solution|चरणबद्ध\s*हल|हल)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'finalAnswer' as const, regex: /(?:^|\n)#{1,4}\s*(?:4[.)]?\s*)?(?:Final\s*Answer(?:\s*Explanation)?|Conclusion|अंतिम\s*उत्तर)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'optionExplanation' as const, regex: /(?:^|\n)#{1,4}\s*(?:5[.)]?\s*)?(?:Option(?:-wise)?\s*(?:Analysis|Explanation|Details)?|विकल्प\s*विश्लेषण)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
-    { key: 'takeaway' as const, regex: /(?:^|\n)#{1,4}\s*(?:6[.)]?\s*)?(?:(?:Key\s*)?Takeaway(?:s)?|Important\s*(?:Note|Tips|Takeaway)|महत्वपूर्ण\s*बिंदु)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: "concept" as const, regex: /(?:^|\n)#{1,4}\s*(?:1[.)]?\s*)?(?:Concept(?:\s*[\/&]\s*Theory)?|अवधारणा|सिद्धांत)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: "formula" as const, regex: /(?:^|\n)#{1,4}\s*(?:2[.)]?\s*)?(?:Formula(?:s)?(?:\s*[\/&]\s*Rules)?|सूत्र|नियम)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: "solution" as const, regex: /(?:^|\n)#{1,4}\s*(?:[23][.)]?\s*)?(?:Step-by-Step\s*(?:Solution)?|Solution\s*&?\s*Explanation|Solution|Detailed\s*Solution|चरणबद्ध\s*हल|हल)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: "finalAnswer" as const, regex: /(?:^|\n)#{1,4}\s*(?:4[.)]?\s*)?(?:Final\s*Answer(?:\s*Explanation)?|Conclusion|अंतिम\s*उत्तर)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: "optionExplanation" as const, regex: /(?:^|\n)#{1,4}\s*(?:5[.)]?\s*)?(?:Option(?:-wise)?\s*(?:Analysis|Explanation|Details)?|विकल्प\s*विश्लेषण)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
+    { key: "takeaway" as const, regex: /(?:^|\n)#{1,4}\s*(?:6[.)]?\s*)?(?:(?:Key\s*)?Takeaway(?:s)?|Important\s*(?:Note|Tips|Takeaway)|महत्वपूर्ण\s*बिंदु)[^\n]*\n([\s\S]*?)(?=(?:^|\n)#{1,4}\s*(?:[1-6][.)]?\s*)?(?:Concept|Formula|Step|Solution|Final|Option|Key|Important|अवधारणा|सूत्र|हल|उत्तर|विकल्प)|$)/i },
   ];
 
   let matchedAny = false;
@@ -144,8 +152,15 @@ export function parseStructuredSolution(raw: string | null | undefined): Structu
     }
   }
 
-  // If no structured headers were found, assign the entire raw text to stepByStep
+  // Synthesize unified solution field if legacy fields were matched
+  if (!result.solution) {
+    result.solution = [result.formula, result.finalAnswer].filter(Boolean).join("\n\n").trim();
+  }
+  result.stepByStep = result.solution;
+
+  // If no structured headers were found, assign entire text as solution
   if (!matchedAny) {
+    result.solution = trimmed;
     result.stepByStep = trimmed;
   }
 
