@@ -188,6 +188,8 @@ export type FullTestAnalysisResult = {
   actionPlan: ActionPlanItem[];
   questionReviews: QuestionReviewItem[];
   isDpp?: boolean;
+  isChapterTest?: boolean;
+  chapterName?: string | null;
   testType?: string | null;
   dppId?: string | null;
 };
@@ -1061,9 +1063,10 @@ export async function analyseAttempt(
     ncertPlan,
     actionPlan,
     questionReviews,
+    isChapterTest: Boolean(test.chapterId) || test.testType?.toUpperCase() === "CHAPTER_TEST",
+    chapterName: (test as any).chapter?.name || null,
     isDpp:
       (test.testType?.toUpperCase() === "DPP") ||
-      Boolean(test.chapterId) ||
       (test.code?.startsWith("DPPT-") ?? false),
     testType: test.testType,
     dppId: test.code?.startsWith("DPPT-") ? test.code.replace("DPPT-", "") : null,
@@ -1087,6 +1090,7 @@ export async function getStoredTestAnalysis(
               code: true,
               testType: true,
               chapterId: true,
+              chapter: { select: { name: true } },
               batchSchedule: { select: { type: true } },
             },
           },
@@ -1246,9 +1250,10 @@ export async function getStoredTestAnalysis(
     ncertPlan: (analysis.ncertPlan as any) || [],
     actionPlan: (analysis.actionPlan as any) || [],
     questionReviews: storedReviews,
+    isChapterTest: Boolean(analysis.attempt.test?.chapterId) || analysis.attempt.test?.testType?.toUpperCase() === "CHAPTER_TEST",
+    chapterName: (analysis.attempt.test as any)?.chapter?.name || null,
     isDpp:
       (analysis.attempt.test?.testType?.toUpperCase() === "DPP") ||
-      Boolean(analysis.attempt.test?.chapterId) ||
       (analysis.attempt.test?.code?.startsWith("DPPT-")) ||
       (analysis.attempt.test?.batchSchedule?.type?.toUpperCase() === "DPP"),
     testType: analysis.attempt.test?.testType,
@@ -1257,8 +1262,10 @@ export async function getStoredTestAnalysis(
 }
 
 /**
- * Privacy-compliant Leaderboard Generator.
- * Strips all student names, emails, phone numbers, avatars, and question answers.
+ * Official Test Leaderboard Generator.
+ * Computes deterministic academic standings using standardized tie-breaking:
+ * Score (desc) -> Accuracy (desc) -> Time Taken (asc) -> SubmittedAt (asc).
+ * Surfaces verified student identities (Name & Photo) with rank medals.
  */
 export async function getPrivacySafeLeaderboard(testId: string, currentStudentId: string) {
   const attempts = await prisma.attempt.findMany({
@@ -1268,6 +1275,17 @@ export async function getPrivacySafeLeaderboard(testId: string, currentStudentId
       studentId: true,
       score: true,
       submittedAt: true,
+      student: {
+        select: {
+          id: true,
+          user: {
+            select: {
+              name: true,
+              photoUrl: true,
+            },
+          },
+        },
+      },
       analysis: {
         select: {
           accuracy: true,
@@ -1279,23 +1297,54 @@ export async function getPrivacySafeLeaderboard(testId: string, currentStudentId
     orderBy: [{ score: "desc" }, { submittedAt: "asc" }],
   });
 
+  // Standard multi-tier sorting: Score (desc) -> Accuracy (desc) -> Time Taken (asc) -> SubmittedAt (asc)
+  attempts.sort((a, b) => {
+    const sDiff = (b.score ?? 0) - (a.score ?? 0);
+    if (sDiff !== 0) return sDiff;
+    const accDiff = (b.analysis?.accuracy ?? 0) - (a.analysis?.accuracy ?? 0);
+    if (accDiff !== 0) return accDiff;
+    const timeA = a.analysis?.timeTakenSec ?? 999999;
+    const timeB = b.analysis?.timeTakenSec ?? 999999;
+    if (timeA !== timeB) return timeA - timeB;
+    const subA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+    const subB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+    return subA - subB;
+  });
+
   const totalParticipants = attempts.length;
   let myRank = 1;
   let myScore = 0;
   let myAccuracy = 0;
 
-  const anonymizedRows = attempts.slice(0, 10).map((att, idx) => {
+  let currentRank = 1;
+  const allRows = attempts.map((att, idx) => {
     const isMe = att.studentId === currentStudentId;
-    const rank = idx + 1;
+    if (idx > 0) {
+      const prev = attempts[idx - 1];
+      const sameScore = (prev.score ?? 0) === (att.score ?? 0);
+      const sameAcc = (prev.analysis?.accuracy ?? 0) === (att.analysis?.accuracy ?? 0);
+      const sameTime = (prev.analysis?.timeTakenSec ?? 0) === (att.analysis?.timeTakenSec ?? 0);
+      if (!sameScore || !sameAcc || !sameTime) {
+        currentRank = idx + 1;
+      }
+    }
+    const rank = currentRank;
     if (isMe) {
       myRank = rank;
       myScore = att.score ?? 0;
       myAccuracy = att.analysis?.accuracy ?? 0;
     }
 
+    const realName = att.student?.user?.name?.trim();
+    const displayName = isMe
+      ? realName ? `${realName} (You)` : "You"
+      : realName || `Candidate #${rank}`;
+
     return {
       rank,
-      displayName: rank === 1 ? "Rank 1 Performer" : isMe ? "You" : `Candidate #${rank}`,
+      studentId: att.studentId,
+      displayName,
+      photoUrl: att.student?.user?.photoUrl || null,
       score: att.score ?? 0,
       accuracy: att.analysis?.accuracy ?? 0,
       percentage: att.analysis?.percentage ?? 0,
@@ -1304,13 +1353,9 @@ export async function getPrivacySafeLeaderboard(testId: string, currentStudentId
     };
   });
 
-  // If current user is not in top 10, find their exact rank
-  const myAttempt = attempts.find((a) => a.studentId === currentStudentId);
-  if (myAttempt) {
-    myRank = attempts.findIndex((a) => a.studentId === currentStudentId) + 1;
-    myScore = myAttempt.score ?? 0;
-    myAccuracy = myAttempt.analysis?.accuracy ?? 0;
-  }
+  const top10 = allRows.slice(0, 10);
+  const myRow = allRows.find((r) => r.isCurrentUser) || null;
+  const isMyRowInTop10 = top10.some((r) => r.isCurrentUser);
 
   const rank1Score = attempts.length > 0 && attempts[0] ? (attempts[0].score ?? 0) : myScore;
 
@@ -1321,7 +1366,8 @@ export async function getPrivacySafeLeaderboard(testId: string, currentStudentId
     myAccuracy,
     rank1Score,
     gapTopperMarks: Math.max(0, rank1Score - myScore),
-    leaderboard: anonymizedRows,
+    leaderboard: top10,
+    currentUserRow: !isMyRowInTop10 && myRow ? myRow : null,
   };
 }
 

@@ -165,6 +165,30 @@ export function PyqQuestionReviewModal({
 
   // Edit Mode toggle
   const [isEditing, setIsEditing] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(true);
+
+  // Dedicated keyboard navigation for reviewers (Alt+N: Next, Alt+P: Prev)
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      
+      if ((e.altKey && e.key.toLowerCase() === "n") || (e.ctrlKey && e.key === "ArrowRight" && !isInput)) {
+        e.preventDefault();
+        if (nav.nextQuestionId && !loading && !submitting) {
+          setActiveQuestionId(nav.nextQuestionId);
+        }
+      } else if ((e.altKey && e.key.toLowerCase() === "p") || (e.ctrlKey && e.key === "ArrowLeft" && !isInput)) {
+        e.preventDefault();
+        if (nav.previousQuestionId && !loading && !submitting) {
+          setActiveQuestionId(nav.previousQuestionId);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, nav.nextQuestionId, nav.previousQuestionId, loading, submitting]);
 
   // Form Fields - Academic Classification
   const [editSubject, setEditSubject] = useState("");
@@ -690,8 +714,8 @@ export function PyqQuestionReviewModal({
   const occ = data?.pyqOccurrences?.[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/80 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-7xl w-full h-[96vh] flex flex-col overflow-hidden">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isFullscreen ? "p-0" : "p-2 sm:p-4"} bg-slate-900/85 backdrop-blur-xs animate-in fade-in duration-150`}>
+      <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 ${isFullscreen ? "w-screen h-screen rounded-none" : "rounded-3xl shadow-2xl max-w-7xl w-full h-[96vh]"} flex flex-col overflow-hidden`}>
         {/* TOP HEADER */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80">
           <div className="flex items-center gap-3">
@@ -783,6 +807,18 @@ export function PyqQuestionReviewModal({
                 {isEditing ? "visibility" : "edit"}
               </span>
               <span>{isEditing ? "Review Mode" : "Edit Question"}</span>
+            </button>
+
+            {/* Fullscreen Workspace Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
+              title={isFullscreen ? "Restore Window Size" : "Full Window Workspace"}
+            >
+              <span className="material-symbols-outlined text-[19px]">
+                {isFullscreen ? "fullscreen_exit" : "fullscreen"}
+              </span>
             </button>
 
             {/* Close Button */}

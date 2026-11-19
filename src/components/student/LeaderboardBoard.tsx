@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-type XpEntry = { studentId: string; name: string; xp: number; level: number; rank: number; percentile: number };
-type TestEntry = { studentId: string; name: string; score: number; rank: number; percentile: number };
+type XpEntry = { studentId: string; name: string; photoUrl?: string | null; xp: number; level: number; rank: number; percentile: number };
+type TestEntry = { studentId: string; name: string; photoUrl?: string | null; score: number; avgScore?: number; testsAttempted?: number; rank: number; percentile: number };
 
 type XpResponse = { window: "7d" | "all"; batchId: string | null; batches: { id: string; name: string }[]; topLearners: XpEntry[]; me: XpEntry };
 type TestResponse = {
@@ -101,14 +101,19 @@ export function LeaderboardBoard() {
   const noAttempts = board === "tests" && testData?.noAttempts === true;
 
   function valueLabel(entry: XpEntry | TestEntry) {
-    return "xp" in entry ? `${entry.xp} XP` : `${entry.score} pts`;
+    if ("xp" in entry) return `${entry.xp.toLocaleString()} XP`;
+    if ("avgScore" in entry && entry.avgScore !== undefined) {
+      return `Avg ${entry.avgScore} m`;
+    }
+    return `${entry.score.toLocaleString()} marks`;
   }
   function subLabel(entry: XpEntry | TestEntry) {
     if ("level" in entry) {
       const t = xpTier(entry.percentile);
       return `${t.emoji} ${t.name} · Level ${entry.level}`;
     }
-    return "Test score total";
+    const attempts = "testsAttempted" in entry ? entry.testsAttempted : 1;
+    return `${attempts} test${attempts > 1 ? "s" : ""} · Total ${entry.score} marks`;
   }
 
   return (
@@ -253,14 +258,22 @@ export function LeaderboardBoard() {
                     >
                       <span
                         className={`w-7 text-center font-label-md text-label-md shrink-0 ${
-                          entry.rank <= 3 ? "text-primary font-bold" : "text-on-surface-variant"
+                          entry.rank <= 3 ? "text-primary font-bold text-base" : "text-on-surface-variant"
                         }`}
                       >
-                        {entry.rank}
+                        {entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : entry.rank}
                       </span>
-                      <div className="w-9 h-9 rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center shrink-0">
-                        {initials(entry.name)}
-                      </div>
+                      {entry.photoUrl ? (
+                        <img
+                          src={entry.photoUrl}
+                          alt={entry.name}
+                          className="w-9 h-9 rounded-full object-cover border border-outline-variant/30 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center shrink-0">
+                          {initials(entry.name)}
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="font-label-md text-label-md text-on-surface truncate">
                           {entry.name}
@@ -279,11 +292,19 @@ export function LeaderboardBoard() {
             {!meInTop && (
               <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-primary-container/15 border-t border-outline-variant/20 mt-1">
                 <span className="w-7 text-center font-label-md text-label-md text-on-surface-variant shrink-0">
-                  {me.rank}
+                  {me.rank === 1 ? "🥇" : me.rank === 2 ? "🥈" : me.rank === 3 ? "🥉" : me.rank}
                 </span>
-                <div className="w-9 h-9 rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center shrink-0">
-                  {initials(me.name)}
-                </div>
+                {me.photoUrl ? (
+                  <img
+                    src={me.photoUrl}
+                    alt={me.name}
+                    className="w-9 h-9 rounded-full object-cover border border-outline-variant/30 shrink-0"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center shrink-0">
+                    {initials(me.name)}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="font-label-md text-label-md text-on-surface truncate">
                     {me.name} <span className="text-primary">(You)</span>

@@ -100,7 +100,11 @@ export default async function TestResultPage({
   return (
     <>
       {switcher}
-      {analysis.isDpp ? <DppResultDashboard analysis={analysis} /> : <StudentResultDashboard analysis={analysis} />}
+      {analysis.isDpp && !analysis.isChapterTest ? (
+        <DppResultDashboard analysis={analysis} />
+      ) : (
+        <StudentResultDashboard analysis={analysis} />
+      )}
     </>
   );
 }

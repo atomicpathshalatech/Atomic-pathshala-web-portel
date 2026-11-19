@@ -53,7 +53,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const question = await prisma.question.findFirst({
     where: {
       OR: buildSlugFilter(params.slug),
-      isPublished: true,
     },
     select: {
       id: true,
@@ -103,7 +102,7 @@ export default async function IndividualQuestionPage({ params }: Props) {
   const question = await prisma.question.findFirst({
     where: {
       OR: buildSlugFilter(params.slug),
-      isPublished: true,
+      ...(isAuthorized ? {} : { isPublished: true }),
     },
     select: {
       id: true,

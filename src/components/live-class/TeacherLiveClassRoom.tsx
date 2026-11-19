@@ -1238,6 +1238,19 @@ export function TeacherLiveClassRoom({
     };
   }, []);
 
+  // Auto-scroll to active slide when slide drawer is opened (Phase 13)
+  useEffect(() => {
+    if (openPopup === "pages" && slideListScrollRef.current) {
+      const timer = setTimeout(() => {
+        const activeEl = slideListScrollRef.current?.querySelector<HTMLElement>('[data-active-slide="true"]');
+        if (activeEl) {
+          activeEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [openPopup, wbSession?.activePageNumber]);
+
   const [activeQuiz, setActiveQuiz] = useState<ActiveQuiz | null>(null);
   useEffect(() => {
     activeQuizIdRef.current = activeQuiz?.id ?? null;
@@ -5155,6 +5168,7 @@ export function TeacherLiveClassRoom({
                           e.preventDefault();
                           handleDropReorder(idx);
                         }}
+                        data-active-slide={active ? "true" : undefined}
                         className={`group/slide relative rounded-xl p-2 border transition-all duration-150 select-none ${
                           isDragging
                             ? "opacity-30 scale-95 border-dashed border-blue-400 bg-blue-950/40"

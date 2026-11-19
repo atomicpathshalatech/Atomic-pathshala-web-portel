@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FullTestAnalysisResult, QuestionReviewItem } from "@/lib/test-engine/analysis-engine";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
+import { LeaderboardModal } from "./LeaderboardModal";
 
 export function DppResultDashboard({
   analysis,
@@ -13,6 +14,7 @@ export function DppResultDashboard({
 }) {
   const [filter, setFilter] = useState<"ALL" | "INCORRECT" | "UNATTEMPTED" | "CORRECT">("ALL");
   const [lang, setLang] = useState<"EN" | "HI">("EN");
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -99,6 +101,16 @@ export function DppResultDashboard({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setIsLeaderboardOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-xs font-bold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+            title="View Official Test Leaderboard"
+          >
+            <span className="material-symbols-outlined text-sm text-amber-600 dark:text-amber-400">trophy</span>
+            <span>Leaderboard</span>
+          </button>
+
           {dppPdfUrl && (
             <a
               href={dppPdfUrl}
@@ -547,6 +559,12 @@ export function DppResultDashboard({
           )}
         </div>
       </div>
+
+      <LeaderboardModal
+        testId={analysis.testId}
+        isOpen={isLeaderboardOpen}
+        onClose={() => setIsLeaderboardOpen(false)}
+      />
     </div>
   );
 }

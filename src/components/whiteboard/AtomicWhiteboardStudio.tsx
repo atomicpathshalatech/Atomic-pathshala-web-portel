@@ -242,6 +242,19 @@ export function AtomicWhiteboardStudio({
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [isSlidePanelOpen, setIsSlidePanelOpen] = useState(false);
 
+  // Auto-scroll to active slide when slide drawer is opened (Phase 13)
+  useEffect(() => {
+    if (isSlidePanelOpen) {
+      const timer = setTimeout(() => {
+        const activeEl = document.querySelector<HTMLElement>('[data-studio-active-slide="true"]');
+        if (activeEl) {
+          activeEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isSlidePanelOpen, activeSlideIndex]);
+
   // ---- TOOLS & PALETTES ----
   const [tool, setTool] = useState<"pen" | "highlighter" | "eraser" | "shape" | "select">("pen");
   const [penStyle, setPenStyle] = useState<PenStyleId>("hard");
@@ -958,7 +971,11 @@ export function AtomicWhiteboardStudio({
       id: `s-${Date.now()}`,
       theme: current.theme,
       title: `${current.title} (Copy)`,
-      strokes: JSON.parse(JSON.stringify(current.strokes)),
+      strokes: (current.strokes || []).map((s) => ({
+        ...s,
+        id: `stk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        points: s.points ? [...s.points] : [],
+      })),
       imageUrl: current.imageUrl,
     };
     const updated = [...slides];
@@ -1196,6 +1213,7 @@ export function AtomicWhiteboardStudio({
               {slides.map((s, idx) => (
                 <div
                   key={s.id}
+                  data-studio-active-slide={idx === activeSlideIndex ? "true" : undefined}
                   onClick={() => {
                     setActiveSlideIndex(idx);
                     setIsSlidePanelOpen(false);

@@ -13,6 +13,7 @@ export interface TestExportOptions {
   logoUrl?: string | null;
   targetCourse?: string;
   testPattern?: string;
+  isChapterTest?: boolean;
   /** Open the browser's print dialog ("Save as PDF") as soon as the pages are laid out. */
   autoPrint?: boolean;
   /** DPP only: the front page (renderDppCoverHtml), printed before the questions / solutions. */
@@ -345,10 +346,15 @@ export function generateTestPaperHtml(
   options: TestExportOptions
 ): string {
   const { withSolution, brandName = "ATOMIC PATHSHALA", autoPrint = false } = options;
-  // A DPP is practice, not an exam: its sheet has no exam cover, OMR rules,
-  // rough-work pages or back cover — just a title strip and the questions.
-  const isDpp = String(options.testPattern || test.examType || "").toUpperCase() === "DPP";
-  const footerCode = isDpp ? "DPP" : test.code || "9610WMD801490250051";
+  // A Chapter Test receives a full booklet cover with Chapter title substitution.
+  // A DPP is basic practice: title strip only without booklet cover.
+  const isChapterTest = Boolean(test.chapter) || Boolean(options.isChapterTest) || test.examType === "CHAPTER_TEST" || test.name?.toLowerCase().includes("chapter test");
+  const isDpp = !isChapterTest && String(options.testPattern || test.examType || "").toUpperCase() === "DPP";
+  const footerCode = isChapterTest
+    ? `CH-${(test.chapter?.title || test.name).slice(0, 18).toUpperCase().replace(/[^A-Z0-9]/g, "-")}`
+    : isDpp
+    ? "DPP"
+    : test.code || "9610WMD801490250051";
   // Footer, left: a DPP carries the brand in colour; a test its code.
   const footerLeftHtml = isDpp
     ? `<span class="footer-brand">ATOMIC <span>PATHSHALA</span></span>`
@@ -592,10 +598,10 @@ export function generateTestPaperHtml(
           Dropper / 12th Pass Students
         </div>
 
-        <!-- Test Type Box (White Background) -->
+        <!-- Test / Chapter Name Box (White Background) -->
         <div class="test-name-box bg-white border-2 border-black">
-          <span class="test-type-label">Test Type : </span>
-          <span class="test-type-value font-bold">${test.name}</span>
+          <span class="test-type-label">${isChapterTest ? "Chapter Test : " : "Test Type : "}</span>
+          <span class="test-type-value font-bold">${isChapterTest && test.chapter ? `${test.chapter.title}${test.chapter.subject ? ` (${test.chapter.subject})` : ""}` : test.name}</span>
         </div>
 
         <!-- BOOKLET CONTAINS & WARNING NOTICE -->
@@ -1766,12 +1772,19 @@ export function generateTestPaperHtml(
 
     .q-diagram-wrap {
       text-align: center;
-      margin: 3px 0;
+      margin: 4px 0;
+    }
+
+    .q-diagram-wrap svg, .q-camdraw-wrap svg {
+      max-width: 95% !important;
+      max-height: 140px !important;
+      height: auto !important;
+      display: inline-block;
     }
 
     .q-diagram-img {
       max-width: 90%;
-      max-height: 110px;
+      max-height: 140px;
       object-fit: contain;
       display: inline-block;
     }
@@ -2159,11 +2172,17 @@ export function generateTestPaperHtml(
       padding-right: 10px; border-right: 1.5px solid #000;
       font-family: 'Noto Serif Devanagari', 'Mangal', 'Tinos', 'Times New Roman', serif;
       font-size: 12pt; line-height: 1.5;
+      word-break: normal;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
     }
     .qp-en {
       padding-left: 10px;
       font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-size: 12.2pt; line-height: 1.4;
+      word-break: normal;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
     }
     /* Everything but KaTeX inherits the line's font and size. */
     .qp-cell *:not(.katex *):not(.katex) { font-size: inherit; line-height: inherit; }
@@ -2184,10 +2203,24 @@ export function generateTestPaperHtml(
     .opt-key { flex: 0 0 1.6em; }
     .q-opt .qp-cell:has(.opt-text img) { align-items: flex-start; }
     .opt-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-    /* Structures drawn as images were sized for a wide editor (e.g. 30%); never print them tiny. */
-    .opt-text img { min-width: 55% !important; max-width: 100% !important; height: auto !important; margin: 3px 0 !important; }
-    .q-body img, .q-fig img { max-width: 100% !important; height: auto !important; }
-    .q-diagram-img { max-height: 220px !important; }
+    /* Chemical structures and option images: responsive scaling, keep aspect ratio */
+    .opt-text img {
+      max-width: 100% !important;
+      max-height: 95px !important;
+      height: auto !important;
+      margin: 2px 0 !important;
+      object-fit: contain;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .opt-text svg {
+      max-width: 100% !important;
+      max-height: 95px !important;
+      height: auto !important;
+      display: inline-block;
+    }
+    .q-body img, .q-fig img { max-width: 100% !important; max-height: 220px !important; height: auto !important; object-fit: contain; }
+    .q-diagram-img { max-height: 180px !important; object-fit: contain; }
     .q-last .qp-cell { padding-bottom: 9px; }
     .q-last { border-bottom: 0.6px solid #bdbdbd; }
 

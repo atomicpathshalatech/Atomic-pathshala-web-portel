@@ -62,10 +62,24 @@ export async function GET(request: NextRequest) {
         ...(since ? { submittedAt: { gte: since } } : {}),
       },
       _sum: { score: true },
+      _avg: { score: true },
+      _count: { id: true },
     });
 
-    const scores = grouped.map((g) => ({ studentId: g.studentId, score: g._sum.score ?? 0 }));
-    scores.sort((a, b) => b.score - a.score);
+    const scores = grouped.map((g) => ({
+      studentId: g.studentId,
+      score: g._sum.score ?? 0,
+      avgScore: Math.round(((g._avg.score ?? 0) * 10)) / 10,
+      testsAttempted: g._count.id ?? 1,
+    }));
+    // Rank primarily by average score performance, secondary by total tests attempted & total score
+    scores.sort((a, b) => {
+      const avgDiff = b.avgScore - a.avgScore;
+      if (avgDiff !== 0) return avgDiff;
+      const countDiff = b.testsAttempted - a.testsAttempted;
+      if (countDiff !== 0) return countDiff;
+      return b.score - a.score;
+    });
 
     const totalStudents = scores.length;
     const myRow = scores.find((s) => s.studentId === me.id);
@@ -75,14 +89,15 @@ export async function GET(request: NextRequest) {
     }
 
     const myScore = myRow.score;
-    const myRank = scores.filter((s) => s.score > myScore).length + 1;
-    const belowMe = scores.filter((s) => s.score < myScore).length;
+    const myAvgScore = myRow.avgScore;
+    const myRank = scores.findIndex((s) => s.studentId === me.id) + 1;
+    const belowMe = scores.length - myRank;
     const myPercentile = totalStudents <= 1 ? 100 : Math.round((belowMe / (totalStudents - 1)) * 100);
 
     const top10 = scores.slice(0, 10);
     const topStudents = await prisma.student.findMany({
       where: { id: { in: top10.map((s) => s.studentId) } },
-      include: { user: { select: { name: true } } },
+      include: { user: { select: { name: true, photoUrl: true } } },
     });
     const byId = new Map(topStudents.map((s) => [s.id, s]));
 
@@ -91,12 +106,15 @@ export async function GET(request: NextRequest) {
       return {
         studentId: row.studentId,
         name: s?.user.name ?? "Unknown",
+        photoUrl: s?.user.photoUrl || null,
         score: row.score,
+        avgScore: row.avgScore,
+        testsAttempted: row.testsAttempted,
         rank: i + 1,
         percentile:
           totalStudents <= 1
             ? 100
-            : Math.round((scores.filter((x) => x.score < row.score).length / (totalStudents - 1)) * 100),
+            : Math.round(((totalStudents - (i + 1)) / (totalStudents - 1)) * 100),
       };
     });
 
@@ -107,7 +125,10 @@ export async function GET(request: NextRequest) {
       me: {
         studentId: me.id,
         name: me.user.name,
+        photoUrl: me.user.photoUrl || null,
         score: myScore,
+        avgScore: myAvgScore,
+        testsAttempted: myRow.testsAttempted,
         rank: myRank,
         percentile: myPercentile,
       },

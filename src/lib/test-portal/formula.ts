@@ -506,14 +506,15 @@ function renderSegments(segments: Segment[]): string {
         return `<em>${escapeHtml(seg.content)}</em>`;
       }
       if (seg.type === "image") {
-        let width = "60%";
+        let widthStyle = "max-width: 100%; max-height: 280px; width: auto; height: auto;";
         const rawWidth = (seg.width || "").trim();
         if (/^\d+%?$/.test(rawWidth)) {
-          width = rawWidth.endsWith("%") ? rawWidth : `${rawWidth}%`;
+          const w = rawWidth.endsWith("%") ? rawWidth : `${rawWidth}%`;
+          widthStyle = `width: ${w}; max-width: 100%; height: auto;`;
         } else if (/^\d+px$/.test(rawWidth)) {
-          width = rawWidth;
+          widthStyle = `width: ${rawWidth}; max-width: 100%; height: auto;`;
         }
-        return `<img src="${escapeHtml(seg.content)}" style="width:${width};max-width:100%;height:auto;display:block;margin:8px 0;border-radius:8px;" alt="Diagram" />`;
+        return `<img src="${escapeHtml(seg.content)}" style="${widthStyle} display: inline-block; vertical-align: middle; margin: 4px auto; border-radius: 6px; object-fit: contain;" alt="Diagram" />`;
       }
       try {
         const cleanFormula = seg.content.trim();
