@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { requireTeam } from "@/lib/pyq/api";
+import { requireTeamUser } from "@/lib/pyq/api";
 import { getMasterNcertChapters, normalizeSubjectName } from "@/lib/academic/master-ncert-catalog";
 
 /**
@@ -13,7 +13,30 @@ import { getMasterNcertChapters, normalizeSubjectName } from "@/lib/academic/mas
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireTeam(PERMISSIONS.QUESTION_READ);
+    const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_READ);
+    const roleUpper = (sessionUser.role || "").toUpperCase();
+    const isSuperAdmin =
+      roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
+
+    // Team members who are not Super Admin/Admin can only see questions assigned to them
+    const userAssignmentScope: any = !isSuperAdmin
+      ? {
+          OR: [
+            { assignedToId: sessionUser.id },
+            {
+              pyqAssignments: {
+                some: {
+                  assignment: {
+                    assignedToId: sessionUser.id,
+                    status: { not: "CANCELLED" },
+                  },
+                },
+              },
+            },
+          ],
+        }
+      : {};
+
     const sp = request.nextUrl.searchParams;
     const examParam = sp.get("exam")?.trim();
     const subjectParam = sp.get("subject")?.trim();
@@ -59,6 +82,7 @@ export async function GET(request: NextRequest) {
                 },
               }
             : {}),
+          ...userAssignmentScope,
         },
         _count: { id: true },
       });
@@ -87,6 +111,7 @@ export async function GET(request: NextRequest) {
         subject: normSubject,
         examId,
         examName,
+        isSuperAdmin,
         chapters: chaptersWithCounts,
       });
     }
@@ -102,6 +127,7 @@ export async function GET(request: NextRequest) {
             },
           }
         : {}),
+      ...userAssignmentScope,
     };
 
     // Calculate metrics across all questions in this chapter
@@ -299,6 +325,8 @@ export async function GET(request: NextRequest) {
       chapter: chapterParam,
       examId,
       examName,
+      isSuperAdmin,
+      currentUserId: sessionUser.id,
       tab: isVerifiedTab ? "verified" : "unverified",
       statusFilter: statusParam,
       metrics: {

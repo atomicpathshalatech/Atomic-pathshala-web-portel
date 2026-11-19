@@ -39,6 +39,8 @@ type ChapterDetail = {
   yearDistribution: { year: number; count: number }[];
   topicDistribution: { topic: string; count: number }[];
   questions: any[];
+  isSuperAdmin?: boolean;
+  currentUserId?: string;
 };
 
 export function PyqChapterWiseView({
@@ -306,14 +308,16 @@ export function PyqChapterWiseView({
 
                   {/* Top Chapter Actions */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAssignmentModal({ open: true, mode: "CHAPTER" })}
-                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">assignment_ind</span>
-                      <span>Assign Chapter</span>
-                    </button>
+                    {detail.isSuperAdmin !== false && (
+                      <button
+                        type="button"
+                        onClick={() => setAssignmentModal({ open: true, mode: "CHAPTER" })}
+                        className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">assignment_ind</span>
+                        <span>Assign Chapter</span>
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -432,7 +436,7 @@ export function PyqChapterWiseView({
                 </div>
 
                 {/* Batch Actions when Checkboxes are checked */}
-                {selectedQuestionIds.size > 0 && (
+                {selectedQuestionIds.size > 0 && detail.isSuperAdmin !== false && (
                   <div className="flex items-center gap-2 animate-in fade-in">
                     <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
                       {selectedQuestionIds.size} selected

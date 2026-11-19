@@ -82,11 +82,46 @@ export async function GET(
       return apiError("Question not found", 404);
     }
 
+    const roleUpper = (sessionUser.role || "").toUpperCase();
+    const isSuperAdmin =
+      roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
+
+    // Team members who are not Super Admin/Admin can only see and review questions assigned to them
+    if (!isSuperAdmin) {
+      const isAssigned =
+        question.assignedToId === sessionUser.id ||
+        question.pyqAssignments.some(
+          (pa) => pa.assignment?.assignedTo?.id === sessionUser.id
+        );
+      if (!isAssigned) {
+        return apiError("This question is not assigned to you for review.", 403);
+      }
+    }
+
+    const userSiblingScope: any = !isSuperAdmin
+      ? {
+          OR: [
+            { assignedToId: sessionUser.id },
+            {
+              pyqAssignments: {
+                some: {
+                  assignment: {
+                    assignedToId: sessionUser.id,
+                    status: { not: "CANCELLED" },
+                  },
+                },
+              },
+            },
+          ],
+        }
+      : {};
+
     // Find siblings in the same chapter to allow seamless next/previous question review
     const siblings = await prisma.question.findMany({
       where: {
         subject: question.subject,
         chapter: question.chapter,
+        ...userSiblingScope,
       },
       orderBy: [{ pyqYear: "desc" }, { createdAt: "desc" }],
       take: 200,
@@ -120,6 +155,7 @@ export async function GET(
       },
     });
   } catch (error) {
+    console.error("[pyq_review_post_error]", error);
     return handleApiError(error);
   }
 }
@@ -154,16 +190,35 @@ export async function POST(
       where: { id },
       include: {
         translations: true,
+        pyqOccurrences: true,
         pyqAssignments: {
           where: { assignment: { status: { not: "CANCELLED" } } },
           orderBy: { createdAt: "desc" },
           take: 1,
+          include: {
+            assignment: { select: { id: true, assignedToId: true } },
+          },
         },
       },
     });
 
     if (!existingQuestion) {
       return apiError("Question not found", 404);
+    }
+
+    const roleUpper = (sessionUser.role || "").toUpperCase();
+    const isSuperAdmin =
+      roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
+
+    if (!isSuperAdmin) {
+      const isAssigned =
+        existingQuestion.assignedToId === sessionUser.id ||
+        existingQuestion.pyqAssignments.some(
+          (pa) => pa.assignment?.assignedToId === sessionUser.id
+        );
+      if (!isAssigned) {
+        return apiError("You cannot review or verify a question that is not assigned to you.", 403);
+      }
     }
 
     const assignmentJunction = existingQuestion.pyqAssignments[0];
@@ -220,8 +275,8 @@ export async function POST(
         });
 
         // Update PyqOccurrence if present
-        if (existingQuestion.pyqOccurrences.length > 0 && (editedQuestion.pyqYear || editedQuestion.pyqExam || editedQuestion.session || editedQuestion.shift || editedQuestion.paper)) {
-          const occ = existingQuestion.pyqOccurrences[0];
+        if ((existingQuestion.pyqOccurrences?.length ?? 0) > 0 && (editedQuestion.pyqYear || editedQuestion.pyqExam || editedQuestion.session || editedQuestion.shift || editedQuestion.paper)) {
+          const occ = existingQuestion.pyqOccurrences![0];
           await tx.pyqOccurrence.update({
             where: { id: occ.id },
             data: {
@@ -482,6 +537,7 @@ export async function POST(
       result: updated,
     });
   } catch (error) {
+    console.error("[pyq_review_post_error]", error);
     return handleApiError(error);
   }
 }

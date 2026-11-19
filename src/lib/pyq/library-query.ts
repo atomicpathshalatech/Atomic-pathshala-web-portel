@@ -30,6 +30,7 @@ export type LibraryFilters = {
   jobId: string | null;
   q: string | null;
   usableOnly: boolean;
+  assignedUserId?: string | null;
 };
 
 const list = (v: string | null) => (v ? v.split(",").map((x) => x.trim()).filter(Boolean) : []);
@@ -80,6 +81,23 @@ export function questionWhere(f: LibraryFilters): Prisma.QuestionWhereInput {
   if (f.chapter) and.push({ chapter: { equals: f.chapter, mode: "insensitive" } });
   if (f.topic) and.push({ topic: { equals: f.topic, mode: "insensitive" } });
   if (f.usableOnly) and.push({ OR: [{ isPublished: true }, { status: "PUBLISHED" }] });
+  if (f.assignedUserId) {
+    and.push({
+      OR: [
+        { assignedToId: f.assignedUserId },
+        {
+          pyqAssignments: {
+            some: {
+              assignment: {
+                assignedToId: f.assignedUserId,
+                status: { not: "CANCELLED" },
+              },
+            },
+          },
+        },
+      ],
+    });
+  }
   if (f.q) {
     and.push({
       OR: [
