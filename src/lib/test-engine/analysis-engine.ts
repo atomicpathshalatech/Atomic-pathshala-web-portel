@@ -228,6 +228,7 @@ function loadAttemptForAnalysis(attemptId: string) {
     include: {
       test: {
         include: {
+          chapter: { select: { id: true, title: true } },
           sections: {
             orderBy: { order: "asc" },
             include: {
@@ -1064,7 +1065,7 @@ export async function analyseAttempt(
     actionPlan,
     questionReviews,
     isChapterTest: Boolean(test.chapterId) || test.testType?.toUpperCase() === "CHAPTER_TEST",
-    chapterName: (test as any).chapter?.name || null,
+    chapterName: (test as any).chapter?.title || null,
     isDpp:
       (test.testType?.toUpperCase() === "DPP") ||
       (test.code?.startsWith("DPPT-") ?? false),
@@ -1090,7 +1091,7 @@ export async function getStoredTestAnalysis(
               code: true,
               testType: true,
               chapterId: true,
-              chapter: { select: { name: true } },
+              chapter: { select: { title: true } },
               batchSchedule: { select: { type: true } },
             },
           },
@@ -1251,7 +1252,7 @@ export async function getStoredTestAnalysis(
     actionPlan: (analysis.actionPlan as any) || [],
     questionReviews: storedReviews,
     isChapterTest: Boolean(analysis.attempt.test?.chapterId) || analysis.attempt.test?.testType?.toUpperCase() === "CHAPTER_TEST",
-    chapterName: (analysis.attempt.test as any)?.chapter?.name || null,
+    chapterName: (analysis.attempt.test as any)?.chapter?.title || null,
     isDpp:
       (analysis.attempt.test?.testType?.toUpperCase() === "DPP") ||
       (analysis.attempt.test?.code?.startsWith("DPPT-")) ||

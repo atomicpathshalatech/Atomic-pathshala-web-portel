@@ -152,6 +152,7 @@ export async function analyseReattempt(re: {
     prisma.test.findUnique({
       where: { id: re.testId },
       include: {
+        chapter: { select: { id: true, title: true } },
         sections: {
           orderBy: { order: "asc" },
           include: {
