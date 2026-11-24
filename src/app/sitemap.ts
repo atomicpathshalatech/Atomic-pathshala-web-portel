@@ -3,11 +3,6 @@ import { prisma } from "@/lib/db";
 import { getPublishedBlogPosts } from "@/lib/blog";
 import { buildChapterSlug } from "@/lib/pyq/slug-generator";
 
-import type { MetadataRoute } from "next";
-import { prisma } from "@/lib/db";
-import { getPublishedBlogPosts } from "@/lib/blog";
-import { buildChapterSlug } from "@/lib/pyq/slug-generator";
-
 const SITE = "https://atomicpathshala.in";
 
 // Public pages only — student, team and parent areas need a login.
