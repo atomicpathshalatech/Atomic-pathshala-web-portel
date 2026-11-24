@@ -61,6 +61,7 @@ export const TEAM_NAV_CONFIG: TeamNavGroup[] = [
   {
     title: "Website & App CMS",
     items: [
+      { href: "/team/seo", label: "SEO Manager", icon: "troubleshoot", permission: PERMISSIONS.SEO_MANAGE, superAdminOnly: true, description: "Search engine optimization, faculty SEO, keywords, audit & visibility engine" },
       { href: "/team/website/media", label: "Media Library", icon: "photo_library", permission: PERMISSIONS.MEDIA_VIEW, description: "Media assets, brand graphics, and videos" },
       { href: "/team/website/banners", label: "App & Web Banners", icon: "view_carousel", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, description: "Promotional hero banners and carousel" },
       { href: "/team/website/hero", label: "Homepage Hero Image", icon: "image", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true, description: "Main landing hero configuration" },

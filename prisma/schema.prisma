@@ -287,6 +287,7 @@ model Student {
   whiteboardBoards StudentWhiteboardBoard[]
   batchEnrollments BatchEnrollment[]
   batchOrders      BatchOrder[]
+  couponUsages     CouponUsage[]
   doubtBookings    DoubtBooking[]
   handRaises       HandRaiseEvent[]
   classroomHandRaises  ClassroomHandRaise[]
@@ -605,6 +606,7 @@ model Teacher {
   classFeedbacks   TeacherClassFeedback[]
   doubtSlots       DoubtSlot[]
   doubtBookings    DoubtBooking[]
+  seoProfile       TeacherSeo?
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([department])
@@ -777,6 +779,7 @@ model Batch {
   // is display-only (strikethrough/discount badge), never used for billing.
   price         Float?
   originalPrice Float?
+  isPurchasable Boolean     @default(true)
   createdById String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -788,6 +791,7 @@ model Batch {
   folders     BatchFolder[]
   activityEvents StudentActivityEvent[]
   orders      BatchOrder[]
+  coupons     Coupon[]
   chapterAssignments BatchChapter[]
   recordedLectures   RecordedLectureMedia[]
   testSeries  BatchTestSeries[]
@@ -907,9 +911,11 @@ model BatchEnrollment {
   enrolledById String?
   enrolledAt   DateTime              @default(now())
   droppedAt    DateTime?
+  orderId      String?               @unique
 
-  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batch   Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  student Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  order   BatchOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@unique([batchId, studentId])
   @@index([studentId])
@@ -929,14 +935,27 @@ enum BatchOrderStatus {
   PENDING
   SUCCESS
   FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
 }
 
 model BatchOrder {
   id                String           @id @default(cuid())
+  orderNumber       String?          @unique
   studentId         String
   batchId           String
+  originalAmount    Float?
+  discountAmount    Float?           @default(0)
   amount            Float
+  currency          String           @default("INR")
   status            BatchOrderStatus @default(PENDING)
+  couponId          String?
+  invoiceNumber     String?          @unique
+  gatewayProvider   String?          // e.g. "RAZORPAY", "CASHFREE", "PAYU", "FREE", "OFFLINE"
+  gatewayOrderId    String?
+  expiresAt         DateTime?
+  notes             Json?
   razorpayOrderId   String?          @unique
   razorpayPaymentId String?
   razorpaySignature String?
@@ -944,13 +963,76 @@ model BatchOrder {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batch          Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  coupon         Coupon?          @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  enrollment     BatchEnrollment?
+  paymentRecords PaymentRecord[]
+  refunds        BatchRefund[]
 
   @@index([studentId])
   @@index([batchId])
   @@index([status])
+  @@index([orderNumber])
+  @@index([gatewayOrderId])
   @@map("batch_orders")
+}
+
+enum CommercePaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model PaymentRecord {
+  id               String                @id @default(cuid())
+  orderId          String
+  amount           Float
+  currency         String                @default("INR")
+  gatewayProvider  String                // "RAZORPAY", "CASHFREE", "PAYU", "OFFLINE", "FREE"
+  gatewayOrderId   String?
+  gatewayPaymentId String?
+  gatewaySignature String?
+  status           CommercePaymentStatus @default(PENDING)
+  method           String?               // "UPI", "CARD", "NETBANKING", "WALLET", "OFFLINE", "FREE"
+  failureReason    String?
+  metadata         Json?
+  initiatedAt      DateTime              @default(now())
+  completedAt      DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  order            BatchOrder            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds          BatchRefund[]
+
+  @@index([orderId])
+  @@index([gatewayOrderId])
+  @@index([gatewayPaymentId])
+  @@index([status])
+  @@map("commerce_payment_records")
+}
+
+model BatchRefund {
+  id              String       @id @default(cuid())
+  orderId         String
+  paymentRecordId String?
+  amount          Float
+  reason          String?
+  status          RefundStatus @default(PENDING)
+  gatewayRefundId String?
+  processedById   String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  order           BatchOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentRecord   PaymentRecord? @relation(fields: [paymentRecordId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([paymentRecordId])
+  @@index([status])
+  @@map("batch_refunds")
 }
 
 model BatchSchedule {
@@ -3539,7 +3621,6 @@ enum GlobalRole {
   CONTENT_GROWTH_EXECUTIVE
   ADMIN
   SUB_ADMIN
-  SUPER_ADMIN
   FOUNDER
 }
 
@@ -3938,27 +4019,75 @@ enum CouponType {
 // throws a clear, honest error rather than silently ignoring a coupon
 // code on a MONTHLY checkout.
 model Coupon {
-  id             String    @id @default(cuid())
-  code           String    @unique
-  type           CouponType
+  id                String            @id @default(cuid())
+  code              String            @unique
+  type              CouponType
   // PERCENT: 0-100. FLAT: a rupee amount, capped to the plan price so a
   // discount can never push the payable amount below zero.
-  value          Float
-  // null = valid against either plan.
-  plan           SubscriptionPlan?
+  value             Float
+  // null = valid against either plan or batch.
+  plan              SubscriptionPlan?
+  batchId           String?
+  minOrderValue     Float?
+  maxDiscountAmount Float?
   // null = unlimited uses.
-  maxRedemptions Int?
-  redeemedCount  Int       @default(0)
-  expiresAt      DateTime?
-  isActive       Boolean   @default(true)
-  createdById    String
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  maxRedemptions    Int?
+  redeemedCount     Int               @default(0)
+  expiresAt         DateTime?
+  isActive          Boolean           @default(true)
+  createdById       String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-  payments SubscriptionPayment[]
+  batch             Batch?            @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  payments          SubscriptionPayment[]
+  batchOrders       BatchOrder[]
+  usages            CouponUsage[]
 
   @@index([isActive])
+  @@index([batchId])
   @@map("coupons")
+}
+
+model CouponUsage {
+  id        String   @id @default(cuid())
+  couponId  String
+  studentId String
+  orderId   String?
+  usedAt    DateTime @default(now())
+
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, studentId, orderId])
+  @@index([couponId])
+  @@index([studentId])
+  @@map("coupon_usages")
+}
+
+enum WebhookProcessStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+model WebhookEvent {
+  id           String               @id @default(cuid())
+  provider     String               // "RAZORPAY", "CASHFREE", "PAYU", etc.
+  eventId      String               // Gateway event ID or unique hash
+  eventType    String
+  payload      Json
+  status       WebhookProcessStatus @default(PENDING)
+  errorMessage String?
+  processedAt  DateTime?
+  createdAt    DateTime             @default(now())
+
+  @@unique([provider, eventId])
+  @@index([provider])
+  @@index([status])
+  @@index([createdAt])
+  @@map("webhook_events")
 }
 
 enum RefundStatus {
@@ -8848,12 +8977,25 @@ model Employee {
   userId             String?
   teacherId          String?
   notes              String?                    @db.Text
+  panMasked          String?                    // "•••••1234A"
+  panEncrypted       String?
+  bankAccountName    String?
+  bankAccountNumberMasked String?                 // "••••••••4589"
+  bankAccountNumberEncrypted String?
+  bankIfsc           String?
+  bankName           String?
+  bankBranch         String?
+  pfUan              String?
+  esiNumber          String?
+  taxRegime          String?                    @default("NEW") // "OLD" | "NEW"
   createdById        String?
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
 
   certificates       EmployeeCertificate[]
   verificationLogs   EmployeeVerificationLog[]
+  salaryStructures   SalaryStructure[]
+  payrollItems       PayrollItem[]
 
   @@index([status])
   @@index([department])
@@ -9103,3 +9245,430 @@ model PyqReviewHistory {
   @@index([action])
   @@map("pyq_review_histories")
 }
+
+// ============================================================================
+// COMPREHENSIVE SEO INFRASTRUCTURE & VISIBILITY ENGINE MODELS
+// ============================================================================
+
+model SeoGlobalSettings {
+  id                    String   @id @default("singleton")
+  siteName              String   @default("Atomic Pathshala")
+  siteUrl               String   @default("https://atomicpathshala.in")
+  defaultTitle          String   @default("Atomic Pathshala — NEET, JEE & Board Exam Preparation")
+  defaultDescription    String   @default("India's premier education accelerator for NEET UG, JEE Main, and Foundation courses with chapter-wise PYQs, live interactive classes, and verified faculty.")
+  defaultOgTitle        String?
+  defaultOgDescription  String?
+  defaultOgImage        String?  @default("/brand/logo.png")
+  twitterCard           String   @default("summary_large_image")
+  canonicalPolicy       String   @default("STRICT_APEX") // "STRICT_APEX"
+  orgName               String   @default("Atomic Pathshala")
+  orgLogoUrl            String?  @default("/brand/logo.png")
+  orgDescription        String?  @default("Atomic Pathshala is an premier educational platform providing live classes, comprehensive test series, chapter-wise previous year questions (PYQ), and AI mentorship for NEET, JEE, and Board exams.")
+  contactEmail          String?  @default("support@atomicpathshala.in")
+  contactPhone          String?  @default("+91 8958900405")
+  addressCountry        String?  @default("IN")
+  addressLocality       String?  @default("India")
+  socialLinks           Json?    @default("[]")
+  defaultLanguage       String   @default("en-IN")
+  supportedLanguages    String[] @default(["en", "hi"])
+  robotsDefault         String   @default("index,follow")
+  gscVerificationCode   String?
+  bingVerificationCode  String?
+  updatedAt             DateTime @updatedAt
+  createdAt             DateTime @default(now())
+
+  @@map("seo_global_settings")
+}
+
+model TeacherSeo {
+  id                     String   @id @default(cuid())
+  teacherId              String   @unique
+  teacher                Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  slug                   String   @unique
+  isPublicProfileEnabled Boolean  @default(true)
+  isSeoIndexed           Boolean  @default(true)
+  isApproved             Boolean  @default(true)
+  customSeoTitle         String?
+  customMetaDescription  String?
+  canonicalUrl           String?
+  ogImageUrl             String?
+  targetKeywords         String[] @default([])
+  hindiKeywords          String[] @default([])
+  englishKeywords        String[] @default([])
+  verifiedBio            String?  @db.Text
+  teachingPhilosophy     String?  @db.Text
+  featuredLectureIds     String[] @default([])
+  updatedAt              DateTime @updatedAt
+  createdAt              DateTime @default(now())
+
+  @@index([isPublicProfileEnabled, isSeoIndexed])
+  @@map("teacher_seo")
+}
+
+model SeoKeyword {
+  id             String    @id @default(cuid())
+  keyword        String
+  cluster        String    // BRAND | TEACHER | NEET | JEE | BOARDS | CHEMISTRY | PHYSICS | BIOLOGY | PYQ | MODULES
+  searchIntent   String    @default("INFORMATIONAL") // INFORMATIONAL | COMMERCIAL | NAVIGATIONAL | TRANSACTIONAL
+  language       String    @default("en") // en | hi | hinglish
+  targetExam     String?   // NEET | JEE | BOARDS | FOUNDATION
+  targetClass    String?   // 10 | 11 | 12 | DROPPER
+  targetSubject  String?   // Chemistry | Physics | Biology | Mathematics
+  targetUrl      String
+  priority       String    @default("MEDIUM") // CRITICAL | HIGH | MEDIUM | LOW
+  status         String    @default("ACTIVE") // ACTIVE | PLANNED | RANKING | CANNIBALIZED
+  notes          String?   @db.Text
+  searchVolume   Int?
+  difficulty     Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([cluster])
+  @@index([targetUrl])
+  @@map("seo_keywords")
+}
+
+model SeoContentArticle {
+  id                 String    @id @default(cuid())
+  title              String
+  slug               String    @unique
+  contentType        String    // BLOG | EXAM_GUIDE | PREPARATION_STRATEGY | CHAPTER_GUIDE | PYQ_ANALYSIS | SUBJECT_ARTICLE
+  summary            String    @db.Text
+  content            String    @db.Text
+  primaryKeyword     String
+  secondaryKeywords  String[]  @default([])
+  searchIntent       String    @default("INFORMATIONAL")
+  targetExam         String?
+  targetSubject      String?
+  targetClass        String?
+  readingTimeMin     Int       @default(5)
+  metaTitle          String?
+  metaDescription    String?   @db.Text
+  canonicalUrl       String?
+  ogImageUrl         String?
+  status             String    @default("DRAFT") // DRAFT | PENDING_APPROVAL | PUBLISHED | ARCHIVED
+  isIndexed          Boolean   @default(true)
+  authorName         String    @default("Academic Team")
+  authorRole         String?   @default("Subject Matter Expert")
+  authorTeacherId    String?
+  faqs               Json?     @default("[]")
+  publishedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([contentType, status])
+  @@index([primaryKeyword])
+  @@map("seo_content_articles")
+}
+
+model SeoAuditIssue {
+  id             String    @id @default(cuid())
+  url            String
+  issueType      String    // MISSING_TITLE | MISSING_DESCRIPTION | MISSING_CANONICAL | MISSING_H1 | SCHEMA_ERROR | BROKEN_LINK | THIN_CONTENT | SUBDOMAIN_MISMATCH
+  severity       String    // CRITICAL | HIGH | MEDIUM | LOW
+  title          String
+  description    String    @db.Text
+  recommendedFix String    @db.Text
+  status         String    @default("OPEN") // OPEN | RESOLVED | IGNORED
+  lastDetectedAt DateTime  @default(now())
+
+  @@index([severity, status])
+  @@map("seo_audit_issues")
+}
+
+model SeoRedirect {
+  id             String    @id @default(cuid())
+  sourcePath     String    @unique
+  destinationPath String
+  statusCode     Int       @default(301)
+  isActive       Boolean   @default(true)
+  hitCount       Int       @default(0)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("seo_redirects")
+}
+
+// ==========================================
+// FINANCE, GST, BANKING, HR & PAYROLL MODELS
+// ==========================================
+
+model BusinessProfile {
+  id                   String   @id @default(cuid())
+  legalName            String   @default("Atomic Pathshala Education Private Limited")
+  tradeName            String   @default("Atomic Pathshala")
+  businessType         String   @default("PROPRIETORSHIP") // PROPRIETORSHIP, PARTNERSHIP, LLP, PRIVATE_LIMITED, OTHER
+  registeredAddress    String   @db.Text
+  state                String   @default("Uttar Pradesh")
+  stateCode            String   @default("09")
+  pincode              String?
+  contactEmail         String
+  contactPhone         String
+  businessPanMasked    String?  // "•••••1234A"
+  businessPanEncrypted String?
+  logoUrl              String?
+  website              String?  @default("https://atomicpathshala.com")
+  createdById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("business_profiles")
+}
+
+model GstSetting {
+  id                     String    @id @default(cuid())
+  registrationStatus     String    @default("PENDING") // NOT_REGISTERED, PENDING, ACTIVE, SUSPENDED, CANCELLED
+  gstin                  String?
+  registrationDate       DateTime?
+  effectiveDate          DateTime?
+  gstState               String    @default("Uttar Pradesh")
+  gstStateCode           String    @default("09")
+  taxpayerType           String    @default("REGULAR") // REGULAR, COMPOSITION, SEZ
+  gstScheme              String    @default("FORWARD_CHARGE")
+  invoicePrefix          String    @default("INV")
+  creditNotePrefix       String    @default("CN")
+  currentFinancialYear   String    @default("2026-27")
+  nextInvoiceSequence    Int       @default(1)
+  nextCreditNoteSequence Int       @default(1)
+  taxCalculationMode     String    @default("EXCLUSIVE") // INCLUSIVE, EXCLUSIVE
+  isVerified             Boolean   @default(false)
+  certificateUrl         String?
+  notes                  String?   @db.Text
+  updatedById            String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@map("gst_settings")
+}
+
+model TaxRule {
+  id             String    @id @default(cuid())
+  name           String    // e.g. "EdTech Online Courses & Coaching"
+  sacHsnCode     String    // e.g. "999293"
+  description    String?
+  cgstRate       Decimal   @default(9.00) @db.Decimal(5, 2)
+  sgstRate       Decimal   @default(9.00) @db.Decimal(5, 2)
+  igstRate       Decimal   @default(18.00) @db.Decimal(5, 2)
+  cessRate       Decimal   @default(0.00) @db.Decimal(5, 2)
+  isExempt       Boolean   @default(false)
+  effectiveFrom  DateTime  @default(now())
+  effectiveUntil DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("tax_rules")
+}
+
+model TaxInvoice {
+  id                 String    @id @default(cuid())
+  invoiceNumber      String    @unique // "INV/2026-27/0001"
+  invoiceType        String    @default("TAX_INVOICE") // TAX_INVOICE, BILL_OF_SUPPLY, CREDIT_NOTE
+  orderId            String?
+  studentId          String?
+  studentName        String
+  studentEmail       String?
+  studentPhone       String?
+  studentState       String?
+  studentStateCode   String?
+  studentGstin       String?
+  businessGstin      String?
+  placeOfSupply      String    @default("09")
+  isInterState       Boolean   @default(false)
+  taxableAmount      Decimal   @db.Decimal(10, 2)
+  cgstAmount         Decimal   @default(0) @db.Decimal(10, 2)
+  sgstAmount         Decimal   @default(0) @db.Decimal(10, 2)
+  igstAmount         Decimal   @default(0) @db.Decimal(10, 2)
+  totalTax           Decimal   @default(0) @db.Decimal(10, 2)
+  totalAmount        Decimal   @db.Decimal(10, 2)
+  currency           String    @default("INR")
+  sacCode            String    @default("999293")
+  status             String    @default("ISSUED") // ISSUED, CANCELLED, REFUNDED
+  originalInvoiceId  String?
+  pdfUrl             String?
+  qrCodeData         String?   @db.Text
+  issuedAt           DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([invoiceNumber])
+  @@index([orderId])
+  @@index([status])
+  @@map("tax_invoices")
+}
+
+model BusinessBankAccount {
+  id                     String    @id @default(cuid())
+  accountName            String
+  bankName               String
+  branchName             String?
+  accountType            String    @default("CURRENT") // CURRENT, SAVINGS, ESCROW
+  accountNumberMasked    String
+  accountNumberEncrypted String?
+  ifscCode               String
+  upiId                  String?
+  purpose                String    @default("OPERATING") // REVENUE, PAYROLL, OPERATING, TAX
+  isPrimary              Boolean   @default(false)
+  isActive               Boolean   @default(true)
+  currentBalance         Decimal   @default(0.00) @db.Decimal(12, 2)
+  notes                  String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  expenses               Expense[]
+
+  @@map("business_bank_accounts")
+}
+
+model Expense {
+  id               String               @id @default(cuid())
+  expenseNumber    String               @unique // "EXP-2026-0001"
+  category         String               // SALARIES, FACULTY_PAYMENTS, MARKETING, HOSTING, OFFICE, MODULES, EQUIPMENT, TRAVEL, SOFTWARE, OTHER
+  title            String
+  description      String?              @db.Text
+  vendorName       String
+  vendorGstin      String?
+  vendorPan        String?
+  invoiceNumber    String?
+  invoiceDate      DateTime?
+  amount           Decimal              @db.Decimal(10, 2)
+  gstAmount        Decimal              @default(0.00) @db.Decimal(10, 2)
+  tdsAmount        Decimal              @default(0.00) @db.Decimal(10, 2)
+  totalAmount      Decimal              @db.Decimal(10, 2)
+  paymentMethod    String               @default("BANK_TRANSFER")
+  paymentStatus    String               @default("PENDING") // PENDING, PAID, CANCELLED
+  approvalStatus   String               @default("PENDING") // DRAFT, PENDING, APPROVED, REJECTED
+  paymentDate      DateTime?
+  paymentReference String?
+  bankAccountId    String?
+  bankAccount      BusinessBankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  receiptUrl       String?
+  approvedById     String?
+  approvedAt       DateTime?
+  rejectionReason  String?
+  createdById      String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([category])
+  @@index([approvalStatus])
+  @@index([paymentStatus])
+  @@map("expenses")
+}
+
+model SalaryStructure {
+  id                      String    @id @default(cuid())
+  employeeId              String
+  employee                Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  paymentMode             String    @default("MONTHLY_SALARY") // MONTHLY_SALARY, PER_LECTURE, PER_HOUR, FIXED_CONTRACT, FREELANCE
+  baseSalary              Decimal   @default(0.00) @db.Decimal(10, 2)
+  hra                     Decimal   @default(0.00) @db.Decimal(10, 2)
+  specialAllowance        Decimal   @default(0.00) @db.Decimal(10, 2)
+  conveyanceAllowance     Decimal   @default(0.00) @db.Decimal(10, 2)
+  medicalAllowance        Decimal   @default(0.00) @db.Decimal(10, 2)
+  perUnitRate             Decimal   @default(0.00) @db.Decimal(10, 2)
+  pfApplicable            Boolean   @default(false)
+  pfEmployerContribution  Decimal   @default(0.00) @db.Decimal(10, 2)
+  pfEmployeeContribution  Decimal   @default(0.00) @db.Decimal(10, 2)
+  esiApplicable           Boolean   @default(false)
+  esiEmployerContribution Decimal   @default(0.00) @db.Decimal(10, 2)
+  esiEmployeeContribution Decimal   @default(0.00) @db.Decimal(10, 2)
+  tdsPercentage           Decimal   @default(0.00) @db.Decimal(5, 2)
+  effectiveFrom           DateTime  @default(now())
+  effectiveUntil          DateTime?
+  isActive                Boolean   @default(true)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([employeeId])
+  @@map("salary_structures")
+}
+
+model PayrollRun {
+  id              String        @id @default(cuid())
+  payrollMonth    String        @unique // "2026-11" (YYYY-MM)
+  title           String        // "Payroll November 2026"
+  status          String        @default("DRAFT") // DRAFT, CALCULATED, PENDING_APPROVAL, APPROVED, PAYMENT_PROCESSING, PAID, CANCELLED
+  totalGross      Decimal       @default(0.00) @db.Decimal(12, 2)
+  totalDeductions Decimal       @default(0.00) @db.Decimal(12, 2)
+  totalNet        Decimal       @default(0.00) @db.Decimal(12, 2)
+  totalEmployees  Int           @default(0)
+  preparedById    String?
+  preparedAt      DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  disbursedById   String?
+  disbursedAt     DateTime?
+  notes           String?       @db.Text
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  items           PayrollItem[]
+
+  @@index([status])
+  @@map("payroll_runs")
+}
+
+model PayrollItem {
+  id                      String     @id @default(cuid())
+  payrollRunId            String
+  payrollRun              PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employeeId              String
+  employee                Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payslipNumber           String     @unique // "PS-202611-0001"
+  paymentMode             String     @default("MONTHLY_SALARY")
+  workingDays             Int        @default(30)
+  presentDays             Decimal    @default(30.00) @db.Decimal(5, 2)
+  unpaidLeaves            Decimal    @default(0.00) @db.Decimal(5, 2)
+  lecturesDelivered       Int        @default(0)
+  hoursDelivered          Decimal    @default(0.00) @db.Decimal(6, 2)
+  basePay                 Decimal    @default(0.00) @db.Decimal(10, 2)
+  hra                     Decimal    @default(0.00) @db.Decimal(10, 2)
+  allowances              Decimal    @default(0.00) @db.Decimal(10, 2)
+  incentives              Decimal    @default(0.00) @db.Decimal(10, 2)
+  grossPay                Decimal    @default(0.00) @db.Decimal(10, 2)
+  pfDeduction             Decimal    @default(0.00) @db.Decimal(10, 2)
+  esiDeduction            Decimal    @default(0.00) @db.Decimal(10, 2)
+  tdsDeduction            Decimal    @default(0.00) @db.Decimal(10, 2)
+  advanceDeduction        Decimal    @default(0.00) @db.Decimal(10, 2)
+  leaveDeduction          Decimal    @default(0.00) @db.Decimal(10, 2)
+  totalDeductions         Decimal    @default(0.00) @db.Decimal(10, 2)
+  netPayable              Decimal    @default(0.00) @db.Decimal(10, 2)
+  payoutStatus            String     @default("PENDING") // PENDING, PROCESSING, PAID, FAILED, ON_HOLD
+  paymentReference        String?
+  paidAt                  DateTime?
+  bankName                String?
+  bankAccountNumberMasked String?
+  bankIfsc                String?
+  notes                   String?
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+
+  @@index([payrollRunId])
+  @@index([employeeId])
+  @@index([payoutStatus])
+  @@map("payroll_items")
+}
+
+model FinanceLedgerEntry {
+  id            String    @id @default(cuid())
+  entryNumber   String    @unique // "LED-2026-0001"
+  entryDate     DateTime  @default(now())
+  type          String    // CREDIT | DEBIT
+  category      String    // STUDENT_COLLECTION, GST_COLLECTED, GATEWAY_FEE, REFUND, EXPENSE, PAYROLL, SETTLEMENT, OWNER_DRAWING
+  amount        Decimal   @db.Decimal(12, 2)
+  referenceType String?   // BATCH_ORDER, SUBSCRIPTION, EXPENSE, PAYROLL_RUN, REFUND
+  referenceId   String?
+  description   String    @db.Text
+  bankAccountId String?
+  balanceAfter  Decimal?  @db.Decimal(12, 2)
+  createdById   String?
+  createdAt     DateTime  @default(now())
+
+  @@index([entryDate])
+  @@index([category])
+  @@index([referenceType, referenceId])
+  @@map("finance_ledger_entries")
+}
+

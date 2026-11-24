@@ -36,6 +36,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { StandardSolutionView } from "@/components/solutions/StandardSolutionView";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
 import {
@@ -1684,13 +1685,14 @@ export function QuestionManagementTable({
                     </button>
 
                     {showSolution && (
-                      <div className="mt-3 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 animate-in fade-in duration-150">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                          Step-by-Step Solution
-                        </span>
-                        <FormulaText
-                          text={activeTranslation?.solution || viewingQuestion.solution || ""}
-                          className="text-xs sm:text-sm font-normal text-slate-800 dark:text-slate-200 leading-relaxed block whitespace-pre-wrap"
+                      <div className="mt-3">
+                        <StandardSolutionView
+                          solution={activeTranslation?.solution || viewingQuestion.solution || ""}
+                          activeLanguage={activeLanguage === "hi" ? "HINDI" : "ENGLISH"}
+                          subject={viewingQuestion.subject}
+                          correctOptionKey={activeTranslation?.correctOptionIds?.[0]}
+                          options={typeof activeTranslation?.options === "object" && !Array.isArray(activeTranslation?.options) ? activeTranslation.options : undefined}
+                          imageUrl={viewingQuestion.imageUrl}
                         />
                       </div>
                     )}

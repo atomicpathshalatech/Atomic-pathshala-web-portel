@@ -48,7 +48,7 @@ async function runTestSuite() {
 
   // Super admin user
   let adminUser = await prisma.user.findFirst({
-    where: { role: { name: { in: ["SUPER_ADMIN", "ADMIN", "FOUNDER"] } } },
+    where: { role: { name: { in: ["ADMIN", "FOUNDER"] } } },
   });
   if (!adminUser) {
     adminUser = testStudentA.user;

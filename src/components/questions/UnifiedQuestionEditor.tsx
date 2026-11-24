@@ -41,9 +41,10 @@ import { QuestionMetadataPanel } from "./QuestionMetadataPanel";
 import { canonicalChapter, canonicalSubject } from "@/lib/academic/canonical-chapter";
 import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
 import { CamDrawEditor } from "@/components/camdraw/CamDrawEditor";
+import { normalizeQuestionStatement } from "@/lib/questions/structure-parser";
 
 export interface UnifiedQuestionEditorProps {
-  mode: "bank" | "dpp" | "test" | "exercise";
+  mode: "bank" | "dpp" | "test" | "exercise" | "pyq";
   initialQuestion?: any;
   questionId?: string;
   dppId?: string;
@@ -62,6 +63,15 @@ export interface UnifiedQuestionEditorProps {
   onNext?: () => void;
   onPrev?: () => void;
   onCancelHref?: string;
+  onClose?: () => void;
+  pyqExamId?: string;
+  pyqExamName?: string;
+  pyqYear?: number | string;
+  pyqSession?: string;
+  pyqShift?: string;
+  pyqPaper?: string;
+  pyqQuestionNumber?: string;
+  pyqExams?: Array<{ id: string; name: string }>;
   /**
    * The test/DPP syllabus: a question added to it can only belong to one of
    * these chapters (and, when a chapter lists topics, one of those topics).
@@ -1206,6 +1216,51 @@ export function UnifiedQuestionEditor({
     }
   };
 
+  // Dedicated Structure & Option Separation Tool
+  const handleSeparateAndFormatStructure = (lang: "EN" | "HI" | "BOTH") => {
+    let changed = false;
+    if (lang === "EN" || lang === "BOTH") {
+      if (statementEn.trim()) {
+        const norm = normalizeQuestionStatement(statementEn, questionType, {
+          A: optionAEn.trim(),
+          B: optionBEn.trim(),
+          C: optionCEn.trim(),
+          D: optionDEn.trim(),
+        });
+        setStatementEn(norm.cleanStatement);
+        if (norm.cleanOptions?.A) setOptionAEn(norm.cleanOptions.A);
+        if (norm.cleanOptions?.B) setOptionBEn(norm.cleanOptions.B);
+        if (norm.cleanOptions?.C) setOptionCEn(norm.cleanOptions.C);
+        if (norm.cleanOptions?.D) setOptionDEn(norm.cleanOptions.D);
+        if (norm.detectedType && norm.detectedType !== questionType) {
+          setQuestionType(norm.detectedType);
+        }
+        changed = true;
+      }
+    }
+    if (lang === "HI" || lang === "BOTH") {
+      if (statementHi.trim()) {
+        const norm = normalizeQuestionStatement(statementHi, questionType, {
+          A: optionAHi.trim(),
+          B: optionBHi.trim(),
+          C: optionCHi.trim(),
+          D: optionDHi.trim(),
+        });
+        setStatementHi(norm.cleanStatement);
+        if (norm.cleanOptions?.A) setOptionAHi(norm.cleanOptions.A);
+        if (norm.cleanOptions?.B) setOptionBHi(norm.cleanOptions.B);
+        if (norm.cleanOptions?.C) setOptionCHi(norm.cleanOptions.C);
+        if (norm.cleanOptions?.D) setOptionDHi(norm.cleanOptions.D);
+        changed = true;
+      }
+    }
+    if (changed) {
+      toast.success("Structure formatted and options separated!");
+    } else {
+      toast.info("No restructuring needed.");
+    }
+  };
+
   // J. Save Question with Strict Mandatory Metadata Validation
   const handleSaveQuestion = async (submitToReview = false) => {
     // 1. Mandatory Metadata Checks
@@ -1257,12 +1312,46 @@ export function UnifiedQuestionEditor({
     setIsSaving(true);
 
     try {
+      // Defensive structural normalization to guarantee option separation & proper types
+      const normEn = normalizeQuestionStatement(statementEn, questionType, {
+        A: optionAEn.trim(),
+        B: optionBEn.trim(),
+        C: optionCEn.trim(),
+        D: optionDEn.trim(),
+      });
+      const finalStatementEn = normEn.cleanStatement;
+      const finalOptAEn = optionAEn.trim() || normEn.cleanOptions?.A || "";
+      const finalOptBEn = optionBEn.trim() || normEn.cleanOptions?.B || "";
+      const finalOptCEn = optionCEn.trim() || normEn.cleanOptions?.C || "";
+      const finalOptDEn = optionDEn.trim() || normEn.cleanOptions?.D || "";
+      const resolvedType = normEn.detectedType || questionType;
+
+      let finalStatementHi = statementHi.trim();
+      let finalOptAHi = optionAHi.trim();
+      let finalOptBHi = optionBHi.trim();
+      let finalOptCHi = optionCHi.trim();
+      let finalOptDHi = optionDHi.trim();
+
+      if (statementHi.trim()) {
+        const normHi = normalizeQuestionStatement(statementHi, resolvedType, {
+          A: optionAHi.trim(),
+          B: optionBHi.trim(),
+          C: optionCHi.trim(),
+          D: optionDHi.trim(),
+        });
+        finalStatementHi = normHi.cleanStatement;
+        finalOptAHi = finalOptAHi || normHi.cleanOptions?.A || "";
+        finalOptBHi = finalOptBHi || normHi.cleanOptions?.B || "";
+        finalOptCHi = finalOptCHi || normHi.cleanOptions?.C || "";
+        finalOptDHi = finalOptDHi || normHi.cleanOptions?.D || "";
+      }
+
       const payload = {
         subject: subject.trim(),
         chapter: chapter.trim(),
         topic: topic.trim(),
         subTopic: subTopic.trim() || undefined,
-        type: questionType,
+        type: resolvedType,
         difficulty,
         category,
         pyqExam: pyqExam || undefined,
@@ -1271,19 +1360,19 @@ export function UnifiedQuestionEditor({
         pyqQuestionNumber: pyqExam && pyqQuestionNumber ? pyqQuestionNumber.trim() : undefined,
         marks,
         negativeMarks,
-        statementEn: statementEn.trim() || undefined,
-        statementHi: statementHi.trim() || undefined,
+        statementEn: finalStatementEn || undefined,
+        statementHi: finalStatementHi || undefined,
         optionsEn: {
-          A: optionAEn.trim(),
-          B: optionBEn.trim(),
-          C: optionCEn.trim(),
-          D: optionDEn.trim(),
+          A: finalOptAEn,
+          B: finalOptBEn,
+          C: finalOptCEn,
+          D: finalOptDEn,
         },
         optionsHi: {
-          A: optionAHi.trim(),
-          B: optionBHi.trim(),
-          C: optionCHi.trim(),
-          D: optionDHi.trim(),
+          A: finalOptAHi,
+          B: finalOptBHi,
+          C: finalOptCHi,
+          D: finalOptDHi,
         },
         correctOptionIds: [correctOption],
         correctAnswer: [correctOption],
@@ -1923,9 +2012,20 @@ export function UnifiedQuestionEditor({
 
             {/* Statement Hi */}
             <div className="space-y-1">
-              <label className="block text-xs font-bold text-slate-700">
-                प्रश्न कथन (Statement in Hindi)
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-700">
+                  प्रश्न कथन (Statement in Hindi)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleSeparateAndFormatStructure("HI")}
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-md transition"
+                  title="विकल्पों को अलग करें और सुमेलन/कथन संरचना व्यवस्थित करें"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>संरचना व विकल्प अलग करें</span>
+                </button>
+              </div>
               <textarea
                 rows={3}
                 placeholder="हिंदी में प्रश्न कथन यहाँ लिखें या इमेज पेस्ट करें (Ctrl+V)..."
@@ -2028,9 +2128,20 @@ export function UnifiedQuestionEditor({
 
             {/* Statement En */}
             <div className="space-y-1">
-              <label className="block text-xs font-bold text-slate-700">
-                Question Statement (English)
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-700">
+                  Question Statement (English)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleSeparateAndFormatStructure("EN")}
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition"
+                  title="Detect Match List, Statement I/II, or separate trailing (A)-(D) options from statement"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Format Structure &amp; Separate Options</span>
+                </button>
+              </div>
               <textarea
                 rows={3}
                 placeholder="Write question statement in English or paste image (Ctrl+V)..."

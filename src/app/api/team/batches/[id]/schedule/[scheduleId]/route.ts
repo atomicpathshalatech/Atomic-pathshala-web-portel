@@ -96,7 +96,7 @@ export async function PATCH(
     // sense (audit trail + notice-window penalty) — a same-time edit (just
     // the title/notes/teacher changing) or any non-LIVE_CLASS entry isn't.
     // This route is already admin-only (BATCH_SCHEDULE_MANAGE — held only
-    // by ACADEMIC_HEAD/SUPER_ADMIN/FOUNDER, see permissions.ts), matching
+    // by ACADEMIC_HEAD/ADMIN/FOUNDER, see permissions.ts), matching
     // the spec's "admin-only reschedule" requirement without a new
     // permission code.
     const isTimeChange =

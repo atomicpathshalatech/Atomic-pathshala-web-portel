@@ -18,7 +18,7 @@ const NAV = [
 /** Where a signed-in user's "Dashboard" goes (same rule as the site navbar). */
 function dashboardFor(role?: string | null) {
   if (role === "TEACHER" || role === "FACULTY" || role === "STAFF") return "/team";
-  if (role === "SUPER_ADMIN" || role === "ADMIN") return "/founder-dashboard";
+  if (role === "ADMIN") return "/founder-dashboard";
   if (role === "PARENT") return "/parent/dashboard";
   return "/dashboard";
 }

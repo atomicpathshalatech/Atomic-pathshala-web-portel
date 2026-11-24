@@ -9,14 +9,14 @@ export default async function TeamPortalLayout({ children }: { children: React.R
   // — this layout makes zero additional DB round trips.
   const { user, permissions } = await requireTeamSession();
   const hasTeacherProfile = Boolean(user.teacher);
-  const isSuper = user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER";
-  const superAdmin = isSuper || user.role?.name === "ADMIN";
+  const isSuper = user.role?.name === "ADMIN" || user.role?.name === "FOUNDER";
+  const superAdmin = isSuper;
 
   const visibleSections: TeamNavSection[] = TEAM_NAV_CONFIG.map((section) => ({
     title: section.title,
     items: section.items
       .filter((item) => {
-        // "View As / Role Preview" requires SUPER_ADMIN or FOUNDER specifically
+        // "View As / Role Preview" requires ADMIN or FOUNDER specifically
         if (item.href === "/team/role-preview") return isSuper;
         if (item.superAdminOnly && !superAdmin) return false;
         return superAdmin || permissions.has(item.permission as (typeof PERMISSIONS)[keyof typeof PERMISSIONS]);

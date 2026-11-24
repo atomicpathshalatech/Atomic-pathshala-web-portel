@@ -30,12 +30,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${titleName} PYQ – Previous Year Questions Chapter-Wise & Year-Wise | Atomic Pathshala`,
     description: `Complete ${titleName} previous year questions library with official answer keys, chapter-wise questions, and step-by-step solutions after login.`,
     alternates: {
-      canonical: `https://ap.atomicpathshala.in/pyq/${params.exam}`,
+      canonical: `https://atomicpathshala.in/pyq/${params.exam}`,
     },
     openGraph: {
       title: `${titleName} Previous Year Questions | Atomic Pathshala`,
       description: `Practice ${titleName} PYQs chapter-wise and year-wise with verified solutions.`,
-      url: `https://ap.atomicpathshala.in/pyq/${params.exam}`,
+      url: `https://atomicpathshala.in/pyq/${params.exam}`,
     },
   };
 }

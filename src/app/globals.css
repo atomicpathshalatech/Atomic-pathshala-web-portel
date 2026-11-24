@@ -53,6 +53,12 @@
     --sidebar-fg-muted: rgba(255, 255, 255, 0.55);
     --sidebar-hover-bg: rgba(255, 255, 255, 0.1);
     --sidebar-active-bg: rgba(255, 255, 255, 0.16);
+
+    color-scheme: light;
+  }
+
+  .dark {
+    color-scheme: dark;
   }
 
   html {
@@ -76,10 +82,101 @@
     min-height: 100dvh;
     margin: 0;
     padding: 0;
-    @apply bg-background text-on-background;
+    @apply bg-background text-on-background dark:bg-bg-dark dark:text-text-dark;
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /*
+   * ==========================================================================
+   * GLOBAL FORM CONTROLS & NATIVE SELECT/POPUP CONTRAST ENFORCEMENT
+   * Ensures that EVERY native select, input, textarea, and option maintains
+   * strict WCAG contrast across all themes and all platforms:
+   * Desktop, mobile browsers (Chrome/Safari), and Capacitor Android WebView.
+   *
+   * STRICT DESIGN SYSTEM RULE:
+   * Light background = dark text (#131b2e)
+   * Dark background = light text (#f8fafc)
+   * NEVER dark text on dark background, NEVER white text on white background.
+   * ==========================================================================
+   */
+
+  /* Base form controls: Light mode defaults */
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
+  textarea {
+    color-scheme: light;
+    color: #131b2e;
+  }
+
+  html:not(.dark) select:not([class*="bg-slate-800"]):not([class*="bg-slate-900"]):not([class*="bg-slate-950"]):not([class*="bg-black"]):not([class*="bg-gray-800"]):not([class*="bg-gray-900"]):not([class*="text-white"]):not([class*="text-slate-100"]) {
+    color-scheme: light !important;
+    color: #131b2e !important;
+  }
+
+  /* Base form controls: Dark mode defaults */
+  .dark select,
+  .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
+  .dark textarea {
+    color-scheme: dark !important;
+    color: #f8fafc !important;
+  }
+
+  /* Form controls with explicit dark background classes in light mode must force light text and dark color-scheme */
+  select[class*="bg-slate-800"],
+  select[class*="bg-slate-900"],
+  select[class*="bg-slate-950"],
+  select[class*="bg-gray-800"],
+  select[class*="bg-gray-900"],
+  select[class*="bg-gray-950"],
+  select[class*="bg-black"],
+  input[class*="bg-slate-800"],
+  input[class*="bg-slate-900"],
+  input[class*="bg-slate-950"],
+  textarea[class*="bg-slate-800"],
+  textarea[class*="bg-slate-900"] {
+    color-scheme: dark !important;
+    color: #f8fafc !important;
+  }
+
+  /*
+   * Dropdown Options & Optgroups:
+   * Native option elements rendered inside select dropdowns and OS picker dialogs.
+   * Explicitly set high-contrast background and text colors so they
+   * never render unreadable black-on-black or white-on-white.
+   */
+  option,
+  optgroup {
+    background-color: #ffffff !important;
+    color: #131b2e !important;
+  }
+
+  /* In dark mode or inside dark-themed selects, options must have dark background and light text */
+  .dark option,
+  .dark optgroup,
+  select[class*="bg-slate-800"] option,
+  select[class*="bg-slate-900"] option,
+  select[class*="bg-slate-950"] option,
+  select[class*="bg-gray-800"] option,
+  select[class*="bg-gray-900"] option,
+  select[class*="bg-gray-950"] option,
+  select[class*="bg-black"] option,
+  select[class*="dark:bg-slate-800"] option,
+  select[class*="dark:bg-slate-900"] option,
+  select[class*="dark:bg-slate-950"] option {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+  }
+
+  /* Placeholders: readable subtle gray in both themes */
+  ::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+  }
+  .dark ::placeholder {
+    color: #64748b;
+    opacity: 1;
   }
 
   /* Prevent mobile Safari & Chrome from auto-zooming when tapping inputs */

@@ -34,6 +34,9 @@ export const batchCreateSchema = z.object({
   // flow (see ThumbnailUploader). Empty string is accepted because clearing
   // the picker submits "" rather than undefined.
   thumbnailUrl: z.string().url().optional().nullable().or(z.literal("")),
+  price: z.coerce.number().min(0, "Price cannot be negative").optional().nullable(),
+  originalPrice: z.coerce.number().min(0, "Original price cannot be negative").optional().nullable(),
+  isPurchasable: z.boolean().default(true).optional(),
 });
 
 export type BatchCreateInput = z.infer<typeof batchCreateSchema>;

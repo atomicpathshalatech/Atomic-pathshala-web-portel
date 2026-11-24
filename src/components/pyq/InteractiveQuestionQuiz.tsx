@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { stripEmbeddedOptions } from "@/lib/questions/structure-parser";
+import { StandardSolutionView } from "@/components/solutions/StandardSolutionView";
 
 export interface TranslationItem {
   language: string; // "ENGLISH" | "HINDI" | ...
@@ -85,8 +87,9 @@ export function InteractiveQuestionQuiz({
   const activeTranslation =
     activeLang === "HINDI" ? hiTrans || enTrans : enTrans || hiTrans;
 
-  const curStatement = activeTranslation?.statement || statement || "";
+  const rawCurStatement = activeTranslation?.statement || statement || "";
   const curOptions = ((activeTranslation?.options || options) || {}) as Record<string, string>;
+  const curStatement = stripEmbeddedOptions(rawCurStatement, curOptions).cleanStem;
   const curSolution = activeTranslation?.solution || solution;
   const rawCorrect = activeTranslation?.correctOptionIds || correctOptionIds || [];
   const cleanCorrect = (Array.isArray(rawCorrect) ? rawCorrect : []).map((k) =>
@@ -354,30 +357,28 @@ export function InteractiveQuestionQuiz({
       {/* Solution Section */}
       <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
         {isAuthorized ? (
-          <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-black text-sm">
-                <span className="material-symbols-outlined">lightbulb</span>
+          <div className="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-white font-black text-sm">
+                <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400">verified</span>
                 <h4>
                   {activeLang === "HINDI"
                     ? "विस्तृत चरण-दर-चरण सत्यापित हल"
                     : "Detailed Step-by-Step Verified Solution"}
                 </h4>
               </div>
-              <span className="text-[10px] uppercase font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded">
-                Verified Expert Derivation
+              <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 px-2.5 py-0.5 rounded-lg">
+                Official Standard Format
               </span>
             </div>
-            <div className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 font-medium leading-relaxed pt-1">
-              <FormulaText
-                text={
-                  curSolution ||
-                  (activeLang === "HINDI"
-                    ? "इस प्रश्न का विस्तृत हल शीघ्र ही अपडेट किया जाएगा।"
-                    : "Detailed step-by-step mathematical explanation has been verified for this PYQ.")
-                }
-              />
-            </div>
+            <StandardSolutionView
+              solution={curSolution}
+              activeLanguage={activeLang}
+              correctOptionKey={cleanCorrect[0]}
+              options={curOptions}
+              subject={subject || undefined}
+              imageUrl={imageUrl}
+            />
           </div>
         ) : (
           <div className="relative overflow-hidden bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 border border-blue-200/70 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xs">

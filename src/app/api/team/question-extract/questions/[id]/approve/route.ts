@@ -20,7 +20,7 @@ export async function POST(
       (await hasPermission(session.user.id, PERMISSIONS.QUESTION_VERIFY)) ||
       (await hasPermission(session.user.id, PERMISSIONS.QUESTION_CREATE)) ||
       session.user.role === "ADMIN" ||
-      session.user.role === "SUPER_ADMIN" ||
+      session.user.role === "FOUNDER" ||
       session.user.role === "ACADEMIC_HEAD";
 
     if (!canApprove) {

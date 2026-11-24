@@ -80,7 +80,7 @@ export async function GET(
 
     const roleUpper = (sessionUser.role || "").toUpperCase();
     const isSuperAdmin =
-      roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
+      roleUpper === "FOUNDER" || roleUpper === "ADMIN";
 
     // Team members who are not Super Admin/Admin can only see and review questions assigned to them
     if (!isSuperAdmin) {
@@ -205,7 +205,7 @@ export async function POST(
 
     const roleUpper = (sessionUser.role || "").toUpperCase();
     const isSuperAdmin =
-      roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
+      roleUpper === "FOUNDER" || roleUpper === "ADMIN";
 
     const assignmentJunction =
       existingQuestion.pyqAssignments.find(

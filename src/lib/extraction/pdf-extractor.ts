@@ -268,7 +268,15 @@ const VISION_RULES = `PAGE-IMAGE RULES (exact reproduction):
 - DRAWINGS (structures drawn with bonds/rings, reaction schemes drawn as pictures, graphs, diagrams, circuits, apparatus): never as text. Put [FIGURE] where each sits (in the statement, or as the whole option text if the option is a drawing) and list it in \"figures\": {\"page\": real page number, \"place\": \"STATEMENT\"|\"A\"|\"B\"|\"C\"|\"D\", \"box\": [ymin,xmin,ymax,xmax] normalized 0–1000 on that page image} — tight around the whole drawing with its atom labels, starting after an option number like (1), excluding nearby text.
 - \"cardBox\": {\"page\": real page number, \"box\": [ymin,xmin,ymax,xmax] 0–1000} around the WHOLE printed question on its page — number, statement, table/statements, drawings and all options. If it continues on the next page, give the box of the part on its first page.
 - \"documentSource\": the publisher / coaching / book name printed on these pages (header, footer or logo text), e.g. \"ALLEN\", \"ExamGOAL\", \"Physics Wallah\", \"Aakash\"; null if none is printed.
-- SOLUTIONS: copy a printed solution; otherwise write a SHORT step-by-step one in "solution" and "solutionHi": "Concept : ..." (the rule/formula), then "Step 1 : ...", "Step 2 : ..." each on its own line, then "Final Answer : Option (X)" (Hindi: सिद्धांत / चरण 1 / अंतिम उत्तर). A calculation goes one line at a time (formula, values, result) — never several calculations on one line. Usually 3–5 short lines; no paragraphs.
+- SOLUTIONS (SOURCE PRIORITY: 1. Original PDF printed solution is PRIMARY SOURCE; 2. Teacher solution; 3. Allen module solution; 4. NCERT; 5. AI generated):
+  * When a printed solution is available in the PDF: Extract it faithfully! Preserve the original method, formulas, calculations, chemical reactions, structures, diagrams, and teacher's reasoning. Do not alter scientific meaning.
+  * Reformat every solution into the MANDATORY 4-SECTION FORMAT:
+    1. Correct Answer: **Correct Answer: Option X**
+    2. Concept Used: [Primary law, theorem, formula, or NCERT rule]
+    3. Step-by-Step Solution: [Complete, accurate, logically connected steps with ~1 line visual spacing between steps]
+    4. Final Answer: **Final Answer: [Result with units] — Option X**
+    (Hindi in "solutionHi": 1. सही उत्तर: विकल्प X, 2. प्रयुक्त अवधारणा: ..., 3. चरण-दर-चरण हल: ..., 4. अंतिम उत्तर: ...).
+  * A calculation goes one line at a time (formula, values, result) — never several calculations on one line. Plain text; LaTeX $...$ only for math, formulas and symbols.
 - \"section\": the exercise / section heading the question is printed under (e.g. \"EXERCISE-I (Conceptual Questions)\"); numbering restarts in each section, so this tells same-numbered questions apart. null if none.
 - ANSWER KEY PAGES: if a printed answer key (table or list of question numbers and answers) is on these pages, return every entry in \"answerKey\": [{\"section\": heading it belongs to or null, \"question\": 1, \"answer\": \"3\"}] exactly as printed.
 - RETURN an object {\"questions\": [ ...question objects as described below... ], \"answerKey\": [ ... ]} (this replaces the plain array at the end).
@@ -331,6 +339,7 @@ YOUR INSTRUCTIONS:
 1. EXTRACT ALL QUESTIONS IN THE DOCUMENT:
    - Identify question number (e.g. Q.1, 1., Question 1, प्रश्न 1) and map to "originalNumber" (integer).
    - Extract the question statement and all 4 options (A, B, C, D).
+   - STRICT OPTION SEPARATION: Options (A), (B), (C), (D) must NEVER be included in the "statement" or "statementHi" fields. The statement must contain ONLY the question stem, instructions, or table. All 4 options must strictly go into the "options" and "optionsHi" objects. Never duplicate options inside the statement.
    - Use standard LaTeX notation $...$ for all mathematical symbols, fractions, powers, square roots, vectors, and chemical equations (e.g. $\\text{H}_2\\text{SO}_4$, $\\text{Ca}^{2+}$, $\\frac{a}{b}$).
 
 2. LANGUAGE — PRESERVE THE ORIGINAL (CRITICAL):
@@ -363,30 +372,51 @@ YOUR INSTRUCTIONS:
      option it belongs to), in BOTH languages, and set "hasImage": true. The real drawing is cropped from
      the page and inserted there automatically, so the student sees the printed structure.
 
-4. 4-STEP STEP-BY-STEP SOLUTION GENERATION:
-   - If the document provides a solution, extract it.
+4. MANDATORY 4-SECTION BILINGUAL SOLUTION GENERATION (Source Priority: 1. Printed PDF solution is PRIMARY; 2. Teacher/Allen; 3. NCERT; 4. AI-generated):
+   - If the document provides a solution, extract it faithfully and format into the 4 sections.
    - If the document does NOT provide a solution, generate a detailed 4-step bilingual solution:
      "solution" (English):
-       Explaining : [Given parameters and what needs to be solved]
-       Concept : This question is based on [Specific scientific law / formula / concept]
-       Solution : [Derivation or option elimination]
-       Final Answer : Option (X)
+       ### 1. Correct Answer
+       **Correct Answer: Option (X)**
+
+       ### 2. Concept Used
+       [Primary scientific law, theorem, formula or NCERT rule]
+
+       ### 3. Step-by-Step Solution
+       [Accurate, logically connected steps with ~1 line visual spacing between steps]
+
+       ### 4. Final Answer
+       **Final Answer: [Result with units] — Option (X)**
+
      "solutionHi" (Hindi):
-       कथन (Explaining) : [दिया गया विवरण और उद्देश्य]
-       सिद्धांत (Concept) : यह प्रश्न [सिद्धांत/नियम] पर आधारित है।
-       हल (Solution) : [चरण-दर-चरण हल]
-       अंतिम उत्तर (Final Answer) : विकल्प (X)
+       ### 1. सही उत्तर
+       **सही उत्तर: विकल्प (X)**
+
+       ### 2. प्रयुक्त अवधारणा
+       [मुख्य वैज्ञानिक नियम, सूत्र अथवा NCERT सिद्धांत]
+
+       ### 3. चरण-दर-चरण हल
+       [स्पष्ट एवं तार्किक चरणबद्ध हल]
+
+       ### 4. अंतिम उत्तर
+       **अंतिम उत्तर: [इकाई सहित परिणाम] — विकल्प (X)**
 
 5. CORRECT ANSWER:
    - If an answer key / answer is printed, use it and set "answerKeySource": "ANSWER_KEY_SECTION".
    - Otherwise solve it and set "answerKeySource": "DEDUCED_AI"; if you cannot be sure, leave "correctAnswer" as "" — never guess.
    - Options printed as (1)(2)(3)(4) map to A, B, C, D. Multiple-correct answers as "A,C".
 
-   - MATCH THE COLUMN / ANY TABLE — write it exactly like the printed paper, as a table in the statement:
-     one header row, a "---|---" divider row, then ONE ROW PER LINE, columns separated by " | ", rows separated by \\n.
-     Example (statement): "Match Column-I with Column-II.\\n\\nColumn-I | Column-II\\n---|---\\n(A) Benzene | (P) 4\\n(B) Cyclohexane | (Q) 1\\n(C) Naphthalene | (R) 7\\n(D) But-1-ene | (S) 0"
-     Hindi (statementHi): "स्तम्भ-I | स्तम्भ-II\\n---|---\\n(A) बेंज़ीन | (P) 4\\n..."
-     Never run the pairs together on one line or inside a sentence; keep Column-I labels (A),(B),(C),(D) and Column-II labels (P),(Q),(R),(S) (or (i),(ii),(iii),(iv) as printed), and give the options as code combinations, e.g. "A-Q, B-P, C-S, D-R".
+   - MATCH THE COLUMN / ANY TABLE — write it exactly like the printed paper, as a 2-column Markdown table in the statement:
+     one header row, a "| :--- | :--- |" divider row, then ONE ROW PER LINE, columns separated by " | ", rows separated by \\n.
+     Example (statement): "Match List I with List II.\\n\\n| List I | List II |\\n| :--- | :--- |\\n| (A) 1 mole of H2O to O2 | (I) 3F |\\n| (B) 1 mole of MnO4− to Mn2+ | (II) 2F |\\n| (C) 1.5 mole of Ca from CaCl2 | (III) 1F |\\n| (D) 1 mole of FeO to Fe2O3 | (IV) 5F |\\n\\nChoose the correct answer from the options given below:"
+     Hindi (statementHi): "सूची I को सूची II से सुमेलित कीजिए:\\n\\n| सूची I | सूची II |\\n| :--- | :--- |\\n| (A) ... | (I) ... |\\n\\nनीचे दिए गए विकल्पों में से सही उत्तर चुनिए:"
+     Never run the pairs together on one line or inside a sentence; keep List I labels (A),(B),(C),(D) and List II labels (I),(II),(III),(IV) or (P),(Q),(R),(S).
+     IMPORTANT: The 4 option choices (e.g. "A-II, B-IV, C-I, D-III") must strictly be placed in the "options" and "optionsHi" objects (A, B, C, D), NEVER in the statement.
+     Set "questionType": "MATCH_THE_COLUMN".
+
+   - MULTIPLE STATEMENTS / ASSERTION REASON:
+     Always keep statements on separate lines: "**Statement I:** ...\\n\\n**Statement II:** ..." or "**Assertion (A):** ...\\n\\n**Reason (R):** ...".
+     Set "questionType": "STATEMENT_BASED" or "ASSERTION_REASON".
 
 6. QUALITY & CLASSIFICATION:
    - "subject": "Physics" | "Chemistry" | "Biology" | "Mathematics"
@@ -394,7 +424,7 @@ YOUR INSTRUCTIONS:
    - "topic": Topic name
    - "subTopic": Subtopic name
    - "difficulty": "EASY" | "MEDIUM" | "HARD"
-   - "questionType": "SINGLE_CORRECT" | "MULTI_CORRECT" | "INTEGER" | "ASSERTION_REASON" | "MATCH_THE_COLUMN"
+   - "questionType": "SINGLE_CORRECT" | "MULTI_CORRECT" | "INTEGER" | "ASSERTION_REASON" | "MATCH_THE_COLUMN" | "STATEMENT_BASED"
    - If all options (A, B, C, D), statement, answer, and solution are present and valid, set "status": "VERIFIED".
    - If options are missing or diagram is missing or answer key is ambiguous, set "status": "REVIEW_REQUIRED" with specific "reviewReasons".
 

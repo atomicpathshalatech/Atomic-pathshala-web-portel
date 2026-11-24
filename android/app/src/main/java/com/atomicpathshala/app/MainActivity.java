@@ -68,6 +68,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(FloatingPollPlugin.class);
+        registerPlugin(LiveStreamingPlugin.class);
         AtomicNotificationChannels.createAllChannels(this);
 
         final long start = SystemClock.uptimeMillis();
@@ -123,6 +124,17 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onHideCustomView() {
                 exitFullscreen();
+            }
+
+            @Override
+            public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+                runOnUiThread(() -> {
+                    try {
+                        request.grant(request.getResources());
+                    } catch (Exception e) {
+                        super.onPermissionRequest(request);
+                    }
+                });
             }
         });
     }

@@ -34,7 +34,6 @@ export default async function TeamHomePage() {
 
   const isExecutive =
     superAdmin ||
-    user.role?.name === "SUPER_ADMIN" ||
     user.role?.name === "FOUNDER" ||
     user.role?.name === "ADMIN" ||
     permissions.has(PERMISSIONS.ANALYTICS_VIEW) ||

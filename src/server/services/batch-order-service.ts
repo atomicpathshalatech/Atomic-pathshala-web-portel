@@ -1,171 +1,116 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { razorpay, verifyOrderPaymentSignature, assertPaymentGatewayConfigured } from "@/lib/payments/razorpay";
+import {
+  createBatchOrder,
+  verifyAndActivateOrder,
+  reconcileOrderFromWebhook,
+  CommerceOrderError,
+} from "./commerce-order-service";
 import type { BatchOrder } from "@prisma/client";
+import type { GatewayProvider } from "@/lib/commerce/types";
 
 export class BatchOrderError extends Error {}
 
 /**
- * Creates the Razorpay order the client-side Checkout widget needs, and a
- * PENDING BatchOrder row keyed by that order id — mirrors
- * subscription-service.ts's createCheckout() for the one-time (Order)
- * case, but for an individual batch purchase instead of a platform plan.
- * The price always comes from Batch.price (the trusted DB source), never
- * from the client.
+ * Backward-compatible wrapper around CommerceOrderService:
+ * Creates the order and initiates gateway preparation. Supports optional coupon codes.
  */
-export async function createBatchCheckout(studentId: string, batchId: string) {
-  const batch = await prisma.batch.findFirst({
-    where: { OR: [{ id: batchId }, { code: batchId }] },
-  });
-  if (!batch) throw new BatchOrderError("Batch not found.");
-  if (batch.price == null) {
-    throw new BatchOrderError("This batch is not available for individual purchase.");
-  }
-
-  const student = await prisma.student.findUnique({
-    where: { id: studentId },
-    select: { id: true, userId: true },
-  });
-  if (!student) throw new BatchOrderError("Student not found.");
-
-  const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
-  const access = await resolveBatchAccess(student.userId, batch.id);
-  if (
-    access.status === "ACTIVE_ENROLLMENT" ||
-    access.status === "ACTIVE_SUBSCRIPTION" ||
-    access.status === "ADMIN_GRANTED"
-  ) {
-    throw new BatchOrderError("You already have active access to this batch.");
-  }
-
-  const existingEnrollment = await prisma.batchEnrollment.findFirst({
-    where: { studentId: student.id, batchId: batch.id, status: "ACTIVE" },
-  });
-  if (existingEnrollment) {
-    throw new BatchOrderError("You already have active access to this batch.");
-  }
-
-  assertPaymentGatewayConfigured("Online payment is currently unavailable for this batch.");
-
-  const amount = batch.price;
-  const order = await razorpay.orders.create({
-    amount: Math.round(amount * 100),
-    currency: "INR",
-    notes: { studentId, batchId: batch.id },
-  });
-
-  const batchOrder = await prisma.batchOrder.create({
-    data: {
-      studentId,
-      batchId: batch.id,
-      amount,
-      status: "PENDING",
-      razorpayOrderId: order.id,
-    },
-  });
-
-  return { razorpayOrderId: order.id, amount, batchOrderId: batchOrder.id };
-}
-
-type ActivationResult = { order: BatchOrder; alreadyProcessed: boolean };
-
-/**
- * Race-safe activation shared by the client-verify route and the webhook
- * backup below. Only the caller that sees the order still PENDING actually
- * flips it and creates the enrollment — a concurrent retry (double-click,
- * webhook arriving alongside the client's own verify call) sees count:0
- * and just reports the already-activated state. Mirrors the reclaim
- * pattern already used by email dispatch idempotency
- * (src/lib/email/dispatch.ts's reclaimFailedLog) for the same "don't
- * double-process a concurrent retry" problem.
- */
-async function activateBatchOrder(
-  order: BatchOrder,
-  razorpayPaymentId: string,
-  razorpaySignature: string | null
-): Promise<ActivationResult> {
-  if (order.status === "SUCCESS") {
-    return { order, alreadyProcessed: true };
-  }
-
-  const claim = await prisma.batchOrder.updateMany({
-    where: { id: order.id, status: "PENDING" },
-    data: {
-      status: "SUCCESS",
-      razorpayPaymentId,
-      razorpaySignature: razorpaySignature ?? undefined,
-    },
-  });
-
-  if (claim.count === 0) {
-    const current = await prisma.batchOrder.findUnique({ where: { id: order.id } });
-    return { order: current ?? order, alreadyProcessed: true };
-  }
-
-  await prisma.batchEnrollment.upsert({
-    where: { batchId_studentId: { batchId: order.batchId, studentId: order.studentId } },
-    create: { batchId: order.batchId, studentId: order.studentId, status: "ACTIVE" },
-    update: { status: "ACTIVE", droppedAt: null },
-  });
-
+export async function createBatchCheckout(
+  studentId: string,
+  batchId: string,
+  couponCode?: string,
+  gatewayProvider?: GatewayProvider
+) {
   try {
-    const { recordActivity, syncCategoryToOutreach } = await import("@/lib/crm/lead-category");
-    const category = await recordActivity({ studentId: order.studentId, type: "PAYMENT_SUCCESS" });
-    await syncCategoryToOutreach(order.studentId, category);
-  } catch (err) {
-    console.error("Activity tracking error (batch order payment success):", err);
-  }
+    const result = await createBatchOrder({
+      studentId,
+      batchId,
+      couponCode,
+      gatewayProvider,
+    });
 
-  const updated = await prisma.batchOrder.findUnique({ where: { id: order.id } });
-  return { order: updated ?? order, alreadyProcessed: false };
+    return {
+      razorpayOrderId: result.gatewayOrderId,
+      gatewayOrderId: result.gatewayOrderId,
+      amount: result.amount,
+      originalAmount: result.originalAmount,
+      discountAmount: result.discountAmount,
+      batchOrderId: result.orderId,
+      orderNumber: result.orderNumber,
+      isFree: result.isFree,
+    };
+  } catch (err: any) {
+    if (err instanceof CommerceOrderError) {
+      throw new BatchOrderError(err.message);
+    }
+    throw err;
+  }
 }
 
+export type ActivationResult = {
+  order: BatchOrder;
+  alreadyProcessed: boolean;
+  invoiceNumber?: string | null;
+  orderNumber?: string | null;
+};
+
 /**
- * Confirms a batch purchase after the client-side Razorpay Checkout success
- * callback. Verifies the signature server-side (never trusts the browser
- * redirect alone), re-fetches the order by its server-stored
- * razorpayOrderId (never trusts a client-supplied studentId/batchId/amount),
- * and only then activates it.
+ * Confirms a batch purchase after client checkout verification.
  */
 export async function verifyAndActivateBatchOrder(
   studentId: string,
   payload: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }
 ): Promise<ActivationResult> {
-  const valid = verifyOrderPaymentSignature({
-    orderId: payload.razorpay_order_id,
-    paymentId: payload.razorpay_payment_id,
-    signature: payload.razorpay_signature,
-  });
-  if (!valid) throw new BatchOrderError("Payment signature verification failed.");
+  try {
+    const res = await verifyAndActivateOrder({
+      studentId,
+      gatewayOrderId: payload.razorpay_order_id,
+      gatewayPaymentId: payload.razorpay_payment_id,
+      gatewaySignature: payload.razorpay_signature,
+      provider: "RAZORPAY",
+    });
 
-  const order = await prisma.batchOrder.findUnique({
-    where: { razorpayOrderId: payload.razorpay_order_id },
-  });
-  if (!order || order.studentId !== studentId) {
-    throw new BatchOrderError("No matching order for this student.");
+    return {
+      order: res.order,
+      alreadyProcessed: res.alreadyProcessed,
+      invoiceNumber: res.invoiceNumber,
+      orderNumber: res.orderNumber,
+    };
+  } catch (err: any) {
+    if (err instanceof CommerceOrderError) {
+      throw new BatchOrderError(err.message);
+    }
+    throw err;
   }
-
-  return activateBatchOrder(order, payload.razorpay_payment_id, payload.razorpay_signature);
 }
 
 /**
- * Webhook backup — `payment.captured` arrives independently of the
- * client-side verify call, covering the case where a student pays and
- * closes the tab before the browser gets to call /verify. The webhook
- * route already authenticates the whole payload via
- * verifyWebhookSignature() before this is ever called, so there's no
- * per-payment client signature to check here (unlike the client-verify
- * path above) — the order id is looked up straight from the payload.
- * A no-op (returns null) for any order id that isn't a BatchOrder's, so
- * this never interferes with Subscription's own webhook handling.
+ * Webhook reconciliation backup for Razorpay payment.captured events.
  */
 export async function reconcileBatchOrderFromWebhook(payload: any): Promise<ActivationResult | null> {
   const razorpayOrderId = payload?.payment?.entity?.order_id;
   const razorpayPaymentId = payload?.payment?.entity?.id;
   if (!razorpayOrderId || !razorpayPaymentId) return null;
 
-  const order = await prisma.batchOrder.findUnique({ where: { razorpayOrderId } });
-  if (!order) return null;
+  try {
+    const res = await reconcileOrderFromWebhook({
+      provider: "RAZORPAY",
+      eventId: payload?.payment?.entity?.id || `RP_${Date.now()}`,
+      eventType: "PAYMENT_SUCCESS",
+      gatewayOrderId: razorpayOrderId,
+      gatewayPaymentId: razorpayPaymentId,
+      rawPayload: payload,
+    });
 
-  return activateBatchOrder(order, razorpayPaymentId, null);
+    if (!res) return null;
+
+    return {
+      order: res.order,
+      alreadyProcessed: res.alreadyProcessed,
+      invoiceNumber: res.invoiceNumber,
+      orderNumber: res.orderNumber,
+    };
+  } catch {
+    return null;
+  }
 }

@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Media & Live Classroom Audio / Video -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -98,6 +101,16 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Live class interactive floating poll overlay over external YouTube video" />
+        </service>
+
+        <!-- Live Teaching Session Foreground Streaming Service -->
+        <service
+            android:name=".LiveClassStreamingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|camera|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Maintains live teaching audio video streaming and class session active when app is minimized" />
         </service>
 
         <!-- Firebase Cloud Messaging Defaults -->

@@ -20,12 +20,12 @@ export const metadata: Metadata = {
     "Atomic Pathshala",
   ],
   alternates: {
-    canonical: "https://ap.atomicpathshala.in/pyq",
+    canonical: "https://atomicpathshala.in/pyq",
   },
   openGraph: {
     title: "NEET & JEE PYQ Library – Atomic Pathshala",
     description: "Complete chapter-wise and year-wise question bank in Hindi & English with verified solutions.",
-    url: "https://ap.atomicpathshala.in/pyq",
+    url: "https://atomicpathshala.in/pyq",
     type: "website",
   },
 };

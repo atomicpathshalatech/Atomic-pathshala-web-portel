@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     if (roleFilter !== "ALL") {
       if (roleFilter === "STAFF") {
-        where.role = { in: ["SUPER_ADMIN", "ADMIN", "TEACHER", "STAFF", "OPERATIONS", "ACADEMIC_OPERATIONS", "FINANCE"] };
+        where.role = { in: ["ADMIN", "TEACHER", "STAFF", "OPERATIONS", "ACADEMIC_OPERATIONS", "FINANCE"] };
       } else if (roleFilter === "STUDENT") {
         where.role = "STUDENT";
       } else if (roleFilter === "GUEST") {

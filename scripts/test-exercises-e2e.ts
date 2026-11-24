@@ -64,7 +64,7 @@ async function seedQuestions(tag: string) {
 
 (async () => {
   const tag = crypto.randomUUID().slice(0, 6);
-  const { s: admin } = await userWithRole("SUPER_ADMIN");
+  const { s: admin } = await userWithRole("ADMIN");
   const { s: student } = await userWithRole("STUDENT");
   const { s: sales } = await userWithRole("SALES");
   const anon = new HttpSession(BASE);

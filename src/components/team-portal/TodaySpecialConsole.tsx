@@ -89,15 +89,15 @@ export function TodaySpecialConsole() {
           <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 p-5 max-h-[85vh] overflow-y-auto">
             <h3 className="font-bold mb-3">New Today Special</h3>
             <label className="text-xs text-slate-500">Date (MM-DD)</label>
-            <input value={draft.specialDate} onChange={(e) => setDraft({ ...draft, specialDate: e.target.value })} placeholder="09-15" className="w-full mb-2 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+            <input value={draft.specialDate} onChange={(e) => setDraft({ ...draft, specialDate: e.target.value })} placeholder="09-15" className="w-full mb-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
             <label className="text-xs text-slate-500">Title</label>
-            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="w-full mb-2 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="w-full mb-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
             <label className="text-xs text-slate-500">Content</label>
-            <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={4} className="w-full mb-2 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+            <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={4} className="w-full mb-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
             <div className="grid grid-cols-3 gap-2 mb-3">
-              <input value={draft.targetClass} onChange={(e) => setDraft({ ...draft, targetClass: e.target.value })} placeholder="Class (optional)" className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
-              <input value={draft.targetExam} onChange={(e) => setDraft({ ...draft, targetExam: e.target.value })} placeholder="Exam (optional)" className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
-              <input value={draft.targetBoard} onChange={(e) => setDraft({ ...draft, targetBoard: e.target.value })} placeholder="Board (optional)" className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+              <input value={draft.targetClass} onChange={(e) => setDraft({ ...draft, targetClass: e.target.value })} placeholder="Class (optional)" className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+              <input value={draft.targetExam} onChange={(e) => setDraft({ ...draft, targetExam: e.target.value })} placeholder="Exam (optional)" className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+              <input value={draft.targetBoard} onChange={(e) => setDraft({ ...draft, targetBoard: e.target.value })} placeholder="Board (optional)" className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setCreating(false)} className="px-3 py-1.5 text-sm rounded-lg border border-slate-300 dark:border-slate-700">Cancel</button>

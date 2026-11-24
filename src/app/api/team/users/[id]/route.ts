@@ -66,7 +66,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     });
 
     const isBlanketAdmin =
-      user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER";
+      user.role?.name === "ADMIN" || user.role?.name === "FOUNDER";
 
     const effectivePermissions: Record<string, boolean> = {};
     Object.values(PERMISSIONS).forEach((permCode) => {
@@ -294,7 +294,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (!resolvedRole) {
         return NextResponse.json(
           {
-            error: `Invalid role "${body.roleName}". Please select a valid system role (e.g. SUPER_ADMIN, FOUNDER, TEACHER, ADMIN).`,
+            error: `Invalid role "${body.roleName}". Please select a valid system role (e.g. ADMIN, FOUNDER, TEACHER).`,
           },
           { status: 400 }
         );
@@ -506,7 +506,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
  * deactivation under the DELETE verb, which meant no real delete
  * capability existed anywhere for staff/team accounts despite USER_DELETE
  * already being enforced here and PERMISSIONS.USER_DELETE only ever being
- * held by SUPER_ADMIN/FOUNDER/ADMIN (see hasPermission's role bypass in
+ * held by ADMIN/FOUNDER (see hasPermission's role bypass in
  * src/lib/rbac/guard.ts).
  *
  * If the target has a Teacher profile, the same Lecture-instructor guard

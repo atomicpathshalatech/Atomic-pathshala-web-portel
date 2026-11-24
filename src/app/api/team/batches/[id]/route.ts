@@ -74,6 +74,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         startDate: data.startDate ?? null,
         endDate: data.endDate ?? null,
         capacity: data.capacity ?? null,
+        price: data.price !== undefined ? data.price : undefined,
+        originalPrice: data.originalPrice !== undefined ? data.originalPrice : undefined,
+        isPurchasable: data.isPurchasable !== undefined ? data.isPurchasable : undefined,
         ...thumbnailFields(data.thumbnailUrl),
       },
     });

@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
 
     const userRole = (session.user as any).role || "STUDENT";
     const isAdmin =
-      userRole === "SUPER_ADMIN" ||
       userRole === "ADMIN" ||
       userRole === "FOUNDER" ||
       userRole === "SUB_ADMIN";

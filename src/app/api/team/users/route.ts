@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
     const salesCount = await prisma.user.count({ where: { role: { name: "SALES" } } });
     const designerCount = await prisma.user.count({ where: { role: { name: "DESIGNER" } } });
     const videoCount = await prisma.user.count({ where: { role: { name: "VIDEO_EDITOR" } } });
-    const adminsCount = await prisma.user.count({ where: { role: { name: { in: ["SUPER_ADMIN", "ADMIN", "SUB_ADMIN", "FOUNDER"] } } } });
+    const adminsCount = await prisma.user.count({ where: { role: { name: { in: ["ADMIN", "SUB_ADMIN", "FOUNDER"] } } } });
 
     return NextResponse.json({
       users: formatted,

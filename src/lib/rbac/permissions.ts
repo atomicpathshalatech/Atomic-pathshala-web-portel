@@ -46,6 +46,20 @@ export const PERMISSIONS = {
   FINANCE_READ: "finance.read",
   FINANCE_REFUND_APPROVE: "finance.refund.approve",
   FINANCE_INVOICE_CREATE: "finance.invoice.create",
+  FINANCE_GST_MANAGE: "finance.gst.manage",
+  FINANCE_BANK_MANAGE: "finance.bank.manage",
+  FINANCE_EXPENSE_MANAGE: "finance.expense.manage",
+  FINANCE_EXPENSE_APPROVE: "finance.expense.approve",
+  FINANCE_LEDGER_VIEW: "finance.ledger.view",
+  FINANCE_REPORT_EXPORT: "finance.report.export",
+
+  // HR & Payroll
+  HR_EMPLOYEE_MANAGE: "hr.employee.manage",
+  HR_SALARY_STRUCTURE_MANAGE: "hr.salary.manage",
+  HR_PAYROLL_PREPARE: "hr.payroll.prepare",
+  HR_PAYROLL_APPROVE: "hr.payroll.approve",
+  HR_PAYROLL_DISBURSE: "hr.payroll.disburse",
+  HR_PAYSLIP_VIEW_ANY: "hr.payslip.view.any",
 
   // Subscriptions — manual grant/extend/revoke for offline/cash payments
   SUBSCRIPTION_MANAGE: "subscription.manage",
@@ -353,7 +367,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.TEACHER_READ,
     // Deliberately NOT PERMISSIONS.STUDENT_READ_ANY — Student Management
     // (the student directory: profiles, contact info, academic status,
-    // batch/course access grants) is ADMIN/SUPER_ADMIN/FOUNDER only. A
+    // batch/course access grants) is ADMIN/FOUNDER only. A
     // teacher's own view of "which students are in my batch" is served by
     // batch/attendance/doubt endpoints scoped to their own batches, none of
     // which require this permission. See /team/students/page.tsx,
@@ -732,6 +746,15 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.FINANCE_READ,
     PERMISSIONS.FINANCE_REFUND_APPROVE,
     PERMISSIONS.FINANCE_INVOICE_CREATE,
+    PERMISSIONS.FINANCE_GST_MANAGE,
+    PERMISSIONS.FINANCE_BANK_MANAGE,
+    PERMISSIONS.FINANCE_EXPENSE_MANAGE,
+    PERMISSIONS.FINANCE_EXPENSE_APPROVE,
+    PERMISSIONS.FINANCE_LEDGER_VIEW,
+    PERMISSIONS.FINANCE_REPORT_EXPORT,
+    PERMISSIONS.HR_PAYROLL_APPROVE,
+    PERMISSIONS.HR_PAYROLL_DISBURSE,
+    PERMISSIONS.HR_PAYSLIP_VIEW_ANY,
     PERMISSIONS.SUBSCRIPTION_MANAGE,
   ],
   HR: [
@@ -746,6 +769,10 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.CONTRACT_READ_ANY,
     PERMISSIONS.CONTRACT_CREATE,
     PERMISSIONS.LEADERBOARD_READ,
+    PERMISSIONS.HR_EMPLOYEE_MANAGE,
+    PERMISSIONS.HR_SALARY_STRUCTURE_MANAGE,
+    PERMISSIONS.HR_PAYROLL_PREPARE,
+    PERMISSIONS.HR_PAYSLIP_VIEW_ANY,
   ],
   MARKETING: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -769,14 +796,13 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.TEACHER_READ,
     PERMISSIONS.BATCH_READ,
   ],
-  SUPER_ADMIN: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],
+  ADMIN: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],
   FOUNDER: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],
 };
 
 export const VALID_GLOBAL_ROLES = [
-  "SUPER_ADMIN",
-  "FOUNDER",
   "ADMIN",
+  "FOUNDER",
   "SUB_ADMIN",
   "TEACHER",
   "ACADEMIC_HEAD",
@@ -818,7 +844,7 @@ export function parseGlobalRole(input: unknown): GlobalRoleName | null {
 
   // 3. Keyword / title heuristic matching
   const upper = trimmed.toUpperCase();
-  if (upper.includes("SUPER_ADMIN") || upper.includes("SUPER ADMIN")) return "SUPER_ADMIN";
+  if (upper.includes("ADMIN") || upper.includes("SUPER_ADMIN") || upper.includes("SUPER ADMIN")) return "ADMIN";
   if (upper.includes("FOUNDER")) return "FOUNDER";
   if (upper.includes("ACADEMIC_HEAD") || upper.includes("ACADEMIC HEAD")) return "ACADEMIC_HEAD";
   if (upper.includes("DEPARTMENT_HEAD") || upper.includes("DEPARTMENT HEAD")) return "DEPARTMENT_HEAD";

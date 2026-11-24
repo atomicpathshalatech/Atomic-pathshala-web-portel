@@ -6,12 +6,12 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { createBatchCheckout } from "@/server/services/batch-order-service";
 
 /**
- * Creates a Razorpay order for buying this specific batch. The price is
+ * Creates an order for buying this specific batch. The price is
  * always read from Batch.price (the trusted DB source) inside
  * createBatchCheckout — this route never accepts or forwards a
  * client-supplied amount.
  */
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return apiError("Unauthorized", 401);
@@ -19,7 +19,17 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     const student = await prisma.student.findUnique({ where: { userId: session.user.id } });
     if (!student) return apiError("No student record for this account", 404);
 
-    const result = await createBatchCheckout(student.id, params.id);
+    let couponCode: string | undefined;
+    let gatewayProvider: any;
+    try {
+      const body = await request.json();
+      couponCode = body?.couponCode?.trim() || undefined;
+      gatewayProvider = body?.gatewayProvider || undefined;
+    } catch {
+      // Body is optional
+    }
+
+    const result = await createBatchCheckout(student.id, params.id, couponCode, gatewayProvider);
 
     // CRM signal: a real checkout/payment-intent was created for this batch.
     try {

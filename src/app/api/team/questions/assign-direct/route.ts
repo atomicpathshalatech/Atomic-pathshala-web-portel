@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const canAssign =
       (await hasPermission(session.user.id, PERMISSIONS.QUESTION_ASSIGN)) ||
       session.user.role === "ADMIN" ||
-      session.user.role === "SUPER_ADMIN" ||
+      session.user.role === "FOUNDER" ||
       session.user.role === "ACADEMIC_HEAD";
 
     if (!canAssign) return apiError("Forbidden — Admin or Question Manager role required.", 403);

@@ -17,6 +17,7 @@
  */
 
 import { findExamTags, headingTagForLine, stripQuestionTag, type DetectedTag, type ExamPattern } from "./metadata-detect";
+import { normalizeQuestionStatement } from "@/lib/questions/structure-parser";
 
 export type ParsedPage = { pageNumber: number; text: string };
 
@@ -35,6 +36,7 @@ export type ParsedQuestion = {
   solution: string | null;
   hasImageHint: boolean;
   issues: string[];
+  questionType?: string;
 };
 
 export type ParseResult = {
@@ -266,11 +268,20 @@ export function parsePyqText(pages: ParsedPage[], patterns?: ExamPattern[]): Par
     }
     if (!solution) solution = solutions.get(`${b.section}#${b.number}`) ?? null;
 
-    const flat = text.replace(/\s*\n\s*/g, " ").trim();
-    const split = splitOptions(flat);
-    let statement = split ? split.stem : flat;
-    const options = split?.options ?? { A: "", B: "", C: "", D: "" };
-    if (!split) issues.push("Options not found — check the question and its options.");
+    // Use structure-aware normalizer to preserve tables/multi-statements while extracting options
+    const norm = normalizeQuestionStatement(text, undefined, null);
+    let statement = norm.cleanStatement;
+    let options = norm.cleanOptions ?? { A: "", B: "", C: "", D: "" };
+    if (!norm.cleanOptions) {
+      const flat = text.replace(/\s*\n\s*/g, " ").trim();
+      const split = splitOptions(flat);
+      if (split) {
+        statement = split.stem;
+        options = split.options;
+      } else {
+        issues.push("Options not found — check the question and its options.");
+      }
+    }
 
     // A tag inside the question ("... [NEET 2019]") belongs to this question only.
     const qTags = findExamTags(statement, patterns);
@@ -298,8 +309,9 @@ export function parsePyqText(pages: ParsedPage[], patterns?: ExamPattern[]): Par
       answer,
       answerSource,
       solution,
-      hasImageHint: FIGURE_HINT.test(flat),
+      hasImageHint: FIGURE_HINT.test(text),
       issues,
+      questionType: norm.detectedType,
     });
   }
 

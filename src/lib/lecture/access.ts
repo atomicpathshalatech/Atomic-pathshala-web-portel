@@ -6,7 +6,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 /**
  * Can this signed-in user manage (view/edit/publish/delete) a given Lecture?
  * Either they hold the admin-tier LECTURE_PUBLISH permission (ACADEMIC_HEAD/
- * SUPER_ADMIN etc.), or they're the Teacher who owns it — same "own content
+ * ADMIN etc.), or they're the Teacher who owns it — same "own content
  * only, unless admin" ownership rule as Tests (canManageTest) and the live
  * whiteboard, checked fresh against the DB every call rather than trusting
  * anything the client sent.

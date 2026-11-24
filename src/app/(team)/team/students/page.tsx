@@ -16,7 +16,7 @@ export const metadata: Metadata = {
  * console component is rendered — this is the enforcement point, not the
  * hidden nav link (see (team)/team/layout.tsx, which filters the "Student
  * Management" link off a Teacher's nav using the same permission and is
- * cosmetic only). ADMIN / SUPER_ADMIN / FOUNDER pass via STUDENT_READ_ANY;
+ * cosmetic only). ADMIN / FOUNDER pass via STUDENT_READ_ANY;
  * a Teacher hitting this URL directly gets an explicit denial screen, never
  * <StudentManagementConsole/> and never a byte of student data.
  */

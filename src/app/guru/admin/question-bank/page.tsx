@@ -145,7 +145,7 @@ export default function QuestionBankAdminPage() {
             setSearch(e.target.value);
           }}
           placeholder="Search question text/topic..."
-          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800 sm:col-span-3"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:col-span-3"
         />
         <select
           value={subject}
@@ -155,7 +155,7 @@ export default function QuestionBankAdminPage() {
             setChapter("");
             setTopic("");
           }}
-          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
         >
           <option value="">All Subjects</option>
           {data?.filters.subjects.map((s) => (
@@ -171,7 +171,7 @@ export default function QuestionBankAdminPage() {
             setChapter(e.target.value);
             setTopic("");
           }}
-          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
         >
           <option value="">All Chapters</option>
           {data?.filters.chapters.map((c) => (
@@ -186,7 +186,7 @@ export default function QuestionBankAdminPage() {
             setPage(1);
             setTopic(e.target.value);
           }}
-          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
         >
           <option value="">All Topics</option>
           {data?.filters.topics.map((t) => (
@@ -201,7 +201,7 @@ export default function QuestionBankAdminPage() {
             setPage(1);
             setDifficulty(e.target.value);
           }}
-          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
         >
           <option value="">All Difficulties</option>
           <option value="Easy">Easy</option>
@@ -214,7 +214,7 @@ export default function QuestionBankAdminPage() {
             setPage(1);
             setQuestionType(e.target.value);
           }}
-          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
         >
           <option value="">All Formats</option>
           <option value="single_correct">Single Correct MCQ</option>
@@ -294,13 +294,13 @@ export default function QuestionBankAdminPage() {
                             return { ...d, options };
                           })
                         }
-                        className="w-full rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                        className="w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                       />
                     ))}
                     <select
                       value={editDraft.correctIndex ?? 0}
                       onChange={(e) => setEditDraft((d) => ({ ...d, correctIndex: Number(e.target.value) }))}
-                      className="rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                      className="rounded-lg border border-slate-200 p-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                     >
                       {[0, 1, 2, 3].map((i) => (
                         <option key={i} value={i}>
@@ -311,7 +311,7 @@ export default function QuestionBankAdminPage() {
                     <textarea
                       value={editDraft.explanation ?? ""}
                       onChange={(e) => setEditDraft((d) => ({ ...d, explanation: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                      className="w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                       rows={2}
                     />
                     <div className="flex gap-2">

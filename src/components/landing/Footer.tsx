@@ -8,10 +8,12 @@ const DEFAULT_COLUMNS: FooterColumnItem[] = [
     id: "company",
     title: "Company",
     links: [
-      { label: "About Us", url: "/about", icon: null, openNewTab: false },
-      { label: "Career", url: "/careers", icon: null, openNewTab: false },
+      { label: "About Us", url: "/about-founder", icon: null, openNewTab: false },
+      { label: "Contact Us", url: "/contact", icon: null, openNewTab: false },
+      { label: "Course Pricing", url: "/pricing", icon: null, openNewTab: false },
       { label: "Privacy Policy", url: "/privacy", icon: null, openNewTab: false },
       { label: "Terms of Service", url: "/terms", icon: null, openNewTab: false },
+      { label: "Refund Policy", url: "/refund-policy", icon: null, openNewTab: false },
     ],
   },
   {

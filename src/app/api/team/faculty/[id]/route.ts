@@ -213,7 +213,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
  * what that cascades through and the one case it refuses — a teacher who
  * is still the instructor of record on a Lecture). Admin-tier only:
  * TEACHER_DELETE isn't granted to any role's defaults, so only
- * SUPER_ADMIN/FOUNDER/ADMIN (which bypass the defaults check entirely,
+ * ADMIN/FOUNDER (which bypass the defaults check entirely,
  * see hasPermission in src/lib/rbac/guard.ts) can reach this.
  */
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {

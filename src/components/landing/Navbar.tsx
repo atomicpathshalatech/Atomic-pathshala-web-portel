@@ -19,7 +19,7 @@ export function Navbar() {
   let dashboardHref = "/dashboard";
   if (user?.role === "TEACHER" || user?.role === "FACULTY" || user?.role === "STAFF") {
     dashboardHref = "/team";
-  } else if (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") {
+  } else if (user?.role === "ADMIN") {
     dashboardHref = "/founder-dashboard";
   } else if (user?.role === "PARENT") {
     dashboardHref = "/parent/dashboard";

@@ -220,7 +220,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const [diagnosticsData, setDiagnosticsData] = useState<{ renderTimeMs: number; loadTimeMs: number }>({ renderTimeMs: 0, loadTimeMs: 0 });
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
-  const isAdmin = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
+  const isAdmin = userRole === "ADMIN";
 
   // Undo / redo: snapshots of the whole document, taken when an edit settles —
   // typing a sentence or dragging an object is one step, not one per key or pixel.

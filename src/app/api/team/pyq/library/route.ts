@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_READ);
     const roleUpper = (sessionUser.role || "").toUpperCase();
     const isSuperAdmin =
-      roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
+      roleUpper === "FOUNDER" || roleUpper === "ADMIN";
 
     const sp = request.nextUrl.searchParams;
     const filters = parseLibraryFilters(sp);

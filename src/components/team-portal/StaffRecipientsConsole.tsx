@@ -64,12 +64,12 @@ export function StaffRecipientsConsole() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name/email…" className="flex-1 min-w-[200px] px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
-        <select value={roleName} onChange={(e) => setRoleName(e.target.value)} className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name/email…" className="flex-1 min-w-[200px] px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+        <select value={roleName} onChange={(e) => setRoleName(e.target.value)} className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
           <option value="">All roles</option>
           {roles.map((r) => <option key={r.name} value={r.name}>{r.label}</option>)}
         </select>
-        <select value={accountStatus} onChange={(e) => setAccountStatus(e.target.value)} className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <select value={accountStatus} onChange={(e) => setAccountStatus(e.target.value)} className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
           <option value="">Active/Inactive: all</option>
           <option value="ACTIVE">Active</option>
           <option value="INACTIVE">Inactive</option>

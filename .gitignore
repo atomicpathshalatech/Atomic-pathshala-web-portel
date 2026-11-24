@@ -46,3 +46,18 @@ ncr_raw_text.json
 race_raw_text.json
 class-notes-preview.html
 qa-test-documents/
+
+# Temporary root scripts and debug images
+temp_*.png
+test_*.png
+test-*.ts
+verify-*.ts
+upload-*.ts
+show-*.ts
+scripts/*.png
+scripts/*.txt
+scripts/*_items.json
+scripts/*_cache.json
+scripts/*_pages.json
+
+

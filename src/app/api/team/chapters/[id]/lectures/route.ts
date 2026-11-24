@@ -83,7 +83,7 @@ export async function POST(
       where: { id: session.user.id },
       include: { role: true },
     });
-    const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
+    const isAdmin = user?.role?.name === "ADMIN" || user?.role?.name === "FOUNDER";
 
     // Authoring lock check (Admins can add lectures anytime even after publish)
     if (!isAdmin) {

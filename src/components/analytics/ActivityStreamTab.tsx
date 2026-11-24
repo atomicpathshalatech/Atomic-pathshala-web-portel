@@ -102,8 +102,7 @@ export function ActivityStreamTab() {
 
   const getRoleBadgeColor = (role: string) => {
     const r = role.toUpperCase();
-    if (r.includes("SUPER_ADMIN")) return "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20";
-    if (r.includes("ADMIN")) return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20";
+    if (r.includes("ADMIN")) return "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20";
     if (r.includes("TEACHER") || r.includes("FACULTY")) return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
     if (r.includes("STUDENT")) return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
     return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20";

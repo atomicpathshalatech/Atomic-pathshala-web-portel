@@ -246,9 +246,9 @@ export function detectNeetQuestionType(
   }
 
   // 4. MATCH THE COLUMN - 3 COLUMNS (Column I, Column II, Column III)
-  const hasColumn1 = /\bcolumn\s*(i|1)\b|\bकॉलम\s*(i|1)\b/i.test(text);
-  const hasColumn2 = /\bcolumn\s*(ii|2)\b|\bकॉलम\s*(ii|2)\b/i.test(text);
-  const hasColumn3 = /\bcolumn\s*(iii|3)\b|\bकॉलम\s*(iii|3)\b/i.test(text);
+  const hasColumn1 = /\b(?:column|colum|list|सूची|स्तम्भ|कॉलम)\s*[-–]?\s*(?:i|1)(?:\s*\(|\s*$|\s+)/i.test(text);
+  const hasColumn2 = /\b(?:column|colum|list|सूची|स्तम्भ|कॉलम)\s*[-–]?\s*(?:ii|2)(?:\s*\(|\s*$|\s+)/i.test(text);
+  const hasColumn3 = /\b(?:column|colum|list|सूची|स्तम्भ|कॉलम)\s*[-–]?\s*(?:iii|3)(?:\s*\(|\s*$|\s+)/i.test(text);
 
   if (hasColumn1 && hasColumn2 && hasColumn3) {
     return {
@@ -259,9 +259,15 @@ export function detectNeetQuestionType(
     };
   }
 
-  // 5. MATCH THE COLUMN - 2 COLUMNS (Column I & Column II or matching pairs)
-  const hasMatchPairOptions = /\ba[\s–-]*[1-4p-s]/i.test(optionsText) || /\bp[\s–-]*[1-4a-d]/i.test(optionsText);
-  const is2ColumnMatch = (hasColumn1 && hasColumn2) || (/\bmatch\b|\bमिलान\b/i.test(lowerText) && hasMatchPairOptions);
+  // 5. MATCH THE COLUMN - 2 COLUMNS (Column/List I & Column/List II or matching pairs)
+  const hasMatchPairOptions =
+    /\b[a-d][\s–-]*(?:[1-4p-s]|i{1,3}|iv|vi{0,3})/i.test(optionsText) ||
+    /\b[p-s][\s–-]*[1-4a-d]/i.test(optionsText) ||
+    /a-[i|1|2|3|4|p|q|r|s]/i.test(optionsText);
+  const is2ColumnMatch =
+    (hasColumn1 && hasColumn2) ||
+    (/\b(?:match\s+(?:the\s+)?(?:column|list)|match\s+list|सुमेलित|सुमेलन|मिलाइए|मिलान)\b/i.test(lowerText) &&
+      (hasMatchPairOptions || hasColumn1 || text.includes("|")));
 
   if (is2ColumnMatch) {
     // Check if conceptual matching (e.g. concept ↔ principle/inhibition)
@@ -411,4 +417,19 @@ export function detectNeetQuestionType(
     confidence: 85,
     reason: "Standard multiple choice question with a single correct option.",
   };
+}
+
+/**
+ * Maps NEET question type string / category to standard QuestionType
+ */
+export function toQuestionType(typeStr?: string): string {
+  if (!typeStr) return "SINGLE_CORRECT";
+  const upper = typeStr.toUpperCase();
+  if (upper.includes("MATCH")) return "MATCH_COLUMN";
+  if (upper.includes("ASSERTION")) return "ASSERTION_REASON";
+  if (upper.includes("STATEMENT")) return "STATEMENT_BASED";
+  if (upper.includes("INTEGER")) return "INTEGER";
+  if (upper.includes("NUMERICAL")) return "NUMERICAL";
+  if (upper.includes("MULTI") && upper.includes("CORRECT")) return "MULTIPLE_CORRECT";
+  return "SINGLE_CORRECT";
 }

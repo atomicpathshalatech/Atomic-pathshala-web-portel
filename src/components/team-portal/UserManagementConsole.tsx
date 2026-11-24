@@ -40,9 +40,8 @@ export interface UserItem {
 }
 
 const PRIMARY_ROLES = [
+  { value: "ADMIN", label: "Admin (Full Access)", badge: "bg-blue-100 text-blue-800 border-blue-300" },
   { value: "TEACHER", label: "Teacher", badge: "bg-emerald-100 text-emerald-800 border-emerald-300" },
-  { value: "SUPER_ADMIN", label: "Super Admin", badge: "bg-blue-100 text-blue-800 border-blue-300" },
-  { value: "ADMIN", label: "Admin", badge: "bg-blue-100 text-blue-800 border-blue-300" },
   { value: "CONTENT_CREATOR", label: "Content Creator", badge: "bg-amber-100 text-amber-800 border-amber-300" },
   { value: "SME", label: "Subject Matter Expert (SME)", badge: "bg-blue-100 text-blue-800 border-blue-300" },
   { value: "SALES", label: "Sales", badge: "bg-cyan-100 text-cyan-800 border-cyan-300" },
@@ -772,7 +771,7 @@ export function UserManagementConsole() {
                     <select
                       value={advForm.roleName}
                       onChange={(e) => setAdvForm({ ...advForm, roleName: e.target.value })}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold"
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-bold"
                     >
                       {PRIMARY_ROLES.map((r) => (
                         <option key={r.value} value={r.value}>
@@ -787,7 +786,7 @@ export function UserManagementConsole() {
                     <select
                       value={advForm.department}
                       onChange={(e) => setAdvForm({ ...advForm, department: e.target.value })}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     >
                       {catalog.departments.map((d) => (
                         <option key={d} value={d}>
@@ -819,7 +818,7 @@ export function UserManagementConsole() {
                     <select
                       value={advForm.subject}
                       onChange={(e) => setAdvForm({ ...advForm, subject: e.target.value, subjectScope: [e.target.value] })}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     >
                       {SUBJECT_OPTIONS.map((s) => (
                         <option key={s} value={s}>
@@ -834,7 +833,7 @@ export function UserManagementConsole() {
                     <select
                       value={advForm.batchScope[0] || "ALL"}
                       onChange={(e) => setAdvForm({ ...advForm, batchScope: [e.target.value] })}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     >
                       <option value="ALL">All Batches (Unrestricted)</option>
                       <option value="NEET_2027">NEET 2027 Batches Only</option>
@@ -853,7 +852,7 @@ export function UserManagementConsole() {
                     <select
                       value={advForm.contractType}
                       onChange={(e) => setAdvForm({ ...advForm, contractType: e.target.value })}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     >
                       {catalog.contractTypes.map((c) => (
                         <option key={c.value} value={c.value}>

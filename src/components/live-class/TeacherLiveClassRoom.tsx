@@ -41,6 +41,14 @@ import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube-url";
 import { StagePreview } from "@/components/live-class/StagePreview";
 import { getDesktopBridge, type DesktopEncoderStatus } from "@/lib/desktop/bridge";
+import { isAndroid, isNativeApp } from "@/lib/platform";
+import {
+  startNativeLiveService,
+  updateNativeLiveServiceStatus,
+  stopNativeLiveService,
+  triggerCloudStageStreaming,
+  stopCloudStageStreaming,
+} from "@/lib/platform/live-stream-service";
 import { DesktopClassStreamer } from "@/lib/live-class/desktop-streamer";
 import { formatFreeCameraLayout, isBrandedTemplate, toStagePoll, type StagePoll } from "@/lib/live-class/stage-compositor";
 import { loadSavedChroma, saveChroma, type ChromaSettings } from "@/lib/live-class/chroma-key";
@@ -919,7 +927,10 @@ export function TeacherLiveClassRoom({
         }
         const d = json.data;
         setYoutubeGate({ state: d.state, streamStatus: d.streamStatus ?? null, healthStatus: d.healthStatus ?? null, error: null });
-        if (d.state === "LIVE") setYoutubeSimulcastWarning(null);
+        if (d.state === "LIVE") {
+          setYoutubeSimulcastWarning(null);
+          void updateNativeLiveServiceStatus("🔴 Live on YouTube — Broadcasting to Students");
+        }
         if (d.embedBlocked) {
           setYoutubeSimulcastWarning(
             "YouTube kept embedding OFF for this class, so students can't watch inside the app (they only get a 'watch on YouTube' button). Fix: YouTube Studio → this live video → Details → Show more → tick 'Allow embedding' → Save; students then tap Retry."
@@ -3093,21 +3104,40 @@ export function TeacherLiveClassRoom({
         // The class now holds its own stream slot: show the OBS panel with
         // this class's key and wait for YouTube to receive the stream.
         setYoutubeGate({ state: data.liveState || "YOUTUBE_CONNECTING", streamStatus: null, healthStatus: null });
+
+        if (isNativeApp() || isAndroid()) {
+          void startNativeLiveService(data?.whiteboardSession?.title || "Atomic Pathshala Live Class", "Connecting to YouTube Live…");
+          if (batchScheduleId) {
+            void triggerCloudStageStreaming(batchScheduleId);
+          }
+        }
+
         // Desktop app: send the class automatically. Browser (or no
         // encoder): fall back to the OBS panel with this class's key.
         const sending = await startDesktopStreaming();
         if (!sending) {
-          if (getDesktopBridge()) {
-            setShowObsStreamInfo(true);
-            fetchStreamKey();
-          } else {
+          setShowObsStreamInfo(true);
+          fetchStreamKey();
+          if (!getDesktopBridge() && !isNativeApp() && !isAndroid()) {
             setStartClassError(TEACHER_APP_NEEDED);
           }
         }
       } else if (data.hasManualStreamKey) {
+        if (isNativeApp() || isAndroid()) {
+          void startNativeLiveService(data?.whiteboardSession?.title || "Atomic Pathshala Live Class", "Broadcasting via custom stream key…");
+          if (batchScheduleId) {
+            void triggerCloudStageStreaming(batchScheduleId);
+          }
+        }
         // Public class with the team's own stream key: same button, same encoder.
         const sending = await startDesktopStreaming();
-        if (!sending && !getDesktopBridge()) setStartClassError(TEACHER_APP_NEEDED);
+        if (!sending) {
+          setShowObsStreamInfo(true);
+          fetchStreamKey();
+          if (!getDesktopBridge() && !isNativeApp() && !isAndroid()) {
+            setStartClassError(TEACHER_APP_NEEDED);
+          }
+        }
       }
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
@@ -3176,6 +3206,8 @@ export function TeacherLiveClassRoom({
       await flushAutosave().catch(() => undefined);
       await postJson(`/api/whiteboard/sessions/${wbSession.id}/end`);
       await stopDesktopStreaming();
+      void stopNativeLiveService();
+      if (batchScheduleId) void stopCloudStageStreaming(batchScheduleId);
       setWbSession((prev) => (prev ? { ...prev, status: "ENDED", livePhase: "ENDED" } : prev));
       setShowPostClassModal(true);
     } catch (err) {
@@ -3947,9 +3979,13 @@ export function TeacherLiveClassRoom({
               title="Open OBS setup"
             >
               <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-              {youtubeGate?.state === "YOUTUBE_ACTIVE"
+              {youtubeGate?.state === "LIVE"
+                ? "🔴 LIVE on YouTube — Broadcast active"
+                : youtubeGate?.state === "YOUTUBE_ACTIVE"
                 ? "YouTube is receiving your stream — going live…"
-                : "Waiting for your OBS stream — students will see the class once YouTube receives it"}
+                : youtubeGate?.streamStatus === "active"
+                ? "Stream connected — YouTube is receiving video data…"
+                : "Waiting for stream ingestion — students will see the class once YouTube receives it"}
             </button>
           )}
           {/* OBS Stream Key & Setup Button (shown whenever mode is YOUTUBE or BOTH) */}
@@ -5844,12 +5880,14 @@ export function TeacherLiveClassRoom({
                   </span>
                   <span>
                     {youtubeGate.state === "LIVE"
-                      ? "You are live on YouTube — students can see the class."
+                      ? "🔴 You are live on YouTube — students can see the class."
                       : youtubeGate.state === "YOUTUBE_ACTIVE"
-                      ? "YouTube is receiving your stream. Going live…"
+                      ? "YouTube is receiving your stream. Transitioning to LIVE…"
                       : youtubeGate.state === "FAILED"
                       ? "The YouTube broadcast ended before going live. End the class and start again."
-                      : `Waiting for OBS… (YouTube stream: ${youtubeGate.streamStatus ?? "not receiving"})`}
+                      : youtubeGate.streamStatus === "active"
+                      ? "Stream connected — YouTube is receiving video. Going live…"
+                      : `Waiting for stream ingestion… (YouTube stream: ${youtubeGate.streamStatus ?? "not receiving"})`}
                     {youtubeGate.error ? ` — ${youtubeGate.error}` : ""}
                   </span>
                 </div>

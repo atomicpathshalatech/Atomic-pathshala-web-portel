@@ -7,7 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 
 const DEFAULT_DEPARTMENTS_POSITIONS = [
   // Administration
-  { department: "Administration", position: "Super Admin", defaultRole: "SUPER_ADMIN" },
+  { department: "Administration", position: "Administrator", defaultRole: "ADMIN" },
   { department: "Administration", position: "Operations Manager", defaultRole: "ADMIN" },
   { department: "Administration", position: "Academic Coordinator", defaultRole: "ADMIN" },
 

@@ -199,7 +199,7 @@ export function RecordedChapterView({ chapterId }: { chapterId: string }) {
           <div className="flex flex-col sm:flex-row gap-2">
             <label className="flex-1">
               <span className="sr-only">Add to batch</span>
-              <select id="rc-add-batch" value={addBatch} onChange={(e) => setAddBatch(e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm">
+              <select id="rc-add-batch" value={addBatch} onChange={(e) => setAddBatch(e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100">
                 <option value="">Add to a batch…</option>
                 {notIn.map((b) => (
                   <option key={b.id} value={b.id}>

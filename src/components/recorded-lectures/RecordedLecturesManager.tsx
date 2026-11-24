@@ -122,7 +122,7 @@ export function RecordedLecturesManager() {
         {canManage && (
           <label>
             <span className="sr-only">Batch</span>
-            <select id="rl-batch" value={batchId} onChange={(e) => setBatchId(e.target.value)} className="w-full sm:w-56 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm">
+            <select id="rl-batch" value={batchId} onChange={(e) => setBatchId(e.target.value)} className="w-full sm:w-56 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100">
               <option value="">All batches</option>
               {batches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -134,7 +134,7 @@ export function RecordedLecturesManager() {
         )}
         <label>
           <span className="sr-only">State</span>
-          <select id="rl-state" value={state} onChange={(e) => setState(e.target.value)} className="w-full sm:w-44 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm">
+          <select id="rl-state" value={state} onChange={(e) => setState(e.target.value)} className="w-full sm:w-44 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100">
             <option value="active">Drafts & published</option>
             <option value="draft">Drafts</option>
             <option value="published">Published</option>

@@ -18,7 +18,7 @@ async function main() {
       email: "admin@atomicpathshala.com",
       password: "Admin@12345",
       name: "Atomic Admin",
-      role: "SUPER_ADMIN" as GlobalRole,
+      role: "ADMIN" as GlobalRole,
     },
     {
       email: "teacher@atomicpathshala.com",

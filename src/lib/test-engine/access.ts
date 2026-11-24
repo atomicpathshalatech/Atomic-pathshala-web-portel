@@ -6,7 +6,7 @@ import { resolveTeacherForSchedule } from "@/lib/batch/access";
 
 /**
  * Can this signed-in user manage (view/edit/publish) a given Test? Either
- * they hold the admin-tier TEST_PUBLISH permission (ACADEMIC_HEAD/SUPER_ADMIN
+ * they hold the admin-tier TEST_PUBLISH permission (ACADEMIC_HEAD/ADMIN
  * etc.), or they're a teacher actually assigned to the batch the test's
  * schedule entry belongs to — same ownership rule the live whiteboard uses,
  * checked fresh against the DB every call.

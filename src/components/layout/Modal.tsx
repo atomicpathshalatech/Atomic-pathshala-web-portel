@@ -78,7 +78,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
-        className={`relative w-full ${SIZES[size]} max-h-[100dvh] sm:max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl bg-white dark:bg-slate-900 shadow-2xl ${className}`}
+        className={`relative w-full ${SIZES[size]} max-h-[100dvh] sm:max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl ${className}`}
       >
         {children}
       </div>

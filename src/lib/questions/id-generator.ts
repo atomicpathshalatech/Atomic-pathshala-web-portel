@@ -38,17 +38,17 @@ export function isValidCanonicalQuestionId(id?: string | null): boolean {
 }
 
 /**
- * Normalizes subject string and returns the standard 3-character subject prefix (P26, C25, B24, M23, S22)
+ * Normalizes subject string and returns the standard 3-character subject prefix (P26, C26, B26, M26, S26)
  */
 export function getSubjectPrefix(subjectName?: string | null): string {
-  if (!subjectName) return "S22";
+  if (!subjectName) return SUBJECT_PREFIXES.SCIENCE;
   const normalized = subjectName.trim().toUpperCase();
   for (const [key, prefix] of Object.entries(SUBJECT_PREFIXES)) {
     if (normalized.includes(key)) {
       return prefix;
     }
   }
-  return "S22";
+  return SUBJECT_PREFIXES.SCIENCE;
 }
 
 /**

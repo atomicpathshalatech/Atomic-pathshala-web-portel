@@ -82,16 +82,39 @@ export class GeminiKeyManager {
     } else {
       const combined = readGeminiKeys();
       // Partition into verified healthy keys vs quota-restricted/depleted keys
-      const isProblematic = (k: string) =>
-        k.endsWith("av1XGw") || k.endsWith("uvlSQw") || k.endsWith("9XCwuA") || k.endsWith("tZdgbw");
-      const healthyKeys = combined.filter((k) => !isProblematic(k));
-      const problematicKeys = combined.filter((k) => isProblematic(k));
+      const isKnownWorking = (k: string) => k.endsWith("9XCwuA") || k.endsWith("tZdgbw");
+      const isKnownZeroQuota = (k: string) =>
+        k.endsWith("av1XGw") ||
+        k.endsWith("uvlSQw") ||
+        k.endsWith("pvxCYQ") ||
+        k.endsWith("NPasQg") ||
+        k.endsWith("8KSmvg") ||
+        k.endsWith("OWy_sQ") ||
+        k.endsWith("_lnb_A") ||
+        k.endsWith("tczRNw") ||
+        k.endsWith("66U_ow") ||
+        k.endsWith("G2R98Q") ||
+        k.endsWith("Dpdbcw");
 
-      if (healthyKeys.length > 0) {
-        this.freeKeys = healthyKeys;
-        this.paidKeys = problematicKeys;
+      // Immediately mark verified zero-quota keys dead so no attempts waste latency on them
+      for (const k of combined) {
+        if (isKnownZeroQuota(k)) {
+          markKeyDead(k);
+        }
+      }
+
+      const healthyKeys = combined.filter((k) => !isKeyDead(k) && !isKnownZeroQuota(k));
+      const workingFirst = [
+        ...healthyKeys.filter(isKnownWorking),
+        ...healthyKeys.filter((k) => !isKnownWorking(k)),
+      ];
+
+      if (workingFirst.length > 0) {
+        this.freeKeys = workingFirst;
+        this.paidKeys = combined.filter((k) => !workingFirst.includes(k) && !isKeyDead(k));
       } else {
-        this.freeKeys = combined;
+        const notDead = combined.filter((k) => !isKeyDead(k));
+        this.freeKeys = notDead.length ? notDead : combined;
         this.paidKeys = [];
       }
     }

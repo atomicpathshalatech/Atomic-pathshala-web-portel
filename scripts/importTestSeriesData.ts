@@ -49,7 +49,7 @@ async function main() {
   }
   const studentRoleId = roleMap["STUDENT"] || roles[0]?.id;
   const teacherRoleId = roleMap["TEACHER"] || roles[0]?.id;
-  const superAdminRoleId = roleMap["SUPER_ADMIN"] || roleMap["ADMIN"] || roles[0]?.id;
+  const superAdminRoleId = roleMap["ADMIN"] || roles[0]?.id;
 
   console.log("Target roles configured. Student role ID:", studentRoleId);
 
@@ -323,7 +323,7 @@ async function main() {
   }
 
   const defaultAdmin = await targetPrisma.user.findFirst({
-    where: { role: { name: { in: ["ADMIN", "SUPER_ADMIN"] } } },
+    where: { role: { name: "ADMIN" } },
   });
   const systemAdminId = defaultAdmin?.id || (await targetPrisma.user.findFirst())?.id || "";
 

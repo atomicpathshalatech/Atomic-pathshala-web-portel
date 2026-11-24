@@ -64,15 +64,15 @@ export function isDeadKeyError(err: unknown): boolean {
     m.includes("unauthenticated") ||
     m.includes("[401") ||
     m.includes("[403") ||
-    // The key's prepaid balance is finished (402). It used to count as a
-    // plain error, so a quiz stopped at the first such key instead of moving
-    // on to the keys that still work — every quiz failed.
+    // The key's prepaid balance is finished (402).
     m.includes("[402") ||
     m.includes("prepayment credits are depleted") ||
     m.includes('quota_limit_value":"0"') ||
     m.includes("quota_limit_value: '0'") ||
-    m.includes("consumer: 'projects/401168136295'") ||
-    m.includes("consumer: 'projects/239005724824'")
+    m.includes('quota_limit_value": "0"') ||
+    m.includes("project_number:401168136295") ||
+    m.includes("projects/401168136295") ||
+    m.includes("projects/239005724824")
   );
 }
 
@@ -135,14 +135,30 @@ export function usableModels(models: readonly string[] = GEMINI_TEXT_MODELS): st
   return ordered.length ? ordered : [...models];
 }
 
-/** The keys without ones found to be blocked/invalid or zero-quota. Never empty if keys exist. */
+/** The keys without ones found to be blocked/invalid or zero-quota. Prioritizes verified healthy keys. */
 export function usableKeys(keys: string[]): string[] {
-  const isProblematic = (k: string) =>
-    k.endsWith("av1XGw") || k.endsWith("uvlSQw") || k.endsWith("9XCwuA") || k.endsWith("tZdgbw");
-  const healthy = keys.filter((k) => !isKeyDead(k) && !isProblematic(k));
-  if (healthy.length > 0) return healthy;
-  const live = keys.filter((k) => !isKeyDead(k));
-  return live.length ? live : keys;
+  const isKnownHealthy = (k: string) => k.endsWith("9XCwuA") || k.endsWith("tZdgbw");
+  const isKnownZeroQuota = (k: string) =>
+    k.endsWith("av1XGw") ||
+    k.endsWith("uvlSQw") ||
+    k.endsWith("pvxCYQ") ||
+    k.endsWith("NPasQg") ||
+    k.endsWith("8KSmvg") ||
+    k.endsWith("OWy_sQ") ||
+    k.endsWith("_lnb_A") ||
+    k.endsWith("tczRNw") ||
+    k.endsWith("66U_ow") ||
+    k.endsWith("G2R98Q") ||
+    k.endsWith("Dpdbcw");
+
+  // Filter out any dead or known zero-quota keys
+  const live = keys.filter((k) => !isKeyDead(k) && !isKnownZeroQuota(k));
+  if (live.length > 0) {
+    // Put known healthy keys first
+    return [...live.filter(isKnownHealthy), ...live.filter((k) => !isKnownHealthy(k))];
+  }
+  const notDead = keys.filter((k) => !isKeyDead(k));
+  return notDead.length ? notDead : keys;
 }
 
 /** Book-keeping after a failed call: returns what the caller should do next. */

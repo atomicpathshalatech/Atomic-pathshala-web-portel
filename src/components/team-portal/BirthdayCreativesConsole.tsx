@@ -65,7 +65,7 @@ export function BirthdayCreativesConsole() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
           {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} disabled={uploading} className="text-sm" />

@@ -3,6 +3,7 @@ import { parseAiJson } from "@/lib/ai/latex-json";
 import { geminiKeyManager, CostEstimateResult } from "@/lib/ai/gemini-key-manager";
 import { GEMINI_TEXT_MODELS, classifyGeminiFailure, usableModels, isQuotaError, isQuotaOut, markQuotaOut, markModelBusy } from "@/lib/ai/gemini-models";
 import { hedge, rotated } from "@/lib/ai/hedge";
+import { validateAcademicSolution } from "@/lib/questions/academic-solution-validator";
 
 export interface ExtractedQuestionData {
   /** Drawings in the pasted image, to be cropped by the caller (image extraction only). */
@@ -54,21 +55,63 @@ export interface ExtractedQuestionData {
  * solution"): the concept first, then numbered steps, and a calculation one
  * line at a time — never several calculations run together on one line.
  */
-const SOLUTION_FORMAT_RULES = `STEP-BY-STEP BILINGUAL SOLUTION (short, but every step shown; STRICTLY NO markdown stars '**' or '*'):
-   - "solutionEn":
-     Concept : [the rule / formula / fact the question uses, 1-2 lines]
-     Solution :
-     Step 1 : [first step]
-     Step 2 : [next step]
-     (as many steps as the question needs — usually 2 to 5)
-     Final Answer : Option (X)
-   - "solutionHi": the same in Hindi — सिद्धांत : …, हल :, चरण 1 : …, चरण 2 : …, अंतिम उत्तर : विकल्प (X)
-   - CALCULATIONS LINE BY LINE (Physics, Physical Chemistry, Maths, any numerical): write the formula on one line, put in the values on the next, simplify on the next, and the result on its own line. NEVER chain several calculations on one line (no "a = b = c = d" runs), never squeeze a whole derivation into one sentence.
-   - Theory questions: the steps give the reason the answer is right (and, in one line, why a tempting wrong option is wrong) — no long paragraphs.
-   - Each Step on its own line (separate lines with \\n). Plain text; LaTeX $...$ only for math, formulas and symbols.`;
+const SOLUTION_FORMAT_RULES = `MANDATORY UNIVERSAL 4-SECTION BILINGUAL SOLUTION FORMAT (Strictly ordered):
+   Every solution MUST follow this exact 4-part structure:
+   
+   1. Correct Answer:
+      - Clearly state the correct answer and correct option at the very beginning.
+      - Format: **Correct Answer: Option X** (or direct answer if numerical).
+      
+   2. Concept Used:
+      - Explain the primary concept, law, theorem, formula, NCERT principle, or reaction rule used to solve the question.
+      - Concise, accurate, and relevant. Do not write unnecessary generic theory.
+      
+   3. Step-by-Step Solution:
+      - Complete, accurate, logically connected solution understandable to a NEET student.
+      - Maintain ~1 line visual spacing between logical steps.
+      - Physics: Concept Used -> Formula -> Substitution -> Calculation -> Final Result. Handle units correctly.
+      - Mathematics: Theorem/Concept -> Valid Step Derivation -> Final Result.
+      - Chemistry: Balanced equations, reagents, catalysts, reaction conditions, mechanisms/intermediates.
+      - Biology: NCERT terminology, evaluate statements individually, explain why correct option is correct.
+      - Calculations line by line: formula on one line, substitution on the next, calculation on the next, result on its own line.
+      
+   4. Final Answer:
+      - Display the final result clearly at the bottom (value, unit, product, conclusion, and option).
+      - Format: **Final Answer: [Result with units] — Option X**
 
-const SOLUTION_EXAMPLE_EN = "Concept : ...\\nSolution :\\nStep 1 : ...\\nStep 2 : ...\\nFinal Answer : Option (A)";
-const SOLUTION_EXAMPLE_HI = "सिद्धांत : ...\\nहल :\\nचरण 1 : ...\\nचरण 2 : ...\\nअंतिम उत्तर : विकल्प (A)";
+   Markdown format:
+   - "solutionEn":
+     ### 1. Correct Answer
+     **Correct Answer: Option (X)**
+
+     ### 2. Concept Used
+     [Primary law, theorem, formula or NCERT rule]
+
+     ### 3. Step-by-Step Solution
+     Step 1 : ...
+     
+     Step 2 : ...
+
+     ### 4. Final Answer
+     **Final Answer: [Result with units] — Option (X)**
+
+   - "solutionHi":
+     ### 1. सही उत्तर
+     **सही उत्तर: विकल्प (X)**
+
+     ### 2. प्रयुक्त अवधारणा
+     [मुख्य सिद्धांत, सूत्र या NCERT नियम]
+
+     ### 3. चरण-दर-चरण हल
+     चरण 1 : ...
+     
+     चरण 2 : ...
+
+     ### 4. अंतिम उत्तर
+     **अंतिम उत्तर: [इकाई सहित परिणाम] — विकल्प (X)**`;
+
+const SOLUTION_EXAMPLE_EN = "### 1. Correct Answer\\n**Correct Answer: Option (A)**\\n\\n### 2. Concept Used\\n...\\n\\n### 3. Step-by-Step Solution\\nStep 1 : ...\\n\\nStep 2 : ...\\n\\n### 4. Final Answer\\n**Final Answer: ... — Option (A)**";
+const SOLUTION_EXAMPLE_HI = "### 1. सही उत्तर\\n**सही उत्तर: विकल्प (A)**\\n\\n### 2. प्रयुक्त अवधारणा\\n...\\n\\n### 3. चरण-दर-चरण हल\\nचरण 1 : ...\\n\\nचरण 2 : ...\\n\\n### 4. अंतिम उत्तर\\n**अंतिम उत्तर: ... — विकल्प (A)**";
 
 // Model order and retired / blocked handling live in one shared place.
 const GEMINI_MODELS = GEMINI_TEXT_MODELS;
@@ -571,13 +614,25 @@ RETURN STRICT JSON SCHEMA:
     const outputTokens = usageMetadata?.candidatesTokenCount || Math.ceil(jsonStr.length / 4);
     const costEstimate = geminiKeyManager.calculateCost(inputTokens, outputTokens, meta.tier, meta.key);
 
-    return {
-      solutionEn: formatSolutionSpacing(parsed.solutionEn || ""),
-      solutionHi: formatSolutionSpacing(parsed.solutionHi || ""),
+    const validated = validateAcademicSolution({
+      subject,
+      statementEn,
+      statementHi,
+      optionsEn,
+      optionsHi,
+      correctAnswer: correctAnswer || userSelectedAnswer,
+      solutionEn: parsed.solutionEn || "",
+      solutionHi: parsed.solutionHi || "",
       recommendedAnswer: recommended,
+    });
+
+    return {
+      solutionEn: validated.solutionEn,
+      solutionHi: validated.solutionHi,
+      recommendedAnswer: validated.recommendedAnswer,
       answerMismatch: hasMismatch,
       mismatchWarning: hasMismatch
-        ? `⚠ Answer mismatch: AI recommends Option (${recommended}), but you selected Option (${userAns}) — please verify.`
+        ? `⚠ Answer mismatch: AI recommends Option (${validated.recommendedAnswer}), but you selected Option (${userAns}) — please verify.`
         : undefined,
       costEstimate,
     };
@@ -586,27 +641,25 @@ RETURN STRICT JSON SCHEMA:
 
 /**
  * Normalizes vertical spacing and sanitizes solutions ensuring clean double-newlines between sections
- * and stripping unnecessary markdown asterisks (**, *), headings, or clutter.
+ * and maintaining ~1 line visual spacing between logical steps.
  */
 export function formatSolutionSpacing(sol: string): string {
   if (!sol) return "";
   let formatted = sol.trim();
 
-  // 1. Remove markdown bold/italic asterisks & underscores (e.g. **Electron:** -> Electron:)
-  formatted = formatted.replace(/\*\*(.*?)\*\*/g, "$1");
-  formatted = formatted.replace(/\*(.*?)\*/g, "$1");
-  formatted = formatted.replace(/__(.*?)__/g, "$1");
-  formatted = formatted.replace(/\*/g, "");
+  // Normalize CRLF
+  formatted = formatted.replace(/\r\n/g, "\n");
 
-  // 2. Remove markdown heading hashes (### Concept -> Concept)
-  formatted = formatted.replace(/^#{1,6}\s+/gm, "");
+  // Clean and normalize canonical section linebreaks
+  formatted = formatted.replace(/([^\n])\s*\n\s*(#{1,4}\s*(?:1[.)]?\s*)?(?:Correct\s*Answer|सही\s*उत्तर))/gi, "$1\n\n$2");
+  formatted = formatted.replace(/([^\n])\s*\n\s*(#{1,4}\s*(?:2[.)]?\s*)?(?:Concept\s*(?:Used|Theory)?|प्रयुक्त\s*अवधारणा|सिद्धांत))/gi, "$1\n\n$2");
+  formatted = formatted.replace(/([^\n])\s*\n\s*(#{1,4}\s*(?:3[.)]?\s*)?(?:Step-by-Step\s*(?:Solution)?|चरण-दर-चरण\s*हल|Solution|हल))/gi, "$1\n\n$2");
+  formatted = formatted.replace(/([^\n])\s*\n\s*(#{1,4}\s*(?:4[.)]?\s*)?(?:Final\s*Answer|अंतिम\s*उत्तर))/gi, "$1\n\n$2");
 
-  // 3. Clean and normalize section linebreaks
-  formatted = formatted.replace(/([^\n])\s*\n\s*(Concept\s*:|सिद्धांत(\s*\(Concept\))?\s*:)/gi, "$1\n\n$2");
-  formatted = formatted.replace(/([^\n])\s*\n\s*(Solution\s*:|हल(\s*\(Solution\))?\s*:)/gi, "$1\n\n$2");
-  formatted = formatted.replace(/([^\n])\s*\n\s*(Final Answer\s*:|अंतिम उत्तर(\s*\(Final Answer\))?\s*:)/gi, "$1\n\n$2");
+  // Ensure ~1 line spacing before step markers
+  formatted = formatted.replace(/([^\n])\s*\n\s*(Step\s*\d+|चरण\s*\d+|Case\s*\d+|स्थिति\s*\d+):/gi, "$1\n\n$2:");
 
-  // 4. Collapse excessive multiple blank lines into standard double newlines
+  // Collapse excessive 3+ newlines into 2
   formatted = formatted.replace(/\n{3,}/g, "\n\n");
 
   return formatted.trim();

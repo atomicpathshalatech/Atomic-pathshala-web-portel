@@ -82,6 +82,20 @@ export type TeacherFullProfile = {
     videoUrl?: string;
     durationMin?: number | null;
   }>;
+  seoProfile?: {
+    slug: string;
+    isPublicProfileEnabled: boolean;
+    isSeoIndexed: boolean;
+    customSeoTitle?: string | null;
+    customMetaDescription?: string | null;
+    canonicalUrl?: string | null;
+    ogImageUrl?: string | null;
+    targetKeywords: string[];
+    hindiKeywords: string[];
+    englishKeywords: string[];
+    verifiedBio?: string | null;
+    teachingPhilosophy?: string | null;
+  } | null;
 };
 
 import { generateSlug } from "./slug";
@@ -163,7 +177,7 @@ export async function getTeacherProfileBySlug(slug: string): Promise<TeacherFull
       user: {
         status: "ACTIVE",
         role: {
-          name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "SUPER_ADMIN", "ADMIN", "FOUNDER"] },
+          name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "ADMIN", "FOUNDER"] },
         },
       },
     },
@@ -212,11 +226,17 @@ export async function getTeacherProfileBySlug(slug: string): Promise<TeacherFull
         },
         take: 10,
       },
+      seoProfile: true,
     },
   });
 
   // Match by slug, ID, employeeCode, or name aliases
   const dbTeacher = allTeachers.find((t) => {
+    // If public profile is disabled by admin, skip public resolution
+    if (t.seoProfile && !t.seoProfile.isPublicProfileEnabled) return false;
+
+    if (t.seoProfile?.slug && t.seoProfile.slug.toLowerCase() === cleanSlug) return true;
+
     const teacherSlug = generateSlug(t.user.name);
     const empCode = t.employeeCode.toLowerCase();
     const id = t.id.toLowerCase();
@@ -404,5 +424,21 @@ export async function getTeacherProfileBySlug(slug: string): Promise<TeacherFull
         videoUrl: lec.videoUrl,
         durationMin: lec.durationMin,
       })) || [],
+    seoProfile: dbTeacher.seoProfile
+      ? {
+          slug: dbTeacher.seoProfile.slug,
+          isPublicProfileEnabled: dbTeacher.seoProfile.isPublicProfileEnabled,
+          isSeoIndexed: dbTeacher.seoProfile.isSeoIndexed,
+          customSeoTitle: dbTeacher.seoProfile.customSeoTitle,
+          customMetaDescription: dbTeacher.seoProfile.customMetaDescription,
+          canonicalUrl: dbTeacher.seoProfile.canonicalUrl,
+          ogImageUrl: dbTeacher.seoProfile.ogImageUrl,
+          targetKeywords: dbTeacher.seoProfile.targetKeywords || [],
+          hindiKeywords: dbTeacher.seoProfile.hindiKeywords || [],
+          englishKeywords: dbTeacher.seoProfile.englishKeywords || [],
+          verifiedBio: dbTeacher.seoProfile.verifiedBio,
+          teachingPhilosophy: dbTeacher.seoProfile.teachingPhilosophy,
+        }
+      : null,
   };
 }

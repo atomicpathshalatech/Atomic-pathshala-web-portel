@@ -5,10 +5,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import Link from "next/link";
 import { FinancePanel } from "@/components/team-portal/FinancePanel";
 
 export const metadata: Metadata = {
-  title: "Finance",
+  title: "Finance & Subscriptions",
 };
 
 export default async function FinancePage() {
@@ -32,11 +33,28 @@ export default async function FinancePage() {
 
   return (
     <div className="space-y-stack-lg max-w-6xl">
-      <div>
-        <h1 className="font-headline-lg text-headline-lg text-primary">Finance</h1>
-        <p className="text-on-surface-variant font-body-md mt-1">
-          Payment reconciliation, invoices, and refunds across every student.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-headline-lg text-headline-lg text-primary">Finance &amp; Subscriptions</h1>
+          <p className="text-on-surface-variant font-body-md mt-1">
+            Payment reconciliation, invoices, and refunds across subscriptions and courses.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/team/commerce/orders"
+            className="px-4 py-2 text-xs font-bold rounded-xl bg-primary text-white hover:bg-primary/90 transition shadow-sm"
+          >
+            Batch Orders Dashboard
+          </Link>
+          <Link
+            href="/team/coupons"
+            className="px-4 py-2 text-xs font-bold rounded-xl border border-outline-variant/30 hover:bg-surface-container transition"
+          >
+            Coupons
+          </Link>
+        </div>
       </div>
 
       <FinancePanel

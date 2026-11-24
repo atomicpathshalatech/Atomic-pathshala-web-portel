@@ -32,7 +32,7 @@ export default async function MyProfilePage() {
 
   // Actual teaching time + views: a teacher sees their own; the Super Admin
   // (and Founder) sees the whole team's total, with the per-teacher board one click away.
-  const isTopAdmin = user.status === "ACTIVE" && (user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER");
+  const isTopAdmin = user.status === "ACTIVE" && (user.role?.name === "ADMIN" || user.role?.name === "FOUNDER");
   const istNow = new Date(Date.now() + 5.5 * 3_600_000);
   const monthStart = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), 1) - 5.5 * 3_600_000);
   let myTeaching: { allTime: TeacherTeachingStats; thisMonth: TeacherTeachingStats } | null = null;

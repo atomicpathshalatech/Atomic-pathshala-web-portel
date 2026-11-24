@@ -21,7 +21,7 @@ export async function POST(
       (await hasPermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS)) ||
       session.user.role === "TEACHER" ||
       session.user.role === "ADMIN" ||
-      session.user.role === "SUPER_ADMIN";
+      session.user.role === "FOUNDER";
     if (!canAccess) return apiError("Forbidden", 403);
 
     const formData = await request.formData();

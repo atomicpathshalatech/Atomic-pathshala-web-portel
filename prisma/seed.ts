@@ -27,7 +27,6 @@ const ROLE_LABELS: Record<GlobalRole, string> = {
   DEPARTMENT_HEAD: "Department Head",
   ADMIN: "Admin",
   SUB_ADMIN: "Sub Admin",
-  SUPER_ADMIN: "Super Admin",
   FOUNDER: "Founder",
 };
 
@@ -200,19 +199,19 @@ async function main() {
   if (seedTestAccounts) {
   const passwordHash = await bcrypt.hash("Test@12345", 12);
 
-  const superAdminRole = roles["SUPER_ADMIN"];
+  const adminRole = roles["ADMIN"];
   const teacherRole = roles["TEACHER"];
   const studentRole = roles["STUDENT"];
 
-  if (!superAdminRole || !teacherRole || !studentRole) {
+  if (!adminRole || !teacherRole || !studentRole) {
     throw new Error("Required roles are missing.");
   }
 
   // ============================================================
-  // TEST SUPER ADMIN
+  // TEST ADMIN
   // ============================================================
 
-  console.log("Creating test Super Admin...");
+  console.log("Creating test Admin...");
 
   const admin = await prisma.user.upsert({
     where: {
@@ -222,14 +221,14 @@ async function main() {
       name: "Atomic Test Admin",
       passwordHash,
       status: "ACTIVE",
-      roleId: superAdminRole.id,
+      roleId: adminRole.id,
     },
     create: {
       email: "admin.test@atomicpathshala.local",
       passwordHash,
       name: "Atomic Test Admin",
       status: "ACTIVE",
-      roleId: superAdminRole.id,
+      roleId: adminRole.id,
     },
   });
 

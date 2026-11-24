@@ -13,12 +13,11 @@ export async function POST(request: NextRequest) {
   try {
     const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_APPROVE);
     const isSuperOrAdmin =
-      sessionUser.role === "SUPER_ADMIN" ||
       sessionUser.role === "ADMIN" ||
       sessionUser.role === "FOUNDER" ||
       (await isSuperAdmin(sessionUser.id));
     if (!isSuperOrAdmin) {
-      return apiError("Only Super Admin or Admin can override verification status", 403);
+      return apiError("Only Admin can override verification status", 403);
     }
 
     const body = await request.json();

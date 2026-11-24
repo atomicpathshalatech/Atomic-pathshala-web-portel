@@ -10,6 +10,8 @@ import { findExamTags, headingTagForLine, resolveQuestionMeta, stripQuestionTag,
 import { parsePyqText, type ParsedPage } from "./text-parser";
 import { classifyQuestion } from "./classify";
 import { compareQuestions, questionFingerprint, DUPLICATE_WARNING_SCORE } from "./fingerprint";
+import { normalizeQuestionStatement } from "@/lib/questions/structure-parser";
+import { toQuestionType } from "@/lib/questions/neet-question-classifier";
 
 /**
  * PYQ import, one chunk (a few pages) per call so a large PDF never has to
@@ -147,22 +149,44 @@ function fromAi(
   const rawAns = String(q.correctAnswer || "").trim().toUpperCase();
   const answer = /^[A-D](,[A-D])*$/.test(rawAns) ? rawAns : (rawAns.length > 0 ? rawAns : null);
 
+  const opts = q.options || { A: "", B: "", C: "", D: "" };
+  // Structural normalization: strip trailing embedded options and preserve multi-statement/match structure
+  const normEn = normalizeQuestionStatement(statement, q.questionType, opts);
+  statement = normEn.cleanStatement;
+  const finalOptions = {
+    A: opts.A || normEn.cleanOptions?.A || "",
+    B: opts.B || normEn.cleanOptions?.B || "",
+    C: opts.C || normEn.cleanOptions?.C || "",
+    D: opts.D || normEn.cleanOptions?.D || "",
+  };
+
+  let statementHi = q.statementHi ?? null;
+  let optionsHi = (q.optionsHi as Record<string, string> | undefined) ?? null;
+  if (statementHi) {
+    const normHi = normalizeQuestionStatement(statementHi, normEn.detectedType, optionsHi);
+    statementHi = normHi.cleanStatement;
+    if (normHi.cleanOptions && (!optionsHi || !optionsHi.A)) {
+      optionsHi = normHi.cleanOptions;
+    }
+  }
+
   const issues: string[] = [];
   if (!answer) issues.push("No trustworthy answer found in the PDF.");
-  const opts = q.options || { A: "", B: "", C: "", D: "" };
-  const isOptionBased = !["INTEGER", "NUMERICAL"].includes(q.questionType?.toUpperCase() || "");
-  if (isOptionBased && (!opts.A || !opts.B || !opts.C || !opts.D)) {
+  const isOptionBased = !["INTEGER", "NUMERICAL"].includes((normEn.detectedType || q.questionType)?.toUpperCase() || "");
+  if (isOptionBased && (!finalOptions.A || !finalOptions.B || !finalOptions.C || !finalOptions.D)) {
     issues.push("Some options appear empty — verify options A-D.");
   }
+
+  const detectedQType = normEn.detectedType ? toQuestionType(normEn.detectedType) : q.questionType || "SINGLE_CORRECT";
 
   return {
     sourceKey: `ai:p${q.sourcePage}#${q.originalNumber}`,
     number: q.originalNumber,
     sourcePage: q.sourcePage,
     statement,
-    statementHi: q.statementHi ?? null,
-    options: { A: opts.A ?? "", B: opts.B ?? "", C: opts.C ?? "", D: opts.D ?? "" },
-    optionsHi: (q.optionsHi as Record<string, string> | undefined) ?? null,
+    statementHi,
+    options: finalOptions,
+    optionsHi,
     answer,
     answerSource: answer ? q.answerKeySource ?? "AI" : null,
     solution: q.solution ?? null,
@@ -178,7 +202,7 @@ function fromAi(
     topic: q.topic ?? null,
     subTopic: q.subTopic ?? null,
     difficulty: q.difficulty || "MEDIUM",
-    questionType: q.questionType || "SINGLE_CORRECT",
+    questionType: detectedQType,
   };
 }
 
@@ -365,12 +389,22 @@ export async function processPyqChunk(
             ans = matchedAnswer;
             ansSource = "ANSWER_KEY_SECTION";
           }
+          const norm = normalizeQuestionStatement(q.statement, (q as any).questionType, q.options);
+          const finalStatement = norm.cleanStatement;
+          const finalOptions = {
+            A: q.options?.A || norm.cleanOptions?.A || "",
+            B: q.options?.B || norm.cleanOptions?.B || "",
+            C: q.options?.C || norm.cleanOptions?.C || "",
+            D: q.options?.D || norm.cleanOptions?.D || "",
+          };
+          const detectedNeetType = toQuestionType(norm.detectedType || (q as any).questionType || "SINGLE_CORRECT");
+
           return {
             sourceKey: q.sourceKey,
             number: q.number,
             sourcePage: q.sourcePage,
-            statement: q.statement,
-            options: q.options,
+            statement: finalStatement,
+            options: finalOptions,
             answer: ans,
             answerSource: ansSource,
             solution: q.solution,
@@ -382,7 +416,7 @@ export async function processPyqChunk(
             subject: job.subject ?? undefined,
             chapter: job.chapter ?? undefined,
             difficulty: "MEDIUM",
-            questionType: "SINGLE_CORRECT",
+            questionType: detectedNeetType,
           };
         });
       }

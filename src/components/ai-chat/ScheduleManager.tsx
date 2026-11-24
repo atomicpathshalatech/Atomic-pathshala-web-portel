@@ -268,7 +268,7 @@ export function ScheduleManager() {
                 value={form.batch}
                 onChange={(event) => setForm({ ...form, batch: event.target.value })}
                 required
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 {BATCHES.map((item) => (
                   <option key={item.value} value={item.value}>
@@ -285,7 +285,7 @@ export function ScheduleManager() {
                 value={form.classDate}
                 onChange={(event) => setForm({ ...form, classDate: event.target.value })}
                 required
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
 
@@ -296,7 +296,7 @@ export function ScheduleManager() {
                 onChange={(event) => setForm({ ...form, subject: event.target.value })}
                 placeholder="Biology / Physics / Chemistry"
                 required
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
 
@@ -305,7 +305,7 @@ export function ScheduleManager() {
               <select
                 value={form.teacherName}
                 onChange={(event) => setForm({ ...form, teacherName: event.target.value })}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="">Select teacher</option>
                 {TEACHERS.map((teacher) => (
@@ -322,7 +322,7 @@ export function ScheduleManager() {
                 value={form.teacherPhotoUrl}
                 onChange={(event) => setForm({ ...form, teacherPhotoUrl: event.target.value })}
                 placeholder="https://... (leave blank to show initials)"
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
 
@@ -333,7 +333,7 @@ export function ScheduleManager() {
                 value={form.startTime}
                 onChange={(event) => setForm({ ...form, startTime: event.target.value })}
                 required
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
 
@@ -343,7 +343,7 @@ export function ScheduleManager() {
                 type="time"
                 value={form.endTime}
                 onChange={(event) => setForm({ ...form, endTime: event.target.value })}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
 
@@ -353,7 +353,7 @@ export function ScheduleManager() {
                 value={form.youtubeLink}
                 onChange={(event) => setForm({ ...form, youtubeLink: event.target.value })}
                 placeholder="https://youtube.com/..."
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
 
@@ -364,7 +364,7 @@ export function ScheduleManager() {
                 onChange={(event) => setForm({ ...form, topic: event.target.value })}
                 placeholder="e.g. Human Reproduction - Part 2"
                 required
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
 
@@ -374,7 +374,7 @@ export function ScheduleManager() {
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
                 rows={2}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </label>
           </div>
@@ -406,7 +406,7 @@ export function ScheduleManager() {
             <select
               value={filterBatch}
               onChange={(event) => setFilterBatch(event.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">All batches</option>
               {BATCHES.map((item) => (

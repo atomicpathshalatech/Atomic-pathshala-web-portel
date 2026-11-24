@@ -23,8 +23,8 @@ async function run() {
   const email = "pyq.admin@atomic.test";
   const password = randomBytes(9).toString("base64url");
   const role =
-    (await prisma.role.findFirst({ where: { name: "SUPER_ADMIN" } })) ??
-    (await prisma.role.create({ data: { name: "SUPER_ADMIN", label: "Super Admin" } }));
+    (await prisma.role.findFirst({ where: { name: "ADMIN" } })) ??
+    (await prisma.role.create({ data: { name: "ADMIN", label: "Admin" } }));
   await prisma.user.upsert({
     where: { email },
     create: { email, name: "PYQ Admin", passwordHash: await bcrypt.hash(password, 10), status: "ACTIVE", roleId: role.id },

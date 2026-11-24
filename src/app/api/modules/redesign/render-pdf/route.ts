@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       });
 
       const roleName = user?.role?.name;
-      const isSuperAdminOrAdmin = roleName === "SUPER_ADMIN" || roleName === "ADMIN";
+      const isSuperAdminOrAdmin = roleName === "ADMIN" || roleName === "FOUNDER";
 
       if (!isSuperAdminOrAdmin) {
         return apiError("Only Administrators are authorized to generate unwatermarked Print PDFs", 403);

@@ -135,7 +135,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           if (!hasQuestions) {
             const isAdmin =
               session.user.role === "ADMIN" ||
-              session.user.role === "SUPER_ADMIN" ||
               session.user.role === "FOUNDER" ||
               session.user.role === "ACADEMIC_HEAD";
 

@@ -9,6 +9,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { generateQuestionId } from "@/lib/questions/id-generator";
 import { QuestionType, Difficulty } from "@prisma/client";
+import { normalizeQuestionStatement } from "@/lib/questions/structure-parser";
 
 function mapQuestionType(typeStr?: string): QuestionType {
   if (!typeStr) return QuestionType.SINGLE_CORRECT;
@@ -72,6 +73,20 @@ export async function POST(request: NextRequest) {
     const refImg = figureUrl || referenceImageUrl || null;
     const solImg = solutionImageUrl || null;
 
+    // Structural normalization to prevent options leaking into statement or flattening
+    const normEn = normalizeQuestionStatement(statementEn, type, optEn);
+    const resolvedStatementEn = normEn.cleanStatement;
+    const resolvedOptEn = { ...optEn, ...(normEn.cleanOptions || {}) };
+    const detectedType = normEn.detectedType || type;
+
+    let resolvedStatementHi = statementHi;
+    let resolvedOptHi = optHi;
+    if (statementHi) {
+      const normHi = normalizeQuestionStatement(statementHi, detectedType, optHi);
+      resolvedStatementHi = normHi.cleanStatement;
+      resolvedOptHi = { ...optHi, ...(normHi.cleanOptions || {}) };
+    }
+
     // 1. UPDATE EXISTING DRAFT IF ID PROVIDED
     if (existingQuestionId) {
       const existing = await prisma.question.findUnique({
@@ -85,20 +100,20 @@ export async function POST(request: NextRequest) {
         });
 
         const translationsToCreate: any[] = [];
-        if (statementEn.trim() || Object.keys(optEn).length > 0) {
+        if (resolvedStatementEn.trim() || Object.keys(resolvedOptEn).length > 0) {
           translationsToCreate.push({
             language: "ENGLISH",
-            statement: statementEn.trim(),
-            options: optEn,
+            statement: resolvedStatementEn.trim(),
+            options: resolvedOptEn,
             correctOptionIds: resolvedCorrect,
             solution: solutionEn.trim() || null,
           });
         }
-        if (statementHi.trim() || Object.keys(optHi).length > 0) {
+        if (resolvedStatementHi.trim() || Object.keys(resolvedOptHi).length > 0) {
           translationsToCreate.push({
             language: "HINDI",
-            statement: statementHi.trim(),
-            options: optHi,
+            statement: resolvedStatementHi.trim(),
+            options: resolvedOptHi,
             correctOptionIds: resolvedCorrect,
             solution: solutionHi.trim() || null,
           });
@@ -111,7 +126,7 @@ export async function POST(request: NextRequest) {
             chapter: chapter.trim() || existing.chapter,
             topic: topic.trim() || existing.topic,
             subTopic: subTopic.trim() || existing.subTopic,
-            type: mapQuestionType(type),
+            type: mapQuestionType(detectedType),
             difficulty: mapDifficulty(difficulty),
             referenceImageUrl: refImg || existing.referenceImageUrl,
             imageUrl: figureUrl && figureUrl !== referenceImageUrl ? figureUrl : null,
@@ -234,20 +249,20 @@ export async function POST(request: NextRequest) {
     const autoTags = ["AI_AUTO_DRAFT", `SOURCE_${source.toUpperCase()}`, tags].filter(Boolean).join(", ");
 
     const translationsToCreate: any[] = [];
-    if (statementEn.trim() || Object.keys(optEn).length > 0) {
+    if (resolvedStatementEn.trim() || Object.keys(resolvedOptEn).length > 0) {
       translationsToCreate.push({
         language: "ENGLISH",
-        statement: statementEn.trim() || "Statement pending...",
-        options: optEn,
+        statement: resolvedStatementEn.trim() || "Statement pending...",
+        options: resolvedOptEn,
         correctOptionIds: resolvedCorrect,
         solution: solutionEn.trim() || null,
       });
     }
-    if (statementHi.trim() || Object.keys(optHi).length > 0) {
+    if (resolvedStatementHi.trim() || Object.keys(resolvedOptHi).length > 0) {
       translationsToCreate.push({
         language: "HINDI",
-        statement: statementHi.trim() || "प्रश्न कथन...",
-        options: optHi,
+        statement: resolvedStatementHi.trim() || "प्रश्न कथन...",
+        options: resolvedOptHi,
         correctOptionIds: resolvedCorrect,
         solution: solutionHi.trim() || null,
       });
@@ -269,7 +284,7 @@ export async function POST(request: NextRequest) {
         chapter: chapter.trim() || "General",
         topic: topic.trim() || "Core Concept",
         subTopic: subTopic.trim() || null,
-        type: mapQuestionType(type),
+        type: mapQuestionType(detectedType),
         difficulty: mapDifficulty(difficulty),
         category: categoryName,
         status: "DRAFT",

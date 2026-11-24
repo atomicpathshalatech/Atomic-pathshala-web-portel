@@ -84,12 +84,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${examName} ${year} ${question.subject} – ${question.chapter || "Question"} | Atomic Pathshala`,
     description: `${statementSnippet}... Practice this official ${examName} question with interactive quiz, instant answer check, and step-by-step solution after login.`,
     alternates: {
-      canonical: `https://ap.atomicpathshala.in/pyq/question/${question.slug || question.id}`,
+      canonical: `https://atomicpathshala.in/pyq/question/${question.slug || question.id}`,
     },
     openGraph: {
       title: `${examName} ${year} – ${question.chapter || question.subject} PYQ`,
       description: statementSnippet,
-      url: `https://ap.atomicpathshala.in/pyq/question/${question.slug || question.id}`,
+      url: `https://atomicpathshala.in/pyq/question/${question.slug || question.id}`,
       type: "article",
     },
   };

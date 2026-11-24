@@ -130,15 +130,24 @@ function safeParseTags(tags: unknown): string[] {
 function sanitizeAndAdaptSolution(
   sol: any,
   subject: string,
-  isHindi = false
+  isHindi = false,
+  officialAnswer?: string
 ): StructuredSolution {
-  let concept = (sol?.concept || "").trim();
+  let correctAnswer = (sol?.correct_answer || sol?.correctAnswer || "").trim();
+  let concept = (sol?.concept_used || sol?.concept || "").trim();
   let formula = (sol?.formula_rules || sol?.formula || "").trim();
   let stepByStep = (sol?.step_by_step || sol?.stepByStep || "").trim();
   let solution = (sol?.solution || "").trim();
   let finalAnswer = (sol?.final_answer || sol?.finalAnswer || "").trim();
   let optionExplanation = (sol?.option_explanations || sol?.optionExplanation || "").trim();
   let takeaway = (sol?.important_takeaway || sol?.takeaway || "").trim();
+
+  if (!correctAnswer && officialAnswer) {
+    correctAnswer = isHindi ? `विकल्प ${officialAnswer}` : `Option ${officialAnswer}`;
+  }
+  if (!finalAnswer && officialAnswer) {
+    finalAnswer = isHindi ? `विकल्प ${officialAnswer}` : `Option ${officialAnswer}`;
+  }
 
   // 1. Identify and clear generic introductory boilerplate
   const genericEnIntroPatterns = [
@@ -177,7 +186,7 @@ function sanitizeAndAdaptSolution(
 
   // 3. Synthesize clean unified solution if solution field was not directly set
   if (!solution) {
-    const parts = [formula, stepByStep, finalAnswer].filter(Boolean);
+    const parts = [formula, stepByStep].filter(Boolean);
     solution = parts.join("\n\n").trim();
   }
   if (!solution && concept) {
@@ -186,6 +195,8 @@ function sanitizeAndAdaptSolution(
   }
 
   return {
+    correctAnswer,
+    correctOptionKey: officialAnswer,
     concept,
     solution,
     optionExplanation,
@@ -508,13 +519,15 @@ Output STRICT JSON only. No markdown formatting ticks.`;
   const parsedEnSolution: StructuredSolution = sanitizeAndAdaptSolution(
     aiRawResult?.structured_solutions?.english,
     question.subject || "Biology",
-    false
+    false,
+    officialAnswer
   );
 
   const parsedHiSolution: StructuredSolution = sanitizeAndAdaptSolution(
     aiRawResult?.structured_solutions?.hindi,
     question.subject || "Biology",
-    true
+    true,
+    officialAnswer
   );
 
   const answerMatch = aiRawResult?.answer_verification?.match ?? (aiRawResult?.answer_verification?.suggested_answer === officialAnswer);

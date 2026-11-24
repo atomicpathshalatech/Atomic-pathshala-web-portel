@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { stripEmbeddedOptions } from "@/lib/questions/structure-parser";
 
 export interface PublicQuestionCardProps {
   question: {
@@ -63,8 +64,9 @@ export function PublicQuestionCard({
   const activeTranslation =
     activeLang === "HINDI" ? hiTrans || enTrans || translations[0] : enTrans || hiTrans || translations[0];
 
-  const statement = activeTranslation?.statement || "";
+  const rawStatement = activeTranslation?.statement || "";
   const options = (activeTranslation?.options || {}) as Record<string, string>;
+  const statement = stripEmbeddedOptions(rawStatement, options).cleanStem;
   const rawCorrect = activeTranslation?.correctOptionIds || [];
   const correctKeys = (Array.isArray(rawCorrect) ? rawCorrect : []).map((k) =>
     String(k).trim().toUpperCase()

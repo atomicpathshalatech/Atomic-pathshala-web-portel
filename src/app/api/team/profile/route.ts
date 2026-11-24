@@ -41,7 +41,7 @@ export async function PATCH(request: NextRequest) {
     const auditChanges: Record<string, { old: any; new: any }> = {};
 
     const roleName = currentUser.role?.name || "";
-    const isAdmin = ["ADMIN", "SUPER_ADMIN", "FOUNDER"].includes(roleName);
+    const isAdmin = ["ADMIN", "FOUNDER"].includes(roleName);
 
     // 1. Name (Only admin can change official name)
     if (body.name !== undefined && body.name.trim() !== "" && body.name.trim() !== currentUser.name) {

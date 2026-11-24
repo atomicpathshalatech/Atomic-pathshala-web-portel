@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const STAFF_ROLES = ["SUPER_ADMIN", "ADMIN", "FOUNDER", "TEACHER", "ACADEMIC_HEAD"];
+      const STAFF_ROLES = ["ADMIN", "FOUNDER", "TEACHER", "ACADEMIC_HEAD"];
       if (!isEnrolled && !STAFF_ROLES.includes(session.user.role || "")) {
         return apiError("Forbidden", 403);
       }

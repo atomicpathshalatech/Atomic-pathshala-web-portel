@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { StandardSolutionView } from "@/components/solutions/StandardSolutionView";
 import { api, answerText, optionEntries, SUBJECTS, type LibraryItem } from "./api-client";
 import { AddToTargetDialog } from "./AddToTargetDialog";
 import { PyqStyles } from "./PyqStyles";
@@ -520,9 +521,17 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
                           </div>
                         ))}
                         <p className="sm:col-span-2 font-bold text-emerald-700">Answer: {answerText(en?.correctOptionIds)}</p>
-                        {(en?.solution || q.solution) && (
-                          <div className="sm:col-span-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800">
-                            <FormulaText text={en?.solution || q.solution || ""} className="block" />
+                        {(en?.solution || hi?.solution || q.solution) && (
+                          <div className="sm:col-span-2 mt-2">
+                            <StandardSolutionView
+                              solution={en?.solution || q.solution}
+                              solutionHi={hi?.solution}
+                              activeLanguage="ENGLISH"
+                              showLanguageToggle={Boolean(en?.solution && hi?.solution)}
+                              correctOptionKey={en?.correctOptionIds?.[0] || hi?.correctOptionIds?.[0]}
+                              options={typeof en?.options === "object" && !Array.isArray(en?.options) ? en.options : undefined}
+                              subject={q.subject}
+                            />
                           </div>
                         )}
                       </div>

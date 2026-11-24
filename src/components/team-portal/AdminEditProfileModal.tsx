@@ -85,9 +85,8 @@ export interface AdminEditProfileModalProps {
 }
 
 export const ROLE_OPTIONS = [
-  { value: "SUPER_ADMIN", label: "Super Admin (Full Access)" },
+  { value: "ADMIN", label: "Admin (Full Access)" },
   { value: "FOUNDER", label: "Founder (Executive Access)" },
-  { value: "ADMIN", label: "Admin" },
   { value: "SUB_ADMIN", label: "Sub Admin" },
   { value: "ACADEMIC_HEAD", label: "Academic Head" },
   { value: "DEPARTMENT_HEAD", label: "Department Head" },

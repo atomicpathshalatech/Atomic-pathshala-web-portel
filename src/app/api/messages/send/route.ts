@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
 
     let senderRole = "STUDENT";
     if (
-      userRole === "SUPER_ADMIN" ||
       userRole === "ADMIN" ||
       userRole === "FOUNDER" ||
       userRole === "SUB_ADMIN"

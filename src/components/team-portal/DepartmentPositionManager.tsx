@@ -214,7 +214,6 @@ export function DepartmentPositionManager() {
                   <option value="DESIGNER">DESIGNER</option>
                   <option value="VIDEO_EDITOR">VIDEO_EDITOR</option>
                   <option value="ADMIN">ADMIN</option>
-                  <option value="SUPER_ADMIN">SUPER_ADMIN</option>
                 </select>
               </div>
 

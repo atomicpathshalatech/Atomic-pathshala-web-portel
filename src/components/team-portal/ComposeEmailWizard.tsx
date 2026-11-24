@@ -128,13 +128,13 @@ export function ComposeEmailWizard() {
           ))}
         </div>
         {groupDef.needsBatch && (
-          <select value={batchId} onChange={(e) => setBatchId(e.target.value)} className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <select value={batchId} onChange={(e) => setBatchId(e.target.value)} className="w-full px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
             <option value="">Select a batch…</option>
             {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
         {groupDef.needsTeacher && (
-          <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} className="w-full px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
             <option value="">Select a teacher…</option>
             {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
@@ -160,7 +160,7 @@ export function ComposeEmailWizard() {
       {step >= 2 && (
         <section className={`rounded-2xl border p-5 ${step === 2 ? "border-primary" : "border-slate-200 dark:border-slate-700"}`}>
           <h2 className="font-bold text-slate-900 dark:text-white mb-3">2. Compose</h2>
-          <select value={templateId} onChange={(e) => applyTemplate(e.target.value)} className="w-full mb-2 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <select value={templateId} onChange={(e) => applyTemplate(e.target.value)} className="w-full mb-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
             <option value="">— Start from a template (optional) —</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
@@ -168,14 +168,14 @@ export function ComposeEmailWizard() {
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Subject"
-            className="w-full mb-2 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+            className="w-full mb-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
           />
           <textarea
             value={bodyHtml}
             onChange={(e) => setBodyHtml(e.target.value)}
             placeholder="Email body (HTML). Use {{recipient_name}} etc."
             rows={8}
-            className="w-full mb-2 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono"
+            className="w-full mb-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono"
           />
           {step === 2 && (
             <button

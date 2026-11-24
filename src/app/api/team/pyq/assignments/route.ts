@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     // Determine target user filter
     const isSuper =
-      sessionUser.role === "SUPER_ADMIN" ||
+      sessionUser.role === "ADMIN" ||
       sessionUser.role === "FOUNDER" ||
       (await isSuperAdmin(sessionUser.id));
     const isSuperOrAdmin =
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
     // Check permissions: Super Admin / Founder / Admin / users with QUESTION_ASSIGN can assign to others; self-assignment allowed for any reviewer
     const isSelf = targetUserId === sessionUser.id;
     const isSuper =
-      sessionUser.role === "SUPER_ADMIN" ||
+      sessionUser.role === "ADMIN" ||
       sessionUser.role === "FOUNDER" ||
       (await isSuperAdmin(sessionUser.id));
 

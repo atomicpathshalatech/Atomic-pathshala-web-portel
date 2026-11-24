@@ -78,7 +78,7 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
   const [previewPrintMode, setPreviewPrintMode] = useState<boolean>(false);
 
   const activeTheme = SUBJECT_THEMES[subject] || SUBJECT_THEMES.CHEMISTRY;
-  const isAdmin = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
+  const isAdmin = userRole === "ADMIN";
 
   const effectiveChapterName = isCustomChapter && customChapterName.trim()
     ? customChapterName.trim()

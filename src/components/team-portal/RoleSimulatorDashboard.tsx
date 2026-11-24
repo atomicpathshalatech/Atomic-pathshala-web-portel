@@ -1163,7 +1163,7 @@ export function RoleSimulatorDashboard() {
                           <td className="p-3">
                             <span
                               className={`px-2 py-0.5 rounded-md font-semibold text-[10px] ${
-                                p.source === "SUPER_ADMIN_BYPASS"
+                                p.source === "ADMIN_BYPASS"
                                   ? "bg-amber-100 text-amber-800"
                                   : p.source.startsWith("USER_OVERRIDE")
                                   ? "bg-purple-100 text-purple-800"

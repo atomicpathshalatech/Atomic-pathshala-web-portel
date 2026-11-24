@@ -23,7 +23,7 @@ export async function POST(
     const { message, isAnnouncement } = messageSchema.parse(body);
 
     const isTeacherOrAdmin =
-      ["TEACHER", "ADMIN", "SUPER_ADMIN", "FOUNDER", "ACADEMIC_HEAD"].includes(session.user.role || "");
+      ["TEACHER", "ADMIN", "FOUNDER", "ACADEMIC_HEAD"].includes(session.user.role || "");
 
     const announcementFlag = isTeacherOrAdmin ? isAnnouncement : false;
 

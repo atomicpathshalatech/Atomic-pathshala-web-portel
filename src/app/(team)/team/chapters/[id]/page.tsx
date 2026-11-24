@@ -107,7 +107,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   // Each lecture's YouTube live link saved on its classes (shown to whoever manages the schedule).
   const liveLinks = canManageSchedule ? await lectureLiveLinks(lectures.map((l) => l.id)) : new Map<string, string>();
 
-  const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
+  const isAdmin = user?.role?.name === "ADMIN" || user?.role?.name === "FOUNDER";
   const canReview = canReviewPermission && (isAdmin || chapter.createdById !== session.user.id);
 
   const mediumLabel =

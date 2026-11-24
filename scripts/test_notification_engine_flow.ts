@@ -20,7 +20,7 @@ async function main() {
   const admin = await prisma.user.findFirst({
     where: {
       OR: [
-        { role: { name: "SUPER_ADMIN" } },
+        { role: { name: "ADMIN" } },
         { email: { contains: "firoz" } },
       ],
     },
@@ -30,7 +30,7 @@ async function main() {
   });
 
   if (!admin) {
-    throw new Error("No SUPER_ADMIN found in database");
+    throw new Error("No ADMIN found in database");
   }
   console.log(`[PASS] Using admin: ${admin.name} (${admin.id})`);
 

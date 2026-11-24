@@ -119,7 +119,6 @@ export async function getConversationsForUser(
   }
 ): Promise<ConversationSummary[]> {
   const isAdmin =
-    userRole === "SUPER_ADMIN" ||
     userRole === "ADMIN" ||
     userRole === "FOUNDER" ||
     userRole === "SUB_ADMIN";
@@ -499,7 +498,6 @@ export async function getConversationThread(
   }
 ) {
   const isAdmin =
-    userRole === "SUPER_ADMIN" ||
     userRole === "ADMIN" ||
     userRole === "FOUNDER" ||
     userRole === "SUB_ADMIN";
@@ -778,7 +776,6 @@ export async function sendMessage({
 
   const senderIsAdmin =
     senderRole === "ADMIN" ||
-    senderRole === "SUPER_ADMIN" ||
     senderRole === "FOUNDER" ||
     senderRole === "SUB_ADMIN";
 
@@ -1113,7 +1110,7 @@ export async function sendMessage({
   } else if (finalRecipientRole === "ADMIN") {
     try {
       const adminUsers = await prisma.user.findMany({
-        where: { role: { name: { in: ["SUPER_ADMIN", "ADMIN", "FOUNDER"] } } },
+        where: { role: { name: { in: ["ADMIN", "FOUNDER"] } } },
         select: { id: true },
       });
 
@@ -1211,7 +1208,6 @@ export async function editMessage(messageId: string, userId: string, newBody: st
  */
 export async function deleteMessage(messageId: string, userId: string, userRole: string, mode: "ME" | "EVERYONE") {
   const isAdmin =
-    userRole === "SUPER_ADMIN" ||
     userRole === "ADMIN" ||
     userRole === "FOUNDER" ||
     userRole === "SUB_ADMIN";

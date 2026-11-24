@@ -209,7 +209,7 @@ async function run() {
 
   // ---- 4. Access + wiring ----
   const { isSuperAdmin } = await import("../src/lib/rbac/super-admin");
-  const superRole = await prisma.role.create({ data: { name: "SUPER_ADMIN", label: "Super Admin" } });
+  const superRole = await prisma.role.create({ data: { name: "ADMIN", label: "Admin" } });
   const adminRole = await prisma.role.create({ data: { name: "ADMIN", label: "Admin" } });
   const boss = await prisma.user.create({ data: { email: "boss@t.local", passwordHash: "x", name: "Boss", roleId: superRole.id } });
   const plainAdmin = await prisma.user.create({ data: { email: "adm@t.local", passwordHash: "x", name: "Admin", roleId: adminRole.id } });

@@ -357,7 +357,7 @@ async function ingestAll() {
   console.log(`Translations ready for ${translations.size} questions.`);
 
   const admin = await prisma.user.findFirst({
-    where: { role: { name: { in: ['SUPER_ADMIN', 'ADMIN'] } } },
+    where: { role: { name: 'ADMIN' } },
   });
   if (!admin) throw new Error("No admin found");
   const userId = admin.id;

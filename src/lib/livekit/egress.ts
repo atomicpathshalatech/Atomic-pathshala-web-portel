@@ -104,6 +104,50 @@ export async function startRoomRecording(roomName: string, storageKey: string, y
   return client.startRoomCompositeEgress(roomName, output, { layout: "grid" });
 }
 
+/**
+ * Starts a Cloud WebComposite Egress that opens the stage URL (obsBroadcastUrl)
+ * in headless cloud Chromium, captures the whiteboard, teacher camera, mic, slides,
+ * and poll overlays, and pushes the composite live via RTMP directly into YouTube.
+ * 
+ * This enables 100% standalone Android tablet teaching without any Windows laptop or OBS.
+ */
+export async function startCloudStageStreaming({
+  stageUrl,
+  youtubeRtmpUrl,
+  storageKey,
+}: {
+  stageUrl: string;
+  youtubeRtmpUrl: string;
+  storageKey?: string;
+}) {
+  const client = getEgressClient();
+  const streamOutput = new StreamOutput({
+    protocol: StreamProtocol.RTMP,
+    urls: [youtubeRtmpUrl],
+  });
+
+  let output: any = streamOutput;
+  if (storageKey) {
+    try {
+      const file = getR2FileOutput(storageKey);
+      output = { file, stream: streamOutput };
+    } catch {
+      output = streamOutput;
+    }
+  }
+
+  return client.startWebEgress(stageUrl, output, {
+    audioOnly: false,
+    videoOnly: false,
+    awaitStartSignal: false,
+  });
+}
+
+export async function stopCloudStageStreaming(egressId: string) {
+  const client = getEgressClient();
+  return client.stopEgress(egressId);
+}
+
 /** Stops an in-progress egress. LiveKit finalizes and uploads the file
  * asynchronously after this returns - the real "it's ready" signal is the
  * egress_ended webhook (src/app/api/webhooks/livekit/route.ts), not this

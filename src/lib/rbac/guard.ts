@@ -84,11 +84,10 @@ export async function hasPermission(
     return false;
   }
 
-  // 3. Super Admin / Founder / Admin has all permissions unless explicitly overridden
-  const isSuperAdmin =
-    user.role.name === "SUPER_ADMIN" ||
-    user.role.name === "FOUNDER" ||
-    user.role.name === "ADMIN";
+  // 3. Admin / Founder has all permissions unless explicitly overridden
+  const isAdmin =
+    user.role.name === "ADMIN" ||
+    user.role.name === "FOUNDER";
 
   // 4. Check user-level explicit override first
   const override = await prisma.userPermissionOverride.findUnique({
@@ -104,7 +103,7 @@ export async function hasPermission(
     return override.granted;
   }
 
-  if (isSuperAdmin) return true;
+  if (isAdmin) return true;
 
   // 5. Check role default catalogue
   const roleDefaults = ROLE_PERMISSION_DEFAULTS[user.role.name] || [];
@@ -152,12 +151,11 @@ export async function getUserPermissionCodes(userId: string): Promise<Set<Permis
   if (!user || !user.role || user.status !== "ACTIVE") return new Set();
   if (user.contractEnd && new Date(user.contractEnd) < new Date()) return new Set();
 
-  const isSuperAdmin =
-    user.role.name === "SUPER_ADMIN" ||
-    user.role.name === "FOUNDER" ||
-    user.role.name === "ADMIN";
+  const isAdmin =
+    user.role.name === "ADMIN" ||
+    user.role.name === "FOUNDER";
 
-  if (isSuperAdmin) {
+  if (isAdmin) {
     return new Set(Object.values(PERMISSIONS));
   }
 
@@ -204,17 +202,19 @@ export async function requirePermission(
 }
 
 /**
- * Super Admin / Founder only (an active account). ADMIN passes every
- * permission, so a permission can't express "only the Super Admin" — the
- * website CMS (builder, FAQs, student feedback) uses this.
+ * Admin / Founder only (an active account). Consolidated top-level admin check.
  */
-export async function isSuperAdminUser(userId: string | undefined | null): Promise<boolean> {
+export async function isAdminUser(userId: string | undefined | null): Promise<boolean> {
   if (!userId) return false;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { status: true, role: { select: { name: true } } } });
-  return Boolean(user && user.status === "ACTIVE" && (user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER"));
+  return Boolean(user && user.status === "ACTIVE" && (user.role?.name === "ADMIN" || user.role?.name === "FOUNDER"));
 }
 
-export async function requireSuperAdmin(userId: string | undefined | null): Promise<void> {
+export async function requireAdmin(userId: string | undefined | null): Promise<void> {
   if (!userId) throw new UnauthorizedError();
-  if (!(await isSuperAdminUser(userId))) throw new ForbiddenError("Only the Super Admin can manage the website.");
+  if (!(await isAdminUser(userId))) throw new ForbiddenError("Only an Admin can perform this action.");
 }
+
+// Backward-compatible aliases pointing to Admin
+export const isSuperAdminUser = isAdminUser;
+export const requireSuperAdmin = requireAdmin;

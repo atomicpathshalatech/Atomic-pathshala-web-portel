@@ -11,7 +11,7 @@ import { QUESTION_REPORT_STATUSES } from "@/lib/validation/question-report";
  * Admin Report Dashboard listing (`/team/questions/reports` in the UI).
  * Gated on QUESTION_READ — the same permission every question-review
  * surface uses — not a new report-specific code; SME/ADMIN/SUB_ADMIN/
- * ACADEMIC_HEAD/QUESTION_TEAM/SUPER_ADMIN/FOUNDER already hold it.
+ * ACADEMIC_HEAD/QUESTION_TEAM/ADMIN/FOUNDER already hold it.
  *
  * Scope note: the source spec also fans a notification out to Super
  * Admin, Sub Admin, the question's subject teacher(s), and its creator

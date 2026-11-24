@@ -26,7 +26,6 @@ export function ChatInfoDrawer({
   const [activeTab, setActiveTab] = useState<"MEDIA" | "DOCS" | "STARRED" | "MEMBERS">("MEDIA");
 
   const isAdmin =
-    currentUserRole === "SUPER_ADMIN" ||
     currentUserRole === "ADMIN" ||
     currentUserRole === "FOUNDER" ||
     currentUserRole === "SUB_ADMIN" ||

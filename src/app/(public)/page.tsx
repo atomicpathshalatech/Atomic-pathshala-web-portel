@@ -11,7 +11,7 @@ import { PublicFooter, resolveFaqs } from "@/components/public-home/TrustSection
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const SITE = "https://ap.atomicpathshala.in";
+const SITE = "https://atomicpathshala.in";
 const TITLE = "Atomic Pathshala — NEET, JEE & Board Exam Preparation";
 const DESCRIPTION =
   "Free PYQs, notes, mind maps, formula sheets, DPPs and tests for NEET, JEE and Class 10, 11 & 12 — in Hindi and English. Live classes, recordings and doubt support.";
@@ -19,7 +19,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   title: { absolute: TITLE },
   description: DESCRIPTION,
-  alternates: { canonical: "/" },
+  alternates: { canonical: "https://atomicpathshala.in" },
   openGraph: {
     type: "website",
     url: SITE,
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     images: [{ url: "/brand/logo.png", alt: "Atomic Pathshala" }],
     locale: "en_IN",
   },
-  twitter: { card: "summary", title: TITLE, description: DESCRIPTION, images: ["/brand/logo.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/brand/logo.png"] },
 };
 
 export default async function HomePage() {

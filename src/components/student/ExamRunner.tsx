@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { stripEmbeddedOptions } from "@/lib/questions/structure-parser";
 import { isNativeApp } from "@/lib/platform";
 import { ExamLanguageModal } from "./ExamLanguageModal";
 import { ExamInstructionsView } from "./ExamInstructionsView";
@@ -711,7 +712,7 @@ export function ExamRunner({
   // ==========================================
   // PHASE 3: Actual High-Stakes NTA CBT Exam
   // ==========================================
-  const statement =
+  const rawStatement =
     currentQuestionLang === "hi" && currentQ?.bodyHi ? currentQ.bodyHi : currentQ?.body || "";
 
   const optionA =
@@ -722,6 +723,13 @@ export function ExamRunner({
     currentQuestionLang === "hi" && currentQ?.optionCHi ? currentQ.optionCHi : currentQ?.optionC;
   const optionD =
     currentQuestionLang === "hi" && currentQ?.optionDHi ? currentQ.optionDHi : currentQ?.optionD;
+
+  const statement = stripEmbeddedOptions(rawStatement, {
+    A: optionA || "",
+    B: optionB || "",
+    C: optionC || "",
+    D: optionD || "",
+  }).cleanStem;
 
   const optionsObj: Record<string, string | null | undefined> = {
     A: optionA,

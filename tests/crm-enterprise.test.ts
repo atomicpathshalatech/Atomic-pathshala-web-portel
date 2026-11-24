@@ -64,7 +64,7 @@ async function runTestSuite() {
 
   // Fetch admin user & active batch for tests
   const admin = await prisma.user.findFirst({
-    where: { role: { name: { in: ["SUPER_ADMIN", "ADMIN"] } } },
+    where: { role: { name: "ADMIN" } },
   });
   const batch = await prisma.batch.findFirst();
 

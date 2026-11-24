@@ -114,7 +114,7 @@ export async function getOutreachUsers(): Promise<OutreachUser[]> {
       where: {
         status: "ACTIVE",
         role: {
-          name: { in: ["ADMIN", "SUPER_ADMIN", "SALES", "MARKETING", "TEACHER", "FOUNDER"] },
+          name: { in: ["ADMIN", "SALES", "MARKETING", "TEACHER", "FOUNDER"] },
         },
       },
       select: {

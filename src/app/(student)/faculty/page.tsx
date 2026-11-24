@@ -17,7 +17,7 @@ export default async function FacultyDirectoryPage() {
       user: {
         status: "ACTIVE",
         role: {
-          name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "SUPER_ADMIN", "ADMIN", "FOUNDER"] },
+          name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "ADMIN", "FOUNDER"] },
         },
       },
     },

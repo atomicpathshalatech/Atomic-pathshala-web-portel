@@ -14,7 +14,7 @@ export type PermissionSourceType =
   | "ROLE_DATABASE"
   | "USER_OVERRIDE_GRANTED"
   | "USER_OVERRIDE_DENIED"
-  | "SUPER_ADMIN_BYPASS"
+  | "ADMIN_BYPASS"
   | "NOT_GRANTED"
   | "ACCOUNT_INACTIVE";
 
@@ -294,9 +294,8 @@ export async function evaluateEmployeePermissions(userId: string): Promise<{
   if (!user) throw new Error("User not found");
 
   const isSuperAdmin =
-    user.role?.name === "SUPER_ADMIN" ||
-    user.role?.name === "FOUNDER" ||
-    user.role?.name === "ADMIN";
+    user.role?.name === "ADMIN" ||
+    user.role?.name === "FOUNDER";
 
   const isAccountActive =
     user.status === "ACTIVE" &&
@@ -359,7 +358,7 @@ export async function evaluateEmployeePermissions(userId: string): Promise<{
       evaluations[code] = {
         code,
         granted: true,
-        source: "SUPER_ADMIN_BYPASS",
+        source: "ADMIN_BYPASS",
         sourceLabel: `${user.role?.label || roleName} Executive Bypass`,
         reason: "Administrative executive role possesses unrestricted platform authority.",
       };
@@ -430,9 +429,8 @@ export async function evaluateRolePermissions(roleName: string): Promise<{
   if (!role) throw new Error(`Role '${roleName}' not found`);
 
   const isSuperAdmin =
-    role.name === "SUPER_ADMIN" ||
-    role.name === "FOUNDER" ||
-    role.name === "ADMIN";
+    role.name === "ADMIN" ||
+    role.name === "FOUNDER";
 
   const roleDefaults = new Set(ROLE_PERMISSION_DEFAULTS[role.name] || []);
   const dbRolePerms = new Set(
@@ -449,7 +447,7 @@ export async function evaluateRolePermissions(roleName: string): Promise<{
       evaluations[code] = {
         code,
         granted: true,
-        source: "SUPER_ADMIN_BYPASS",
+        source: "ADMIN_BYPASS",
         sourceLabel: `${role.label} Authority`,
         reason: "Administrative executive role possesses unrestricted platform authority.",
       };
@@ -662,9 +660,8 @@ export async function simulateEmployee(userId: string): Promise<SimulationResult
   const { effectiveCodes, evaluations, user } = await evaluateEmployeePermissions(userId);
 
   const isSuperAdmin =
-    user.role?.name === "SUPER_ADMIN" ||
-    user.role?.name === "FOUNDER" ||
-    user.role?.name === "ADMIN";
+    user.role?.name === "ADMIN" ||
+    user.role?.name === "FOUNDER";
 
   const sidebarEvaluation = calculateSidebarEvaluation(effectiveCodes, isSuperAdmin, evaluations);
   const moduleMatrix = buildModuleMatrix(effectiveCodes);
@@ -746,9 +743,8 @@ export async function simulateRole(roleName: string): Promise<SimulationResult> 
   const { effectiveCodes, evaluations, role } = await evaluateRolePermissions(roleName);
 
   const isSuperAdmin =
-    role.name === "SUPER_ADMIN" ||
-    role.name === "FOUNDER" ||
-    role.name === "ADMIN";
+    role.name === "ADMIN" ||
+    role.name === "FOUNDER";
 
   const sidebarEvaluation = calculateSidebarEvaluation(effectiveCodes, isSuperAdmin, evaluations);
   const moduleMatrix = buildModuleMatrix(effectiveCodes);

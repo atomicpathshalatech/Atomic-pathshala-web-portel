@@ -87,9 +87,7 @@ export function StickyPurchaseBar({ course }: { course: CourseData }) {
     );
   }
 
-  // Android app: no purchases in the app (Google Play billing policy).
-  if (nativeApp) return <NotInAppNotice />;
-
+  // Purchase bar rendered across both Web and Android app
   return (
     <>
       {/* 1. Desktop Sticky Purchase Card (Right Column) */}

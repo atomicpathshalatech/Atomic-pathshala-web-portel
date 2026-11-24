@@ -30,7 +30,6 @@ export async function GET(
 
     const isTeacherSelf = teacher.userId === session.user.id;
     const isAdmin =
-      session.user.role === "SUPER_ADMIN" ||
       session.user.role === "ADMIN" ||
       session.user.role === "FOUNDER";
 
@@ -161,7 +160,6 @@ export async function POST(
 
     const isTeacherSelf = teacher.userId === session.user.id;
     const isAdmin =
-      session.user.role === "SUPER_ADMIN" ||
       session.user.role === "ADMIN" ||
       session.user.role === "FOUNDER";
 

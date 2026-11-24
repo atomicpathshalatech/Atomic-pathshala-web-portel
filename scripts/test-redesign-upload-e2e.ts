@@ -58,7 +58,7 @@ async function asset(ownerId: string, name: string, buf: Buffer) {
 }
 
 (async () => {
-  const role = await prisma.role.findFirst({ where: { name: "SUPER_ADMIN" } });
+  const role = await prisma.role.findFirst({ where: { name: "ADMIN" } });
   const pw = crypto.randomBytes(12).toString("base64url");
   const user = await prisma.user.create({ data: { email: `e2e-redesign-${Date.now()}@test.local`, name: "E2E redesign", passwordHash: await bcrypt.hash(pw, 10), roleId: role!.id, status: "ACTIVE" } as any });
   const other = await prisma.user.create({ data: { email: `e2e-redesign-o-${Date.now()}@test.local`, name: "E2E other", passwordHash: "x", roleId: role!.id, status: "ACTIVE" } as any });

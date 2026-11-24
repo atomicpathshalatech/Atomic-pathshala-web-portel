@@ -77,7 +77,7 @@ async function main() {
 
   // 2. Fetch admin user to assign leads
   const adminUser = await prisma.user.findFirst({
-    where: { role: { name: { in: ["SUPER_ADMIN", "ADMIN"] } } },
+    where: { role: { name: "ADMIN" } },
     select: { id: true, name: true },
   });
 

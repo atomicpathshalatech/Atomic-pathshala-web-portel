@@ -634,7 +634,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
               <select
                 value={editRole === "NONE" ? "" : editRole}
                 onChange={(e) => setEditRole(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold"
+                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-bold"
               >
                 <option value="">— select a role —</option>
                 {ALL_ASSIGNABLE_ROLES.map((r) => (
@@ -649,7 +649,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
               <select
                 value={editStatus}
                 onChange={(e) => setEditStatus(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold"
+                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-bold"
               >
                 {LIFECYCLE_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -718,7 +718,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
                 type="text"
                 value={editPosition}
                 onChange={(e) => setEditPosition(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
               />
             </div>
 
@@ -727,7 +727,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
               <select
                 value={editContractType}
                 onChange={(e) => setEditContractType(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold"
+                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-bold"
               >
                 <option value="FULL_TIME">Full Time</option>
                 <option value="PART_TIME">Part Time</option>

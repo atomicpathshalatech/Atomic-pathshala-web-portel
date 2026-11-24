@@ -32,7 +32,7 @@ async function runTestSuite() {
   try {
     // Setup test user
     const adminUser = await prisma.user.findFirst({
-      where: { role: { name: { in: ["SUPER_ADMIN", "ADMIN"] } } },
+      where: { role: { name: "ADMIN" } },
     });
     if (!adminUser) throw new Error("Admin user not found in database");
 

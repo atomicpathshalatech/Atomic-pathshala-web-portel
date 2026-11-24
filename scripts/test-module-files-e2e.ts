@@ -70,7 +70,7 @@ const noStorageText = (v: unknown) => {
 };
 
 (async () => {
-  const { s: admin, user: adminUser } = await userWithRole("SUPER_ADMIN");
+  const { s: admin, user: adminUser } = await userWithRole("ADMIN");
   const { s: sales } = await userWithRole("SALES");
   const anon = new HttpSession(BASE);
   const batch = await prisma.batch.findFirst({ select: { id: true, code: true, name: true } });

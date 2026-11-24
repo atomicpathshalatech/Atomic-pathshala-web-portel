@@ -1,20 +1,25 @@
 import { Prisma } from "@prisma/client";
 import { QuestionType, Difficulty } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { generateQuestionId } from "./id-generator";
+import { generateQuestionId, isValidCanonicalQuestionId } from "./id-generator";
 
 /**
- * Every new Question gets its 8-digit Question ID (questionCode) here.
+ * Every new Question gets its Canonical Question ID (questionCode) here.
  *
- * generateQuestionId() reads the highest code and adds one — two questions
+ * generateQuestionId() reads the highest code for the subject and adds one — two questions
  * created at the same moment (an AI batch, a PDF import and a teacher saving)
  * got the SAME code; the second insert failed on the unique index, and the
  * AI worker swallowed that error, so questions silently went missing. Several
  * create paths also never assigned a code at all. This claims a code and
  * retries with a fresh one if another insert took it first.
  */
-export async function withNewQuestionCode<T>(subject: string | null | undefined, create: (questionCode: string) => Promise<T>, firstCode?: string): Promise<T> {
-  let code = firstCode ?? (await generateQuestionId(prisma, subject));
+export async function withNewQuestionCode<T>(
+  subject: string | null | undefined,
+  create: (questionCode: string) => Promise<T>,
+  firstCode?: string
+): Promise<T> {
+  const isCandidateCanonical = firstCode ? isValidCanonicalQuestionId(firstCode) : false;
+  let code = isCandidateCanonical && firstCode ? firstCode : (await generateQuestionId(prisma, subject));
   for (let attempt = 0; attempt < 8; attempt++) {
     try {
       return await create(code);

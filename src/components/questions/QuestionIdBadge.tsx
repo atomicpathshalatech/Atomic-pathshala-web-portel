@@ -27,11 +27,13 @@ export function QuestionIdBadge({
   const getPrefixInfo = (code?: string | null) => {
     if (!code || code.length < 3) return "Prefix: Dynamic";
     const prefix = code.slice(0, 3).toUpperCase();
-    if (prefix === "P26") return "Physics (P26)";
-    if (prefix === "C25") return "Chemistry (C25)";
-    if (prefix === "B24") return "Biology (B24)";
-    if (prefix === "M23") return "Mathematics (M23)";
-    if (prefix === "S22") return "Science (S22)";
+    const letter = prefix.charAt(0);
+    if (letter === "P") return `Physics (${prefix})`;
+    if (letter === "C") return `Chemistry (${prefix})`;
+    if (letter === "B") return `Biology (${prefix})`;
+    if (letter === "M") return `Mathematics (${prefix})`;
+    if (letter === "S") return `Science (${prefix})`;
+    if (letter === "Z") return `Zoology (${prefix})`;
     // Fallback for legacy 8-digit codes
     if (code.startsWith("80") || code.startsWith("81")) return "Physics (Legacy)";
     if (code.startsWith("82")) return "Chemistry (Legacy)";

@@ -19,9 +19,53 @@ export async function generateMetadata({
   if (!profile) return { title: "Faculty Not Found | Atomic Pathshala" };
 
   const subject = profile.subjects.length > 0 ? profile.subjects.join(", ") : profile.department;
+  const canonicalUrl = `https://atomicpathshala.in/teachers/${params.slug}`;
+  const title =
+    profile.seoProfile?.customSeoTitle ||
+    `${profile.name} — ${subject} Faculty | Atomic Pathshala`;
+  const description =
+    profile.seoProfile?.customMetaDescription ||
+    (profile.bio
+      ? profile.bio.slice(0, 160)
+      : `Learn with ${profile.name}, verified ${subject} educator at Atomic Pathshala for NEET, JEE & Boards.`);
+  const ogImage = profile.seoProfile?.ogImageUrl || profile.photoUrl || "/brand/logo.png";
+
   return {
-    title: `${profile.name} — ${subject} Faculty | Atomic Pathshala`,
-    description: profile.bio ? profile.bio.slice(0, 160) : `Learn with ${profile.name} at Atomic Pathshala.`,
+    title,
+    description,
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      type: "profile",
+      url: canonicalUrl,
+      title,
+      description,
+      siteName: "Atomic Pathshala",
+      images: [
+        {
+          url: ogImage,
+          width: 1200,
+          height: 630,
+          alt: profile.name,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
+    robots: {
+      index: profile.seoProfile?.isSeoIndexed !== false,
+      follow: true,
+      googleBot: {
+        index: profile.seoProfile?.isSeoIndexed !== false,
+        follow: true,
+        "max-image-preview": "large",
+      },
+    },
   };
 }
 
@@ -131,8 +175,68 @@ export default async function TeacherProfilePage({
     profile.dobDayMonth
   );
 
+  const profileUrl = `https://atomicpathshala.in/teachers/${params.slug}`;
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "@id": `${profileUrl}#person`,
+      name: profile.name,
+      jobTitle: profile.headline || `${primarySubject} Educator`,
+      description: profile.seoProfile?.verifiedBio || profile.bio,
+      image: profile.photoUrl || "https://atomicpathshala.in/brand/logo.png",
+      url: profileUrl,
+      worksFor: {
+        "@type": "EducationalOrganization",
+        name: "Atomic Pathshala",
+        url: "https://atomicpathshala.in",
+      },
+      alumniOf: profile.qualifications.map((q) => ({
+        "@type": "EducationalOrganization",
+        name: q.institution,
+      })),
+      knowsAbout: [
+        ...profile.subjects,
+        ...(profile.targetExams || []),
+        ...(profile.seoProfile?.targetKeywords || []),
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "ProfilePage",
+      mainEntity: { "@id": `${profileUrl}#person` },
+      breadcrumb: {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: "https://atomicpathshala.in",
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Faculty Directory",
+            item: "https://atomicpathshala.in/teachers",
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: profile.name,
+            item: profileUrl,
+          },
+        ],
+      },
+    },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100 antialiased font-sans">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Navbar />
 
       <main className="flex-1 pt-24 pb-20 px-4 sm:px-6 max-w-4xl mx-auto w-full space-y-6 sm:space-y-8">
@@ -142,9 +246,9 @@ export default async function TeacherProfilePage({
             Home
           </Link>
           <span className="material-symbols-outlined text-xs text-slate-400">chevron_right</span>
-          <span className="hover:text-blue-600 transition-colors">
-            Faculty
-          </span>
+          <Link href="/teachers" className="hover:text-blue-600 transition-colors">
+            Faculty Directory
+          </Link>
           <span className="material-symbols-outlined text-xs text-slate-400">chevron_right</span>
           <span className="text-blue-600 dark:text-blue-400 font-semibold truncate">
             {profile.name}

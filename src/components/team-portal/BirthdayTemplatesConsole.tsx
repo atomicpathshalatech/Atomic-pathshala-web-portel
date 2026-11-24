@@ -82,11 +82,11 @@ export function BirthdayTemplatesConsole() {
             {creating && (
               <>
                 <label className="text-xs text-slate-500">Category</label>
-                <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className="w-full mb-2 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
+                <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className="w-full mb-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900">
                   {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <label className="text-xs text-slate-500">Board (optional)</label>
-                <input value={draft.board} onChange={(e) => setDraft({ ...draft, board: e.target.value })} placeholder="e.g. CBSE" className="w-full mb-2 px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
+                <input value={draft.board} onChange={(e) => setDraft({ ...draft, board: e.target.value })} placeholder="e.g. CBSE" className="w-full mb-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900" />
               </>
             )}
             <label className="text-xs text-slate-500">Name</label>

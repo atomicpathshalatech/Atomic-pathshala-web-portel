@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import { toast } from "sonner";
 import { AiMetadataSuggestion, TranslationVerificationResult } from "@/lib/questions/ai-service";
 
 interface AiAssistantToolsProps {
@@ -172,27 +173,45 @@ export function AiAssistantTools({
   // 4. AI Detailed Solution Generation
   const handleGenerateSolution = async () => {
     const activeStatement = statementEn || statementHi;
-    if (!activeStatement?.trim()) return;
+    if (!activeStatement?.trim()) {
+      toast.warning("Please enter a question statement first.");
+      return;
+    }
     setLoadingAction("solution");
+    const toastId = toast.loading(`Generating ${subject || "academic"} 4-part solution...`);
     try {
       const res = await fetch("/api/team/questions/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "solution",
+          action: "generate_subject_solution",
           payload: {
-            statement: activeStatement,
-            options: optionsEn,
-            correctAnswer,
+            subject: subject || "Chemistry",
+            chapter: chapter || "",
+            statementEn: statementEn || statementHi,
+            statementHi: statementHi || statementEn,
+            optionsEn: optionsEn || {},
+            optionsHi: optionsHi || {},
+            correctAnswer: Array.isArray(correctAnswer) ? correctAnswer[0] : correctAnswer,
           },
         }),
       });
       const json = await res.json();
-      if (json.success && json.data.solution) {
-        onApplySolution(json.data.solution);
+      if (!res.ok || !json.success) {
+        throw new Error(typeof json.error === "string" ? json.error : json.error?.message || "Solution generation failed.");
       }
-    } catch (err) {
-      console.error(err);
+
+      if (json.data?.solution) {
+        onApplySolution(json.data.solution);
+        if (json.data.solution.answerMismatch) {
+          toast.warning(json.data.solution.mismatchWarning || "Answer mismatch detected.", { id: toastId });
+        } else {
+          toast.success("✨ 4-Part solution generated & applied successfully!", { id: toastId });
+        }
+      }
+    } catch (err: any) {
+      console.error("[AiAssistantTools] handleGenerateSolution Error:", err);
+      toast.error(err.message || "Failed to generate solution", { id: toastId });
     } finally {
       setLoadingAction(null);
     }

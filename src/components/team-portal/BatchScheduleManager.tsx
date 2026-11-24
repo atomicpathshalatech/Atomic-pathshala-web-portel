@@ -85,7 +85,7 @@ export function BatchScheduleManager({
   schedules: ScheduleEntry[];
   teachers: TeacherOption[];
   // Edit/Delete/Schedule actions all hit routes gated on
-  // PERMISSIONS.BATCH_SCHEDULE_MANAGE (ACADEMIC_HEAD/SUPER_ADMIN/FOUNDER
+  // PERMISSIONS.BATCH_SCHEDULE_MANAGE (ACADEMIC_HEAD/ADMIN/FOUNDER
   // only) — this component used to render those controls for every viewer
   // regardless of whether they actually held that permission, so anyone
   // without it (e.g. a Teacher, who only has BATCH_READ) saw working-looking

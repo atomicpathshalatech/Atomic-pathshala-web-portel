@@ -8,9 +8,26 @@ import { FacultyDirectoryList } from "@/components/teacher/FacultyDirectoryList"
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Expert Faculty Directory | Atomic Pathshala",
+  title: "Expert Faculty Directory — Top NEET & JEE Educators | Atomic Pathshala",
   description:
     "Explore Atomic Pathshala's verified faculty members, doctors, and engineers dedicated to academic excellence across NEET, JEE, Foundation, and Board examinations.",
+  alternates: {
+    canonical: "https://atomicpathshala.in/teachers",
+  },
+  openGraph: {
+    type: "website",
+    url: "https://atomicpathshala.in/teachers",
+    title: "Expert Faculty Directory — Atomic Pathshala",
+    description:
+      "Meet our experienced faculty team including Senior Chemistry Educator Firoz Ali. Expert mentoring for NEET, JEE & Boards.",
+    images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Atomic Pathshala Faculty" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Expert Faculty Directory — Atomic Pathshala",
+    description: "Meet our experienced faculty team for NEET, JEE & Boards.",
+    images: ["/brand/logo.png"],
+  },
 };
 
 export default async function FacultyDirectoryPage() {
@@ -20,7 +37,7 @@ export default async function FacultyDirectoryPage() {
       user: {
         status: "ACTIVE",
         role: {
-          name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "SUPER_ADMIN", "ADMIN", "FOUNDER"] },
+          name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "ADMIN", "FOUNDER"] },
         },
       },
     },
@@ -50,12 +67,34 @@ export default async function FacultyDirectoryPage() {
       followers: {
         select: { id: true },
       },
+      seoProfile: true,
     },
     orderBy: { createdAt: "asc" },
   });
 
+  const visibleTeachers = teachers.filter((t) => !t.seoProfile || t.seoProfile.isPublicProfileEnabled);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "Atomic Pathshala Faculty Directory",
+    itemListElement: visibleTeachers.map((t, idx) => {
+      const slug = t.seoProfile?.slug || t.user.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || t.id;
+      return {
+        "@type": "ListItem",
+        position: idx + 1,
+        url: `https://atomicpathshala.in/teachers/${slug}`,
+        name: t.user.name,
+      };
+    }),
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100 antialiased font-sans">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Navbar />
 
       <main className="flex-1 pt-24 pb-20 px-4 sm:px-6 max-w-6xl mx-auto w-full space-y-8">
@@ -89,7 +128,7 @@ export default async function FacultyDirectoryPage() {
         </section>
 
         {/* Interactive Faculty Directory with Category & Subject Selection */}
-        <FacultyDirectoryList teachers={teachers as any} />
+        <FacultyDirectoryList teachers={visibleTeachers as any} />
       </main>
 
       <Footer />

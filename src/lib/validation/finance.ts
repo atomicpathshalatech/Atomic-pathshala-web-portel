@@ -13,15 +13,25 @@ export const couponCreateSchema = z
       .transform((s) => s.toUpperCase()),
     type: couponTypeSchema,
     value: z.number().positive("Value must be greater than 0"),
-    plan: subscriptionPlanSchema.optional(),
-    maxRedemptions: z.number().int().positive().optional(),
-    expiresAt: z.coerce.date().optional(),
+    plan: subscriptionPlanSchema.optional().nullable(),
+    batchId: z.string().optional().nullable(),
+    minOrderValue: z.number().min(0).optional().nullable(),
+    maxDiscountAmount: z.number().min(0).optional().nullable(),
+    maxRedemptions: z.number().int().positive().optional().nullable(),
+    expiresAt: z.coerce.date().optional().nullable(),
   })
   .refine((v) => v.type !== "PERCENT" || v.value <= 100, {
     message: "A percent coupon can't exceed 100",
     path: ["value"],
   });
 export type CouponCreateInput = z.infer<typeof couponCreateSchema>;
+
+export const couponValidateSchema = z.object({
+  code: z.string().trim().min(1, "Coupon code is required"),
+  batchId: z.string().optional(),
+  amount: z.number().min(0).optional(),
+});
+export type CouponValidateInput = z.infer<typeof couponValidateSchema>;
 
 export const couponUpdateSchema = z.object({
   isActive: z.boolean().optional(),

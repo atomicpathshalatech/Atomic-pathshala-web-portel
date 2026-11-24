@@ -21,6 +21,7 @@ import {
   formatStructuredSolution,
   isEmptyStructuredSolution,
 } from "@/lib/pyq/structured-solution";
+import { StandardSolutionView } from "@/components/solutions/StandardSolutionView";
 
 interface QuestionTranslationData {
   id?: string;
@@ -1296,25 +1297,36 @@ export function PyqQuestionReviewModal({
                   <div className="space-y-4">
                     {[
                       {
-                        key: "concept" as const,
+                        key: "correctAnswer" as const,
                         number: "1",
-                        title: solutionLanguageTab === "en" ? "Core Concept & Theory (Optional)" : "मुख्य अवधारणा एवं सिद्धांत (वैकल्पिक)",
-                        desc: solutionLanguageTab === "en" ? "Brief underlying scientific principle or definition (only when genuinely needed)." : "संक्षिप्त मूल वैज्ञानिक सिद्धांत या परिभाषा (केवल आवश्यक होने पर)।",
-                        placeholder: solutionLanguageTab === "en" ? "Explain the primary theoretical concept here (optional for direct recall)..." : "यहाँ मुख्य वैज्ञानिक अवधारणा दर्ज करें...",
+                        title: solutionLanguageTab === "en" ? "1. Correct Answer" : "1. सही उत्तर",
+                        desc: solutionLanguageTab === "en" ? "Displayed at the very beginning (e.g. Option B)." : "शुरुआत में प्रदर्शित सही उत्तर (उदा. विकल्प B)।",
+                        placeholder: solutionLanguageTab === "en" ? "Option B" : "विकल्प B",
+                        rows: 1,
+                      },
+                      {
+                        key: "concept" as const,
+                        number: "2",
+                        title: solutionLanguageTab === "en" ? "2. Concept Used" : "2. प्रयुक्त अवधारणा",
+                        desc: solutionLanguageTab === "en" ? "Concise governing principle, law, formula, or NCERT rule." : "संक्षिप्त मूल वैज्ञानिक सिद्धांत, नियम, सूत्र अथवा NCERT अवधारणा।",
+                        placeholder: solutionLanguageTab === "en" ? "Explain primary concept/formula here..." : "यहाँ मुख्य अवधारणा/सूत्र दर्ज करें...",
+                        rows: 3,
                       },
                       {
                         key: "solution" as const,
-                        number: "2",
-                        title: solutionLanguageTab === "en" ? "Question Solution & Working" : "प्रश्न हल एवं व्याख्या",
-                        desc: solutionLanguageTab === "en" ? "Complete, question-specific explanation. Includes formulas & calculation for Physics/Chem; direct factual explanation for Biology." : "प्रत्यक्ष एवं संपूर्ण हल। भौतिकी/रसायन के सूत्र व गणना, या जीव विज्ञान का सीधा वैज्ञानिक कारण।",
-                        placeholder: solutionLanguageTab === "en" ? "Write the direct, complete solution here..." : "यहाँ विस्तृत एवं स्पष्ट हल दर्ज करें...",
+                        number: "3",
+                        title: solutionLanguageTab === "en" ? "3. Step-by-Step Solution" : "3. चरण-दर-चरण हल",
+                        desc: solutionLanguageTab === "en" ? "Complete, logically connected steps with ~1 line visual spacing between steps." : "प्रत्यक्ष एवं संपूर्ण हल, चरणों के बीच दृश्य रिक्त स्थान सहित।",
+                        placeholder: solutionLanguageTab === "en" ? "Step 1 : ...\n\nStep 2 : ..." : "चरण 1 : ...\n\nचरण 2 : ...",
+                        rows: 6,
                       },
                       {
-                        key: "optionExplanation" as const,
-                        number: "3",
-                        title: solutionLanguageTab === "en" ? "Option-wise Analysis" : "विकल्पवार विश्लेषण",
-                        desc: solutionLanguageTab === "en" ? "Why the correct option is right and why distractors are incorrect." : "सही विकल्प क्यों सही है और अन्य विकल्प क्यों गलत हैं।",
-                        placeholder: solutionLanguageTab === "en" ? "Option (A): ... \nOption (B): ... \nOption (C): ... \nOption (D): ..." : "विकल्प (A): ... \nविकल्प (B): ...",
+                        key: "finalAnswer" as const,
+                        number: "4",
+                        title: solutionLanguageTab === "en" ? "4. Final Answer" : "4. अंतिम उत्तर",
+                        desc: solutionLanguageTab === "en" ? "Final numerical value + unit / chemical product / biological conclusion + option." : "अंतिम मान, इकाई, उत्पाद, निष्कर्ष एवं विकल्प।",
+                        placeholder: solutionLanguageTab === "en" ? "3.2 m/s — Option B" : "3.2 m/s — विकल्प B",
+                        rows: 2,
                       },
                     ].map((sec) => {
                       const curVal = ((solutionLanguageTab === "en" ? structuredEn[sec.key] : structuredHi[sec.key]) || "") as string;
@@ -1336,7 +1348,7 @@ export function PyqQuestionReviewModal({
                               </div>
                             </div>
                             <span className="text-[10px] font-bold text-slate-400 uppercase">
-                              {curVal.trim() ? "Completed ✓" : sec.key === "concept" ? "Optional" : "Required"}
+                              {curVal.trim() ? "Completed ✓" : "Required"}
                             </span>
                           </div>
 
@@ -1360,7 +1372,7 @@ export function PyqQuestionReviewModal({
                                 }
                               }}
                               placeholder={sec.placeholder}
-                              rows={sec.key === "solution" ? 5 : 3}
+                              rows={sec.rows}
                               className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-medium focus:ring-2 focus:ring-blue-500 resize-y"
                             />
                           ) : (
@@ -1438,17 +1450,22 @@ export function PyqQuestionReviewModal({
                       })}
                     </div>
 
-                    {/* Full Structured Solution Markdown Preview */}
+                    {/* Full Structured Solution Standard Preview */}
                     <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                       <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
-                        <span className="material-symbols-outlined text-purple-600 text-lg">lightbulb</span>
+                        <span className="material-symbols-outlined text-purple-600 text-lg">verified</span>
                         <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
-                          Comprehensive Solution Explanation
+                          Mandatory Universal 4-Section Solution
                         </h4>
                       </div>
-                      <div className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed space-y-3 prose dark:prose-invert max-w-none">
-                        <FormulaText text={formatStructuredSolution(structuredEn) || "(No structured solution compiled yet)"} />
-                      </div>
+                      <StandardSolutionView
+                        solution={structuredEn}
+                        activeLanguage="ENGLISH"
+                        correctOptionKey={correctKey}
+                        options={enOptions}
+                        subject={editSubject}
+                        imageUrl={editImageUrl}
+                      />
                     </div>
                   </div>
                 )}

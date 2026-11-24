@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { StandardSolutionView } from "@/components/solutions/StandardSolutionView";
 import type { SimilarityHit } from "@/lib/exercises/module-similarity";
 import {
   Trash2,
@@ -341,33 +342,19 @@ export function ExerciseQuestionCard({
         </button>
 
         {showSolution && (
-          <div className="mt-2 rounded-lg bg-slate-50 p-3 text-xs border border-slate-200 dark:bg-slate-800/60 dark:border-slate-700 space-y-2">
-            <span className="block font-bold text-slate-700 dark:text-slate-300">
-              Answer &amp; Detailed Explanation:
-            </span>
-            {hi?.solution && (
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase">हिन्दी व्याख्या:</span>
-                <div className="text-slate-900 dark:text-white mt-0.5">
-                  <FormulaText text={hi.solution} />
-                </div>
-              </div>
-            )}
-            {en?.solution && (
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase">English Explanation:</span>
-                <div className="text-slate-700 dark:text-slate-300 mt-0.5">
-                  <FormulaText text={en.solution} />
-                </div>
-              </div>
-            )}
-            {!hi?.solution && !en?.solution && question.solution && (
-              <div className="text-slate-800 dark:text-slate-200">
-                <FormulaText text={question.solution} />
-              </div>
-            )}
-            {!hi?.solution && !en?.solution && !question.solution && (
-              <p className="italic text-slate-400">No extended solution registered for this question.</p>
+          <div className="mt-2 rounded-xl bg-slate-50 p-2 text-xs border border-slate-200 dark:bg-slate-850 dark:border-slate-800">
+            {en?.solution || hi?.solution || question.solution ? (
+              <StandardSolutionView
+                solution={en?.solution || question.solution}
+                solutionHi={hi?.solution}
+                activeLanguage={activeLang === "HINDI" ? "HINDI" : "ENGLISH"}
+                showLanguageToggle={Boolean(en?.solution && hi?.solution)}
+                correctOptionKey={Array.isArray(en?.correctOptionIds) ? en.correctOptionIds[0] : (Array.isArray(hi?.correctOptionIds) ? hi.correctOptionIds[0] : undefined)}
+                options={typeof en?.options === "object" && !Array.isArray(en?.options) ? en.options : undefined}
+                imageUrl={question.imageUrl}
+              />
+            ) : (
+              <p className="italic text-slate-400 p-2">No extended solution registered for this question.</p>
             )}
           </div>
         )}

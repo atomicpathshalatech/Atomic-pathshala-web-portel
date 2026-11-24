@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { MathText } from "@/components/ai-chat/MathText";
+import { StandardSolutionView } from "@/components/solutions/StandardSolutionView";
 import { useUrlParams } from "@/lib/navigation/use-url-params";
 
 type Overview = {
@@ -274,14 +275,24 @@ function PyqRunner({ subject, examId, year, chapter, title }: { subject: string;
         )}
 
         {result && (
-          <div className="rounded-xl bg-slate-50 p-3 text-sm">
-            <p className={`font-bold ${result.correct ? "text-emerald-700" : "text-rose-700"}`}>
-              {result.correct ? "Correct" : `Answer: ${result.correctKeys.join(", ") || "—"}`}
-            </p>
+          <div className="mt-3 space-y-2">
+            <div className={`p-3 rounded-xl border text-sm font-bold flex items-center justify-between ${
+              result.correct 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800" 
+                : "bg-rose-50 border-rose-200 text-rose-800"
+            }`}>
+              <span>{result.correct ? "Your Answer is Correct!" : "Incorrect Attempt"}</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/80 border border-current">
+                Key: {result.correctKeys.join(", ") || "—"}
+              </span>
+            </div>
             {result.solution && (
-              <div className="mt-1 text-slate-700">
-                <MathText text={result.solution} />
-              </div>
+              <StandardSolutionView
+                solution={result.solution}
+                correctOptionKey={result.correctKeys[0]}
+                options={q.options.reduce((acc, opt) => ({ ...acc, [opt.key]: opt.text }), {})}
+                imageUrl={q.imageUrl}
+              />
             )}
           </div>
         )}

@@ -20,7 +20,7 @@ export default async function RolePreviewPage() {
   const isSuper =
     (await isSuperAdminUser(session.user.id)) ||
     (await isSuperAdmin(session.user.id)) ||
-    (session.user as any)?.role === "SUPER_ADMIN" ||
+    (session.user as any)?.role === "ADMIN" ||
     (session.user as any)?.role === "FOUNDER";
 
   if (!isSuper) {

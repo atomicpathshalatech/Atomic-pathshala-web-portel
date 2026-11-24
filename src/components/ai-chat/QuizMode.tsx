@@ -33,6 +33,7 @@ import { PYQ_AVAILABLE_YEARS } from "@/lib/ai-chat/pyqBank";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas-pro";
 import { NCERT_CHAPTERS } from "@/lib/ai-chat/ncertChapters";
+import { CustomSelect } from "@/components/ui/Select";
 
 type QuizStage =
   | "modeSelect"
@@ -1763,48 +1764,33 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
                 </button>
               ))}
             </div>
-            <label className="mb-5 block">
+            <div className="mb-5">
               <span className="mb-1 block text-xs font-medium text-slate-500">Language</span>
-              <select
+              <CustomSelect
                 value={quizLanguage}
-                onChange={(event) => setQuizLanguage(event.target.value as QuizLanguage)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-              >
-                {LANGUAGE_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="mb-5 block">
+                onChange={(val) => setQuizLanguage(val as QuizLanguage)}
+                options={LANGUAGE_OPTIONS}
+                label="Language"
+              />
+            </div>
+            <div className="mb-5">
               <span className="mb-1 block text-xs font-medium text-slate-500">Difficulty Level</span>
-              <select
+              <CustomSelect
                 value={subjectLevel}
-                onChange={(event) => setSubjectLevel(event.target.value as QuizLevel)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-              >
-                {LEVEL_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="mb-5 block">
+                onChange={(val) => setSubjectLevel(val as QuizLevel)}
+                options={LEVEL_OPTIONS}
+                label="Difficulty Level"
+              />
+            </div>
+            <div className="mb-5">
               <span className="mb-1 block text-xs font-medium text-slate-500">Question Format</span>
-              <select
+              <CustomSelect
                 value={subjectFormat}
-                onChange={(event) => setSubjectFormat(event.target.value as QuestionType | "")}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-              >
-                {FORMAT_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(val) => setSubjectFormat(val as QuestionType | "")}
+                options={FORMAT_OPTIONS}
+                label="Question Format"
+              />
+            </div>
             <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
               <p className="mb-1 font-semibold">Rules</p>
               <ul className="list-disc space-y-1 pl-4">
@@ -1848,55 +1834,47 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
             <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
               Practice a specific chapter or topic only.
             </p>
-            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-              <label className="mb-3 block">
+            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700 space-y-4">
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">Language</span>
-                <select
+                <CustomSelect
                   value={topicLanguage}
-                  onChange={(event) => setTopicLanguage(event.target.value as QuizLanguage)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  {LANGUAGE_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mb-3 block">
+                  onChange={(val) => setTopicLanguage(val as QuizLanguage)}
+                  options={LANGUAGE_OPTIONS}
+                  label="Language"
+                />
+              </div>
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">Subject</span>
-                <select
+                <CustomSelect
                   value={topicSubject}
-                  onChange={(event) => {
-                    setTopicSubject(event.target.value as Exclude<QuizSubject, "Full NEET">);
+                  onChange={(val) => {
+                    setTopicSubject(val as Exclude<QuizSubject, "Full NEET">);
                     setTopicText("");
                     setCustomTopicText("");
                   }}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  {TOPIC_SUBJECT_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mb-3 block">
+                  options={TOPIC_SUBJECT_OPTIONS}
+                  label="Subject"
+                />
+              </div>
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">Chapter</span>
-                <select
+                <CustomSelect
                   value={topicText}
-                  onChange={(event) => setTopicText(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  <option value="">Select a chapter</option>
-                  {NCERT_CHAPTERS[topicSubject].map((chapter) => (
-                    <option key={chapter} value={chapter}>
-                      {chapter}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mb-3 block">
+                  onChange={(val) => setTopicText(val as string)}
+                  options={[
+                    { value: "", label: "Select a chapter" },
+                    ...NCERT_CHAPTERS[topicSubject].map((chapter) => ({
+                      value: chapter,
+                      label: chapter,
+                    })),
+                  ]}
+                  placeholder="Select a chapter"
+                  label="Chapter"
+                  searchable={true}
+                />
+              </div>
+              <label className="block">
                 <span className="mb-1 block text-xs font-medium text-slate-500">
                   Specific topic (optional)
                 </span>
@@ -1904,52 +1882,43 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
                   value={customTopicText}
                   onChange={(event) => setCustomTopicText(event.target.value)}
                   placeholder="e.g. Spermatogenesis — leave blank for full chapter"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
               </label>
-              <label className="mb-4 block">
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">
                   Number of questions
                 </span>
-                <select
+                <CustomSelect
                   value={topicQuestionCount}
-                  onChange={(event) => setTopicQuestionCount(Number(event.target.value))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  <option value={5}>5 Questions</option>
-                  <option value={10}>10 Questions</option>
-                  <option value={15}>15 Questions</option>
-                  <option value={20}>20 Questions</option>
-                </select>
-              </label>
-              <label className="mb-4 block">
+                  onChange={(val) => setTopicQuestionCount(Number(val))}
+                  options={[
+                    { value: 5, label: "5 Questions" },
+                    { value: 10, label: "10 Questions" },
+                    { value: 15, label: "15 Questions" },
+                    { value: 20, label: "20 Questions" },
+                  ]}
+                  label="Number of questions"
+                />
+              </div>
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">Difficulty Level</span>
-                <select
+                <CustomSelect
                   value={topicLevel}
-                  onChange={(event) => setTopicLevel(event.target.value as QuizLevel)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  {LEVEL_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mb-4 block">
+                  onChange={(val) => setTopicLevel(val as QuizLevel)}
+                  options={LEVEL_OPTIONS}
+                  label="Difficulty Level"
+                />
+              </div>
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">Question Format</span>
-                <select
+                <CustomSelect
                   value={topicFormat}
-                  onChange={(event) => setTopicFormat(event.target.value as QuestionType | "")}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  {FORMAT_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(val) => setTopicFormat(val as QuestionType | "")}
+                  options={FORMAT_OPTIONS}
+                  label="Question Format"
+                />
+              </div>
               {error && (
                 <p className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
                   <AlertCircle className="h-4 w-4 shrink-0" />
@@ -1984,51 +1953,45 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
             <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
               Practice with real NEET previous year questions.
             </p>
-            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-              <label className="mb-3 block">
+            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700 space-y-4">
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">Subject</span>
-                <select
+                <CustomSelect
                   value={pyqSubject}
-                  onChange={(event) => setPyqSubject(event.target.value as PyqSubjectOption)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  {PYQ_SUBJECT_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mb-3 block">
+                  onChange={(val) => setPyqSubject(val as PyqSubjectOption)}
+                  options={PYQ_SUBJECT_OPTIONS}
+                  label="Subject"
+                />
+              </div>
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">Year</span>
-                <select
+                <CustomSelect
                   value={pyqYear}
-                  onChange={(event) => setPyqYear(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  <option value="all">All Years</option>
-                  {PYQ_AVAILABLE_YEARS.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mb-4 block">
+                  onChange={(val) => setPyqYear(val as string)}
+                  options={[
+                    { value: "all", label: "All Years" },
+                    ...PYQ_AVAILABLE_YEARS.map((year) => ({ value: year, label: year })),
+                  ]}
+                  label="Year"
+                  searchable={true}
+                />
+              </div>
+              <div>
                 <span className="mb-1 block text-xs font-medium text-slate-500">
                   Number of questions
                 </span>
-                <select
+                <CustomSelect
                   value={pyqQuestionCount}
-                  onChange={(event) => setPyqQuestionCount(Number(event.target.value))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-atomic-orange dark:border-slate-700 dark:bg-slate-800"
-                >
-                  <option value={5}>5 Questions</option>
-                  <option value={10}>10 Questions</option>
-                  <option value={15}>15 Questions</option>
-                  <option value={20}>20 Questions</option>
-                </select>
-              </label>
+                  onChange={(val) => setPyqQuestionCount(Number(val))}
+                  options={[
+                    { value: 5, label: "5 Questions" },
+                    { value: 10, label: "10 Questions" },
+                    { value: 15, label: "15 Questions" },
+                    { value: 20, label: "20 Questions" },
+                  ]}
+                  label="Number of questions"
+                />
+              </div>
               {error && (
                 <p className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
                   <AlertCircle className="h-4 w-4 shrink-0" />
@@ -2157,62 +2120,48 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs">
                 <div>
                   <span className="mb-1 block font-medium text-slate-500">Language</span>
-                  <select
+                  <CustomSelect
                     value={ncertLanguage}
-                    onChange={(e) => setNcertLanguage(e.target.value as QuizLanguage)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  >
-                    {LANGUAGE_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setNcertLanguage(val as QuizLanguage)}
+                    options={LANGUAGE_OPTIONS}
+                    label="Language"
+                  />
                 </div>
 
                 <div>
                   <span className="mb-1 block font-medium text-slate-500">Questions Count</span>
-                  <select
+                  <CustomSelect
                     value={ncertQuestionCount}
-                    onChange={(e) => setNcertQuestionCount(Number(e.target.value))}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  >
-                    <option value={10}>10 Questions</option>
-                    <option value={15}>15 Questions</option>
-                    <option value={20}>20 Questions</option>
-                    <option value={30}>30 Questions</option>
-                    <option value={45}>45 Questions (Full Test)</option>
-                  </select>
+                    onChange={(val) => setNcertQuestionCount(Number(val))}
+                    options={[
+                      { value: 10, label: "10 Questions" },
+                      { value: 15, label: "15 Questions" },
+                      { value: 20, label: "20 Questions" },
+                      { value: 30, label: "30 Questions" },
+                      { value: 45, label: "45 Questions (Full Test)" },
+                    ]}
+                    label="Questions Count"
+                  />
                 </div>
 
                 <div>
                   <span className="mb-1 block font-medium text-slate-500">Difficulty</span>
-                  <select
+                  <CustomSelect
                     value={ncertLevel}
-                    onChange={(e) => setNcertLevel(e.target.value as QuizLevel)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  >
-                    {LEVEL_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setNcertLevel(val as QuizLevel)}
+                    options={LEVEL_OPTIONS}
+                    label="Difficulty"
+                  />
                 </div>
 
                 <div>
                   <span className="mb-1 block font-medium text-slate-500">Question Format</span>
-                  <select
+                  <CustomSelect
                     value={ncertFormat}
-                    onChange={(e) => setNcertFormat(e.target.value as QuestionType | "")}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  >
-                    {FORMAT_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setNcertFormat(val as QuestionType | "")}
+                    options={FORMAT_OPTIONS}
+                    label="Question Format"
+                  />
                 </div>
               </div>
 
@@ -2466,7 +2415,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               </div>
               <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                 <p className="text-xs text-slate-500">Accuracy</p>
-                <p className="mt-1 text-lg font-bold">{score.accuracy}%</p>
+                <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{score.accuracy}%</p>
               </div>
               <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                 <p className="text-xs text-slate-500">Correct</p>

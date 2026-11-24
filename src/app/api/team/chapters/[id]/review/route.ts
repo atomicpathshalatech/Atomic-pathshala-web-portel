@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       where: { id: session.user.id },
       include: { role: true },
     });
-    const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
+    const isAdmin = user?.role?.name === "ADMIN" || user?.role?.name === "FOUNDER";
 
     // Non-admin peer reviewers cannot approve their own authored chapter,
     // but Admins / Super Admins can verify and approve any chapter.

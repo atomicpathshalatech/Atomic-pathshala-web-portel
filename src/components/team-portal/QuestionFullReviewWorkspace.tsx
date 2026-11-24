@@ -38,6 +38,7 @@ import {
   ListOrdered,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { StandardSolutionView } from "@/components/solutions/StandardSolutionView";
 import type { MultiDimensionalAuditResult } from "@/lib/questions/ai-audit-engine";
 import { AddToCollectionButton, ChipCard, LanguageQuestionCard, fmtDateTime, humanize } from "@/components/team-portal/question-review/QuestionReviewParts";
 import { BLOOM_LEVELS, DIFFICULTIES, IMPORTANCE_LEVELS, KEY_SKILLS, QUESTION_TYPE_OPTIONS, SOLVE_TIMES, labelOf } from "@/lib/questions/classification-options";
@@ -1270,16 +1271,24 @@ export function QuestionFullReviewWorkspace({
                   {/* Dual Column Solutions */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
-                      <span className="text-xs font-black tracking-wider text-slate-600 dark:text-slate-300">ENGLISH SOLUTION</span>
-                      <div className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
-                        <FormulaText text={englishT?.solution || "None provided"} />
-                      </div>
+                      <span className="text-xs font-black tracking-wider text-slate-600 dark:text-slate-300">ENGLISH SOLUTION (4-PART STANDARD)</span>
+                      <StandardSolutionView
+                        solution={englishT?.solution || question.solution || "None provided"}
+                        activeLanguage="ENGLISH"
+                        subject={question.subject}
+                        correctOptionKey={Array.isArray(englishT?.correctOptionIds) ? englishT?.correctOptionIds[0] : (englishT?.correctOptionIds as string)}
+                        options={typeof englishT?.options === "object" && !Array.isArray(englishT?.options) ? englishT?.options : undefined}
+                      />
                     </div>
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
-                      <span className="text-xs font-black tracking-wider text-slate-600 dark:text-slate-300">हिंदी व्याख्या (HINDI SOLUTION)</span>
-                      <div className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
-                        <FormulaText text={hindiT?.solution || "None provided"} />
-                      </div>
+                      <span className="text-xs font-black tracking-wider text-slate-600 dark:text-slate-300">हिंदी व्याख्या (मानकीकृत 4-चरणीय प्रारूप)</span>
+                      <StandardSolutionView
+                        solution={hindiT?.solution || "None provided"}
+                        activeLanguage="HINDI"
+                        subject={question.subject}
+                        correctOptionKey={Array.isArray(hindiT?.correctOptionIds) ? hindiT?.correctOptionIds[0] : (hindiT?.correctOptionIds as string)}
+                        options={typeof hindiT?.options === "object" && !Array.isArray(hindiT?.options) ? hindiT?.options : undefined}
+                      />
                     </div>
                   </div>
                 </div>
@@ -2353,14 +2362,13 @@ export function QuestionFullReviewWorkspace({
                   </button>
 
                   {cbtPreviewShowSolution && (
-                    <div className="mt-3 p-4 rounded-2xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 space-y-2 animate-in fade-in">
-                      <div className="flex items-center gap-2 text-xs font-black text-emerald-800 dark:text-emerald-300">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>Correct Answer Key: {correctOptionIds.join(", ")}</span>
-                      </div>
-                      <FormulaText
-                        text={activeTrans?.solution || "No detailed step-by-step solution provided."}
-                        className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed block"
+                    <div className="mt-3 p-3 rounded-2xl bg-emerald-50/20 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 animate-in fade-in">
+                      <StandardSolutionView
+                        solution={activeTrans?.solution || question.solution || "No detailed step-by-step solution provided."}
+                        activeLanguage={previewLang === "HI" ? "HINDI" : "ENGLISH"}
+                        subject={question.subject}
+                        correctOptionKey={correctOptionIds[0]}
+                        options={typeof activeTrans?.options === "object" && !Array.isArray(activeTrans?.options) ? activeTrans?.options : undefined}
                       />
                     </div>
                   )}

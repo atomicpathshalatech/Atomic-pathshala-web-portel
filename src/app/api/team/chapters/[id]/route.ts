@@ -86,7 +86,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
  *                     UNDER_REVIEW/APPROVED) or still holds lectures, DPPs or
  *                     tests. These are workflow rails, not database limits.
  *   ?force=1        - skips those rails. Gated by the same CHAPTER_DELETE
- *                     permission, which only ADMIN, SUPER_ADMIN and FOUNDER
+ *                     permission, which only ADMIN and FOUNDER
  *                     hold (see ROLE_PERMISSIONS), so this is not a hole an
  *                     ordinary content role can walk through.
  *

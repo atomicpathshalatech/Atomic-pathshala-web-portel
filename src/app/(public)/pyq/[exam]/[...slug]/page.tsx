@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return {
       title: `${examTitle} ${year} Question Paper with Solutions | Atomic Pathshala`,
       description: `Practice official ${examTitle} ${year} questions with verified options and step-by-step solutions after login.`,
-      alternates: { canonical: `https://ap.atomicpathshala.in/pyq/${params.exam}/${year}` },
+      alternates: { canonical: `https://atomicpathshala.in/pyq/${params.exam}/${year}` },
     };
   }
 
@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return {
       title: `${examTitle} ${subject} PYQ – Previous Year Questions | Atomic Pathshala`,
       description: `Practice all ${examTitle} ${subject} previous year questions chapter-wise with detailed solutions.`,
-      alternates: { canonical: `https://ap.atomicpathshala.in/pyq/${params.exam}/${slugParts[0]}` },
+      alternates: { canonical: `https://atomicpathshala.in/pyq/${params.exam}/${slugParts[0]}` },
     };
   }
 
@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${titleChapter} ${examTitle} PYQ – Previous Year Questions | Atomic Pathshala`,
     description: `Practice ${titleChapter} previous year questions for ${examTitle} ${subject} with year-wise distribution and step-by-step solutions after login.`,
-    alternates: { canonical: `https://ap.atomicpathshala.in/pyq/${params.exam}/${slugParts[0]}/${slugParts[1]}` },
+    alternates: { canonical: `https://atomicpathshala.in/pyq/${params.exam}/${slugParts[0]}/${slugParts[1]}` },
   };
 }
 

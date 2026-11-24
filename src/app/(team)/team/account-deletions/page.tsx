@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AccountDeletionsPage() {
   const { user } = await requireTeamSession();
-  if (user.role?.name !== "SUPER_ADMIN" && user.role?.name !== "FOUNDER") redirect("/team");
+  if (user.role?.name !== "ADMIN" && user.role?.name !== "FOUNDER") redirect("/team");
   const pending = await listPendingDeletions();
   return (
     <div className="mx-auto max-w-4xl space-y-4">

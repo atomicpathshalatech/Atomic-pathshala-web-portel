@@ -513,7 +513,7 @@ function SocialLinksSection({ section }: { section: RenderableSection }) {
 function CustomHtmlSection({ section }: { section: RenderableSection }) {
   const html = str(section.config, "html");
   if (!html) return null;
-  // Trusted input: only SUPER_ADMIN / MARKETING (HOME_EDIT permission
+  // Trusted input: only ADMIN / MARKETING (HOME_EDIT permission
   // holders) can ever write section config, the same trust boundary as
   // every other Team Portal write in this project — not public input.
   return (

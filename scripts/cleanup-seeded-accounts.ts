@@ -75,9 +75,9 @@ async function ensureSuperAdmin() {
     throw new Error("SUPER_ADMIN_PASSWORD must be at least 12 characters.");
   }
 
-  const role = await prisma.role.findUnique({ where: { name: "SUPER_ADMIN" } });
+  const role = await prisma.role.findUnique({ where: { name: "ADMIN" } });
   if (!role) {
-    throw new Error("SUPER_ADMIN role is not seeded. Run `npm run db:seed` first.");
+    throw new Error("ADMIN role is not seeded. Run `npm run db:seed` first.");
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -102,7 +102,7 @@ async function ensureSuperAdmin() {
       });
     }
     console.log(
-      `[super-admin] ${email} -> ${CONFIRM ? "CREATED" : "WOULD be created"} (SUPER_ADMIN, ACTIVE)`
+      `[admin] ${email} -> ${CONFIRM ? "CREATED" : "WOULD be created"} (ADMIN, ACTIVE)`
     );
   }
   return email;

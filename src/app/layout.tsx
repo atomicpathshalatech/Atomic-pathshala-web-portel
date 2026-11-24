@@ -36,23 +36,53 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: "cover",
   themeColor: "#090D16",
+  colorScheme: "light",
   interactiveWidget: "resizes-content",
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ap.atomicpathshala.in"),
+  metadataBase: new URL("https://atomicpathshala.in"),
   title: {
-    default: "Atomic Pathshala | Accelerating Excellence",
+    default: "Atomic Pathshala — NEET, JEE & Board Exam Preparation",
     template: "%s | Atomic Pathshala",
   },
   description:
-    "India's premium accelerator for NEET, JEE, and Foundation courses — live classes, AI doubt solving, test series, and 1-on-1 mentorship.",
+    "India's premier education accelerator for NEET UG, JEE Main, and Foundation courses with chapter-wise PYQs, live interactive classes, and verified faculty.",
   applicationName: "Atomic Pathshala",
   manifest: "/manifest.webmanifest",
-  appleWebApp: {
-    capable: true,
-    title: "Atomic Pathshala",
-    statusBarStyle: "black-translucent",
+  alternates: {
+    canonical: "https://atomicpathshala.in",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_IN",
+    url: "https://atomicpathshala.in",
+    siteName: "Atomic Pathshala",
+    title: "Atomic Pathshala — NEET, JEE & Board Exam Preparation",
+    description:
+      "India's premier education accelerator for NEET UG, JEE Main, and Foundation courses with chapter-wise PYQs, live interactive classes, and verified faculty.",
+    images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Atomic Pathshala" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Atomic Pathshala — NEET, JEE & Board Exam Preparation",
+    description:
+      "India's premier education accelerator for NEET UG, JEE Main, and Foundation courses with chapter-wise PYQs, live interactive classes, and verified faculty.",
+    images: ["/brand/logo.png"],
+  },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GSC_VERIFICATION || undefined,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
   },
   icons: {
     icon: [
@@ -76,6 +106,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
         />
+        <meta name="color-scheme" content="light dark" />
         <meta name="HandheldFriendly" content="true" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

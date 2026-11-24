@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest) {
       include: { role: true },
     });
     const roleName = currentUser?.role?.name || "";
-    const isAdmin = ["ADMIN", "SUPER_ADMIN", "FOUNDER"].includes(roleName);
+    const isAdmin = ["ADMIN", "FOUNDER"].includes(roleName);
 
     if (!isAdmin && (teacher.creativeAssetVersion || 0) >= 2) {
       return apiError(

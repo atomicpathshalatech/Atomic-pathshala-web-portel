@@ -47,7 +47,7 @@ export async function hasActiveSubscription(userId: string): Promise<boolean> {
     });
     if (
       user?.role?.name &&
-      ["ADMIN", "SUPER_ADMIN", "SUB_ADMIN", "TEACHER", "FOUNDER"].includes(user.role.name)
+      ["ADMIN", "SUB_ADMIN", "TEACHER", "FOUNDER"].includes(user.role.name)
     ) {
       return true;
     }
