@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const sessionUser = await requireTeamUser(PERMISSIONS.QUESTION_READ);
     const roleUpper = (sessionUser.role || "").toUpperCase();
     const isSuperAdmin =
-      roleUpper === "SUPER_ADMIN" || roleUpper === "FOUNDER" || roleUpper === "ADMIN";
+      roleUpper === "FOUNDER" || roleUpper === "ADMIN";
 
     // Team members who are not Super Admin/Admin can only see questions assigned to them
     const userAssignmentCondition = !isSuperAdmin
@@ -81,22 +81,37 @@ export async function GET(request: NextRequest) {
         chapterAndClauses.push(userAssignmentCondition);
       }
 
-      const chapterCounts = await prisma.question.groupBy({
-        by: ["chapter"],
-        where: { AND: chapterAndClauses },
-        _count: { id: true },
-      });
+      const [chapterCounts, ncertChapterCounts] = await Promise.all([
+        prisma.question.groupBy({
+          by: ["chapter"],
+          where: { AND: chapterAndClauses },
+          _count: { id: true },
+        }),
+        prisma.question.groupBy({
+          by: ["ncertChapter"],
+          where: { AND: chapterAndClauses },
+          _count: { id: true },
+        }),
+      ]);
 
       const countMap = new Map(
         chapterCounts.map((c) => [c.chapter?.toLowerCase().trim(), c._count.id])
       );
+      const ncertCountMap = new Map(
+        ncertChapterCounts.map((c) => [c.ncertChapter?.toLowerCase().trim(), c._count.id])
+      );
 
       const chaptersWithCounts = allMasterChapters.map((ch) => {
         const cleanTitle = ch.title.toLowerCase().trim();
-        const count =
+        let count =
           countMap.get(cleanTitle) ??
           countMap.get(ch.displayTitle.toLowerCase().trim()) ??
           0;
+
+        if (count === 0 && ncertCountMap.has(cleanTitle)) {
+          count = ncertCountMap.get(cleanTitle) ?? 0;
+        }
+
         return {
           id: ch.id,
           title: ch.title,
@@ -107,19 +122,64 @@ export async function GET(request: NextRequest) {
         };
       });
 
+      const masterTitles = new Set(
+        allMasterChapters.map((ch) => ch.title.toLowerCase().trim())
+      );
+
+      // Add any custom or split chapters present in DB that aren't in master NCERT chapters
+      const extraChapters: typeof chaptersWithCounts = [];
+      let extraIdx = 20;
+      for (const c of chapterCounts) {
+        if (!c.chapter) continue;
+        const clean = c.chapter.toLowerCase().trim();
+        if (!masterTitles.has(clean)) {
+          const isClass11 = [
+            "iupac", "nomenclature", "general organic", "goc", "isomerism", "purification", "qualitative", "quantitative"
+          ].some((kw) => clean.includes(kw));
+
+          const classNumber = isClass11 ? 11 : 12;
+          const chapterNumber = isClass11 ? 8.5 : ++extraIdx;
+
+          extraChapters.push({
+            id: `db-ch-${clean.replace(/[^a-z0-9]/g, "-")}`,
+            title: c.chapter,
+            displayTitle: `[Class ${classNumber}] ${c.chapter}`,
+            chapterNumber,
+            classNumber,
+            count: c._count.id,
+          });
+        }
+      }
+
+      const allCombined = [...chaptersWithCounts, ...extraChapters];
+      allCombined.sort((a, b) => {
+        if (a.classNumber !== b.classNumber) return a.classNumber - b.classNumber;
+        if (a.chapterNumber !== b.chapterNumber) return a.chapterNumber - b.chapterNumber;
+        return a.title.localeCompare(b.title);
+      });
+
       return apiSuccess({
         subject: normSubject,
         examId,
         examName,
         isSuperAdmin,
-        chapters: chaptersWithCounts,
+        chapters: allCombined,
       });
     }
 
     // 3. For a specific chapter, get detailed counts, distribution and questions
+    const isParentChapter = chapterParam.toLowerCase().includes("some basic principles");
+
     const baseAndClauses: any[] = [
       { subject: { equals: normSubject, mode: "insensitive" } },
-      { chapter: { contains: chapterParam, mode: "insensitive" } },
+      isParentChapter
+        ? {
+            OR: [
+              { chapter: { contains: chapterParam, mode: "insensitive" } },
+              { ncertChapter: { contains: chapterParam, mode: "insensitive" } },
+            ],
+          }
+        : { chapter: { contains: chapterParam, mode: "insensitive" } },
     ];
     if (examId) {
       baseAndClauses.push({ pyqOccurrences: { some: { examId } } });

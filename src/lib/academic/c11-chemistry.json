@@ -365,6 +365,57 @@
       ]
     },
     {
+      "chapterNumber": 8.1,
+      "title": "IUPAC Nomenclature",
+      "titleHindi": "IUPAC नामकरण पद्धति",
+      "bookPart": 2,
+      "topics": [
+        { "topicNumber": "8.1.1", "title": "Alkanes", "titleHindi": "ऐल्केन" },
+        { "topicNumber": "8.1.2", "title": "Alkenes & Enynes", "titleHindi": "ऐल्कीन एवं ईनाइन" },
+        { "topicNumber": "8.1.3", "title": "Polyfunctional Compounds", "titleHindi": "बहुक्रियात्मक समूह" },
+        { "topicNumber": "8.1.4", "title": "Haloalkanes & Haloalkenes", "titleHindi": "हैलोऐल्केन एवं हैलोऐल्कीन" },
+        { "topicNumber": "8.1.5", "title": "Aromatic Compounds", "titleHindi": "ऐरोमैटिक यौगिक" }
+      ]
+    },
+    {
+      "chapterNumber": 8.2,
+      "title": "General Organic Chemistry",
+      "titleHindi": "सामान्य कार्बनिक रसायन (GOC)",
+      "bookPart": 2,
+      "topics": [
+        { "topicNumber": "8.2.1", "title": "Carbocation & Carbanion Stability", "titleHindi": "कार्बधनायन एवं कार्बऋणायन स्थायित्व" },
+        { "topicNumber": "8.2.2", "title": "Electronic Effects (Inductive, Resonance, Hyperconjugation)", "titleHindi": "इलेक्ट्रॉनिक विस्थापन प्रभाव" },
+        { "topicNumber": "8.2.3", "title": "Aromaticity & Huckel's Rule", "titleHindi": "ऐरोमैटिकता एवं हकल नियम" },
+        { "topicNumber": "8.2.4", "title": "Acidity & Basicity of Organic Compounds", "titleHindi": "अम्लीयता एवं क्षारीयता" },
+        { "topicNumber": "8.2.5", "title": "Electrophilic Aromatic Substitution", "titleHindi": "इलेक्ट्रॉनरागी ऐरोमैटिक प्रतिस्थापन" },
+        { "topicNumber": "8.2.6", "title": "Tautomerism & Hybridisation", "titleHindi": "चलावयवता एवं संकरण" }
+      ]
+    },
+    {
+      "chapterNumber": 8.3,
+      "title": "Isomerism",
+      "titleHindi": "समावयवता",
+      "bookPart": 2,
+      "topics": [
+        { "topicNumber": "8.3.1", "title": "Optical Isomerism & Chirality", "titleHindi": "प्रकाशिक समावयवता एवं काइरलता" },
+        { "topicNumber": "8.3.2", "title": "Conformational Isomerism", "titleHindi": "संरूपण समावयवता" },
+        { "topicNumber": "8.3.3", "title": "Geometrical Isomerism", "titleHindi": "ज्यामितीय समावयवता" },
+        { "topicNumber": "8.3.4", "title": "Structural Isomerism", "titleHindi": "संरचनात्मक समावयवता" }
+      ]
+    },
+    {
+      "chapterNumber": 8.4,
+      "title": "Purification, Qualitative & Quantitative Analysis",
+      "titleHindi": "कार्बनिक यौगिकों का शोधन, गुणात्मक एवं मात्रात्मक विश्लेषण",
+      "bookPart": 2,
+      "topics": [
+        { "topicNumber": "8.4.1", "title": "Qualitative Analysis (Lassaigne's Test)", "titleHindi": "गुणात्मक विश्लेषण (लैसाने परीक्षण)" },
+        { "topicNumber": "8.4.2", "title": "Quantitative Analysis (Dumas, Kjeldahl, Carius)", "titleHindi": "मात्रात्मक विश्लेषण (ड्यूमा, कैल्डाल, कैरियस)" },
+        { "topicNumber": "8.4.3", "title": "Separation & Purification Techniques", "titleHindi": "शोधन एवं पृथक्करण विधियाँ" },
+        { "topicNumber": "8.4.4", "title": "Chromatography", "titleHindi": "वर्णलेखन (क्रोमैटोग्राफी)" }
+      ]
+    },
+    {
       "chapterNumber": 9,
       "title": "Hydrocarbons",
       "titleHindi": "हाइड्रोकार्बन",

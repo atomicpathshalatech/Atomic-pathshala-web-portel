@@ -131,6 +131,10 @@ export function PyqChapterWiseView({
       .then((j) => {
         if (j.success) {
           setDetail(j.data);
+          // If current tab has 0 questions but verified has questions, auto switch to verified
+          if (verificationTab === "unverified" && j.data?.metrics?.unverifiedCount === 0 && j.data?.metrics?.verifiedCount > 0) {
+            setVerificationTab("verified");
+          }
           // Clear stale selection
           setSelectedQuestionIds(new Set());
         }
