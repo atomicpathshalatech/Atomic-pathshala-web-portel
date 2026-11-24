@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ExpensesManager } from "@/components/team-portal/ExpensesManager";
+import { FinanceNavTabs } from "@/components/team-portal/FinanceNavTabs";
 
 export const metadata: Metadata = {
   title: "Expense Management",
@@ -33,6 +34,7 @@ export default async function ExpensesPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
+      <FinanceNavTabs />
       <ExpensesManager
         initialExpenses={expenses}
         bankAccounts={bankAccounts}

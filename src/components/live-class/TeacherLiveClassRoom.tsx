@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useBackNavigation } from "@/lib/navigation/useBackNavigation";
+import { registerBackGuard } from "@/lib/navigation/back-guards";
 import {
   CanvasEngine,
   type StrokeObject,
@@ -819,6 +821,81 @@ export function TeacherLiveClassRoom({
   const [manualObsYtLink, setManualObsYtLink] = useState("");
   const [savingManualObsYt, setSavingManualObsYt] = useState(false);
   const [manualObsYtMsg, setManualObsYtMsg] = useState<string | null>(null);
+
+  // Universal Navigation & Leave Handling
+  const { goBack } = useBackNavigation({ fallbackHref: "/team/my-schedule" });
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+
+  const handleLeaveClass = useCallback(() => {
+    setConfirmingLeave(false);
+    goBack();
+  }, [goBack]);
+
+  const onBackClick = useCallback(() => {
+    if (wbSession?.livePhase === "LIVE") {
+      setConfirmingLeave(true);
+    } else {
+      handleLeaveClass();
+    }
+  }, [wbSession?.livePhase, handleLeaveClass]);
+
+  useEffect(() => {
+    return registerBackGuard(async () => {
+      if (confirmingLeave) {
+        setConfirmingLeave(false);
+        return true;
+      }
+      if (confirmingEnd) {
+        setConfirmingEnd(false);
+        return true;
+      }
+      if (settingsOpen) {
+        setSettingsOpen(false);
+        return true;
+      }
+      if (showObsStreamInfo) {
+        setShowObsStreamInfo(false);
+        return true;
+      }
+      if (slideTemplatesOpen) {
+        setSlideTemplatesOpen(false);
+        return true;
+      }
+      if (sim3dOpen) {
+        setSim3dOpen(false);
+        return true;
+      }
+      if (scienceLabsOpen) {
+        setScienceLabsOpen(false);
+        return true;
+      }
+      if (stagePreviewOpen) {
+        setStagePreviewOpen(false);
+        return true;
+      }
+      if (document.fullscreenElement) {
+        try {
+          await document.exitFullscreen();
+          return true;
+        } catch {}
+      }
+      if (wbSession?.livePhase === "LIVE") {
+        setConfirmingLeave(true);
+        return true;
+      }
+      return false;
+    }, 10);
+  }, [
+    confirmingLeave,
+    confirmingEnd,
+    settingsOpen,
+    showObsStreamInfo,
+    slideTemplatesOpen,
+    sim3dOpen,
+    scienceLabsOpen,
+    stagePreviewOpen,
+    wbSession?.livePhase,
+  ]);
 
   useEffect(() => {
     if (wbSession?.youtubeVideoId && !manualObsYtLink) {
@@ -3557,9 +3634,9 @@ export function TeacherLiveClassRoom({
       <aside className="live-rail border-r border-[#2d2e3b] bg-[#1a1b23] flex-col items-center py-4">
         <button
           type="button"
-          onClick={() => router.push("/team/batches")}
-          className="w-10 h-10 rounded-xl overflow-hidden p-1 hover:opacity-85 transition-opacity"
-          title="Atomic Pathshala"
+          onClick={onBackClick}
+          className="w-10 h-10 rounded-xl overflow-hidden p-1 hover:opacity-85 transition-opacity cursor-pointer"
+          title="Back / Leave Live Class"
         >
           <img
             src="/brand/logo.png"
@@ -3572,6 +3649,15 @@ export function TeacherLiveClassRoom({
       {/* Header */}
       <header className="live-header teacher-compact-header flex flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
         <div className="min-w-0 shrink flex flex-nowrap items-center gap-x-3">
+          <button
+            type="button"
+            onClick={onBackClick}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition shrink-0 cursor-pointer shadow-xs"
+            title="Leave this screen without ending class for students"
+          >
+            <span className="material-symbols-outlined text-sm">arrow_back</span>
+            <span className="hidden sm:inline">Back / Leave</span>
+          </button>
           <div className="min-w-0">
             <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
             <h1 className="text-sm font-medium text-gray-200 truncate">{scheduleTitle}</h1>
@@ -6078,6 +6164,41 @@ export function TeacherLiveClassRoom({
       {/* Development & Performance Diagnostic HUD (Ctrl+Shift+D) */}
       <WhiteboardDiagnosticsHUD isTeacher={true} />
 
+      {/* Leave Live Class Confirmation Modal (Separate from End Class) */}
+      {confirmingLeave && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-[#161822] border border-slate-700 rounded-2xl p-5 shadow-2xl text-white space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <span className="material-symbols-outlined text-xl">arrow_back</span>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Leave Live Class Screen?</h3>
+                <p className="text-xs text-slate-400">This will NOT end the class for students.</p>
+              </div>
+            </div>
+            <div className="bg-amber-950/40 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-200/90 leading-relaxed">
+              <strong>Notice:</strong> The live stream and session will remain running. You can return to this screen at any time. To conclude the session for all participants, use <strong>End Class</strong> instead.
+            </div>
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmingLeave(false)}
+                className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Stay in Class
+              </button>
+              <button
+                type="button"
+                onClick={handleLeaveClass}
+                className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
+              >
+                Leave Screen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ const STUDENT_PATHS = [
   "/subscription",
   "/practice",
   "/practice-board",
+  "/live",
   "/live-class",
   "/classroom",
   "/settings",
@@ -45,13 +46,13 @@ const NON_TEAM_ROLES = new Set(["STUDENT", "PARENT", "GUEST"]);
  * Added `/leaderboard` for the new student leaderboard page (gamification).
  */
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
   const secret = AUTH_SECRET;
   const token = await getToken({ req: request, secret });
 
   if (!token) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
+    loginUrl.searchParams.set("callbackUrl", `${pathname}${search}`);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -92,6 +93,7 @@ export const config = {
     "/practice",
     "/practice/:path*",
     "/practice-board/:path*",
+    "/live/:path*",
     "/live-class/:path*",
     "/classroom/:path*",
     "/settings/:path*",

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search,
@@ -148,7 +148,20 @@ export function QuestionManagementTable({
   currentUserId,
 }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const updateUrl = useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = new URLSearchParams(searchParams?.toString() || "");
+      for (const [k, v] of Object.entries(patch)) {
+        if (v) next.set(k, v);
+        else next.delete(k);
+      }
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname]
+  );
 
   // Filters State
   const [search, setSearch] = useState(searchParams?.get("search") || "");
@@ -176,6 +189,47 @@ export function QuestionManagementTable({
     question: QuestionRow;
     stage: "REVIEW_1" | "REVIEW_2";
   } | null>(null);
+
+  // Restore inspect or review modal state on page refresh or direct URL navigation
+  useEffect(() => {
+    const inspectId = searchParams?.get("inspect");
+    if (inspectId) {
+      const idx = questions.findIndex(
+        (q) => q.id === inspectId || q.questionCode === inspectId
+      );
+      if (idx >= 0) setViewQuestionIndex(idx);
+    }
+    const reviewId = searchParams?.get("review");
+    if (reviewId) {
+      const q = questions.find(
+        (item) => item.id === reviewId || item.questionCode === reviewId
+      );
+      if (q) {
+        setStandaloneReviewQuestion(q);
+      }
+    }
+  }, [searchParams, questions]);
+
+  const handleOpenInspect = (idx: number) => {
+    setViewQuestionIndex(idx);
+    const q = questions[idx];
+    if (q) updateUrl({ inspect: q.questionCode || q.id });
+  };
+
+  const handleCloseInspect = () => {
+    setViewQuestionIndex(null);
+    updateUrl({ inspect: null });
+  };
+
+  const handleOpenReview = (q: QuestionRow) => {
+    setStandaloneReviewQuestion(q);
+    updateUrl({ review: q.questionCode || q.id });
+  };
+
+  const handleCloseReview = () => {
+    setStandaloneReviewQuestion(null);
+    updateUrl({ review: null });
+  };
   const [reviewAction, setReviewAction] = useState<"APPROVE" | "REJECT" | "REQUEST_CHANGES">("APPROVE");
   const [reviewNotes, setReviewNotes] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -1190,7 +1244,7 @@ export function QuestionManagementTable({
                         {/* Full Review & AI Quality Workspace in Modal */}
                         <button
                           type="button"
-                          onClick={() => setStandaloneReviewQuestion(q)}
+                          onClick={() => handleOpenReview(q)}
                           className="px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                           title="Open Question Review & Preview (with Next / Prev navigation)"
                         >
@@ -1203,7 +1257,7 @@ export function QuestionManagementTable({
                           type="button"
                           onClick={() => {
                             const idx = questions.findIndex((item) => item.id === q.id);
-                            setViewQuestionIndex(idx >= 0 ? idx : 0);
+                            handleOpenInspect(idx >= 0 ? idx : 0);
                             setShowSolution(false);
                           }}
                           className="px-2 py-1 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 hover:text-blue-800 font-bold transition flex items-center gap-1 shadow-2xs"
@@ -1354,22 +1408,22 @@ export function QuestionManagementTable({
         const handlePrevModal = () => {
           const prevQ = questions[currentIdx - 1];
           if (hasPrev && prevQ) {
-            setStandaloneReviewQuestion(prevQ);
+            handleOpenReview(prevQ);
           }
         };
         const handleNextModal = () => {
           const nextQ = questions[currentIdx + 1];
           if (hasNext && nextQ) {
-            setStandaloneReviewQuestion(nextQ);
+            handleOpenReview(nextQ);
           }
         };
 
         return (
           <QuestionReviewWorkspaceModal
             question={standaloneReviewQuestion as any}
-            onClose={() => setStandaloneReviewQuestion(null)}
+            onClose={handleCloseReview}
             onSuccess={() => {
-              setStandaloneReviewQuestion(null);
+              handleCloseReview();
               router.refresh();
             }}
             onPrev={hasPrev ? handlePrevModal : undefined}
@@ -1559,7 +1613,7 @@ export function QuestionManagementTable({
 
                   <button
                     type="button"
-                    onClick={() => setViewQuestionIndex(null)}
+                    onClick={handleCloseInspect}
                     className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
                   >
                     <X className="w-5 h-5" />
@@ -1708,7 +1762,8 @@ export function QuestionManagementTable({
                     type="button"
                     disabled={viewQuestionIndex <= 0}
                     onClick={() => {
-                      setViewQuestionIndex((prev) => (prev !== null ? Math.max(0, prev - 1) : 0));
+                      const newIdx = viewQuestionIndex !== null ? Math.max(0, viewQuestionIndex - 1) : 0;
+                      handleOpenInspect(newIdx);
                       setShowSolution(false);
                     }}
                     className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer"
@@ -1721,7 +1776,8 @@ export function QuestionManagementTable({
                     type="button"
                     disabled={viewQuestionIndex >= questions.length - 1}
                     onClick={() => {
-                      setViewQuestionIndex((prev) => (prev !== null ? Math.min(questions.length - 1, prev + 1) : 0));
+                      const newIdx = viewQuestionIndex !== null ? Math.min(questions.length - 1, viewQuestionIndex + 1) : 0;
+                      handleOpenInspect(newIdx);
                       setShowSolution(false);
                     }}
                     className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer"
@@ -1774,7 +1830,7 @@ export function QuestionManagementTable({
 
                   <button
                     type="button"
-                    onClick={() => setViewQuestionIndex(null)}
+                    onClick={handleCloseInspect}
                     className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 transition cursor-pointer"
                   >
                     Close

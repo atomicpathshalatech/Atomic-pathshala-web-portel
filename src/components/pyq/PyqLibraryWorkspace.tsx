@@ -44,8 +44,42 @@ export function PyqLibraryWorkspace({ canImport, canBuildModules }: { canImport:
   const [dialog, setDialog] = useState<null | "MODULE" | "TEST" | "DPP">(null);
   const [selectingAll, setSelectingAll] = useState(false);
   const [openExams, setOpenExams] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<"YEAR_WISE" | "CHAPTER_WISE" | "MY_REVIEWS" | "DUPLICATES" | "ANALYTICS">(
-    sp.get("tab") === "my-reviews" ? "MY_REVIEWS" : "YEAR_WISE"
+  const resolveTab = useCallback((tabParam: string | null): "YEAR_WISE" | "CHAPTER_WISE" | "MY_REVIEWS" | "DUPLICATES" | "ANALYTICS" => {
+    const t = tabParam?.toLowerCase();
+    if (t === "chapter-wise" || t === "chapter_wise" || t === "chapter") return "CHAPTER_WISE";
+    if (t === "my-reviews" || t === "my_reviews") return "MY_REVIEWS";
+    if (t === "duplicates") return "DUPLICATES";
+    if (t === "analytics") return "ANALYTICS";
+    return "YEAR_WISE";
+  }, []);
+
+  const [activeTab, setActiveTabState] = useState<"YEAR_WISE" | "CHAPTER_WISE" | "MY_REVIEWS" | "DUPLICATES" | "ANALYTICS">(
+    resolveTab(sp.get("tab"))
+  );
+
+  useEffect(() => {
+    setActiveTabState(resolveTab(sp.get("tab")));
+  }, [sp, resolveTab]);
+
+  const setActiveTab = useCallback(
+    (newTab: "YEAR_WISE" | "CHAPTER_WISE" | "MY_REVIEWS" | "DUPLICATES" | "ANALYTICS") => {
+      setActiveTabState(newTab);
+      const slug =
+        newTab === "CHAPTER_WISE"
+          ? "chapter-wise"
+          : newTab === "MY_REVIEWS"
+          ? "my-reviews"
+          : newTab === "DUPLICATES"
+          ? "duplicates"
+          : newTab === "ANALYTICS"
+          ? "analytics"
+          : null;
+      const next = new URLSearchParams(sp.toString());
+      if (slug) next.set("tab", slug);
+      else next.delete("tab");
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [sp, router, pathname]
   );
   const [manualModalOpen, setManualModalOpen] = useState(false);
 

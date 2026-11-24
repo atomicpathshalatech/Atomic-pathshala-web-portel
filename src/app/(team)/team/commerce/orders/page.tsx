@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { CommerceOrdersManager } from "@/components/team-portal/CommerceOrdersManager";
+import { FinanceNavTabs } from "@/components/team-portal/FinanceNavTabs";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -77,6 +78,7 @@ export default async function CommerceOrdersPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      <FinanceNavTabs />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">

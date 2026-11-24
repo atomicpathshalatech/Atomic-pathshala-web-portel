@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -240,6 +240,30 @@ export function UnifiedQuestionEditor({
   const [pyqQuestionNumber, setPyqQuestionNumber] = useState<string>(
     initialPyqQuestionNumber || initialQuestion?.pyqQuestionNumber || "Question 01"
   );
+
+  // Unsaved Edits Protection
+  const isDirty = useMemo(() => {
+    const origBody = initialQuestion?.body || initialQuestion?.statement || "";
+    const origBodyHi = initialQuestion?.bodyHi || initialQuestion?.statementHi || "";
+    const origA = initialQuestion?.optionA || "";
+    const origB = initialQuestion?.optionB || "";
+    return (
+      (statementEn.trim() !== origBody.trim() && statementEn.trim().length > 0) ||
+      (statementHi.trim() !== origBodyHi.trim() && statementHi.trim().length > 0) ||
+      (optionAEn.trim() !== origA.trim() && optionAEn.trim().length > 0) ||
+      (optionBEn.trim() !== origB.trim() && optionBEn.trim().length > 0)
+    );
+  }, [statementEn, statementHi, optionAEn, optionBEn, initialQuestion]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
 
   // Taxonomy Lists (Dynamic from Master NCERT Catalog + Memory)
   const [subjectsList, setSubjectsList] = useState<Array<{ id: string; name: string }>>([]);

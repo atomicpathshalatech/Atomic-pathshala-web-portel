@@ -98,9 +98,10 @@ export const TEAM_NAV_CONFIG: TeamNavGroup[] = [
     ],
   },
   {
-    title: "People",
+    title: "People & HR",
     items: [
       { href: "/team/faculty", label: "Faculty", icon: "school", permission: PERMISSIONS.FACULTY_DIRECTORY, description: "Teacher profiles, bios and watch times" },
+      { href: "/team/hr/payroll", label: "Payroll & Salaries", icon: "payments", permission: PERMISSIONS.HR_PAYROLL_APPROVE, description: "Monthly payroll runs, salary disbursement, payslips & bank export" },
       { href: "/team/employees", label: "Employee ID Verification", icon: "badge", permission: PERMISSIONS.FACULTY_DIRECTORY, description: "Employee ID documents and verification" },
       { href: "/team/contracts", label: "Contracts & Agreements", icon: "description", permission: PERMISSIONS.CONTRACT_READ_ANY, description: "Staff agreements and digital signatures" },
       { href: "/team/onboarding", label: "Onboarding", icon: "pending_actions", permission: PERMISSIONS.ONBOARDING_REVIEW, description: "New recruit profile reviews" },
@@ -123,10 +124,19 @@ export const TEAM_NAV_CONFIG: TeamNavGroup[] = [
     ],
   },
   {
-    title: "Finance & Insights",
+    title: "Finance & Operations",
     items: [
-      { href: "/team/finance", label: "Finance", icon: "payments", permission: PERMISSIONS.FINANCE_READ, description: "Revenue reports, refunds, and transactions" },
-      { href: "/team/subscriptions", label: "Subscriptions", icon: "workspace_premium", permission: PERMISSIONS.FINANCE_READ, description: "Manual subscription grants and renewals" },
+      { href: "/team/commerce/orders", label: "Orders & Payments", icon: "receipt_long", permission: PERMISSIONS.FINANCE_READ, description: "Course & batch orders, payments, GST invoices & refunds" },
+      { href: "/team/finance/overview", label: "Finance & Ledger", icon: "account_balance", permission: PERMISSIONS.FINANCE_LEDGER_VIEW, description: "P&L overview, total revenue, expenses, and double-entry ledger" },
+      { href: "/team/finance/expenses", label: "Expense Management", icon: "receipt", permission: PERMISSIONS.FINANCE_EXPENSE_MANAGE, description: "Operating expenses, vouchers, attachments, and vendor payments" },
+      { href: "/team/finance/settings", label: "GST & Tax Settings", icon: "tune", permission: PERMISSIONS.FINANCE_GST_MANAGE, description: "GSTIN, SAC codes, tax brackets, and business bank accounts" },
+      { href: "/team/finance", label: "Subscription Payments", icon: "payments", permission: PERMISSIONS.FINANCE_READ, description: "Legacy subscription payments and refunds" },
+      { href: "/team/subscriptions", label: "Manual Subscriptions", icon: "workspace_premium", permission: PERMISSIONS.FINANCE_READ, description: "Manual subscription grants and renewals" },
+    ],
+  },
+  {
+    title: "Insights & Security",
+    items: [
       { href: "/team/analytics", label: "Analytics", icon: "analytics", permission: PERMISSIONS.ANALYTICS_VIEW, description: "Platform-wide engagement analytics" },
       { href: "/team/performance", label: "Performance Boards", icon: "monitoring", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true, description: "Executive KPI board" },
       { href: "/team/live-diagnostics", label: "Live Class Diagnostics", icon: "monitor_heart", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true, description: "WebRTC and live class stream health" },

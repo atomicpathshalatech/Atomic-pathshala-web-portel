@@ -7,6 +7,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import Link from "next/link";
 import { FinancePanel } from "@/components/team-portal/FinancePanel";
+import { FinanceNavTabs } from "@/components/team-portal/FinanceNavTabs";
 
 export const metadata: Metadata = {
   title: "Finance & Subscriptions",
@@ -33,6 +34,8 @@ export default async function FinancePage() {
 
   return (
     <div className="space-y-stack-lg max-w-6xl">
+      <FinanceNavTabs />
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-headline-lg text-headline-lg text-primary">Finance &amp; Subscriptions</h1>

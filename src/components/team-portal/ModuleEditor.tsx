@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { renderFormulaContent } from "@/lib/test-portal/formula";
@@ -247,13 +248,31 @@ const AUTOSAVE_DELAY_MS = 1500;
 const HISTORY_LIMIT = 50;
 
 export function ModuleEditor({ moduleId }: { moduleId: string }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  const updateUrlParam = useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = new URLSearchParams(searchParams?.toString() || "");
+      for (const [k, v] of Object.entries(patch)) {
+        if (v) next.set(k, v);
+        else next.delete(k);
+      }
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname]
+  );
+
   const [data, setData] = useState<ModuleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [pageEdits, setPageEdits] = useState<Record<string, ElementRow[]>>({});
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState(false);
+  const [previewMode, setPreviewModeState] = useState(
+    searchParams?.get("preview") === "true"
+  );
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [uploadingImageFor, setUploadingImageFor] = useState<string | null>(null);
   const [versionLabel, setVersionLabel] = useState("");
@@ -261,6 +280,23 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const [exportVersionId, setExportVersionId] = useState("");
   const [includeWatermark, setIncludeWatermark] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  const setPreviewMode = useCallback(
+    (val: boolean) => {
+      setPreviewModeState(val);
+      updateUrlParam({ preview: val ? "true" : null });
+    },
+    [updateUrlParam]
+  );
+
+  const handleSelectPage = useCallback(
+    (pageId: string) => {
+      setSelectedPageId(pageId);
+      const p = data?.pages.find((x) => x.id === pageId);
+      if (p) updateUrlParam({ page: String(p.pageNumber), pageId: p.id });
+    },
+    [data?.pages, updateUrlParam]
+  );
 
   // Edit Details Modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -373,7 +409,14 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
         historyRef.current[p.id] = { stack: [p.elements], index: 0 };
       }
       setPageEdits(edits);
-      setSelectedPageId((prev) => (prev && m.pages.some((p) => p.id === prev) ? prev : (m.pages[0]?.id ?? null)));
+      const targetPageNum = searchParams?.get("page");
+      const targetPageId = searchParams?.get("pageId");
+      const matchedPage =
+        (targetPageId ? m.pages.find((p) => p.id === targetPageId) : null) ||
+        (targetPageNum ? m.pages.find((p) => String(p.pageNumber) === targetPageNum) : null) ||
+        m.pages[0];
+
+      setSelectedPageId((prev) => (prev && m.pages.some((p) => p.id === prev) ? prev : (matchedPage?.id ?? null)));
 
     } catch {
       setError("Failed to connect to module service.");
@@ -1417,7 +1460,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                 key={p.id}
                 type="button"
                 onClick={() => {
-                  setSelectedPageId(p.id);
+                  handleSelectPage(p.id);
                   setSelectedElementId(null);
                 }}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-label-sm flex items-center gap-1.5 transition-colors ${

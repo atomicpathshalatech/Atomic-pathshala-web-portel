@@ -7,6 +7,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { getFinancialSummary } from "@/lib/finance/ledger-service";
 import { FinanceOverviewDashboard } from "@/components/team-portal/FinanceOverviewDashboard";
+import { FinanceNavTabs } from "@/components/team-portal/FinanceNavTabs";
 
 export const metadata: Metadata = {
   title: "Finance & Accounting Overview",
@@ -29,6 +30,7 @@ export default async function FinanceOverviewPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
+      <FinanceNavTabs />
       <FinanceOverviewDashboard initialSummary={summary} initialLedger={ledger} />
     </div>
   );

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { ManualQuestionDialog } from "./ManualQuestionDialog";
@@ -50,9 +51,37 @@ export function PyqChapterWiseView({
   exams: Exam[];
   canImport: boolean;
 }) {
-  const [selectedExam, setSelectedExam] = useState<Exam>(
-    exams.find((e) => e.canonicalType === "NEET_UG") || exams[0] || { id: "", name: "NEET UG", canonicalType: "NEET_UG", slug: "neet-ug" }
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+
+  const updateUrlParam = useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = new URLSearchParams(sp.toString());
+      for (const [k, v] of Object.entries(patch)) {
+        if (v) next.set(k, v);
+        else next.delete(k);
+      }
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [sp, router, pathname]
   );
+
+  const examFromUrl = sp.get("exam");
+  const initialExam =
+    (examFromUrl
+      ? exams.find(
+          (e) =>
+            e.id === examFromUrl ||
+            e.slug === examFromUrl ||
+            e.canonicalType === examFromUrl
+        )
+      : null) ||
+    exams.find((e) => e.canonicalType === "NEET_UG") ||
+    exams[0] ||
+    { id: "", name: "NEET UG", canonicalType: "NEET_UG", slug: "neet-ug" };
+
+  const [selectedExam, setSelectedExamState] = useState<Exam>(initialExam);
 
   // Available subjects depending on exam
   const subjects =
@@ -60,15 +89,27 @@ export function PyqChapterWiseView({
       ? ["Physics", "Chemistry", "Biology", "Botany", "Zoology"]
       : ["Physics", "Chemistry", "Mathematics"];
 
-  const [selectedSubject, setSelectedSubject] = useState<string>("Biology");
+  const subjectFromUrl = sp.get("subject");
+  const initialSubject =
+    subjectFromUrl && subjects.includes(subjectFromUrl)
+      ? subjectFromUrl
+      : "Chemistry";
+
+  const [selectedSubject, setSelectedSubjectState] = useState<string>(initialSubject);
   const [chapters, setChapters] = useState<ChapterSummary[]>([]);
-  const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
+  const [selectedChapter, setSelectedChapterState] = useState<string | null>(
+    sp.get("chapter") || null
+  );
   const [detail, setDetail] = useState<ChapterDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
   // Active Verification Tab inside Chapter
-  const [verificationTab, setVerificationTab] = useState<"unverified" | "verified">("unverified");
+  const initialVerification =
+    sp.get("verification") === "verified" ? "verified" : "unverified";
+  const [verificationTab, setVerificationTabState] = useState<"unverified" | "verified">(
+    initialVerification
+  );
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
   // Selection for batch assignment
@@ -80,7 +121,57 @@ export function PyqChapterWiseView({
     open: boolean;
     mode: "CHAPTER" | "SELECTED_QUESTIONS" | "SELF";
   }>({ open: false, mode: "CHAPTER" });
-  const [reviewModalQuestionId, setReviewModalQuestionId] = useState<string | null>(null);
+  const [reviewModalQuestionId, setReviewModalQuestionIdState] = useState<string | null>(
+    sp.get("reviewQuestionId") || null
+  );
+
+  // Wrapped setters that sync to URL
+  const setSelectedExam = (ex: Exam) => {
+    setSelectedExamState(ex);
+    updateUrlParam({ exam: ex.canonicalType || ex.id, chapter: null });
+  };
+
+  const setSelectedSubject = (sub: string) => {
+    setSelectedSubjectState(sub);
+    updateUrlParam({ subject: sub, chapter: null });
+  };
+
+  const setSelectedChapter = (chap: string | null) => {
+    setSelectedChapterState(chap);
+    updateUrlParam({ chapter: chap });
+  };
+
+  const setVerificationTab = (v: "unverified" | "verified") => {
+    setVerificationTabState(v);
+    updateUrlParam({ verification: v });
+  };
+
+  const setReviewModalQuestionId = (qid: string | null) => {
+    setReviewModalQuestionIdState(qid);
+    updateUrlParam({ reviewQuestionId: qid });
+  };
+
+  // Sync state from URL when Back/Forward navigation occurs
+  useEffect(() => {
+    const e = sp.get("exam");
+    if (e) {
+      const match = exams.find(
+        (x) => x.id === e || x.slug === e || x.canonicalType === e
+      );
+      if (match && match.id !== selectedExam.id) setSelectedExamState(match);
+    }
+    const s = sp.get("subject");
+    if (s && s !== selectedSubject && subjects.includes(s))
+      setSelectedSubjectState(s);
+    const c = sp.get("chapter");
+    if (c !== selectedChapter) setSelectedChapterState(c);
+    const v = sp.get("verification");
+    if (v === "verified" || v === "unverified") {
+      if (v !== verificationTab) setVerificationTabState(v);
+    }
+    const rq = sp.get("reviewQuestionId") || null;
+    if (rq !== reviewModalQuestionId) setReviewModalQuestionIdState(rq);
+  }, [sp, exams]);
 
   // Switch subject when exam changes if current subject is not valid for exam
   useEffect(() => {
@@ -101,8 +192,8 @@ export function PyqChapterWiseView({
       .then((j) => {
         if (j.success && j.data?.chapters) {
           setChapters(j.data.chapters);
-          // auto-select first chapter with questions or first chapter
-          if (!selectedChapter && j.data.chapters.length > 0) {
+          // auto-select first chapter with questions or first chapter only if no chapter selected or in URL
+          if (!selectedChapter && !sp.get("chapter") && j.data.chapters.length > 0) {
             const firstWithQs = j.data.chapters.find((c: ChapterSummary) => c.count > 0) || j.data.chapters[0];
             setSelectedChapter(firstWithQs.title);
           }

@@ -3,6 +3,8 @@
 import { useDeviceOrientationClass } from "@/lib/ui/use-device-orientation";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useBackNavigation } from "@/lib/navigation/useBackNavigation";
+import { registerBackGuard } from "@/lib/navigation/back-guards";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { STUDENT_HEARTBEAT_MS } from "@/lib/whiteboard/constants";
@@ -1502,6 +1504,63 @@ export function StudentLiveClassRoom({
   // used): the teacher's camera is the class video, shown to every student.
   const isAppVideoClass = wbSession?.videoTransport === "LIVEKIT" && wbSession?.livePhase === "LIVE";
 
+  // Navigation & Exit Handling (Universal Back / Leave Class)
+  const { goBack } = useBackNavigation({ fallbackHref: "/schedule" });
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+
+  const handleLeaveClass = useCallback(() => {
+    setConfirmingLeave(false);
+    goBack();
+  }, [goBack]);
+
+  const onBackClick = useCallback(() => {
+    if (isLive) {
+      setConfirmingLeave(true);
+    } else {
+      handleLeaveClass();
+    }
+  }, [isLive, handleLeaveClass]);
+
+  useEffect(() => {
+    return registerBackGuard(async () => {
+      if (confirmingLeave) {
+        setConfirmingLeave(false);
+        return true;
+      }
+      if (showOverlayModal) {
+        setShowOverlayModal(false);
+        return true;
+      }
+      if (mobileLandscapeActive) {
+        toggleMobileOrientation();
+        return true;
+      }
+      if (document.fullscreenElement) {
+        try {
+          await document.exitFullscreen();
+          return true;
+        } catch {}
+      }
+      if (pendingDoubtPreviewUrl) {
+        handleCancelPendingDoubt();
+        return true;
+      }
+      if (isLive) {
+        setConfirmingLeave(true);
+        return true;
+      }
+      return false;
+    }, 10);
+  }, [
+    confirmingLeave,
+    showOverlayModal,
+    mobileLandscapeActive,
+    pendingDoubtPreviewUrl,
+    isLive,
+    toggleMobileOrientation,
+    handleCancelPendingDoubt,
+  ]);
+
   // ---------------- CLASS ENDED ----------------
   // Students see ONLY "Class Ended" + Student Learning Feedback.
   // Strictly NO PDF or PPTX download buttons appear on this immediate post-class screen.
@@ -1547,16 +1606,18 @@ export function StudentLiveClassRoom({
       className={`fixed inset-0 w-full flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}
     >
       {/* Top Authoritative Studio Header */}
-      {/* Phones/tablets: no header — the class video gets the room (hand raise is in the panel below, rotate/fullscreen in the player strip). */}
+      {/* Phones/tablets have their own compact mobile header below */}
       <header className="h-12 sm:h-14 px-3 sm:px-4 shrink-0 hidden lg:flex items-center justify-between border-b border-slate-800/80 bg-[#10131d] z-20">
         <div className="flex items-center gap-2.5 min-w-0">
-          <Link
-            href="/schedule"
-            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center shrink-0 transition shadow-xs"
-            title="Back to Schedule"
+          <button
+            type="button"
+            onClick={onBackClick}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 text-xs font-bold transition shadow-xs cursor-pointer"
+            title="Leave Live Class"
           >
             <span className="material-symbols-outlined text-base">arrow_back</span>
-          </Link>
+            <span>Leave Class</span>
+          </button>
           <div className="w-8 h-8 rounded-xl overflow-hidden p-0.5 bg-white/5 border border-white/10 shrink-0 hidden xs:flex items-center justify-center">
             <img
               src="/brand/logo.png"
@@ -1932,6 +1993,36 @@ export function StudentLiveClassRoom({
       <div className={`md:hidden flex-1 min-h-0 flex flex-col ls:flex-row overflow-hidden bg-[#0b0d14] relative ${
         mobileLandscapeActive ? "fixed inset-0 z-[80] w-screen h-screen bg-black" : ""
       }`}>
+        {/* Mobile Top Header (Portrait only) */}
+        {!mobileLandscapeActive && (
+          <header className="h-11 px-3 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d] z-20">
+            <button
+              type="button"
+              onClick={onBackClick}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
+              title="Leave Live Class"
+            >
+              <span className="material-symbols-outlined text-sm">arrow_back</span>
+              <span>Leave</span>
+            </button>
+            <div className="min-w-0 flex-1 px-2 text-center">
+              <p className="text-[11px] font-bold text-white truncate">{scheduleTitle}</p>
+            </div>
+            <div className="shrink-0">
+              {isLive ? (
+                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  LIVE
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-amber-400 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded-full">
+                  CONNECTING
+                </span>
+              )}
+            </div>
+          </header>
+        )}
+
         {/* Mobile Media Area: In portrait takes top 40-45dvh; in LANDSCAPE takes 100% FULL SCREEN */}
         <div className={`w-full aspect-video ${
           mobileLandscapeActive
@@ -1953,15 +2044,26 @@ export function StudentLiveClassRoom({
                 livePhase={isLive ? "LIVE" : "PREPARING"}
               />
               {mobileLandscapeActive && (
-                <button
-                  type="button"
-                  onClick={toggleMobileOrientation}
-                  className="absolute top-3 left-3 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/70 hover:bg-black/90 text-white border border-white/20 text-xs font-semibold backdrop-blur-md shadow-xl"
-                  title="Exit Landscape"
-                >
-                  <span className="material-symbols-outlined text-sm">fullscreen_exit</span>
-                  <span>Exit</span>
-                </button>
+                <div className="absolute top-3 left-3 z-30 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleMobileOrientation}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/70 hover:bg-black/90 text-white border border-white/20 text-xs font-semibold backdrop-blur-md shadow-xl cursor-pointer"
+                    title="Exit Landscape"
+                  >
+                    <span className="material-symbols-outlined text-sm">fullscreen_exit</span>
+                    <span>Exit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onBackClick}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-500/40 text-xs font-bold backdrop-blur-md shadow-xl cursor-pointer"
+                    title="Leave Live Class"
+                  >
+                    <span className="material-symbols-outlined text-sm">arrow_back</span>
+                    <span>Leave</span>
+                  </button>
+                </div>
               )}
 
               {/* Teacher's camera is already baked into the YouTube video via
@@ -2212,6 +2314,42 @@ export function StudentLiveClassRoom({
       {/* Quiz leaderboard published by the teacher */}
       {publishedLeaderboard && (
         <LeaderboardPopup leaderboard={publishedLeaderboard} onClose={closeLeaderboard} currentStudentId={currentUserId} />
+      )}
+
+      {/* Leave Class Confirmation Dialog */}
+      {confirmingLeave && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-[#11131f] border border-slate-700/80 rounded-2xl p-5 shadow-2xl text-white space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <span className="material-symbols-outlined text-xl">logout</span>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Leave Live Class?</h3>
+                <p className="text-xs text-slate-400">Your class will continue for other students.</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              You can return to this class at any time while it is in session.
+            </p>
+            <div className="flex items-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmingLeave(false)}
+                className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Stay in Class
+              </button>
+              <button
+                type="button"
+                onClick={handleLeaveClass}
+                className="flex-1 py-2 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition shadow-md shadow-red-600/30 cursor-pointer"
+              >
+                Leave Class
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
