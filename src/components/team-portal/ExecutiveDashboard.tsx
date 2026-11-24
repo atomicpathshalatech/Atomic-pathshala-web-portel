@@ -49,7 +49,7 @@ export function ExecutiveDashboard({
               Executive Overview
             </h1>
             <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-              {userRoleLabel || "Super Admin"}
+              {userRoleLabel || "Admin"}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -57,7 +57,20 @@ export function ExecutiveDashboard({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <Link
+            href="/team/finance/overview"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100/70 text-xs font-semibold text-emerald-800 transition"
+          >
+            <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+            Finance &amp; GST
+          </Link>
+          <Link
+            href="/team/commerce/orders"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition"
+          >
+            Orders &amp; Payments
+          </Link>
           <Link
             href="/team/analytics"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition"
@@ -108,8 +121,8 @@ export function ExecutiveDashboard({
           { label: "Active Batches", val: kpis.activeBatches, sub: "Running cohorts", href: "/team/batches", icon: Layers },
           { label: "Total Faculty", val: kpis.totalFaculty, sub: "Verified educators", href: "/team/faculty", icon: Users },
           { label: "Today's Classes", val: kpis.todayLiveClasses, sub: "Whiteboard studio", href: "/team/my-schedule", icon: Video },
-          { label: "Monthly Revenue", val: `₹${kpis.monthlyRevenue.toLocaleString("en-IN")}`, sub: "Confirmed orders", href: "/team/finance", icon: Wallet },
-          { label: "Pending Orders", val: kpis.pendingPayments, sub: "Awaiting payment", href: "/team/finance", icon: Clock },
+          { label: "Monthly Revenue", val: `₹${kpis.monthlyRevenue.toLocaleString("en-IN")}`, sub: "Confirmed orders", href: "/team/finance/overview", icon: Wallet },
+          { label: "Pending Orders", val: kpis.pendingPayments, sub: "Orders & checkout", href: "/team/commerce/orders", icon: Clock },
           { label: "Pending Doubts", val: kpis.pendingDoubts, sub: "In faculty queue", href: "/team/doubts", icon: HelpCircle },
           { label: "Active Tests", val: kpis.activeTests, sub: "Published mock tests", href: "/team/tests", icon: FileCheck2 },
         ].map((card) => {

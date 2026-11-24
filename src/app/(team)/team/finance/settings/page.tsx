@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { BusinessTaxSettingsManager } from "@/components/team-portal/BusinessTaxSettingsManager";
+import { FinanceNavTabs } from "@/components/team-portal/FinanceNavTabs";
 
 export const metadata: Metadata = {
   title: "Business Profile & Tax Settings",
@@ -29,6 +30,7 @@ export default async function BusinessSettingsPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
+      <FinanceNavTabs />
       <BusinessTaxSettingsManager
         initialProfile={profile}
         initialGst={gst}

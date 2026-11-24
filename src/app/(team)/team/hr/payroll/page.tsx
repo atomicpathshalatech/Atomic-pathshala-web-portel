@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { PayrollManager } from "@/components/team-portal/PayrollManager";
+import { FinanceNavTabs } from "@/components/team-portal/FinanceNavTabs";
 
 export const metadata: Metadata = {
   title: "Payroll Management",
@@ -45,6 +46,7 @@ export default async function PayrollPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
+      <FinanceNavTabs />
       <PayrollManager
         initialRuns={runs}
         canPrepare={canPrepare}
