@@ -110,10 +110,10 @@ export async function getFinancialSummary(dateFrom?: Date, dateTo?: Date) {
       : {}),
   };
 
-  // 1. Gross Student Collections (from PAID BatchOrders)
+  // 1. Gross Student Collections (from SUCCESS BatchOrders)
   const ordersAggregate = await prisma.batchOrder.aggregate({
     where: {
-      status: "PAID",
+      status: "SUCCESS",
       ...dateFilter,
     },
     _sum: {
@@ -164,7 +164,7 @@ export async function getFinancialSummary(dateFrom?: Date, dateTo?: Date) {
   // 4. Total Refunds
   const refundAggregate = await prisma.batchRefund.aggregate({
     where: {
-      status: "COMPLETED",
+      status: "SUCCESS",
       ...dateFilter,
     },
     _sum: {
