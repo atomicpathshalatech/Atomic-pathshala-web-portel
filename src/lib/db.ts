@@ -35,7 +35,7 @@ function buildDatabaseUrl(): string | undefined {
   if (!raw) return undefined;
   try {
     const url = new URL(raw);
-    if (url.hostname.endsWith(".pooler.supabase.com") && !url.port) {
+    if (url.hostname.endsWith(".pooler.supabase.com")) {
       url.port = "6543";
       url.searchParams.set("pgbouncer", "true");
     }
