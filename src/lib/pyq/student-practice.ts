@@ -3,17 +3,20 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { normalizeOptions } from "@/lib/qc/question";
 import { extractCorrectOptionKeys, isAnswerCorrect } from "@/lib/test-engine/answer-evaluator";
+import {
+  VERIFIED_PYQ_OCCURRENCE_WHERE,
+  VERIFIED_PYQ_QUESTION_WHERE,
+  VERIFIED_PYQ_STATUS,
+} from "@/lib/pyq/visibility";
 
 /**
- * Student PYQ practice, straight from the team's PYQ Library (whatever is
- * added there shows here): subject → year-wise papers or chapter-wise sets
- * → the questions in test mode. Answers are checked on the server at submit;
- * they are never sent to the phone before that.
- *
- * Only occurrences not REJECTED by the team count.
+ * Student PYQ practice, strictly enforced to VERIFIED PYQs only:
+ * subject → year-wise papers or chapter-wise sets → questions in test mode.
+ * Answers are checked on the server at submit; unverified/draft/rejected
+ * questions are never exposed.
  */
 
-const LIVE_OCCURRENCE: Prisma.PyqOccurrenceWhereInput = { verificationStatus: { not: "REJECTED" } };
+const LIVE_OCCURRENCE: Prisma.PyqOccurrenceWhereInput = VERIFIED_PYQ_OCCURRENCE_WHERE;
 
 export type PyqOverview = {
   subjects: {
@@ -77,10 +80,15 @@ export type PyqPracticeQuestion = {
 const MAX_QUESTIONS = 200;
 
 function questionFilter(p: { subject: string; examId?: string | null; year?: number | null; chapter?: string | null }): Prisma.QuestionWhereInput {
-  const occurrence: Prisma.PyqOccurrenceWhereInput = { ...LIVE_OCCURRENCE };
+  const occurrence: Prisma.PyqOccurrenceWhereInput = { verificationStatus: VERIFIED_PYQ_STATUS };
   if (p.examId) occurrence.examId = p.examId;
   if (p.year) occurrence.year = p.year;
-  const and: Prisma.QuestionWhereInput[] = [{ subject: { equals: p.subject, mode: "insensitive" } }, { pyqOccurrences: { some: occurrence } }];
+  const and: Prisma.QuestionWhereInput[] = [
+    { pyqVerificationStatus: VERIFIED_PYQ_STATUS },
+    { isPublished: true },
+    { subject: { equals: p.subject, mode: "insensitive" } },
+    { pyqOccurrences: { some: occurrence } },
+  ];
   if (p.chapter) and.push({ chapter: { equals: p.chapter, mode: "insensitive" } });
   return { AND: and };
 }
@@ -96,7 +104,7 @@ export async function pyqQuestions(p: { subject: string; examId?: string | null;
       type: true,
       imageUrl: true,
       translations: { select: { language: true, statement: true, options: true } },
-      pyqOccurrences: { where: LIVE_OCCURRENCE, select: { year: true, sourceLabel: true, questionNumber: true, exam: { select: { name: true } } }, take: 3 },
+      pyqOccurrences: { where: { verificationStatus: VERIFIED_PYQ_STATUS }, select: { year: true, sourceLabel: true, questionNumber: true, exam: { select: { name: true } } }, take: 3 },
     },
   });
   return rows
@@ -126,7 +134,10 @@ export type PyqCheckResult = { questionId: string; correct: boolean; correctKeys
 export async function checkPyqAnswers(answers: { questionId: string; selected: string[] }[]): Promise<PyqCheckResult[]> {
   const ids = Array.from(new Set(answers.map((a) => a.questionId))).slice(0, MAX_QUESTIONS);
   const rows = await prisma.question.findMany({
-    where: { id: { in: ids }, pyqOccurrences: { some: LIVE_OCCURRENCE } },
+    where: {
+      id: { in: ids },
+      ...VERIFIED_PYQ_QUESTION_WHERE,
+    },
     select: { id: true, type: true, solution: true, translations: { select: { language: true, statement: true, options: true, correctOptionIds: true, solution: true } } },
   });
   const byId = new Map(rows.map((r) => [r.id, r]));

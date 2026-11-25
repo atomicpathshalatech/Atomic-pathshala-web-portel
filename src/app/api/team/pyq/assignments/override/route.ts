@@ -4,6 +4,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { requireTeamUser } from "@/lib/pyq/api";
 import { isSuperAdmin } from "@/lib/rbac/super-admin";
+import { invalidatePyqVisibilityCaches } from "@/lib/pyq/visibility";
 
 /**
  * POST /api/team/pyq/assignments/override
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     const question = await prisma.question.findUnique({
       where: { id: questionId },
-      select: { id: true, pyqVerificationStatus: true },
+      select: { id: true, slug: true, subject: true, chapter: true, pyqVerificationStatus: true },
     });
 
     if (!question) {
@@ -46,27 +47,28 @@ export async function POST(request: NextRequest) {
     }
 
     const previousStatus = question.pyqVerificationStatus || "UNVERIFIED";
+    const isNowVerified = newStatus === "VERIFIED";
 
     await prisma.$transaction(async (tx) => {
       await tx.question.update({
         where: { id: questionId },
         data: {
           pyqVerificationStatus: newStatus,
-          pyqVerifiedById: newStatus === "VERIFIED" ? sessionUser.id : null,
-          pyqVerifiedAt: newStatus === "VERIFIED" ? new Date() : null,
+          pyqVerifiedById: isNowVerified ? sessionUser.id : null,
+          pyqVerifiedAt: isNowVerified ? new Date() : null,
+          isPublished: isNowVerified,
+          status: isNowVerified ? "PUBLISHED" : "DRAFT",
         },
       });
 
-      if (newStatus === "VERIFIED") {
-        await tx.pyqOccurrence.updateMany({
-          where: { questionId },
-          data: {
-            verificationStatus: "VERIFIED",
-            verifiedById: sessionUser.id,
-            verifiedAt: new Date(),
-          },
-        });
-      }
+      await tx.pyqOccurrence.updateMany({
+        where: { questionId },
+        data: {
+          verificationStatus: isNowVerified ? "VERIFIED" : "UNVERIFIED",
+          verifiedById: isNowVerified ? sessionUser.id : null,
+          verifiedAt: isNowVerified ? new Date() : null,
+        },
+      });
 
       await tx.pyqReviewHistory.create({
         data: {
@@ -78,6 +80,12 @@ export async function POST(request: NextRequest) {
           updatedData: { status: newStatus, reason, overriddenBy: sessionUser.name },
         },
       });
+    });
+
+    await invalidatePyqVisibilityCaches({
+      slug: question.slug,
+      subject: question.subject,
+      chapter: question.chapter,
     });
 
     return apiSuccess({

@@ -13,17 +13,47 @@ export const metadata: Metadata = {
 };
 
 export default async function CheckoutPage({ params }: { params: { courseSlug: string } }) {
-  // A real Batch takes priority over the sample/demo catalog — this is the
-  // actual product, and checkout for it must go through the real,
-  // server-verified payment flow (see RealBatchCheckoutView), never the
-  // old CheckoutView, which faked success with a setTimeout and never
-  // touched a BatchEnrollment.
+  // A real Batch takes priority over the sample/demo catalog
   const realBatch = await prisma.batch.findFirst({
     where: { OR: [{ id: params.courseSlug }, { code: params.courseSlug }] },
-    select: { id: true, name: true, price: true, originalPrice: true, thumbnailUrl: true, description: true },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      originalPrice: true,
+      thumbnailUrl: true,
+      description: true,
+      isPurchasable: true,
+    },
   });
 
   if (realBatch) {
+    if (realBatch.isPurchasable === false) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#f9f9ff] px-4 text-center py-12">
+          <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-2xs">
+              <span className="material-symbols-outlined text-3xl">event_busy</span>
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-xl font-black text-[#031635]">Enrollment Closed</h1>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Admissions for <strong>{realBatch.name}</strong> are currently closed. Please check back later or explore other active cohorts.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Link
+                href="/courses"
+                className="w-full py-3 px-4 rounded-xl bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-bold text-xs shadow-md transition inline-block text-center"
+              >
+                Explore Available Batches
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (realBatch.price == null) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-[#f9f9ff] px-4 text-center">
@@ -114,9 +144,7 @@ export default async function CheckoutPage({ params }: { params: { courseSlug: s
     );
   }
 
-  // No matching real Batch — fall back to the sample/demo catalog. This is
-  // legacy marketing/demo content, disconnected from real Batch data by
-  // design (see sample-courses.ts) — no real payment exists to run here.
+  // No matching real Batch — fall back to the sample/demo catalog
   const found =
     SAMPLE_COURSES.find((c) => c.slug === params.courseSlug || c.id === params.courseSlug) ??
     SAMPLE_COURSES[0]!;

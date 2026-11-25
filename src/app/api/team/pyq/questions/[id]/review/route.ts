@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { requireTeamUser } from "@/lib/pyq/api";
+import { invalidatePyqVisibilityCaches } from "@/lib/pyq/visibility";
 
 const MANDATORY_CHECKLIST_KEYS = [
   "englishStatement",
@@ -436,8 +437,21 @@ export async function POST(
           where: { id },
           data: {
             pyqVerificationStatus: "NEEDS_CORRECTION",
+            pyqVerifiedAt: null,
+            pyqVerifiedById: null,
+            isPublished: false,
+            status: "DRAFT",
             correctionStatus: "REWORK",
             correctionNotes: correctionsNeeded || reviewComments,
+          },
+        });
+
+        await tx.pyqOccurrence.updateMany({
+          where: { questionId: id },
+          data: {
+            verificationStatus: "UNVERIFIED",
+            verifiedById: null,
+            verifiedAt: null,
           },
         });
 
@@ -520,6 +534,17 @@ export async function POST(
             pyqVerificationStatus: "IN_REVIEW",
             pyqVerifiedAt: null,
             pyqVerifiedById: null,
+            isPublished: false,
+            status: "DRAFT",
+          },
+        });
+
+        await tx.pyqOccurrence.updateMany({
+          where: { questionId: id },
+          data: {
+            verificationStatus: "UNVERIFIED",
+            verifiedById: null,
+            verifiedAt: null,
           },
         });
 
@@ -535,6 +560,12 @@ export async function POST(
 
       return { status: action };
     });
+
+    const targetMeta = await prisma.question.findUnique({
+      where: { id },
+      select: { slug: true, subject: true, chapter: true },
+    });
+    await invalidatePyqVisibilityCaches(targetMeta ?? undefined);
 
     return apiSuccess({
       message:

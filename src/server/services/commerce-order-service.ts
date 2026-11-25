@@ -648,3 +648,192 @@ export async function recordBatchOrderRefund(input: RecordRefundInput) {
 
   return refund;
 }
+
+/**
+ * Direct self-enrollment for completely FREE batches (price === 0).
+ * Validates batch eligibility and price server-side, idempotently provisions
+ * active enrollment, writes a zero-amount SUCCESS order record for financial auditability,
+ * and notifies the student.
+ */
+export async function enrollStudentInFreeBatch(studentId: string, batchIdentifier: string) {
+  // 1. Locate batch by ID or code
+  const batch = await prisma.batch.findFirst({
+    where: {
+      OR: [{ id: batchIdentifier }, { code: batchIdentifier }],
+    },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      status: true,
+      price: true,
+      originalPrice: true,
+      isPurchasable: true,
+    },
+  });
+
+  if (!batch) {
+    throw new CommerceOrderError("Batch not found.", "BATCH_NOT_FOUND");
+  }
+
+  // 2. Validate batch is published and enrollment is open
+  if (batch.isPurchasable === false) {
+    throw new CommerceOrderError("Enrollment for this batch is currently closed.", "ENROLLMENT_CLOSED");
+  }
+  if (batch.status === "ARCHIVED") {
+    throw new CommerceOrderError("This batch is no longer available.", "BATCH_ARCHIVED");
+  }
+
+  // 3. Verify server-side that the selling price is strictly zero
+  if (batch.price !== 0) {
+    throw new CommerceOrderError(
+      "This is a paid batch. Please complete payment through checkout to enroll.",
+      "PAYMENT_REQUIRED"
+    );
+  }
+
+  // 4. Validate student profile
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: { user: { select: { id: true, name: true, email: true, phone: true } } },
+  });
+
+  if (!student) {
+    throw new CommerceOrderError("Student profile not found.", "STUDENT_NOT_FOUND");
+  }
+
+  // 5. Idempotent check: if already active, do not duplicate records
+  const existingEnrollment = await prisma.batchEnrollment.findUnique({
+    where: {
+      batchId_studentId: {
+        batchId: batch.id,
+        studentId: student.id,
+      },
+    },
+  });
+
+  if (existingEnrollment && existingEnrollment.status === "ACTIVE") {
+    return {
+      success: true,
+      alreadyEnrolled: true,
+      batchId: batch.id,
+      batchName: batch.name,
+      message: "You are already enrolled in this batch.",
+      enrollment: existingEnrollment,
+    };
+  }
+
+  // 6. Generate order & invoice numbers
+  const orderNumber = await generateOrderNumber();
+  const invoiceNumber = await generateInvoiceNumber();
+
+  // 7. Atomic transaction: create BatchOrder (status: SUCCESS, provider: FREE), PaymentRecord, and upsert BatchEnrollment
+  const [batchOrder, enrollment] = await prisma.$transaction(async (tx) => {
+    const order = await tx.batchOrder.create({
+      data: {
+        orderNumber,
+        invoiceNumber,
+        studentId: student.id,
+        batchId: batch.id,
+        originalAmount: batch.originalPrice ?? 0,
+        discountAmount: batch.originalPrice ?? 0,
+        amount: 0,
+        currency: "INR",
+        status: "SUCCESS",
+        gatewayProvider: "FREE",
+        gatewayOrderId: `FREE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      },
+    });
+
+    await tx.paymentRecord.create({
+      data: {
+        orderId: order.id,
+        amount: 0,
+        currency: "INR",
+        gatewayProvider: "FREE",
+        gatewayOrderId: order.gatewayOrderId,
+        gatewayPaymentId: `FREE_CLAIM_${order.id}`,
+        status: "SUCCESS",
+        completedAt: new Date(),
+      },
+    });
+
+    const enrolled = await tx.batchEnrollment.upsert({
+      where: {
+        batchId_studentId: {
+          batchId: batch.id,
+          studentId: student.id,
+        },
+      },
+      create: {
+        batchId: batch.id,
+        studentId: student.id,
+        status: "ACTIVE",
+        orderId: order.id,
+      },
+      update: {
+        status: "ACTIVE",
+        droppedAt: null,
+        orderId: order.id,
+      },
+    });
+
+    return [order, enrolled];
+  });
+
+  // 8. Dispatch Welcome & Enrollment Notification Email
+  try {
+    await notifyEnrollment({
+      idempotencyKey: `free_enrollment:${enrollment.id}`,
+      kind: "BATCH",
+      studentUserId: student.userId,
+      studentName: student.user.name,
+      studentEmail: student.user.email,
+      productName: batch.name,
+    });
+  } catch (emailErr) {
+    console.error("[commerce] Failed to dispatch free enrollment email:", emailErr);
+  }
+
+  // 9. Dispatch In-App Notification
+  try {
+    await prisma.notification.create({
+      data: {
+        userId: student.userId,
+        title: "Enrolled in Batch! 🎉",
+        body: `You have successfully enrolled in ${batch.name}. Happy learning!`,
+        type: "GENERAL",
+        category: "SYSTEM",
+        channel: "IN_APP",
+        deepLink: `/courses/${batch.id}`,
+        idempotencyKey: `notif_free_enroll_${batch.id}_${student.id}`,
+      },
+    });
+  } catch (notifErr) {
+    console.error("[commerce] In-app notification creation error:", notifErr);
+  }
+
+  // 10. CRM Activity Tracking
+  try {
+    const { recordActivity, syncCategoryToOutreach } = await import("@/lib/crm/lead-category");
+    const category = await recordActivity({
+      studentId: student.id,
+      type: "PAYMENT_SUCCESS",
+      batchId: batch.id,
+    });
+    await syncCategoryToOutreach(student.id, category);
+  } catch (err) {
+    console.error("Activity tracking error (free batch enrollment):", err);
+  }
+
+  return {
+    success: true,
+    alreadyEnrolled: false,
+    batchId: batch.id,
+    batchName: batch.name,
+    message: `Successfully enrolled in ${batch.name}!`,
+    orderNumber: batchOrder.orderNumber,
+    enrollment,
+  };
+}
+

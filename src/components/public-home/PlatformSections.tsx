@@ -94,15 +94,13 @@ export function CourseSection({ batches, head, showPrice = true }: { batches: Pu
                   <li className="flex items-center gap-1"><Icon name="assignment" className="text-[15px] text-blue-600" /> DPPs & tests</li>
                   <li className="flex items-center gap-1"><Icon name="help" className="text-[15px] text-blue-600" /> Doubt support</li>
                 </ul>
-                <div className="mt-auto flex items-end justify-between gap-2 pt-4">
+                <div className={`mt-auto flex items-end gap-2 pt-4 ${showPrice && b.price != null && b.price > 0 ? "justify-between" : "justify-start"}`}>
                   {showPrice && b.price != null && b.price > 0 ? (
                     <p className="text-lg font-bold text-slate-900">
                       {inr(b.price)}
                       {b.originalPrice && b.originalPrice > b.price ? <span className="ml-1.5 text-xs font-medium text-slate-400 line-through">{inr(b.originalPrice)}</span> : null}
                     </p>
-                  ) : (
-                    <span />
-                  )}
+                  ) : null}
                   <ButtonLink href={`/courses/${b.id}`} className="!min-h-[40px] shrink-0 whitespace-nowrap !px-4">View Details</ButtonLink>
                 </div>
               </div>

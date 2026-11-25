@@ -1,5 +1,35 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
+import {
+  Languages,
+  GraduationCap,
+  Unlock,
+  CheckCircle2,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Menu,
+  Search,
+  Download,
+  Megaphone,
+  Phone,
+  Mail,
+  MapPin,
+  HelpCircle,
+  ClipboardList,
+  FileQuestion,
+  Tv,
+  RotateCcw,
+  List,
+  Tag,
+  Calendar,
+  Smartphone,
+  PlaySquare,
+  BookOpen,
+  Brain,
+  ListOrdered,
+} from "lucide-react";
 
 /**
  * Small design system for the public homepage only (the signed-in app keeps
@@ -105,7 +135,51 @@ export function SectionHeader({
   );
 }
 
+type LucideIconComponent = ComponentType<SVGProps<SVGSVGElement> & { size?: number | string; strokeWidth?: number | string }>;
+
+const ICON_MAP: Record<string, LucideIconComponent> = {
+  translate: Languages,
+  school: GraduationCap,
+  lock_open: Unlock,
+  check_circle: CheckCircle2,
+  arrow_forward: ArrowRight,
+  chevron_left: ChevronLeft,
+  chevron_right: ChevronRight,
+  close: X,
+  menu: Menu,
+  search: Search,
+  download: Download,
+  campaign: Megaphone,
+  call: Phone,
+  mail: Mail,
+  location_on: MapPin,
+  help: HelpCircle,
+  assignment: ClipboardList,
+  quiz: FileQuestion,
+  live_tv: Tv,
+  replay: RotateCcw,
+  view_list: List,
+  label: Tag,
+  event: Calendar,
+  install_mobile: Smartphone,
+  smart_display: PlaySquare,
+  article: BookOpen,
+  psychology: Brain,
+  format_list_numbered: ListOrdered,
+};
+
 export function Icon({ name, className = "" }: { name: string; className?: string }) {
+  const Component = ICON_MAP[name];
+  if (Component) {
+    return (
+      <Component
+        aria-hidden="true"
+        width="1em"
+        height="1em"
+        className={`inline-block shrink-0 align-middle ${className}`}
+      />
+    );
+  }
   return (
     <span aria-hidden="true" className={`material-symbols-outlined leading-none ${className}`}>
       {name}

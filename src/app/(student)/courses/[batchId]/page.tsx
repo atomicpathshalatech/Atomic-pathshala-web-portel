@@ -7,6 +7,7 @@ import { CourseDetailMasterView } from "@/components/course-platform/CourseDetai
 import { SAMPLE_COURSES } from "@/components/course-platform/sample-courses";
 import { StudentBatchHome, type BatchTab } from "@/components/student/batch/StudentBatchHome";
 import { loadStudentBatchHome } from "@/lib/batch/student-batch-home";
+import { getBatchPricingDetails } from "@/lib/commerce/pricing";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -328,6 +329,12 @@ export default async function BatchCoursePage({
   const educatorsStr =
     educatorsList.map((e: any) => e.name).join(" & ") || "Atomic Faculty";
 
+  const pricing = getBatchPricingDetails({
+    price: dbBatch?.price,
+    originalPrice: dbBatch?.originalPrice,
+    isPurchasable: dbBatch?.isPurchasable,
+  });
+
   const courseData: any = {
     id: dbBatch?.id || batchId,
     slug: dbBatch?.id || batchId,
@@ -343,16 +350,10 @@ export default async function BatchCoursePage({
     classesCount: dbBatch?._count?.schedules || 0,
     testsCount: dbTests.length,
     studentsCount: dbBatch?._count?.enrollments || 0,
-    // Real price from the DB — never hardcoded, since this is exactly what
-    // /api/batches/[id]/checkout charges. A batch with no price set yet
-    // shows as 0 here; the checkout page itself refuses to create an order
-    // for a null price rather than silently charging nothing.
-    price: dbBatch?.price ?? 0,
-    originalPrice: dbBatch?.originalPrice ?? dbBatch?.price ?? 0,
-    discountPercentage:
-      dbBatch?.originalPrice && dbBatch?.price && dbBatch.originalPrice > dbBatch.price
-        ? Math.round(((dbBatch.originalPrice - dbBatch.price) / dbBatch.originalPrice) * 100)
-        : undefined,
+    price: pricing.sellingPrice,
+    originalPrice: pricing.originalPrice,
+    discountPercentage: pricing.discountPercentage,
+    isPurchasable: pricing.isEnrollmentOpen,
     isNewBatch: true,
     thumbnailUrl: dbBatch?.thumbnailUrl ?? null,
     isEnrolled,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cleanBatchName } from "@/lib/academic/canonical-courses";
+import { calculateDiscountPercentage, formatInr } from "@/lib/commerce/pricing";
 
 type CourseOption = { id: string; title: string; slug: string };
 type TeacherOption = { id: string; employeeCode: string; department: string; user: { name: string } };
@@ -30,13 +31,19 @@ export function BatchCreatorWizard({
     startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     description: "Complete 2-year concept-first preparation batch for NEET aspirants with live whiteboard sessions, DPPs, and AIR test series.",
-    mrpPrice: "₹14,999",
-    offerPrice: "₹7,499",
-    discountPercent: "50%",
+    pricingStatus: "PAID" as "FREE" | "PAID",
+    originalPrice: 2000,
+    sellingPrice: 1000,
+    isPurchasable: true,
     teacherIds: teachers.slice(0, 3).map((t) => t.id),
   });
 
   const selectedCourse = courses.find((c) => c.id === form.courseId);
+
+  const discountPercent =
+    form.pricingStatus === "FREE"
+      ? (form.originalPrice > 0 ? 100 : 0)
+      : calculateDiscountPercentage(form.originalPrice, form.sellingPrice);
 
   async function handleCreate() {
     if (!form.name.trim() || !form.code.trim()) {
@@ -44,8 +51,19 @@ export function BatchCreatorWizard({
       return;
     }
 
+    if (form.pricingStatus === "PAID" && form.sellingPrice > form.originalPrice && form.originalPrice > 0) {
+      toast.error("Selling Price cannot be greater than Original MRP Price.");
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const finalPrice = form.pricingStatus === "FREE" ? 0 : Math.max(0, Number(form.sellingPrice));
+      const finalOriginalPrice =
+        form.originalPrice != null && Number(form.originalPrice) >= 0
+          ? Math.max(0, Number(form.originalPrice))
+          : finalPrice;
+
       const res = await fetch("/api/team/batches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -59,6 +77,9 @@ export function BatchCreatorWizard({
           startDate: form.startDate ? new Date(form.startDate).toISOString() : undefined,
           endDate: form.endDate ? new Date(form.endDate).toISOString() : undefined,
           capacity: form.capacity > 0 ? form.capacity : undefined,
+          price: finalPrice,
+          originalPrice: finalOriginalPrice,
+          isPurchasable: form.isPurchasable,
         }),
       });
 
@@ -330,41 +351,217 @@ export function BatchCreatorWizard({
 
       {/* Step 4: Pricing & Access */}
       {step === 4 && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="space-y-1">
-            <h3 className="font-bold text-sm text-on-surface">Step 4 — Pricing &amp; Enrollment Rules</h3>
-            <p className="text-xs text-on-surface-variant">Set the commercial pricing and discount plan.</p>
+            <h3 className="font-bold text-sm text-on-surface">Step 4 — Pricing, Discount &amp; Enrollment Rules</h3>
+            <p className="text-xs text-on-surface-variant">
+              Configure student pricing, automatic discount calculation, and self-enrollment accessibility.
+            </p>
           </div>
 
+          {/* Pricing Status Toggle: FREE vs PAID */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-on-surface block">Pricing Status</label>
+            <div className="grid grid-cols-2 gap-3 max-w-md">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, pricingStatus: "FREE", sellingPrice: 0 })}
+                className={`py-3 px-4 rounded-2xl border text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  form.pricingStatus === "FREE"
+                    ? "bg-emerald-500/10 border-emerald-500 text-emerald-600 shadow-xs"
+                    : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant hover:border-outline-variant"
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">card_giftcard</span>
+                <span>FREE Batch (100% Free)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    pricingStatus: "PAID",
+                    sellingPrice: form.sellingPrice === 0 ? Math.round(form.originalPrice * 0.5) || 999 : form.sellingPrice,
+                  })
+                }
+                className={`py-3 px-4 rounded-2xl border text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  form.pricingStatus === "PAID"
+                    ? "bg-primary/10 border-primary text-primary shadow-xs"
+                    : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant hover:border-outline-variant"
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">payments</span>
+                <span>PAID Batch</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Price Inputs & Auto Discount */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-on-surface">Standard MRP Price</label>
-              <input
-                type="text"
-                value={form.mrpPrice}
-                onChange={(e) => setForm({ ...form, mrpPrice: e.target.value })}
-                className="w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 text-xs text-on-surface outline-none focus:ring-2 focus:ring-primary font-bold"
-              />
+              <label className="text-xs font-bold text-on-surface">Original Price / MRP (₹)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-xs text-on-surface-variant font-bold">₹</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.originalPrice}
+                  onChange={(e) => {
+                    const val = Math.max(0, Number(e.target.value) || 0);
+                    setForm({ ...form, originalPrice: val });
+                  }}
+                  className="w-full pl-7 pr-4 py-2.5 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-xs text-on-surface outline-none focus:ring-2 focus:ring-primary font-bold"
+                  placeholder="2000"
+                />
+              </div>
+              <p className="text-[10px] text-on-surface-variant">Shown with strikethrough if discounted</p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-on-surface">Offer / Sale Price</label>
-              <input
-                type="text"
-                value={form.offerPrice}
-                onChange={(e) => setForm({ ...form, offerPrice: e.target.value })}
-                className="w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 text-xs text-primary outline-none focus:ring-2 focus:ring-primary font-bold"
-              />
+              <label className="text-xs font-bold text-on-surface">Selling Price (₹)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-xs text-on-surface-variant font-bold">₹</span>
+                <input
+                  type="number"
+                  min={0}
+                  disabled={form.pricingStatus === "FREE"}
+                  value={form.pricingStatus === "FREE" ? 0 : form.sellingPrice}
+                  onChange={(e) => {
+                    const val = Math.max(0, Number(e.target.value) || 0);
+                    setForm({ ...form, sellingPrice: val });
+                  }}
+                  className="w-full pl-7 pr-4 py-2.5 rounded-xl border border-outline-variant/40 bg-surface-container-lowest text-xs text-primary outline-none focus:ring-2 focus:ring-primary font-bold disabled:opacity-60 disabled:bg-surface-container-high/30"
+                  placeholder="1000"
+                />
+              </div>
+              <p className="text-[10px] text-on-surface-variant">
+                {form.pricingStatus === "FREE" ? "Locked to ₹0 for Free batch" : "Amount student actually pays"}
+              </p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-on-surface">Discount Percentage</label>
+              <label className="text-xs font-bold text-on-surface">Calculated Discount</label>
+              <div className="h-[42px] px-4 rounded-xl border border-outline-variant/40 bg-surface-container-high/40 flex items-center justify-between">
+                <span className="text-xs font-black text-emerald-600">
+                  {discountPercent > 0 ? `${discountPercent}% OFF` : "No Discount (0%)"}
+                </span>
+                {form.pricingStatus === "FREE" && (
+                  <span className="bg-emerald-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                    FREE
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-on-surface-variant">Automatically computed from MRP &amp; Selling Price</p>
+            </div>
+          </div>
+
+          {form.pricingStatus === "PAID" && form.sellingPrice > form.originalPrice && form.originalPrice > 0 && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 text-xs flex items-center gap-2">
+              <span className="material-symbols-outlined text-base">warning</span>
+              <span>Notice: Selling price exceeds original MRP. Discount cannot be applied.</span>
+            </div>
+          )}
+
+          {/* Enrollment Availability Toggle */}
+          <div className="p-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest flex items-center justify-between">
+            <div className="space-y-0.5">
+              <p className="text-xs font-bold text-on-surface">Allow Student Self-Enrollment</p>
+              <p className="text-[11px] text-on-surface-variant">
+                When enabled, students can self-enroll from Store/Batches. When disabled, enrollment is closed.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
               <input
-                type="text"
-                value={form.discountPercent}
-                onChange={(e) => setForm({ ...form, discountPercent: e.target.value })}
-                className="w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 text-xs text-emerald-600 outline-none focus:ring-2 focus:ring-primary font-bold"
+                type="checkbox"
+                checked={form.isPurchasable}
+                onChange={(e) => setForm({ ...form, isPurchasable: e.target.checked })}
+                className="sr-only peer"
               />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+
+          {/* Live Student-Facing Preview Card */}
+          <div className="p-5 rounded-2xl border border-outline-variant/30 bg-surface-container-high/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                Live Student Preview (Store &amp; Catalog)
+              </span>
+              <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">
+                Interactive Preview
+              </span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-outline-variant/30 rounded-2xl p-4 shadow-sm max-w-sm flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-[10px] font-bold text-primary uppercase">{form.targetExam}</span>
+                  <h4 className="font-bold text-sm text-on-surface line-clamp-1">{form.name}</h4>
+                </div>
+                {form.pricingStatus === "FREE" ? (
+                  <span className="bg-emerald-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shrink-0">
+                    FREE
+                  </span>
+                ) : discountPercent > 0 ? (
+                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full shrink-0">
+                    {discountPercent}% OFF
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Pricing Display */}
+              <div className="flex items-baseline gap-2 pt-1">
+                {form.pricingStatus === "FREE" ? (
+                  <>
+                    <span className="text-lg font-black text-emerald-600">FREE</span>
+                    {form.originalPrice > 0 && (
+                      <span className="text-xs text-slate-400 line-through">
+                        {formatInr(form.originalPrice)}
+                      </span>
+                    )}
+                    {discountPercent > 0 && (
+                      <span className="text-[10px] font-extrabold text-emerald-600">
+                        {discountPercent}% OFF
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-lg font-black text-on-surface">
+                      {formatInr(form.sellingPrice)}
+                    </span>
+                    {discountPercent > 0 && (
+                      <span className="text-xs text-slate-400 line-through">
+                        {formatInr(form.originalPrice)}
+                      </span>
+                    )}
+                    {discountPercent > 0 && (
+                      <span className="text-[10px] font-extrabold text-emerald-600">
+                        {discountPercent}% OFF
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Preview Button */}
+              <button
+                type="button"
+                disabled
+                className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 ${
+                  !form.isPurchasable
+                    ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                    : form.pricingStatus === "FREE"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-primary text-on-primary"
+                }`}
+              >
+                {!form.isPurchasable
+                  ? "Enrollment Closed"
+                  : form.pricingStatus === "FREE"
+                  ? "Join Free"
+                  : "Buy Now"}
+              </button>
             </div>
           </div>
         </div>
@@ -393,9 +590,26 @@ export function BatchCreatorWizard({
                 <span className="font-semibold text-on-surface">{form.targetExam}</span>
               </div>
               <div>
-                <span className="text-[10px] text-on-surface-variant block uppercase">Offer Price</span>
-                <span className="font-bold text-primary">{form.offerPrice}</span>
+                <span className="text-[10px] text-on-surface-variant block uppercase">Pricing</span>
+                <span className={`font-bold ${form.pricingStatus === "FREE" ? "text-emerald-600" : "text-primary"}`}>
+                  {form.pricingStatus === "FREE" ? "FREE (₹0)" : `${formatInr(form.sellingPrice)} (MRP ${formatInr(form.originalPrice)})`}
+                </span>
               </div>
+            </div>
+
+            <div className="pt-2 border-t border-outline-variant/20 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-on-surface-variant block uppercase">Enrollment Status</span>
+                <span className={`font-bold ${form.isPurchasable ? "text-emerald-600" : "text-slate-500"}`}>
+                  {form.isPurchasable ? "Open for Self-Enrollment" : "Enrollment Closed"}
+                </span>
+              </div>
+              {discountPercent > 0 && (
+                <div>
+                  <span className="text-[10px] text-on-surface-variant block uppercase">Discount</span>
+                  <span className="font-bold text-emerald-600">{discountPercent}% OFF</span>
+                </div>
+              )}
             </div>
 
             <div className="pt-2 border-t border-outline-variant/20">
@@ -404,7 +618,7 @@ export function BatchCreatorWizard({
                 {form.teacherIds
                   .map((id) => teachers.find((t) => t.id === id)?.user.name)
                   .filter(Boolean)
-                  .join(" · ")}
+                  .join(" · ") || "None assigned yet"}
               </p>
             </div>
           </div>

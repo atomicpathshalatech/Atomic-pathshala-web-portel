@@ -82,15 +82,20 @@ export function PyqHub({ pyqCounts, topChapters, head, exams }: Props) {
                   subject === s ? "bg-blue-600 text-white" : "bg-white/[0.06] text-white hover:bg-white/10"
                 }`}
               >
-                <span className="block text-sm font-semibold">{s}</span>
-                <span className="block text-xs text-white/60">{counts[s] ? `${fmtCount(counts[s])} in question bank` : "Practice"}</span>
+                <span className="block text-sm font-semibold text-white leading-tight">{s}</span>
+                <span className="mt-1 block text-xs text-white/70 leading-snug">
+                  {counts[s]
+                    ? `${fmtCount(counts[s])} ${counts[s] === 1 ? "question" : "questions"} in question bank`
+                    : "Practice"}
+                </span>
               </button>
             ))}
           </div>
-          <ul className="mt-4 flex flex-wrap gap-2">
+          <ul className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-white/75" aria-label="Available PYQ formats">
             {WAYS.map((w) => (
-              <li key={w.label} className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs text-white/80">
-                <Icon name={w.icon} className="text-[15px] text-cyan-300" /> {w.label}
+              <li key={w.label} className="flex items-center gap-1.5">
+                <Icon name={w.icon} className="text-[15px] text-cyan-300" />
+                <span>{w.label}</span>
               </li>
             ))}
           </ul>

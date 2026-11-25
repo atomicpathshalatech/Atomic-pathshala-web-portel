@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/db";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
+import { searchStudentPYQs } from "@/lib/pyq/visibility";
 
-export const revalidate = 60; // Cache search responses for 60 seconds
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,110 +12,25 @@ export async function GET(request: NextRequest) {
     const isAuthorized = Boolean(session?.user?.id);
 
     const sp = request.nextUrl.searchParams;
-    const q = sp.get("q")?.trim();
-    const examSlug = sp.get("exam")?.trim();
-    const subject = sp.get("subject")?.trim();
-    const chapter = sp.get("chapter")?.trim();
+    const q = sp.get("q")?.trim() || "";
+    const examSlug = sp.get("exam")?.trim() || null;
+    const subject = sp.get("subject")?.trim() || null;
+    const chapter = sp.get("chapter")?.trim() || null;
     const year = sp.get("year") ? parseInt(sp.get("year")!, 10) : null;
-    const lang = sp.get("lang")?.trim().toUpperCase(); // "ALL" | "HINDI" | "ENGLISH"
+    const lang = sp.get("lang")?.trim().toUpperCase() || "ALL";
     const page = Math.max(1, Number(sp.get("page") || 1));
     const pageSize = Math.min(30, Math.max(1, Number(sp.get("pageSize") || 15)));
 
-    const where: any = {
-      isPublished: true,
-      pyqOccurrences: {
-        some: {
-          verificationStatus: "VERIFIED",
-          ...(year ? { year } : {}),
-          ...(examSlug
-            ? {
-                exam: {
-                  OR: [{ slug: examSlug }, { canonicalType: examSlug.toUpperCase().replace(/-/g, "_") }],
-                },
-              }
-            : {}),
-        },
-      },
-      ...(subject ? { subject: { equals: subject, mode: "insensitive" } } : {}),
-      ...(chapter ? { chapter: { contains: chapter, mode: "insensitive" } } : {}),
-    };
-
-    if (lang === "HINDI") {
-      where.translations = {
-        some: {
-          OR: [{ language: "HINDI" }, { statement: { contains: "क", mode: "insensitive" } }],
-        },
-      };
-    } else if (lang === "ENGLISH") {
-      where.translations = {
-        some: { language: "ENGLISH" },
-      };
-    }
-
-    if (q) {
-      where.OR = [
-        { questionCode: { contains: q, mode: "insensitive" } },
-        { topic: { contains: q, mode: "insensitive" } },
-        { chapter: { contains: q, mode: "insensitive" } },
-        { subject: { contains: q, mode: "insensitive" } },
-        { tags: { contains: q, mode: "insensitive" } },
-        {
-          translations: {
-            some: {
-              statement: { contains: q, mode: "insensitive" },
-            },
-          },
-        },
-      ];
-    }
-
-    const [total, questions] = await Promise.all([
-      prisma.question.count({ where }),
-      prisma.question.findMany({
-        where,
-        orderBy: [{ pyqYear: "desc" }, { createdAt: "desc" }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: {
-          id: true,
-          slug: true,
-          questionCode: true,
-          type: true,
-          difficulty: true,
-          subject: true,
-          chapter: true,
-          topic: true,
-          imageUrl: true,
-          pyqExam: true,
-          pyqYear: true,
-          pyqMonth: true,
-          pyqQuestionNumber: true,
-          // Protected fields: ONLY returned if user is authenticated!
-          solution: isAuthorized,
-          translations: {
-            select: {
-              language: true,
-              statement: true,
-              options: true,
-              // Answer keys for quiz mode, solution strictly protected:
-              correctOptionIds: true,
-              solution: isAuthorized,
-            },
-          },
-          pyqOccurrences: {
-            where: { verificationStatus: "VERIFIED" },
-            select: {
-              year: true,
-              session: true,
-              shift: true,
-              paper: true,
-              questionNumber: true,
-              exam: { select: { slug: true, name: true, canonicalType: true } },
-            },
-          },
-        },
-      }),
-    ]);
+    const { total, questions } = await searchStudentPYQs(q, {
+      examSlug,
+      subject,
+      chapter,
+      year,
+      lang,
+      page,
+      pageSize,
+      includeSolution: isAuthorized,
+    });
 
     return apiSuccess({
       total,

@@ -23,7 +23,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const student = await prisma.student.findUnique({ where: { userId: session.user.id } });
     if (!student) return apiError("No student record for this account", 404);
 
-    const payload = verifyPaymentSchema.parse(await request.json());
+    const body = await request.json();
+    const isFreeClaim =
+      body.razorpay_payment_id === "FREE_CLAIM" ||
+      body.razorpay_signature === "FREE" ||
+      (typeof body.razorpay_order_id === "string" && body.razorpay_order_id.startsWith("FREE_")) ||
+      (typeof body.gatewayOrderId === "string" && body.gatewayOrderId.startsWith("FREE_"));
+
+    const payload = isFreeClaim
+      ? {
+          razorpay_order_id: body.razorpay_order_id || body.gatewayOrderId || body.orderId || "",
+          razorpay_payment_id: body.razorpay_payment_id || "FREE_CLAIM",
+          razorpay_signature: body.razorpay_signature || "FREE",
+        }
+      : verifyPaymentSchema.parse(body);
+
     const { order, alreadyProcessed } = await verifyAndActivateBatchOrder(student.id, payload);
 
     if (order.batchId !== params.id) {

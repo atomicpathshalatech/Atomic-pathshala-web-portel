@@ -4,6 +4,7 @@ import { containsAll, containsAllAcross } from "@/lib/search/normalize";
 import type { SearchResult } from "@/lib/search/types";
 import type { SearchScope } from "@/lib/search/scope";
 import { NOT_RECORDED_SLOT } from "@/lib/recorded-lectures/visibility";
+import { VERIFIED_PYQ_STATUS } from "@/lib/pyq/visibility";
 
 /** How many raw rows to pull per entity before ranking trims to the top N. */
 const RAW_TAKE = 12;
@@ -372,6 +373,7 @@ async function findQuestions(scope: SearchScope, tokens: string[]): Promise<Sear
   if (!scope.canReadQuestions || tokens.length === 0) return [];
   const rows = await prisma.question.findMany({
     where: {
+      ...(scope.isTeam ? {} : { pyqVerificationStatus: VERIFIED_PYQ_STATUS, isPublished: true }),
       OR: [
         containsAllAcross(["chapter", "topic", "subTopic", "subject"], tokens),
         ...(tokens.length === 1 ? [{ questionCode: { contains: tokens[0], mode: "insensitive" as const } }] : []),

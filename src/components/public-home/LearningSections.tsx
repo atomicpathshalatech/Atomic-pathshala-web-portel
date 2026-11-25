@@ -16,7 +16,7 @@ export function FreeLearningHub({ data, youtubeUrl, head, items }: { data: Publi
         {...hd(head, {
           eyebrow: "Free learning hub",
           title: "Start with high-quality resources — completely free",
-          subtitle: "Create a free account and open PYQs, notes, tests, DPPs, mind maps and formula sheets.",
+          subtitle: "Create a free account and open PYQs, notes, tests, Daily Practice Problems (DPP), mind maps and formula sheets.",
         })}
       />
       {items?.length ? (
@@ -30,7 +30,7 @@ export function FreeLearningHub({ data, youtubeUrl, head, items }: { data: Publi
         <ResourceCard href="/practice" icon="history_edu" title="Free PYQs" text="NEET PYQ practice with free questions every day, plus JEE & board papers." cta="Practice PYQs" meta={pyqTotal ? `${fmtCount(pyqTotal)} PYQs in our question bank` : undefined} />
         <ResourceCard href="/study-material" icon="description" title="Free Notes" text="Modules and short notes for every chapter." cta="Read notes" tone="cyan" meta={files(m.MODULE + m.SHORT_NOTES)} />
         <ResourceCard href="/tests" icon="quiz" title="Free Tests" text="Exam-style tests with instant results." cta="Take a test" tone="orange" />
-        <ResourceCard href="/dpp" icon="assignment" title="Free DPPs" text="Daily practice problems, chapter by chapter." cta="Solve DPPs" tone="green" />
+        <ResourceCard href="/dpp" icon="assignment" title="Daily Practice Problems (DPP)" text="Daily practice problems, chapter by chapter." cta="Solve DPPs" tone="green" />
         {youtubeUrl ? (
           <ResourceCard href={youtubeUrl} external icon="smart_display" title="Free Classes" text="Lectures and revision on our YouTube channel." cta="Watch free" tone="violet" />
         ) : (

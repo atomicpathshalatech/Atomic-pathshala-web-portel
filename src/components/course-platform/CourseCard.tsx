@@ -24,10 +24,11 @@ export interface CourseData {
   thumbnailUrl?: string | null;
   isNewBatch?: boolean;
   isEnrolled?: boolean;
+  isPurchasable?: boolean;
 }
 
 export const BATCH_GRADIENT_THEMES = [
-  // 1. Mint / Emerald (Image Reference 1)
+  // 1. Mint / Emerald
   {
     cardBg: "bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-emerald-500/15 dark:from-emerald-950/40 dark:via-slate-900/90 dark:to-teal-950/30",
     cardBorder: "border-emerald-200/90 dark:border-emerald-800/60",
@@ -37,7 +38,7 @@ export const BATCH_GRADIENT_THEMES = [
     btnGrad: "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-xs shadow-emerald-600/20",
     statBorder: "border-emerald-100 dark:border-emerald-900/40",
   },
-  // 2. Lavender / Purple (Image Reference 2)
+  // 2. Lavender / Purple
   {
     cardBg: "bg-gradient-to-br from-purple-500/10 via-fuchsia-500/5 to-indigo-500/15 dark:from-purple-950/40 dark:via-slate-900/90 dark:to-indigo-950/30",
     cardBorder: "border-purple-200/90 dark:border-purple-800/60",
@@ -47,7 +48,7 @@ export const BATCH_GRADIENT_THEMES = [
     btnGrad: "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-xs shadow-purple-600/20",
     statBorder: "border-purple-100 dark:border-purple-900/40",
   },
-  // 3. Sky / Cyan (Image Reference 3)
+  // 3. Sky / Cyan
   {
     cardBg: "bg-gradient-to-br from-sky-500/10 via-cyan-500/5 to-blue-500/15 dark:from-sky-950/40 dark:via-slate-900/90 dark:to-blue-950/30",
     cardBorder: "border-sky-200/90 dark:border-sky-800/60",
@@ -98,10 +99,16 @@ export function CourseCard({
       statBorder: "border-emerald-100",
     };
 
+  const isFree = course.price === 0;
+  const isClosed = course.isPurchasable === false;
   const discount =
-    course.originalPrice > course.price
+    typeof course.discountPercentage === "number"
+      ? course.discountPercentage
+      : isFree
+      ? (course.originalPrice > 0 ? 100 : 0)
+      : course.originalPrice > course.price
       ? Math.round(((course.originalPrice - course.price) / course.originalPrice) * 100)
-      : course.discountPercentage || 0;
+      : 0;
 
   return (
     <article
@@ -134,13 +141,17 @@ export function CourseCard({
 
       {/* Content Body — Compact, Reduced Thickness */}
       <div className="p-3 sm:p-3.5 flex flex-col flex-1">
-        {/* Badges / Meta Strip (Cleanly adjusted below thumbnail) */}
+        {/* Badges / Meta Strip */}
         <div className="flex items-center justify-between gap-1.5 flex-wrap mb-2">
           <div className="flex items-center gap-1.5 flex-wrap">
             {course.isEnrolled ? (
               <span className="inline-flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide">
                 <span className="material-symbols-outlined text-[12px]">verified</span>
                 Enrolled
+              </span>
+            ) : isFree ? (
+              <span className="inline-flex items-center gap-1 bg-emerald-600 text-white px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide shadow-xs">
+                FREE
               </span>
             ) : course.isNewBatch ? (
               <span className="inline-flex items-center gap-1 bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide">
@@ -225,18 +236,33 @@ export function CourseCard({
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-base font-black text-slate-900 dark:text-white">
-                    ₹{course.price.toLocaleString("en-IN")}
-                  </span>
-                  {course.originalPrice > course.price && (
-                    <span className="text-[10px] text-slate-400 line-through">
-                      ₹{course.originalPrice.toLocaleString("en-IN")}
-                    </span>
+                  {isFree ? (
+                    <>
+                      <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                        FREE
+                      </span>
+                      {course.originalPrice > 0 && (
+                        <span className="text-[10px] text-slate-400 line-through">
+                          ₹{course.originalPrice.toLocaleString("en-IN")}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base font-black text-slate-900 dark:text-white">
+                        ₹{course.price.toLocaleString("en-IN")}
+                      </span>
+                      {course.originalPrice > course.price && (
+                        <span className="text-[10px] text-slate-400 line-through">
+                          ₹{course.originalPrice.toLocaleString("en-IN")}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
                 {discount > 0 && (
-                  <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
-                    {discount}% SAVE
+                  <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 block">
+                    {discount}% OFF
                   </span>
                 )}
               </div>
@@ -248,12 +274,25 @@ export function CourseCard({
                 >
                   Details
                 </Link>
-                <Link
-                  href={`/courses/${course.slug}`}
-                  className={`px-3.5 py-1.5 ${theme.btnGrad} font-bold text-xs rounded-xl transition active:scale-98`}
-                >
-                  Enroll
-                </Link>
+                {isClosed ? (
+                  <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 font-bold text-xs rounded-xl cursor-not-allowed">
+                    Closed
+                  </span>
+                ) : isFree ? (
+                  <Link
+                    href={`/courses/${course.slug}`}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition active:scale-98 shadow-xs"
+                  >
+                    Join Free
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/courses/${course.slug}`}
+                    className={`px-3.5 py-1.5 ${theme.btnGrad} font-bold text-xs rounded-xl transition active:scale-98`}
+                  >
+                    Enroll
+                  </Link>
+                )}
               </div>
             </div>
           )}

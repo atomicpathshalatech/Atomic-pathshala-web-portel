@@ -132,7 +132,7 @@ const FOOTER_COLS = [
     ],
   },
   {
-    title: "Atomic Pathshala",
+    title: "Company",
     links: [
       { label: "Faculty", href: "/teachers" },
       { label: "Blog", href: "/blog" },
@@ -167,7 +167,7 @@ export function PublicFooter({ socials }: { socials: PublicHomeData["socials"] }
               {socials.map((s) => (
                 <li key={s.url}>
                   <a href={s.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[36px] items-center rounded-full bg-white/10 px-3 text-xs font-medium text-white hover:bg-white/15">
-                    {s.label}
+                    {s.label.toLowerCase() === "youtube" ? "YouTube" : s.label}
                   </a>
                 </li>
               ))}

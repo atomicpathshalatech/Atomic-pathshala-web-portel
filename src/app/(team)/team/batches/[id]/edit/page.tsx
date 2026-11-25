@@ -48,6 +48,10 @@ export default async function EditBatchPage({ params }: { params: { id: string }
           startDate: batch.startDate ?? undefined,
           endDate: batch.endDate ?? undefined,
           capacity: batch.capacity ?? undefined,
+          price: batch.price,
+          originalPrice: batch.originalPrice,
+          isPurchasable: batch.isPurchasable,
+          thumbnailUrl: batch.thumbnailUrl ?? "",
         }}
       />
     </div>

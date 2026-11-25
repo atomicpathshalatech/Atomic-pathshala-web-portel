@@ -7,6 +7,7 @@ import { getActiveBatchCatalog } from "@/lib/courses/catalog";
 import { CourseListingMasterView } from "@/components/course-platform/CourseListingMasterView";
 import { CourseData } from "@/components/course-platform/CourseCard";
 import { NotInApp } from "@/components/common/NotInApp";
+import { getBatchPricingDetails } from "@/lib/commerce/pricing";
 
 export const metadata: Metadata = {
   title: "Store — Atomic Pathshala",
@@ -67,11 +68,7 @@ export default async function StorePage() {
       batch.course?.subjects?.[0]?.title || "Comprehensive";
 
     const isEnrolled = hasUniversalAccess || activeBatchIds.has(batch.id);
-
-    const price = batch.price ?? 4999;
-    const originalPrice = batch.originalPrice ?? 5999;
-    const discount =
-      originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 15;
+    const pricing = getBatchPricingDetails(batch);
 
     return {
       id: batch.id,
@@ -88,9 +85,10 @@ export default async function StorePage() {
       classesCount: batch._count?.schedules || 0,
       testsCount: 0,
       studentsCount: batch._count?.enrollments || 0,
-      price,
-      originalPrice,
-      discountPercentage: discount,
+      price: pricing.sellingPrice,
+      originalPrice: pricing.originalPrice,
+      discountPercentage: pricing.discountPercentage,
+      isPurchasable: pricing.isEnrollmentOpen,
       isNewBatch: true,
       thumbnailUrl: batch.thumbnailUrl ?? null,
       isEnrolled,

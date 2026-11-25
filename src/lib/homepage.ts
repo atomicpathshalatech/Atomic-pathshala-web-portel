@@ -144,12 +144,21 @@ export type FooterData = {
   social: FooterSocial[];
 };
 
+function formatSocialLabel(key: string): string {
+  const lower = key.trim().toLowerCase();
+  if (lower === "youtube") return "YouTube";
+  if (lower === "linkedin") return "LinkedIn";
+  if (lower === "github") return "GitHub";
+  if (lower === "whatsapp") return "WhatsApp";
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
 function parseSocial(raw: unknown): FooterSocial[] {
   // Saved by Team → Website → Footer as { youtube: url, … }.
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     return Object.entries(raw as Record<string, unknown>)
       .filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== "")
-      .map(([k, url]) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), url, icon: null }));
+      .map(([k, url]) => ({ label: formatSocialLabel(k), url, icon: null }));
   }
   if (!Array.isArray(raw)) return [];
   return raw
@@ -157,11 +166,12 @@ function parseSocial(raw: unknown): FooterSocial[] {
       if (!x || typeof x !== "object") return null;
       const o = x as Record<string, unknown>;
       const url = typeof o.url === "string" ? o.url : "";
-      const label =
+      const rawLabel =
         (typeof o.label === "string" && o.label) ||
         (typeof o.platform === "string" && o.platform) ||
         "";
-      if (!url || !label) return null;
+      if (!url || !rawLabel) return null;
+      const label = formatSocialLabel(rawLabel);
       return { label, url, icon: typeof o.icon === "string" ? o.icon : null };
     })
     .filter((x): x is FooterSocial => x !== null);

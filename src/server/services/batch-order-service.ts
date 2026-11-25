@@ -4,6 +4,7 @@ import {
   createBatchOrder,
   verifyAndActivateOrder,
   reconcileOrderFromWebhook,
+  enrollStudentInFreeBatch,
   CommerceOrderError,
 } from "./commerce-order-service";
 import type { BatchOrder } from "@prisma/client";
@@ -114,3 +115,18 @@ export async function reconcileBatchOrderFromWebhook(payload: any): Promise<Acti
     return null;
   }
 }
+
+/**
+ * Free batch 1-click self-enrollment.
+ */
+export async function enrollInFreeBatch(studentId: string, batchIdentifier: string) {
+  try {
+    return await enrollStudentInFreeBatch(studentId, batchIdentifier);
+  } catch (err: any) {
+    if (err instanceof CommerceOrderError) {
+      throw new BatchOrderError(err.message);
+    }
+    throw err;
+  }
+}
+
