@@ -11,6 +11,7 @@ import { EnablePushPrompt } from "@/components/common/EnablePushPrompt";
 import { RateAppPrompt } from "@/components/student/RateAppPrompt";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { BackButton } from "@/components/layout/BackButton";
+import { IosSwipeBack } from "@/components/layout/IosSwipeBack";
 import { isRootRoute } from "@/lib/navigation/hierarchy";
 import { StudentUpcomingTestBanner } from "@/components/student/StudentUpcomingTestBanner";
 import { DownloadAppsModal } from "@/components/common/DownloadAppsModal";
@@ -261,8 +262,8 @@ export function StudentShell({
   if (isExamAttempt || isLiveClass || isRecordedPlayer) {
     return (
       <div
-        className={`fixed inset-0 overflow-y-auto overscroll-contain ${
-          isRecordedPlayer ? "bg-white dark:bg-slate-950" : "bg-[#0b0d14]"
+        className={`fixed inset-0 overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] ${
+          isRecordedPlayer ? "bg-black" : "bg-[#0b0d14]"
         }`}
       >
         {children}
@@ -271,12 +272,13 @@ export function StudentShell({
   }
 
   return (
-    <div className="min-h-screen-safe bg-white text-slate-800 flex flex-col selection:bg-orange-100 selection:text-orange-900 font-sans antialiased">
+    <div className="min-h-screen-safe bg-white text-slate-800 flex flex-col selection:bg-blue-100 selection:text-blue-900 font-sans antialiased">
+      <IosSwipeBack />
       {/* BEGIN: MainHeader */}
-      <header className="sticky top-0 z-header w-full bg-white border-b border-slate-200/80 shadow-2xs transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[var(--header-h)] flex items-center justify-between">
+      <header className="sticky top-0 z-header w-full bg-white/90 backdrop-blur-xl border-b border-slate-200/80 shadow-2xs transition-all pt-[env(safe-area-inset-top)]">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-[var(--header-h)] flex items-center justify-between gap-2">
           {/* Left: 3-Lines Hamburger Menu + Brand & Goal Selector */}
-          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
             {/* 3-Lines Hamburger Pop-up Trigger Button */}
             <button
               type="button"
@@ -307,16 +309,16 @@ export function StudentShell({
             <div aria-hidden="true" className="h-7 w-[1px] bg-slate-200 rounded-full" />
 
             {/* Current Goal Dropdown Button */}
-            <div className="flex flex-col justify-center">
+            <div className="flex flex-col justify-center min-w-0">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none mb-0.5">
                 Current goal
               </span>
               <button
                 type="button"
                 onClick={() => setGoalModalOpen(true)}
-                className="group flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 rounded"
+                className="group flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 rounded min-w-0"
               >
-                <span className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight group-hover:text-orange-600 transition-colors">
+                <span className="text-sm sm:text-lg font-extrabold text-slate-900 tracking-tight group-hover:text-orange-600 transition-colors truncate max-w-[92px] sm:max-w-none">
                   {activeGoal}
                 </span>
                 <svg
@@ -365,7 +367,7 @@ export function StudentShell({
           />
 
           {/* Sliding Drawer Body */}
-          <aside className="relative w-80 max-w-[85vw] bg-primary text-white h-full shadow-2xl border-r border-black/10 flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200 overflow-y-auto">
+          <aside className="relative w-80 max-w-[85vw] bg-primary text-white h-full shadow-2xl border-r border-black/10 flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200 overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
             {/* Drawer Header */}
             <div>
               <div className="p-4 border-b border-white/15 flex items-center justify-between">
@@ -484,7 +486,7 @@ export function StudentShell({
                     className="flex w-full items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white/85 hover:bg-white/10 hover:text-white transition"
                   >
                     <span className="material-symbols-outlined text-[18px] text-white/70">install_mobile</span>
-                    <span>Download App (Windows / Android)</span>
+                    <span>Install App (iPhone / Android / PC)</span>
                   </button>
                 </div>
               </div>
@@ -536,7 +538,7 @@ export function StudentShell({
         </div>
 
         {/* Content Area (Pure White Background) */}
-        <main className="flex-1 pb-28 lg:pb-12 w-full bg-white">
+        <main className="flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-12 w-full bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
             {/* One Back control for every nested student page, rendered by
                 the shell rather than repeated in ~30 page files. Hidden on
@@ -560,11 +562,12 @@ export function StudentShell({
       {/* The upgrade prompt is no longer a fixed banner stacked on the dock —
           it renders inline in the page (see <PromoCard/> on the home). */}
 
-      {/* Mobile & Tablet Bottom Navigation Dock (Responsive, with 3-Lines Menu Trigger) */}
-      <div className="lg:hidden fixed bottom-3 left-0 right-0 max-w-lg mx-auto px-3 z-header pointer-events-auto pb-[env(safe-area-inset-bottom)]">
+      {/* Mobile & Tablet Bottom Tab Bar (iOS-style frosted glass + safe area) */}
+      <div className="lg:hidden fixed inset-x-0 bottom-0 z-header pointer-events-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800 pb-[env(safe-area-inset-bottom)]">
         <nav
           id="bottom-dock-nav"
-          className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl rounded-2xl p-1.5 flex items-center justify-around gap-1"
+          aria-label="Primary navigation"
+          className="max-w-lg mx-auto px-2 py-1 flex items-center justify-around gap-1"
         >
           {dockItems.map((item) => {
             const active = isActive(pathname, item.href);
@@ -572,16 +575,23 @@ export function StudentShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`dock-item rounded-xl px-2.5 py-2 flex flex-col items-center justify-center gap-1 group select-none flex-1 text-center transition-all duration-200 ease-out active:scale-95 ${
+                aria-current={active ? "page" : undefined}
+                className={`dock-item relative rounded-xl px-2 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-0.5 group select-none flex-1 text-center transition-all duration-150 ease-out active:scale-95 ${
                   active
-                    ? "active bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25 shadow-xs font-semibold"
-                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 border border-transparent"
+                    ? "active text-primary dark:text-blue-400 font-bold"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100"
                 }`}
               >
-                <span className="material-symbols-outlined text-[20px] transition-transform duration-200 group-hover:-translate-y-0.5">
+                {active && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-0.5 h-0.5 w-6 rounded-full bg-primary dark:bg-blue-400"
+                  />
+                )}
+                <span className="material-symbols-outlined text-[22px] leading-none">
                   {item.icon}
                 </span>
-                <span className="text-[10px] font-bold leading-none">{item.label}</span>
+                <span className="text-[10px] font-semibold leading-none tracking-tight">{item.label}</span>
               </Link>
             );
           })}

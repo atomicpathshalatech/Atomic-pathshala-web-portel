@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isNativeApp } from "@/lib/platform";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { isIOSDevice, isNativeApp } from "@/lib/platform";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -30,12 +32,20 @@ function isStandalone(): boolean {
  *     the browser's actual prompt() — no fake button
  */
 export function PwaProvider() {
+  const pathname = usePathname();
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstall, setShowInstall] = useState(false);
+  const [showIosGuide, setShowIosGuide] = useState(false);
   const waitingRef = useRef<ServiceWorker | null>(null);
 
   const canPrompt =
     typeof window !== "undefined" && !isNativeApp() && !isStandalone();
+
+  const isFocusedSession =
+    pathname?.startsWith("/install") ||
+    pathname?.includes("/attempt") ||
+    pathname?.startsWith("/live-class") ||
+    pathname?.startsWith("/watch");
 
   // --- Service worker registration + update handling --------------------
   useEffect(() => {
@@ -83,7 +93,16 @@ export function PwaProvider() {
 
   // --- Install prompt capture -----------------------------------------
   useEffect(() => {
-    if (!canPrompt) return;
+    if (!canPrompt || isFocusedSession) return;
+
+    if (isIOSDevice()) {
+      const dismissedAt = Number(localStorage.getItem(DISMISS_KEY) || 0);
+      if (!dismissedAt || Date.now() - dismissedAt >= REPROMPT_AFTER_MS) {
+        const timer = setTimeout(() => setShowIosGuide(true), 2500);
+        return () => clearTimeout(timer);
+      }
+      return;
+    }
 
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
@@ -108,7 +127,7 @@ export function PwaProvider() {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       window.removeEventListener("appinstalled", onInstalled);
     };
-  }, [canPrompt]);
+  }, [canPrompt, isFocusedSession]);
 
   const install = useCallback(async () => {
     if (!deferred) return;
@@ -128,7 +147,56 @@ export function PwaProvider() {
       /* ignore */
     }
     setShowInstall(false);
+    setShowIosGuide(false);
   }, []);
+
+  if (isFocusedSession) return null;
+
+  if (showIosGuide) {
+    return (
+      <div
+        role="dialog"
+        aria-label="Add Atomic Pathshala to iPhone Home Screen"
+        className="fixed inset-x-0 bottom-0 z-[1000] mx-auto max-w-md p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+      >
+        <div className="rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-xl p-4 shadow-2xl">
+          <div className="flex items-start gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/apple-touch-icon.png"
+              alt=""
+              width={44}
+              height={44}
+              className="shrink-0 rounded-xl border border-slate-200"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-900">Get the iPhone App Experience</p>
+              <p className="mt-0.5 text-xs text-slate-600 leading-relaxed">
+                Tap <span className="font-semibold text-primary">Share</span> then{" "}
+                <span className="font-semibold text-slate-900">&ldquo;Add to Home Screen&rdquo;</span> for full-screen classes &amp; alerts.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Link
+              href="/install"
+              onClick={() => setShowIosGuide(false)}
+              className="flex flex-1 min-h-[40px] items-center justify-center rounded-xl bg-primary px-3 text-xs font-bold text-white hover:bg-primary/90"
+            >
+              See 5-Step Guide
+            </Link>
+            <button
+              type="button"
+              onClick={later}
+              className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!showInstall || !deferred) return null;
 

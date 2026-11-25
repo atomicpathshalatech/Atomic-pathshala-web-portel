@@ -22,6 +22,46 @@ export const isAndroid = (): boolean => {
   return Capacitor.getPlatform() === 'android';
 };
 
+/**
+ * True on iPhone, iPad, or iPod (including iPadOS 13+ which reports MacIntel
+ * with multi-touch). Safe for SSR (returns false).
+ */
+export const isIOSDevice = (): boolean => {
+  if (!isClient) return false;
+  const ua = navigator.userAgent || '';
+  return (
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+};
+
+export const isIPad = (): boolean => {
+  if (!isClient) return false;
+  const ua = navigator.userAgent || '';
+  return /iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
+/**
+ * True when running inside an iOS in-app webview (WhatsApp, Instagram,
+ * Facebook, Telegram, LinkedIn, etc.) or third-party iOS browser (Chrome,
+ * Firefox, Edge) rather than Mobile Safari. Used to guide students to tap
+ * "Open in Safari" before "Add to Home Screen".
+ */
+export const getIOSBrowserContext = (): 'safari' | 'in-app' | 'other-browser' | 'non-ios' => {
+  if (!isClient || !isIOSDevice()) return 'non-ios';
+  const ua = navigator.userAgent || '';
+  if (/FBAN|FBAV|Instagram|WhatsApp|Telegram|Line\/|MicroMessenger|Snapchat|Twitter|LinkedInApp/i.test(ua)) {
+    return 'in-app';
+  }
+  if (/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/i.test(ua)) {
+    return 'other-browser';
+  }
+  if (/Safari/i.test(ua) && /Version\//i.test(ua)) {
+    return 'safari';
+  }
+  return 'in-app';
+};
+
 export const isWeb = (): boolean => {
   if (!isClient) return true;
   return !Capacitor.isNativePlatform();

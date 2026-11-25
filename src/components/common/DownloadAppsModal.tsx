@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isNativeApp } from "@/lib/platform";
+import Link from "next/link";
+import { isNativeApp, isStandalonePwa } from "@/lib/platform";
 
 type ReleaseInfo = { version: string; sizeBytes: number | null; publishedAt: string | null; notes: string | null } | null;
 
@@ -58,7 +59,40 @@ export function DownloadAppsModal({ isOpen, onClose }: { isOpen: boolean; onClos
           </button>
         </div>
 
-        <div className="grid gap-4 overflow-y-auto p-5 sm:grid-cols-2">
+        <div className="grid gap-4 overflow-y-auto p-5 sm:grid-cols-3">
+          {/* iPhone / iPad (iOS) */}
+          <div className="flex flex-col rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-primary dark:bg-blue-950">
+                <span className="material-symbols-outlined">phone_iphone</span>
+              </span>
+              <div>
+                <p className="text-sm font-bold">iPhone &amp; iPad</p>
+                <p className="text-[11px] text-slate-500">iOS Safari • No App Store needed</p>
+              </div>
+            </div>
+            <ol className="mt-3 flex-1 list-decimal space-y-1 pl-4 text-xs text-slate-600 dark:text-slate-300">
+              <li>Open <b>atomicpathshala.in</b> in <b>Safari</b>.</li>
+              <li>Tap the <b>Share</b> button (square with arrow).</li>
+              <li>Select <b>Add to Home Screen</b> and tap <b>Add</b>.</li>
+            </ol>
+            <p className="mt-2 text-[11px] text-slate-500">Full-screen app with live class alerts.</p>
+            {isStandalonePwa() ? (
+              <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                Installed on Home Screen
+              </p>
+            ) : (
+              <Link
+                href="/install"
+                onClick={onClose}
+                className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90"
+              >
+                <span className="material-symbols-outlined text-lg">install_mobile</span>
+                iPhone Install Guide
+              </Link>
+            )}
+          </div>
+
           {/* Windows */}
           <div className="flex flex-col rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
             <div className="flex items-center gap-2.5">

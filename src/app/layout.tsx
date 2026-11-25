@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "sonner";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider";
@@ -21,10 +21,10 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
  * Geist (display/headline font) stays on the external stylesheet below —
  * next/font in this Next version doesn't yet provide it.
  */
-const inter = Inter({
-  subsets: ["latin"],
+const inter = localFont({
+  src: "./fonts/inter-latin.woff2",
   display: "swap",
-  weight: ["400", "500", "600", "700"],
+  weight: "400 700",
   variable: "--font-inter",
   fallback: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
 });
@@ -35,7 +35,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#090D16",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#090D16" },
+  ],
   colorScheme: "light",
   interactiveWidget: "resizes-content",
 };
@@ -49,6 +52,11 @@ export const metadata: Metadata = {
   description:
     "India's premier education accelerator for NEET UG, JEE Main, and Foundation courses with chapter-wise PYQs, live interactive classes, and verified faculty.",
   applicationName: "Atomic Pathshala",
+  appleWebApp: {
+    capable: true,
+    title: "Atomic Pathshala",
+    statusBarStyle: "black-translucent",
+  },
   manifest: "/manifest.webmanifest",
   alternates: {
     canonical: "https://atomicpathshala.in",
@@ -108,7 +116,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <meta name="color-scheme" content="light dark" />
         <meta name="HandheldFriendly" content="true" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="format-detection" content="telephone=no" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Geist (display font) + Material Symbols (icon font). Inter is
