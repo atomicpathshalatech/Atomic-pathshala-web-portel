@@ -241,30 +241,6 @@ export function UnifiedQuestionEditor({
     initialPyqQuestionNumber || initialQuestion?.pyqQuestionNumber || "Question 01"
   );
 
-  // Unsaved Edits Protection
-  const isDirty = useMemo(() => {
-    const origBody = initialQuestion?.body || initialQuestion?.statement || "";
-    const origBodyHi = initialQuestion?.bodyHi || initialQuestion?.statementHi || "";
-    const origA = initialQuestion?.optionA || "";
-    const origB = initialQuestion?.optionB || "";
-    return (
-      (statementEn.trim() !== origBody.trim() && statementEn.trim().length > 0) ||
-      (statementHi.trim() !== origBodyHi.trim() && statementHi.trim().length > 0) ||
-      (optionAEn.trim() !== origA.trim() && optionAEn.trim().length > 0) ||
-      (optionBEn.trim() !== origB.trim() && optionBEn.trim().length > 0)
-    );
-  }, [statementEn, statementHi, optionAEn, optionBEn, initialQuestion]);
-
-  useEffect(() => {
-    if (!isDirty) return;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty]);
-
   // Taxonomy Lists (Dynamic from Master NCERT Catalog + Memory)
   const [subjectsList, setSubjectsList] = useState<Array<{ id: string; name: string }>>([]);
   const [chaptersList, setChaptersList] = useState<Array<{ id: string; title: string; displayTitle?: string }>>([]);
@@ -422,6 +398,9 @@ export function UnifiedQuestionEditor({
     };
   };
 
+  // A syllabus chapter under the catalog's (standard) title when there is one.
+  const chapterOptionFor = (name: string) => chaptersList.find((c) => sameChapter(subject, c.title, name))?.title ?? name;
+
   // The AI's metadata is filled in straight away (no separate approve step);
   // the teacher checks it in the panel above Save. Inside a test/DPP the
   // subject comes from the section and the chapter must be in the syllabus.
@@ -531,6 +510,30 @@ export function UnifiedQuestionEditor({
   const [correctOption, setCorrectOption] = useState<string>(initialCorrect);
   const [solutionEn, setSolutionEn] = useState<string>(translationEn?.solution || initialQuestion?.solutionEn || "");
   const [solutionHi, setSolutionHi] = useState<string>(translationHi?.solution || initialQuestion?.solutionHi || "");
+
+  // Unsaved Edits Protection
+  const isDirty = useMemo(() => {
+    const origBody = initialQuestion?.body || initialQuestion?.statement || "";
+    const origBodyHi = initialQuestion?.bodyHi || initialQuestion?.statementHi || "";
+    const origA = initialQuestion?.optionA || "";
+    const origB = initialQuestion?.optionB || "";
+    return (
+      (statementEn.trim() !== origBody.trim() && statementEn.trim().length > 0) ||
+      (statementHi.trim() !== origBodyHi.trim() && statementHi.trim().length > 0) ||
+      (optionAEn.trim() !== origA.trim() && optionAEn.trim().length > 0) ||
+      (optionBEn.trim() !== origB.trim() && optionBEn.trim().length > 0)
+    );
+  }, [statementEn, statementHi, optionAEn, optionBEn, initialQuestion]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
 
   // 1. Reference / Source Screenshot (Editor Verification Only — NEVER shown to students/PDF)
   const initialRefImg =
@@ -804,8 +807,6 @@ export function UnifiedQuestionEditor({
   // chapters for this subject — and only the listed topics when the chapter
   // names some; without one, the subject's whole catalog.
   const syllabusForSubject = (syllabus ?? []).filter((s) => sameSubject(s.subject, subject));
-  // A syllabus chapter under the catalog's (standard) title when there is one.
-  const chapterOptionFor = (name: string) => chaptersList.find((c) => sameChapter(subject, c.title, name))?.title ?? name;
   const chapterOptions =
     syllabusForSubject.length > 0 ? syllabusForSubject.map((s) => chapterOptionFor(s.chapter)) : chaptersList.map((c) => c.title);
   const syllabusChapter = syllabusForSubject.find((s) => sameChapter(subject, s.chapter, chapter));
