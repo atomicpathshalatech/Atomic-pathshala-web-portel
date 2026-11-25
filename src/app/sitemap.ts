@@ -2,8 +2,9 @@ import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/db";
 import { getPublishedBlogPosts } from "@/lib/blog";
 import { buildChapterSlug } from "@/lib/pyq/slug-generator";
+import { VERIFIED_PYQ_QUESTION_WHERE } from "@/lib/pyq/visibility";
 
-const SITE = "https://atomicpathshala.in";
+const SITE = "https://ap.atomicpathshala.in";
 
 // Public pages only — student, team and parent areas need a login.
 export const revalidate = 3600;
@@ -37,9 +38,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     getPublishedBlogPosts(500),
     prisma.question.findMany({
       where: {
-        isPublished: true,
+        ...VERIFIED_PYQ_QUESTION_WHERE,
         slug: { not: null },
-        pyqOccurrences: { some: { verificationStatus: "VERIFIED" } },
       },
       take: 2000,
       select: {
@@ -50,9 +50,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     prisma.question.groupBy({
       by: ["subject", "chapter"],
       where: {
-        isPublished: true,
+        ...VERIFIED_PYQ_QUESTION_WHERE,
         chapter: { not: null },
-        pyqOccurrences: { some: { verificationStatus: "VERIFIED" } },
       },
       _count: { id: true },
     }),

@@ -44,7 +44,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://atomicpathshala.in"),
+  metadataBase: new URL("https://ap.atomicpathshala.in"),
   title: {
     default: "Atomic Pathshala — NEET, JEE & Board Exam Preparation",
     template: "%s | Atomic Pathshala",
@@ -59,12 +59,12 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.webmanifest",
   alternates: {
-    canonical: "https://atomicpathshala.in",
+    canonical: "https://ap.atomicpathshala.in",
   },
   openGraph: {
     type: "website",
     locale: "en_IN",
-    url: "https://atomicpathshala.in",
+    url: "https://ap.atomicpathshala.in",
     siteName: "Atomic Pathshala",
     title: "Atomic Pathshala — NEET, JEE & Board Exam Preparation",
     description:

@@ -10,11 +10,11 @@ export const metadata: Metadata = {
   description:
     "Comprehensive Board Exam Preparation for Class 10 & Class 12 (CBSE, UP Board, Bihar Board & State Boards) in Hindi & English medium. Master NCERT textbooks, sample papers, and model answers with expert educators.",
   alternates: {
-    canonical: "https://atomicpathshala.in/boards",
+    canonical: "https://ap.atomicpathshala.in/boards",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/boards",
+    url: "https://ap.atomicpathshala.in/boards",
     title: "Board Exam Preparation | Atomic Pathshala",
     description: "Achieve top board exam percentages with NCERT line-by-line preparation, sample papers, and model answer writing.",
     images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Board Exams Atomic Pathshala" }],
@@ -37,16 +37,16 @@ export default function BoardsPage() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/boards",
+      url: "https://ap.atomicpathshala.in/boards",
     },
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "Board Preparation", item: "https://atomicpathshala.in/boards" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "Board Preparation", item: "https://ap.atomicpathshala.in/boards" },
       ],
     },
   ];

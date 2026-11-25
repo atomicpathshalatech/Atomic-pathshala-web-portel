@@ -2,8 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { PublicQuestionCard } from "@/components/pyq/PublicQuestionCard";
+import {
+  getVerifiedPyqCountsByExam,
+  searchStudentPYQs,
+  VERIFIED_PYQ_QUESTION_WHERE,
+  VERIFIED_PYQ_STATUS,
+} from "@/lib/pyq/visibility";
 
-export const revalidate = 3600; // 1 hour ISR
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "NEET & JEE PYQ Library – Previous Year Questions with Solutions | Atomic Pathshala",
@@ -20,12 +26,12 @@ export const metadata: Metadata = {
     "Atomic Pathshala",
   ],
   alternates: {
-    canonical: "https://atomicpathshala.in/pyq",
+    canonical: "https://ap.atomicpathshala.in/pyq",
   },
   openGraph: {
     title: "NEET & JEE PYQ Library – Atomic Pathshala",
     description: "Complete chapter-wise and year-wise question bank in Hindi & English with verified solutions.",
-    url: "https://atomicpathshala.in/pyq",
+    url: "https://ap.atomicpathshala.in/pyq",
     type: "website",
   },
 };
@@ -47,97 +53,19 @@ export default async function PublicPyqHomePage({ searchParams }: Props) {
   let isSearching = searchQuery.length > 0;
 
   if (isSearching) {
-    const searchWhere: any = {
-      isPublished: true,
-      pyqOccurrences: { some: { verificationStatus: "VERIFIED" } },
-    };
-
-    if (langFilter === "HINDI") {
-      searchWhere.translations = {
-        some: {
-          OR: [{ language: "HINDI" }, { statement: { contains: "क", mode: "insensitive" } }],
-        },
-      };
-    } else if (langFilter === "ENGLISH") {
-      searchWhere.translations = {
-        some: { language: "ENGLISH" },
-      };
-    }
-
-    searchWhere.OR = [
-      { questionCode: { contains: searchQuery, mode: "insensitive" } },
-      { topic: { contains: searchQuery, mode: "insensitive" } },
-      { chapter: { contains: searchQuery, mode: "insensitive" } },
-      { subject: { contains: searchQuery, mode: "insensitive" } },
-      { tags: { contains: searchQuery, mode: "insensitive" } },
-      {
-        translations: {
-          some: {
-            statement: { contains: searchQuery, mode: "insensitive" },
-          },
-        },
-      },
-    ];
-
-    searchResults = await prisma.question.findMany({
-      where: searchWhere,
-      take: 40,
-      orderBy: [{ pyqYear: "desc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        slug: true,
-        questionCode: true,
-        subject: true,
-        chapter: true,
-        topic: true,
-        pyqYear: true,
-        imageUrl: true,
-        translations: {
-          select: { language: true, statement: true, options: true, correctOptionIds: true },
-        },
-        pyqOccurrences: {
-          where: { verificationStatus: "VERIFIED" },
-          select: {
-            year: true,
-            session: true,
-            shift: true,
-            paper: true,
-            questionNumber: true,
-            exam: { select: { name: true, slug: true } },
-          },
-        },
-      },
+    const res = await searchStudentPYQs(searchQuery, {
+      lang: langFilter,
+      pageSize: 30,
+      includeSolution: false,
     });
+    searchResults = res.questions;
   }
 
-  // Fetch real statistics from database
-  const [neetCount, jeeMainCount, jeeAdvCount, recentQuestions] = await Promise.all([
-    prisma.pyqOccurrence.count({
-      where: {
-        verificationStatus: "VERIFIED",
-        exam: { canonicalType: "NEET_UG" },
-        question: { isPublished: true },
-      },
-    }),
-    prisma.pyqOccurrence.count({
-      where: {
-        verificationStatus: "VERIFIED",
-        exam: { canonicalType: "JEE_MAIN" },
-        question: { isPublished: true },
-      },
-    }),
-    prisma.pyqOccurrence.count({
-      where: {
-        verificationStatus: "VERIFIED",
-        exam: { canonicalType: "JEE_ADVANCED" },
-        question: { isPublished: true },
-      },
-    }),
+  // Fetch real VERIFIED-only statistics from database
+  const [{ neetCount, jeeMainCount, jeeAdvCount }, recentQuestions] = await Promise.all([
+    getVerifiedPyqCountsByExam(),
     prisma.question.findMany({
-      where: {
-        isPublished: true,
-        pyqOccurrences: { some: { verificationStatus: "VERIFIED" } },
-      },
+      where: VERIFIED_PYQ_QUESTION_WHERE,
       orderBy: [{ pyqYear: "desc" }, { createdAt: "desc" }],
       take: 6,
       select: {
@@ -152,7 +80,7 @@ export default async function PublicPyqHomePage({ searchParams }: Props) {
           select: { language: true, statement: true, options: true, correctOptionIds: true },
         },
         pyqOccurrences: {
-          where: { verificationStatus: "VERIFIED" },
+          where: { verificationStatus: VERIFIED_PYQ_STATUS },
           select: {
             year: true,
             questionNumber: true,

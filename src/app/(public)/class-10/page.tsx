@@ -10,11 +10,11 @@ export const metadata: Metadata = {
   description:
     "Prepare for Class 10 Board Examinations and NTSE/Olympiad Foundation at Atomic Pathshala. Concept clarity in Physics, Chemistry, Biology & Mathematics with chapter-wise notes and practice questions.",
   alternates: {
-    canonical: "https://atomicpathshala.in/class-10",
+    canonical: "https://ap.atomicpathshala.in/class-10",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/class-10",
+    url: "https://ap.atomicpathshala.in/class-10",
     title: "Class 10 Board & Foundation Mastery | Atomic Pathshala",
     description: "Score 95%+ in Class 10 Boards and build a strong foundation for NEET/JEE.",
     images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Class 10 Atomic Pathshala" }],
@@ -37,16 +37,16 @@ export default function Class10Page() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/class-10",
+      url: "https://ap.atomicpathshala.in/class-10",
     },
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "Class 10", item: "https://atomicpathshala.in/class-10" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "Class 10", item: "https://ap.atomicpathshala.in/class-10" },
       ],
     },
   ];

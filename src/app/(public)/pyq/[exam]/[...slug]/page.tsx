@@ -7,8 +7,9 @@ import { prisma } from "@/lib/db";
 import { getMasterNcertChapters, normalizeSubjectName } from "@/lib/academic/master-ncert-catalog";
 import { buildChapterSlug } from "@/lib/pyq/slug-generator";
 import { PublicQuestionCard } from "@/components/pyq/PublicQuestionCard";
+import { VERIFIED_PYQ_STATUS } from "@/lib/pyq/visibility";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: { exam: string; slug: string[] };
@@ -37,7 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return {
       title: `${examTitle} ${year} Question Paper with Solutions | Atomic Pathshala`,
       description: `Practice official ${examTitle} ${year} questions with verified options and step-by-step solutions after login.`,
-      alternates: { canonical: `https://atomicpathshala.in/pyq/${params.exam}/${year}` },
+      alternates: { canonical: `https://ap.atomicpathshala.in/pyq/${params.exam}/${year}` },
     };
   }
 
@@ -47,7 +48,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return {
       title: `${examTitle} ${subject} PYQ – Previous Year Questions | Atomic Pathshala`,
       description: `Practice all ${examTitle} ${subject} previous year questions chapter-wise with detailed solutions.`,
-      alternates: { canonical: `https://atomicpathshala.in/pyq/${params.exam}/${slugParts[0]}` },
+      alternates: { canonical: `https://ap.atomicpathshala.in/pyq/${params.exam}/${slugParts[0]}` },
     };
   }
 
@@ -58,7 +59,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${titleChapter} ${examTitle} PYQ – Previous Year Questions | Atomic Pathshala`,
     description: `Practice ${titleChapter} previous year questions for ${examTitle} ${subject} with year-wise distribution and step-by-step solutions after login.`,
-    alternates: { canonical: `https://atomicpathshala.in/pyq/${params.exam}/${slugParts[0]}/${slugParts[1]}` },
+    alternates: { canonical: `https://ap.atomicpathshala.in/pyq/${params.exam}/${slugParts[0]}/${slugParts[1]}` },
   };
 }
 
@@ -82,8 +83,8 @@ export default async function DynamicPyqRouter({ params, searchParams }: Props) 
     const occurrenceWhere: any = {
       examId: exam.id,
       year: yearNum,
-      verificationStatus: "VERIFIED",
-      question: { isPublished: true },
+      verificationStatus: VERIFIED_PYQ_STATUS,
+      question: { pyqVerificationStatus: VERIFIED_PYQ_STATUS, isPublished: true },
       ...(searchParams.session ? { session: searchParams.session } : {}),
       ...(searchParams.shift ? { shift: searchParams.shift } : {}),
     };
@@ -202,9 +203,10 @@ export default async function DynamicPyqRouter({ params, searchParams }: Props) 
     const chapterGroupings = await prisma.question.groupBy({
       by: ["chapter"],
       where: {
+        pyqVerificationStatus: VERIFIED_PYQ_STATUS,
         isPublished: true,
         subject: { equals: normSubject, mode: "insensitive" },
-        pyqOccurrences: { some: { examId: exam.id, verificationStatus: "VERIFIED" } },
+        pyqOccurrences: { some: { examId: exam.id, verificationStatus: VERIFIED_PYQ_STATUS } },
       },
       _count: { id: true },
     });
@@ -273,13 +275,14 @@ export default async function DynamicPyqRouter({ params, searchParams }: Props) 
   const topicFilter = searchParams.topic?.trim() || null;
 
   const where: any = {
+    pyqVerificationStatus: VERIFIED_PYQ_STATUS,
     isPublished: true,
     subject: { equals: normSubject, mode: "insensitive" },
     chapter: { contains: chapterSearchName, mode: "insensitive" },
     pyqOccurrences: {
       some: {
         examId: exam.id,
-        verificationStatus: "VERIFIED",
+        verificationStatus: VERIFIED_PYQ_STATUS,
         ...(yearFilter ? { year: yearFilter } : {}),
       },
     },

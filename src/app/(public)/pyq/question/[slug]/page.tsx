@@ -7,8 +7,13 @@ import { prisma } from "@/lib/db";
 import { buildChapterSlug, buildExamSlug } from "@/lib/pyq/slug-generator";
 import { PublicQuestionCard } from "@/components/pyq/PublicQuestionCard";
 import { InteractiveQuestionQuiz } from "@/components/pyq/InteractiveQuestionQuiz";
+import {
+  getVerifiedQuestionBySlugOrId,
+  VERIFIED_PYQ_QUESTION_WHERE,
+  VERIFIED_PYQ_STATUS,
+} from "@/lib/pyq/visibility";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: { slug: string };
@@ -50,28 +55,13 @@ function buildSlugFilter(rawSlug: string) {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const question = await prisma.question.findFirst({
-    where: {
-      OR: buildSlugFilter(params.slug),
-    },
-    select: {
-      id: true,
-      slug: true,
-      subject: true,
-      chapter: true,
-      pyqExam: true,
-      pyqYear: true,
-      translations: { select: { statement: true }, take: 1 },
-      pyqOccurrences: {
-        where: { verificationStatus: "VERIFIED" },
-        take: 1,
-        select: { year: true, exam: { select: { name: true } } },
-      },
-    },
-  });
+  const question = await getVerifiedQuestionBySlugOrId(buildSlugFilter(params.slug), false);
 
   if (!question) {
-    return { title: "Question Not Found | Atomic Pathshala" };
+    return {
+      title: "Question Not Found | Atomic Pathshala",
+      robots: { index: false, follow: false },
+    };
   }
 
   const occ = question.pyqOccurrences[0];
@@ -84,12 +74,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${examName} ${year} ${question.subject} – ${question.chapter || "Question"} | Atomic Pathshala`,
     description: `${statementSnippet}... Practice this official ${examName} question with interactive quiz, instant answer check, and step-by-step solution after login.`,
     alternates: {
-      canonical: `https://atomicpathshala.in/pyq/question/${question.slug || question.id}`,
+      canonical: `https://ap.atomicpathshala.in/pyq/question/${question.slug || question.id}`,
     },
     openGraph: {
       title: `${examName} ${year} – ${question.chapter || question.subject} PYQ`,
       description: statementSnippet,
-      url: `https://atomicpathshala.in/pyq/question/${question.slug || question.id}`,
+      url: `https://ap.atomicpathshala.in/pyq/question/${question.slug || question.id}`,
       type: "article",
     },
   };
@@ -99,52 +89,7 @@ export default async function IndividualQuestionPage({ params }: Props) {
   const session = await getServerSession(authOptions);
   const isAuthorized = Boolean(session?.user?.id);
 
-  const question = await prisma.question.findFirst({
-    where: {
-      OR: buildSlugFilter(params.slug),
-      ...(isAuthorized ? {} : { isPublished: true }),
-    },
-    select: {
-      id: true,
-      slug: true,
-      questionCode: true,
-      type: true,
-      difficulty: true,
-      subject: true,
-      chapter: true,
-      topic: true,
-      subTopic: true,
-      imageUrl: true,
-      pyqExam: true,
-      pyqYear: true,
-      pyqMonth: true,
-      pyqQuestionNumber: true,
-      // Protected fields: ONLY retrieved if user is authenticated!
-      solution: isAuthorized,
-      translations: {
-        select: {
-          language: true,
-          statement: true,
-          options: true,
-          correctOptionIds: true, // Needed for quiz checking
-          solution: isAuthorized,
-        },
-      },
-      pyqOccurrences: {
-        where: { verificationStatus: "VERIFIED" },
-        select: {
-          id: true,
-          year: true,
-          session: true,
-          shift: true,
-          paper: true,
-          questionNumber: true,
-          sourceLabel: true,
-          exam: { select: { slug: true, name: true, canonicalType: true } },
-        },
-      },
-    },
-  });
+  const question = await getVerifiedQuestionBySlugOrId(buildSlugFilter(params.slug), isAuthorized);
 
   if (!question) notFound();
 
@@ -155,14 +100,13 @@ export default async function IndividualQuestionPage({ params }: Props) {
   const examSlug = occ?.exam ? buildExamSlug(occ.exam.canonicalType || occ.exam.slug) : "neet";
   const chapterSlug = question.chapter ? buildChapterSlug(question.chapter) : "general";
 
-  // Related questions from same chapter
+  // Related questions from same chapter (strictly VERIFIED only)
   const relatedQuestions = await prisma.question.findMany({
     where: {
+      ...VERIFIED_PYQ_QUESTION_WHERE,
       id: { not: question.id },
-      isPublished: true,
       subject: { equals: question.subject, mode: "insensitive" },
       ...(question.chapter ? { chapter: { equals: question.chapter, mode: "insensitive" } } : {}),
-      pyqOccurrences: { some: { verificationStatus: "VERIFIED" } },
     },
     take: 4,
     orderBy: [{ pyqYear: "desc" }, { createdAt: "desc" }],
@@ -175,7 +119,7 @@ export default async function IndividualQuestionPage({ params }: Props) {
       pyqYear: true,
       translations: { select: { language: true, statement: true, options: true, correctOptionIds: true }, take: 2 },
       pyqOccurrences: {
-        where: { verificationStatus: "VERIFIED" },
+        where: { verificationStatus: VERIFIED_PYQ_STATUS },
         take: 1,
         select: { year: true, exam: { select: { name: true } } },
       },

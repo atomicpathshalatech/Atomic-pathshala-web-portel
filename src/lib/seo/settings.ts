@@ -27,18 +27,18 @@ export interface SeoSettings {
 
 export const DEFAULT_SEO_SETTINGS: SeoSettings = {
   siteName: "Atomic Pathshala",
-  siteUrl: "https://atomicpathshala.in",
-  defaultTitle: "Atomic Pathshala — NEET, JEE & Board Exam Preparation",
+  siteUrl: "https://ap.atomicpathshala.in",
+  defaultTitle: "Atomic Pathshala — NEET, JEE & Board Exam Preparation Platform",
   defaultDescription:
     "India's premier education accelerator for NEET UG, JEE Main, and Foundation courses with chapter-wise PYQs, live interactive classes, and verified faculty.",
   defaultOgTitle: "Atomic Pathshala — Accelerating Academic Excellence",
   defaultOgDescription:
     "Master NEET, JEE & Board exams with expert faculty, chapter-wise previous year questions (PYQ) with verified solutions, test series, and personalized AI mentorship.",
-  defaultOgImage: "/brand/logo.png",
+  defaultOgImage: "https://ap.atomicpathshala.in/brand/logo.png",
   twitterCard: "summary_large_image",
   canonicalPolicy: "STRICT_APEX",
   orgName: "Atomic Pathshala",
-  orgLogoUrl: "/brand/logo.png",
+  orgLogoUrl: "https://ap.atomicpathshala.in/brand/logo.png",
   orgDescription:
     "Atomic Pathshala is an premier educational platform providing live classes, comprehensive test series, chapter-wise previous year questions (PYQ), and AI mentorship for NEET, JEE, and Board exams.",
   contactEmail: "support@atomicpathshala.in",
@@ -103,7 +103,7 @@ export async function getSeoGlobalSettings(): Promise<SeoSettings> {
 /**
  * Builds an absolute canonical URL using the canonical site URL from settings.
  */
-export function buildCanonicalUrl(path: string, siteUrl: string = "https://atomicpathshala.in"): string {
+export function buildCanonicalUrl(path: string, siteUrl: string = "https://ap.atomicpathshala.in"): string {
   const cleanBase = siteUrl.replace(/\/+$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   return `${cleanBase}${cleanPath}`;

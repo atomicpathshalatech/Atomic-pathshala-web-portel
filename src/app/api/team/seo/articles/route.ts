@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
           authorRole: authorRole || "Subject Matter Expert",
           faqs: Array.isArray(faqs) ? faqs : [],
           publishedAt: status === "PUBLISHED" ? publishedAt : undefined,
-          canonicalUrl: `https://atomicpathshala.in/blog/${cleanSlug}`,
+          canonicalUrl: `https://ap.atomicpathshala.in/blog/${cleanSlug}`,
         },
       });
     } else {
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
           authorRole: authorRole || "Subject Matter Expert",
           faqs: Array.isArray(faqs) ? faqs : [],
           publishedAt,
-          canonicalUrl: `https://atomicpathshala.in/blog/${cleanSlug}`,
+          canonicalUrl: `https://ap.atomicpathshala.in/blog/${cleanSlug}`,
         },
       });
     }

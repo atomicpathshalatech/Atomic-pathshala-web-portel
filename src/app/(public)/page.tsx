@@ -11,15 +11,15 @@ import { PublicFooter, resolveFaqs } from "@/components/public-home/TrustSection
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const SITE = "https://atomicpathshala.in";
+const SITE = "https://ap.atomicpathshala.in";
 const TITLE = "Atomic Pathshala — NEET, JEE & Board Exam Preparation";
 const DESCRIPTION =
-  "Free PYQs, notes, mind maps, formula sheets, DPPs and tests for NEET, JEE and Class 10, 11 & 12 — in Hindi and English. Live classes, recordings and doubt support.";
+  "Free PYQs, notes, mind maps, formula sheets, Daily Practice Problems (DPP) and tests for NEET, JEE and Class 10, 11 & 12 — in Hindi and English. Live classes, recordings and doubt support.";
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },
   description: DESCRIPTION,
-  alternates: { canonical: "https://atomicpathshala.in" },
+  alternates: { canonical: "https://ap.atomicpathshala.in" },
   openGraph: {
     type: "website",
     url: SITE,

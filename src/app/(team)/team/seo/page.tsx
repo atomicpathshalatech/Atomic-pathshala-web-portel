@@ -78,7 +78,7 @@ export default async function TeamSeoManagerPage() {
       englishKeywords: t.seoProfile?.englishKeywords || [],
       verifiedBio: t.seoProfile?.verifiedBio || t.bio || "",
       teachingPhilosophy: t.seoProfile?.teachingPhilosophy || "",
-      canonicalUrl: `https://atomicpathshala.in/teachers/${slug}`,
+      canonicalUrl: `https://ap.atomicpathshala.in/teachers/${slug}`,
       completenessScore: completeness,
     };
   });

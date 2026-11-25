@@ -10,11 +10,11 @@ export const metadata: Metadata = {
   description:
     "Explore Atomic Pathshala's curriculum modules, chapter notes, formula sheets, Daily Practice Problems (DPP), and verified PYQ books for NEET UG, JEE Main, and Class 11-12 in Hindi & English medium.",
   alternates: {
-    canonical: "https://atomicpathshala.in/modules",
+    canonical: "https://ap.atomicpathshala.in/modules",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/modules",
+    url: "https://ap.atomicpathshala.in/modules",
     title: "Educational Modules & Study Material | Atomic Pathshala",
     description: "Chapter-wise notes, formula sheets, DPPs and practice modules for NEET & JEE.",
     images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Modules Atomic Pathshala" }],
@@ -75,8 +75,8 @@ export default function ModulesPage() {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "Modules & Study Material", item: "https://atomicpathshala.in/modules" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "Modules & Study Material", item: "https://ap.atomicpathshala.in/modules" },
       ],
     },
   ];

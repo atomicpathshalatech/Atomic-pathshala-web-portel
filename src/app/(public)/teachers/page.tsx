@@ -12,11 +12,11 @@ export const metadata: Metadata = {
   description:
     "Explore Atomic Pathshala's verified faculty members, doctors, and engineers dedicated to academic excellence across NEET, JEE, Foundation, and Board examinations.",
   alternates: {
-    canonical: "https://atomicpathshala.in/teachers",
+    canonical: "https://ap.atomicpathshala.in/teachers",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/teachers",
+    url: "https://ap.atomicpathshala.in/teachers",
     title: "Expert Faculty Directory — Atomic Pathshala",
     description:
       "Meet our experienced faculty team including Senior Chemistry Educator Firoz Ali. Expert mentoring for NEET, JEE & Boards.",
@@ -83,7 +83,7 @@ export default async function FacultyDirectoryPage() {
       return {
         "@type": "ListItem",
         position: idx + 1,
-        url: `https://atomicpathshala.in/teachers/${slug}`,
+        url: `https://ap.atomicpathshala.in/teachers/${slug}`,
         name: t.user.name,
       };
     }),

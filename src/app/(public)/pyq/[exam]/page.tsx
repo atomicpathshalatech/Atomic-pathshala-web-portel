@@ -4,8 +4,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getMasterNcertChapters, normalizeSubjectName } from "@/lib/academic/master-ncert-catalog";
 import { buildChapterSlug } from "@/lib/pyq/slug-generator";
+import { VERIFIED_PYQ_OCCURRENCE_WHERE, VERIFIED_PYQ_STATUS } from "@/lib/pyq/visibility";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: { exam: string };
@@ -30,12 +31,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${titleName} PYQ – Previous Year Questions Chapter-Wise & Year-Wise | Atomic Pathshala`,
     description: `Complete ${titleName} previous year questions library with official answer keys, chapter-wise questions, and step-by-step solutions after login.`,
     alternates: {
-      canonical: `https://atomicpathshala.in/pyq/${params.exam}`,
+      canonical: `https://ap.atomicpathshala.in/pyq/${params.exam}`,
     },
     openGraph: {
       title: `${titleName} Previous Year Questions | Atomic Pathshala`,
       description: `Practice ${titleName} PYQs chapter-wise and year-wise with verified solutions.`,
-      url: `https://atomicpathshala.in/pyq/${params.exam}`,
+      url: `https://ap.atomicpathshala.in/pyq/${params.exam}`,
     },
   };
 }
@@ -54,13 +55,13 @@ export default async function ExamPublicPage({ params }: Props) {
       ? ["Physics", "Chemistry", "Biology"]
       : ["Physics", "Chemistry", "Mathematics"];
 
-  // Fetch years with count for this exam
+  // Fetch years with strictly VERIFIED count for this exam
   const [yearOccurrences, chapterGroupings] = await Promise.all([
     prisma.pyqOccurrence.groupBy({
       by: ["year"],
       where: {
+        ...VERIFIED_PYQ_OCCURRENCE_WHERE,
         examId: exam.id,
-        verificationStatus: "VERIFIED",
         year: { not: null },
       },
       _count: { id: true },
@@ -69,9 +70,10 @@ export default async function ExamPublicPage({ params }: Props) {
     prisma.question.groupBy({
       by: ["subject", "chapter"],
       where: {
+        pyqVerificationStatus: VERIFIED_PYQ_STATUS,
         isPublished: true,
         pyqOccurrences: {
-          some: { examId: exam.id, verificationStatus: "VERIFIED" },
+          some: { examId: exam.id, verificationStatus: VERIFIED_PYQ_STATUS },
         },
       },
       _count: { id: true },

@@ -46,6 +46,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: "https://atomicpathshala.in/sitemap.xml",
+    sitemap: "https://ap.atomicpathshala.in/sitemap.xml",
   };
 }

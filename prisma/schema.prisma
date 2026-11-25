@@ -9253,7 +9253,7 @@ model PyqReviewHistory {
 model SeoGlobalSettings {
   id                    String   @id @default("singleton")
   siteName              String   @default("Atomic Pathshala")
-  siteUrl               String   @default("https://atomicpathshala.in")
+  siteUrl               String   @default("https://ap.atomicpathshala.in")
   defaultTitle          String   @default("Atomic Pathshala — NEET, JEE & Board Exam Preparation")
   defaultDescription    String   @default("India's premier education accelerator for NEET UG, JEE Main, and Foundation courses with chapter-wise PYQs, live interactive classes, and verified faculty.")
   defaultOgTitle        String?

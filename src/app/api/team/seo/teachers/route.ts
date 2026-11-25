@@ -80,7 +80,7 @@ export async function GET() {
         englishKeywords: t.seoProfile?.englishKeywords || [],
         verifiedBio: t.seoProfile?.verifiedBio || t.bio || "",
         teachingPhilosophy: t.seoProfile?.teachingPhilosophy || "",
-        canonicalUrl: `https://atomicpathshala.in/teachers/${slug}`,
+        canonicalUrl: `https://ap.atomicpathshala.in/teachers/${slug}`,
         completenessScore: Math.min(completeness, 100),
         batchesCount: t.batchAssignments.length,
         lecturesCount: t.lectures.length,
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
         englishKeywords: Array.isArray(englishKeywords) ? englishKeywords : [],
         verifiedBio: verifiedBio || null,
         teachingPhilosophy: teachingPhilosophy || null,
-        canonicalUrl: `https://atomicpathshala.in/teachers/${cleanSlug}`,
+        canonicalUrl: `https://ap.atomicpathshala.in/teachers/${cleanSlug}`,
       },
       create: {
         teacherId,
@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
         englishKeywords: Array.isArray(englishKeywords) ? englishKeywords : [],
         verifiedBio: verifiedBio || null,
         teachingPhilosophy: teachingPhilosophy || null,
-        canonicalUrl: `https://atomicpathshala.in/teachers/${cleanSlug}`,
+        canonicalUrl: `https://ap.atomicpathshala.in/teachers/${cleanSlug}`,
       },
     });
 

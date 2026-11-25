@@ -19,7 +19,7 @@ export async function generateMetadata({
   if (!profile) return { title: "Faculty Not Found | Atomic Pathshala" };
 
   const subject = profile.subjects.length > 0 ? profile.subjects.join(", ") : profile.department;
-  const canonicalUrl = `https://atomicpathshala.in/teachers/${params.slug}`;
+  const canonicalUrl = `https://ap.atomicpathshala.in/teachers/${params.slug}`;
   const title =
     profile.seoProfile?.customSeoTitle ||
     `${profile.name} — ${subject} Faculty | Atomic Pathshala`;
@@ -175,7 +175,7 @@ export default async function TeacherProfilePage({
     profile.dobDayMonth
   );
 
-  const profileUrl = `https://atomicpathshala.in/teachers/${params.slug}`;
+  const profileUrl = `https://ap.atomicpathshala.in/teachers/${params.slug}`;
   const jsonLd = [
     {
       "@context": "https://schema.org",
@@ -184,12 +184,12 @@ export default async function TeacherProfilePage({
       name: profile.name,
       jobTitle: profile.headline || `${primarySubject} Educator`,
       description: profile.seoProfile?.verifiedBio || profile.bio,
-      image: profile.photoUrl || "https://atomicpathshala.in/brand/logo.png",
+      image: profile.photoUrl || "https://ap.atomicpathshala.in/brand/logo.png",
       url: profileUrl,
       worksFor: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
       alumniOf: profile.qualifications.map((q) => ({
         "@type": "EducationalOrganization",
@@ -212,13 +212,13 @@ export default async function TeacherProfilePage({
             "@type": "ListItem",
             position: 1,
             name: "Home",
-            item: "https://atomicpathshala.in",
+            item: "https://ap.atomicpathshala.in",
           },
           {
             "@type": "ListItem",
             position: 2,
             name: "Faculty Directory",
-            item: "https://atomicpathshala.in/teachers",
+            item: "https://ap.atomicpathshala.in/teachers",
           },
           {
             "@type": "ListItem",

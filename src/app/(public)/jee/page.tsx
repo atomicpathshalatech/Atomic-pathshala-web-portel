@@ -11,11 +11,11 @@ export const metadata: Metadata = {
   description:
     "Prepare for IIT-JEE Main & Advanced 2026 with Atomic Pathshala. Conceptual depth in Physics, Chemistry & Mathematics, chapter-wise verified PYQs with video derivations, mock tests, and top engineering faculty.",
   alternates: {
-    canonical: "https://atomicpathshala.in/jee",
+    canonical: "https://ap.atomicpathshala.in/jee",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/jee",
+    url: "https://ap.atomicpathshala.in/jee",
     title: "IIT-JEE Main & Advanced Preparation | Atomic Pathshala",
     description: "Crack JEE Main & Advanced with verified chapter-wise PYQ bank, advanced problem-solving techniques, and live classes.",
     images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "IIT-JEE Atomic Pathshala" }],
@@ -70,9 +70,9 @@ export default async function JeeLandingPage() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/jee",
+      url: "https://ap.atomicpathshala.in/jee",
       educationalCredentialAwarded: "JEE Advanced Readiness Certificate",
       occupationalCategory: "Engineering Entrance (IIT / NIT / IIIT)",
     },
@@ -89,8 +89,8 @@ export default async function JeeLandingPage() {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "JEE Preparation", item: "https://atomicpathshala.in/jee" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "JEE Preparation", item: "https://ap.atomicpathshala.in/jee" },
       ],
     },
   ];

@@ -10,11 +10,11 @@ export const metadata: Metadata = {
   description:
     "Class 11 Science preparation for NEET, JEE & CBSE. Master Mechanics, Physical & Organic Chemistry (GOC) by Firoz Ali, and Cell Biology with chapter-wise notes and PYQs.",
   alternates: {
-    canonical: "https://atomicpathshala.in/class-11",
+    canonical: "https://ap.atomicpathshala.in/class-11",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/class-11",
+    url: "https://ap.atomicpathshala.in/class-11",
     title: "Class 11 Science (NEET / JEE) | Atomic Pathshala",
     description: "Build an unbeatable Class 11 foundation for NEET & JEE with expert faculty.",
     images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Class 11 Atomic Pathshala" }],
@@ -37,16 +37,16 @@ export default function Class11Page() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/class-11",
+      url: "https://ap.atomicpathshala.in/class-11",
     },
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "Class 11", item: "https://atomicpathshala.in/class-11" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "Class 11", item: "https://ap.atomicpathshala.in/class-11" },
       ],
     },
   ];

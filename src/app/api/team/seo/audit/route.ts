@@ -73,14 +73,14 @@ export async function POST() {
     }> = [];
 
     // 1. Check Global Settings
-    if (!settings || !settings.siteUrl.includes("atomicpathshala.in")) {
+    if (!settings || !settings.siteUrl.includes("ap.atomicpathshala.in")) {
       detectedIssues.push({
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
         issueType: "SUBDOMAIN_MISMATCH",
         severity: "CRITICAL",
         title: "Canonical Domain Missing or Misconfigured",
-        description: "The global site URL is not configured as https://atomicpathshala.in.",
-        recommendedFix: "Set siteUrl to https://atomicpathshala.in in Global SEO Settings.",
+        description: "The global site URL is not configured as https://ap.atomicpathshala.in.",
+        recommendedFix: "Set siteUrl to https://ap.atomicpathshala.in in Global SEO Settings.",
         status: "OPEN",
       });
     }
@@ -88,7 +88,7 @@ export async function POST() {
     // 2. Check Teacher Profiles
     for (const t of teachers) {
       const slug = t.seoProfile?.slug || t.user.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      const url = `https://atomicpathshala.in/teachers/${slug}`;
+      const url = `https://ap.atomicpathshala.in/teachers/${slug}`;
 
       if (!t.seoProfile) {
         detectedIssues.push({
@@ -118,7 +118,7 @@ export async function POST() {
     // 3. Check PYQ indexable volume
     if (publishedQuestions === 0) {
       detectedIssues.push({
-        url: "https://atomicpathshala.in/pyq",
+        url: "https://ap.atomicpathshala.in/pyq",
         issueType: "THIN_CONTENT",
         severity: "HIGH",
         title: "No Published PYQ Questions Found",

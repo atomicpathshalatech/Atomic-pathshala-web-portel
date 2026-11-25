@@ -10,11 +10,11 @@ export const metadata: Metadata = {
   description:
     "Class 12 Science preparation for Board Exams (CBSE & State Boards), NEET UG, and JEE Main. Master Electrodynamics, Organic Reactions, Genetics, and Calculus with verified study materials.",
   alternates: {
-    canonical: "https://atomicpathshala.in/class-12",
+    canonical: "https://ap.atomicpathshala.in/class-12",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/class-12",
+    url: "https://ap.atomicpathshala.in/class-12",
     title: "Class 12 Science (Board + Competitive) | Atomic Pathshala",
     description: "Score top marks in Class 12 Boards and secure medical & engineering admissions.",
     images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Class 12 Atomic Pathshala" }],
@@ -37,16 +37,16 @@ export default function Class12Page() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/class-12",
+      url: "https://ap.atomicpathshala.in/class-12",
     },
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "Class 12", item: "https://atomicpathshala.in/class-12" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "Class 12", item: "https://ap.atomicpathshala.in/class-12" },
       ],
     },
   ];

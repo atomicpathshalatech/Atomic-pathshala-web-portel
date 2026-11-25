@@ -11,11 +11,11 @@ export const metadata: Metadata = {
   description:
     "Ace NEET UG with Atomic Pathshala's Selection Pro Batch. Learn Physics, Chemistry & Biology with expert doctors & faculties, chapter-wise verified PYQs (2000–2024), live classes, and AI test analytics in Hindi & English medium.",
   alternates: {
-    canonical: "https://atomicpathshala.in/neet",
+    canonical: "https://ap.atomicpathshala.in/neet",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/neet",
+    url: "https://ap.atomicpathshala.in/neet",
     title: "NEET UG 2026 Preparation | Atomic Pathshala",
     description:
       "Target NEET UG with concept clarity, chapter-wise PYQ bank, mock test series, and mentorship by top educators including Senior Chemistry Faculty Firoz Ali.",
@@ -83,9 +83,9 @@ export default async function NeetLandingPage() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/neet",
+      url: "https://ap.atomicpathshala.in/neet",
       educationalCredentialAwarded: "NEET Preparation Certificate",
       occupationalCategory: "Medical Entrance (MBBS / BDS / AYUSH)",
     },
@@ -105,8 +105,8 @@ export default async function NeetLandingPage() {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "NEET UG", item: "https://atomicpathshala.in/neet" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "NEET UG", item: "https://ap.atomicpathshala.in/neet" },
       ],
     },
   ];

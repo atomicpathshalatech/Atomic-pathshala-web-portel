@@ -11,11 +11,11 @@ export const metadata: Metadata = {
   description:
     "Master Chemistry for NEET UG, JEE Main & Board exams with Senior Chemistry Educator Firoz Ali. Concept-first lectures on GOC, reaction mechanisms, physical chemistry formulas, and chapter-wise verified PYQ solutions in Hindi & English medium.",
   alternates: {
-    canonical: "https://atomicpathshala.in/chemistry",
+    canonical: "https://ap.atomicpathshala.in/chemistry",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/chemistry",
+    url: "https://ap.atomicpathshala.in/chemistry",
     title: "NEET & JEE Chemistry Mastery | Atomic Pathshala",
     description:
       "Comprehensive Chemistry coaching by Firoz Ali (M.Sc Chemistry). Complete Organic, Inorganic & Physical Chemistry for NEET, JEE & Boards.",
@@ -92,9 +92,9 @@ export default async function ChemistryLandingPage() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/chemistry",
+      url: "https://ap.atomicpathshala.in/chemistry",
     },
     {
       "@context": "https://schema.org",
@@ -109,8 +109,8 @@ export default async function ChemistryLandingPage() {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "Chemistry Hub", item: "https://atomicpathshala.in/chemistry" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "Chemistry Hub", item: "https://ap.atomicpathshala.in/chemistry" },
       ],
     },
   ];

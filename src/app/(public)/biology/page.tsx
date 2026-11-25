@@ -11,11 +11,11 @@ export const metadata: Metadata = {
   description:
     "Master NEET Biology (Botany & Zoology) with NCERT line-by-line coverage, high-yield diagrams, memory retention charts, and chapter-wise verified PYQs at Atomic Pathshala in Hindi and English medium.",
   alternates: {
-    canonical: "https://atomicpathshala.in/biology",
+    canonical: "https://ap.atomicpathshala.in/biology",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/biology",
+    url: "https://ap.atomicpathshala.in/biology",
     title: "NEET Biology Mastery | Atomic Pathshala",
     description: "Complete NCERT line-by-line Botany & Zoology mastery for NEET UG with verified PYQ bank.",
     images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Biology Atomic Pathshala" }],
@@ -55,16 +55,16 @@ export default async function BiologyLandingPage() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/biology",
+      url: "https://ap.atomicpathshala.in/biology",
     },
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "Biology Hub", item: "https://atomicpathshala.in/biology" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "Biology Hub", item: "https://ap.atomicpathshala.in/biology" },
       ],
     },
   ];

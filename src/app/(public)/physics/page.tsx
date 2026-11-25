@@ -11,11 +11,11 @@ export const metadata: Metadata = {
   description:
     "Learn Physics for NEET UG and IIT-JEE Main/Advanced with top educators Mukul Kashyap and Sashan Yadav at Atomic Pathshala. Concept derivations, formula sheets, short tricks, and chapter-wise verified PYQ solutions in Hindi & English medium.",
   alternates: {
-    canonical: "https://atomicpathshala.in/physics",
+    canonical: "https://ap.atomicpathshala.in/physics",
   },
   openGraph: {
     type: "website",
-    url: "https://atomicpathshala.in/physics",
+    url: "https://ap.atomicpathshala.in/physics",
     title: "NEET & JEE Physics Mastery | Atomic Pathshala",
     description: "Physics derivations, numerical solving techniques, and verified chapter-wise PYQ bank for NEET & JEE.",
     images: [{ url: "/brand/logo.png", width: 1200, height: 630, alt: "Physics Atomic Pathshala" }],
@@ -62,16 +62,16 @@ export default async function PhysicsLandingPage() {
       provider: {
         "@type": "EducationalOrganization",
         name: "Atomic Pathshala",
-        url: "https://atomicpathshala.in",
+        url: "https://ap.atomicpathshala.in",
       },
-      url: "https://atomicpathshala.in/physics",
+      url: "https://ap.atomicpathshala.in/physics",
     },
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: "https://atomicpathshala.in" },
-        { "@type": "ListItem", position: 2, name: "Physics Hub", item: "https://atomicpathshala.in/physics" },
+        { "@type": "ListItem", position: 1, name: "Home", item: "https://ap.atomicpathshala.in" },
+        { "@type": "ListItem", position: 2, name: "Physics Hub", item: "https://ap.atomicpathshala.in/physics" },
       ],
     },
   ];

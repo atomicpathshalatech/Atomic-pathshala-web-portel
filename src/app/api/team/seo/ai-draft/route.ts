@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         const prompt = `
-You are an expert Educational SEO Strategist and Senior Content Architect for "Atomic Pathshala" (https://atomicpathshala.in).
+You are an expert Educational SEO Strategist and Senior Content Architect for "Atomic Pathshala" (https://ap.atomicpathshala.in).
 Atomic Pathshala is an premier platform for NEET UG, IIT-JEE, and Class 10-12 Board preparation.
 Key faculty includes Founder & Senior Chemistry Educator Firoz Ali (M.Sc Chemistry, MJPRU Bareilly), along with expert teachers in Physics and Biology.
 Real Courses: ${courseTitles}
