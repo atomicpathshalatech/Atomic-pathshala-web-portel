@@ -182,8 +182,12 @@ export function ExamRunner({
   const [answers, setAnswers] = useState<Record<string, string | null>>({});
   const [questionStates, setQuestionStates] = useState<Record<string, QuestionState>>({});
 
-  // Mobile Palette Drawer
-  const [paletteOpen, setPaletteOpen] = useState(true);
+  // Mobile Palette Drawer (closed by default on mobile; desktop always shows sidebar)
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Mobile Orientation & Security UI
+  const [isMobileLandscape, setIsMobileLandscape] = useState(false);
+  const [landscapeNoticeDismissed, setLandscapeNoticeDismissed] = useState(false);
 
   // Timer & Submission
   const [remainingSec, setRemainingSec] = useState(0);
@@ -195,6 +199,8 @@ export function ExamRunner({
   const [fullscreenWarning, setFullscreenWarning] = useState(false);
   const [violationsCount, setViolationsCount] = useState(0);
   const submittedRef = useRef(false);
+  const lastViolationAtRef = useRef<Record<string, number>>({});
+  const examEnteredAtRef = useRef<number>(0);
 
   // Answer saving: every choice is sent to the server and sent again until the
   // server confirms it. Only the latest choice per question is ever sent.
@@ -352,10 +358,64 @@ export function ExamRunner({
     return () => clearInterval(interval);
   }, [phase, data?.attempt?.deadlineAt]);
 
-  // 5. Anti-Cheating & Fullscreen Monitors
+  // Fullscreen & Orientation helpers (with safe vendor-prefix & browser fallbacks)
+  const getFullscreenElement = () =>
+    document.fullscreenElement ||
+    (document as unknown as { webkitFullscreenElement?: Element | null }).webkitFullscreenElement ||
+    null;
+
+  const requestFullscreenSafe = async () => {
+    const el = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    };
+    if (el.requestFullscreen) {
+      await el.requestFullscreen();
+    } else if (el.webkitRequestFullscreen) {
+      await el.webkitRequestFullscreen();
+    }
+  };
+
+  const exitFullscreenSafe = () => {
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    } else if (doc.webkitFullscreenElement && doc.webkitExitFullscreen) {
+      Promise.resolve(doc.webkitExitFullscreen()).catch(() => {});
+    }
+  };
+
+  const tryLockPortrait = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const isTouchDevice =
+      window.matchMedia?.("(pointer: coarse)")?.matches || isNativeApp();
+    if (!isTouchDevice) return;
+    const orientation = window.screen?.orientation as
+      | (ScreenOrientation & { lock?: (o: string) => Promise<void>; unlock?: () => void })
+      | undefined;
+    if (!orientation || typeof orientation.lock !== "function") return;
+    try {
+      await orientation.lock("portrait-primary");
+    } catch {
+      try {
+        await orientation.lock("portrait");
+      } catch {
+        // Orientation lock unsupported or requires fullscreen; fail silently
+      }
+    }
+  }, []);
+
+  // 5. Anti-Cheating, Fullscreen, Orientation & Wake-Lock Monitors
   const logViolation = useCallback(
-    async (type: string) => {
+    async (type: "TAB_SWITCH" | "FULLSCREEN_EXIT" | "COPY_PASTE" | "CONTEXT_MENU") => {
       if (phase !== "RUNNING" || submittedRef.current) return;
+      const now = Date.now();
+      const cooldownMs = type === "TAB_SWITCH" ? 2500 : 3000;
+      if (now - (lastViolationAtRef.current[type] ?? 0) < cooldownMs) return;
+      lastViolationAtRef.current[type] = now;
+
       setViolationsCount((prev) => prev + 1);
       try {
         await fetch(`${base}/violations`, {
@@ -372,31 +432,135 @@ export function ExamRunner({
 
   useEffect(() => {
     if (phase !== "RUNNING") return;
+    examEnteredAtRef.current = Date.now();
+
+    let wakeLockSentinel: { release: () => Promise<void> } | null = null;
+    const acquireWakeLock = async () => {
+      try {
+        const nav = navigator as Navigator & {
+          wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+        };
+        if (nav.wakeLock && !document.hidden) {
+          wakeLockSentinel = await nav.wakeLock.request("screen");
+        }
+      } catch {
+        // Wake Lock API unsupported or rejected; ignore
+      }
+    };
+
+    void tryLockPortrait();
+    void acquireWakeLock();
+
+    const checkMobileOrientation = () => {
+      const isTouchDevice =
+        window.matchMedia?.("(pointer: coarse)")?.matches || isNativeApp();
+      if (!isTouchDevice) {
+        setIsMobileLandscape(false);
+        return;
+      }
+      const orientType = window.screen?.orientation?.type;
+      let landscape = false;
+      if (orientType) {
+        landscape = orientType.startsWith("landscape");
+      } else {
+        const legacy = (window as unknown as { orientation?: number }).orientation;
+        landscape =
+          typeof legacy === "number"
+            ? Math.abs(legacy) === 90
+            : window.innerWidth > window.innerHeight;
+      }
+      setIsMobileLandscape(landscape);
+      if (landscape) {
+        setLandscapeNoticeDismissed(false);
+        void tryLockPortrait();
+      }
+    };
+    checkMobileOrientation();
 
     const handleFullscreenChange = () => {
       if (isNativeApp()) return;
-      if (!document.fullscreenElement) {
+      if (!getFullscreenElement()) {
         setFullscreenWarning(true);
-        logViolation("FULLSCREEN_EXIT");
+        void logViolation("FULLSCREEN_EXIT");
       } else {
         setFullscreenWarning(false);
+        void tryLockPortrait();
       }
     };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        logViolation("TAB_SWITCH");
+        void logViolation("TAB_SWITCH");
+      } else {
+        void acquireWakeLock();
+        if (Date.now() - (lastViolationAtRef.current.TAB_SWITCH ?? 0) < 10_000) {
+          toast.warning("Tab or app switch detected and logged. Stay on the exam screen.");
+        }
+      }
+    };
+
+    const handleWindowBlur = () => {
+      // Ignore transient blur right when entering fullscreen (permission prompt)
+      if (Date.now() - examEnteredAtRef.current < 1500) return;
+      if (!document.hidden) {
+        void logViolation("TAB_SWITCH");
+      }
+    };
+
+    const handleCopyCutPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      e.preventDefault();
+      toast.warning("Copy/paste is disabled during the exam.");
+      void logViolation("COPY_PASTE");
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      void logViolation("CONTEXT_MENU");
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPaletteOpen(false);
       }
     };
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleWindowBlur);
+    document.addEventListener("copy", handleCopyCutPaste);
+    document.addEventListener("cut", handleCopyCutPaste);
+    document.addEventListener("paste", handleCopyCutPaste);
+    document.addEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("orientationchange", checkMobileOrientation);
+    window.screen?.orientation?.addEventListener?.("change", checkMobileOrientation);
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleWindowBlur);
+      document.removeEventListener("copy", handleCopyCutPaste);
+      document.removeEventListener("cut", handleCopyCutPaste);
+      document.removeEventListener("paste", handleCopyCutPaste);
+      document.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("orientationchange", checkMobileOrientation);
+      window.screen?.orientation?.removeEventListener?.("change", checkMobileOrientation);
+      window.removeEventListener("keydown", handleKeyDown);
+
+      if (wakeLockSentinel) {
+        wakeLockSentinel.release().catch(() => {});
+      }
+      try {
+        (window.screen?.orientation as ScreenOrientation & { unlock?: () => void })?.unlock?.();
+      } catch {
+        // ignore
+      }
     };
-  }, [phase, logViolation]);
+  }, [phase, logViolation, tryLockPortrait]);
 
   // 6. Save Answer API Call — retried until the server confirms it.
   const markUnsaved = useCallback(() => {
@@ -594,8 +758,11 @@ export function ExamRunner({
       unsavedRef.current = {};
       clearProgress(data?.attempt?.id);
       toast.success(auto ? "Time expired. Test auto-submitted!" : "Test submitted successfully!");
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+      exitFullscreenSafe();
+      try {
+        (window.screen?.orientation as ScreenOrientation & { unlock?: () => void })?.unlock?.();
+      } catch {
+        // ignore
       }
       router.replace(resultUrl);
     } catch {
@@ -608,12 +775,11 @@ export function ExamRunner({
   // 9. Fullscreen Gatekeeper Transition from Instructions
   const handleProceedToFullscreenExam = async () => {
     try {
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
-      }
-      setPhase("RUNNING");
+      await requestFullscreenSafe();
     } catch {
       toast.error("Please allow fullscreen mode to start the exam.");
+    } finally {
+      void tryLockPortrait();
       setPhase("RUNNING");
     }
   };
@@ -741,38 +907,38 @@ export function ExamRunner({
   return (
     <div
       data-exam-runner="true"
-      className="w-full min-h-screen bg-[#f8fafc] dark:bg-slate-950 text-slate-900 dark:text-white flex flex-col justify-between touch-pan-y"
+      className="w-full min-h-screen overflow-x-clip bg-[#f8fafc] dark:bg-slate-950 text-slate-900 dark:text-white flex flex-col justify-between touch-pan-y"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
       {/* 1. TOP HEADER (Matches Screenshot media_1788449327614.png) */}
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-2.5 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 sm:py-2.5 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 sm:gap-4">
           {/* Candidate Info */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shrink-0 flex items-center justify-center">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shrink-0 flex items-center justify-center">
               {data?.candidatePhoto ? (
                 <img src={data.candidatePhoto} alt="Candidate" className="w-full h-full object-cover" />
               ) : (
-                <span className="material-symbols-outlined text-2xl text-slate-400">person</span>
+                <span className="material-symbols-outlined text-xl sm:text-2xl text-slate-400">person</span>
               )}
             </div>
 
-            <div className="text-[11px] leading-tight space-y-0.5">
-              <div>
+            <div className="text-[10px] sm:text-[11px] leading-tight space-y-0.5 min-w-0">
+              <div className="truncate max-w-[170px] sm:max-w-none">
                 <span className="text-slate-400">Candidate Name : </span>
                 <span className="font-black text-slate-800 dark:text-slate-100">{data?.candidateName}</span>
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <span className="text-slate-400">Exam Name : </span>
                 <span className="font-bold text-slate-700 dark:text-slate-200">{data?.test.targetExam || "NEET"}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400">Test Name : </span>
-                <span className="font-bold text-slate-700 dark:text-slate-200">{data?.test.title}</span>
-                <span className="px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono text-[10px] font-bold">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <span className="text-slate-400 hidden sm:inline">Test Name : </span>
+                <span className="font-bold text-slate-700 dark:text-slate-200 truncate max-w-[140px] sm:max-w-none">{data?.test.title}</span>
+                <span className="hidden sm:inline-block px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono text-[10px] font-bold">
                   {formatClock(remainingSec)}
                 </span>
-                <span className="px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 text-[10px] font-bold">
+                <span className="hidden sm:inline-block px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 text-[10px] font-bold">
                   🔋 98%
                 </span>
               </div>
@@ -780,13 +946,13 @@ export function ExamRunner({
           </div>
 
           {/* Right Controls: Independent Language Toggle & Time Left */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto">
             {/* Language Switcher Popover Button */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setCurrentQuestionLang((prev) => (prev === "en" ? "hi" : "en"))}
-                className="px-3.5 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-black transition flex items-center gap-1.5 shadow-sm"
+                className="px-2.5 sm:px-3.5 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] sm:text-xs font-black transition flex items-center gap-1 sm:gap-1.5 shadow-sm whitespace-nowrap"
               >
                 <span className="material-symbols-outlined text-sm">translate</span>
                 <span>{currentQuestionLang === "hi" ? "🌐 हिंदी ▾" : "🌐 English ▾"}</span>
@@ -796,7 +962,7 @@ export function ExamRunner({
             {/* Answers not yet confirmed by the server */}
             {unsavedCount > 0 && (
               <span
-                className="px-2 py-1 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold"
+                className="hidden sm:inline-block px-2 py-1 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold"
                 title="These answers are kept on this device and are being sent again. They are also sent when you submit."
               >
                 Saving {unsavedCount} answer{unsavedCount === 1 ? "" : "s"}…
@@ -804,11 +970,11 @@ export function ExamRunner({
             )}
 
             {/* Time Left Clock */}
-            <div className="text-right">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
+            <div className="text-right shrink-0">
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
                 Time Left
               </span>
-              <span className="text-base sm:text-lg font-black font-mono text-slate-900 dark:text-white tracking-wider">
+              <span className="text-sm sm:text-lg font-black font-mono text-slate-900 dark:text-white tracking-wider">
                 {formatClock(remainingSec)}
               </span>
             </div>
@@ -816,8 +982,10 @@ export function ExamRunner({
             {/* Mobile Palette Drawer Toggle Button */}
             <button
               type="button"
-              onClick={() => setPaletteOpen(!paletteOpen)}
-              className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1"
+              onClick={() => setPaletteOpen((prev) => !prev)}
+              aria-expanded={paletteOpen}
+              aria-label="Toggle Question Palette"
+              className="lg:hidden px-2.5 py-1.5 sm:p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1 shrink-0"
             >
               <span className="material-symbols-outlined text-base">grid_view</span>
               <span>Palette</span>
@@ -826,8 +994,49 @@ export function ExamRunner({
         </div>
       </header>
 
+      {/* Mobile Orientation & Security Status Strip (non-blocking, visible above controls) */}
+      {((isMobileLandscape && !landscapeNoticeDismissed) || violationsCount > 0 || unsavedCount > 0) && (
+        <div className="max-w-7xl mx-auto w-full px-3 sm:px-6 pt-2 space-y-1.5">
+          {isMobileLandscape && !landscapeNoticeDismissed && (
+            <div className="lg:hidden flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-[11px] font-semibold">
+              <span>Portrait mode is recommended for the best exam view. Rotate your device upright.</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => void tryLockPortrait()}
+                  className="px-2 py-1 rounded-lg bg-amber-600 text-white text-[10px] font-bold"
+                >
+                  Portrait
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLandscapeNoticeDismissed(true)}
+                  aria-label="Dismiss orientation notice"
+                  className="px-1.5 py-1 text-amber-700 dark:text-amber-300 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+          {violationsCount > 0 && (
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-[11px] font-bold">
+              <span className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">shield_alert</span>
+                <span>Proctoring Notice: {violationsCount} security warning{violationsCount === 1 ? "" : "s"} logged</span>
+              </span>
+            </div>
+          )}
+          {unsavedCount > 0 && (
+            <div className="sm:hidden px-3 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[11px] font-bold">
+              Saving {unsavedCount} answer{unsavedCount === 1 ? "" : "s"}…
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 2. MAIN EXAM BODY */}
-      <main className="max-w-7xl mx-auto w-full p-3 sm:p-6 pb-28 sm:pb-20 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <main className="max-w-7xl mx-auto w-full p-3 sm:p-6 pb-8 sm:pb-20 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
         {/* LEFT COLUMN: Question Display & Subject Tabs (8 Cols) — min-w-0 so a
             wide equation/table can never stretch the grid past the screen */}
         <div className="lg:col-span-8 space-y-4 min-w-0">
@@ -866,9 +1075,9 @@ export function ExamRunner({
           </div>
 
           {/* Question Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 min-h-[380px] min-w-0">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5 sm:space-y-6 min-h-[240px] sm:min-h-[380px] min-w-0">
             {/* Statement */}
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <FormulaText
                 text={statement || "No statement available."}
                 className="text-sm sm:text-base font-normal text-slate-900 dark:text-white leading-relaxed block"
@@ -876,11 +1085,12 @@ export function ExamRunner({
 
               {/* CamDraw Universal Vector Structure */}
               {currentQ?.camDrawData && (
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex justify-center my-3">
+                <div className="p-2.5 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex justify-center my-3 w-full max-w-full overflow-x-auto">
                   <CamDrawRenderer
                     document={currentQ.camDrawData}
                     theme="light"
                     maxWidth={550}
+                    className="w-full max-w-full"
                   />
                 </div>
               )}
@@ -898,7 +1108,7 @@ export function ExamRunner({
             </div>
 
             {/* Options List */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-2.5 sm:space-y-3 pt-1 sm:pt-2">
               {OPTION_KEYS.map((key) => {
                 const optVal = optionsObj[key];
                 if (!optVal && optVal !== "") return null;
@@ -937,13 +1147,13 @@ export function ExamRunner({
           </div>
 
           {/* 3. Action Buttons Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 pt-1 sm:pt-2">
             <div className="flex flex-wrap items-center gap-2">
               {/* Save & Next (Green) */}
               <button
                 type="button"
                 onClick={handleSaveAndNext}
-                className="px-5 py-2.5 rounded-xl bg-[#047857] hover:bg-[#065f46] text-white font-bold text-xs shadow transition active:scale-95"
+                className="px-3.5 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-[#047857] hover:bg-[#065f46] text-white font-bold text-xs shadow transition active:scale-95"
               >
                 Save &amp; Next
               </button>
@@ -952,7 +1162,7 @@ export function ExamRunner({
               <button
                 type="button"
                 onClick={handleClearResponse}
-                className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition active:scale-95"
+                className="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition active:scale-95"
               >
                 Clear
               </button>
@@ -961,7 +1171,7 @@ export function ExamRunner({
               <button
                 type="button"
                 onClick={handleSaveAndMarkForReview}
-                className="px-5 py-2.5 rounded-xl bg-[#d97706] hover:bg-[#b45309] text-white font-bold text-xs shadow transition active:scale-95"
+                className="px-3.5 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-[#d97706] hover:bg-[#b45309] text-white font-bold text-xs shadow transition active:scale-95"
               >
                 Save &amp; Mark for Review
               </button>
@@ -970,37 +1180,39 @@ export function ExamRunner({
               <button
                 type="button"
                 onClick={handleMarkForReviewAndNext}
-                className="px-5 py-2.5 rounded-xl bg-[#0369a1] hover:bg-[#075985] text-white font-bold text-xs shadow transition active:scale-95"
+                className="px-3.5 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-[#0369a1] hover:bg-[#075985] text-white font-bold text-xs shadow transition active:scale-95"
               >
                 Mark for Review &amp; Next
               </button>
             </div>
 
             {/* Navigation & Submit */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={currentIndex === 0}
-                onClick={() => navigateToQuestion(currentIndex - 1)}
-                className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 disabled:opacity-40"
-              >
-                &lt;&lt; Back
-              </button>
+            <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={currentIndex === 0}
+                  onClick={() => navigateToQuestion(currentIndex - 1)}
+                  className="px-3 py-2 sm:px-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                >
+                  &lt;&lt; Back
+                </button>
 
-              <button
-                type="button"
-                disabled={currentIndex === (data?.questions.length || 1) - 1}
-                onClick={() => navigateToQuestion(currentIndex + 1)}
-                className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 disabled:opacity-40"
-              >
-                Next &gt;&gt;
-              </button>
+                <button
+                  type="button"
+                  disabled={currentIndex === (data?.questions.length || 1) - 1}
+                  onClick={() => navigateToQuestion(currentIndex + 1)}
+                  className="px-3 py-2 sm:px-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                >
+                  Next &gt;&gt;
+                </button>
+              </div>
 
               {/* Submit (Dark Red) */}
               <button
                 type="button"
                 onClick={() => setConfirmingSubmit(true)}
-                className="px-6 py-2.5 rounded-xl bg-[#b91c1c] hover:bg-[#991b1b] text-white font-black text-xs shadow-md shadow-red-700/20 transition active:scale-95"
+                className="px-5 py-2 sm:px-6 sm:py-2.5 rounded-xl bg-[#b91c1c] hover:bg-[#991b1b] text-white font-black text-xs shadow-md shadow-red-700/20 transition active:scale-95"
               >
                 Submit
               </button>
@@ -1008,12 +1220,36 @@ export function ExamRunner({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Question Palette (4 Cols) */}
+        {/* Mobile Palette Backdrop */}
+        {paletteOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs lg:hidden"
+            onClick={() => setPaletteOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* RIGHT COLUMN (Desktop) / SLIDE-OVER DRAWER (Mobile): Question Palette */}
         <div
-          className={`lg:col-span-4 space-y-4 min-w-0 ${
-            paletteOpen ? "block" : "hidden lg:block"
+          className={`min-w-0 space-y-4 ${
+            paletteOpen
+              ? "fixed inset-y-0 right-0 z-50 w-[88vw] max-w-sm bg-[#f8fafc] dark:bg-slate-950 p-4 overflow-y-auto overscroll-contain shadow-2xl border-l border-slate-200 dark:border-slate-800 lg:static lg:inset-auto lg:z-auto lg:w-auto lg:max-w-none lg:bg-transparent lg:dark:bg-transparent lg:p-0 lg:overflow-visible lg:shadow-none lg:border-0 lg:col-span-4 lg:block"
+              : "hidden lg:block lg:col-span-4"
           }`}
         >
+          {/* Mobile Drawer Header */}
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 lg:hidden">
+            <h3 className="text-sm font-black text-slate-900 dark:text-white">Question Palette</h3>
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(false)}
+              aria-label="Close Question Palette"
+              className="px-2.5 py-1 rounded-lg bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold"
+            >
+              ✕ Close
+            </button>
+          </div>
+
           {/* Status Summary Box */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
             <div className="grid grid-cols-2 gap-2.5 text-[11px] font-bold">
@@ -1055,19 +1291,22 @@ export function ExamRunner({
           </div>
 
           {/* Question Grid for Active Subject */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
             <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">
               Question Palette — {activeSubject}
             </h4>
 
-            <div className="grid grid-cols-5 sm:grid-cols-5 gap-2 max-h-[420px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-5 gap-2 max-h-[52vh] lg:max-h-[420px] overflow-y-auto pr-1">
               {activeSubjectQuestions.map((q) => {
                 const isCurrent = q.globalIdx === currentIndex;
                 return (
                   <button
                     key={q.id}
                     type="button"
-                    onClick={() => navigateToQuestion(q.globalIdx)}
+                    onClick={() => {
+                      navigateToQuestion(q.globalIdx);
+                      setPaletteOpen(false);
+                    }}
                     className={getPaletteBtnClass(q.id, isCurrent)}
                   >
                     {String(q.globalIdx + 1).padStart(2, "0")}
@@ -1082,7 +1321,7 @@ export function ExamRunner({
       {/* 4. FULLSCREEN EXIT WARNING MODAL */}
       {fullscreenWarning && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 max-w-md w-full text-center space-y-5 shadow-2xl border border-red-300 dark:border-red-900 animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full text-center space-y-5 shadow-2xl border border-red-300 dark:border-red-900 animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 rounded-3xl bg-red-100 dark:bg-red-950 text-red-600 mx-auto flex items-center justify-center shadow-lg shadow-red-500/10">
               <span className="material-symbols-outlined text-3xl">warning</span>
             </div>
@@ -1101,9 +1340,8 @@ export function ExamRunner({
                 type="button"
                 onClick={async () => {
                   try {
-                    if (document.documentElement.requestFullscreen) {
-                      await document.documentElement.requestFullscreen();
-                    }
+                    await requestFullscreenSafe();
+                    void tryLockPortrait();
                   } catch {
                     // ignore
                   } finally {
