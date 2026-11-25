@@ -52,6 +52,7 @@ export const TEAM_NAV_CONFIG: TeamNavGroup[] = [
       { href: "/team/questions/reports", label: "Question Reports", icon: "flag", permission: PERMISSIONS.QUESTION_READ, description: "Quality audit reports and flagged questions" },
       { href: "/team/qc", label: "Question QC", icon: "verified_user", permission: PERMISSIONS.QUESTION_VERIFY, description: "Quality control and bilingual verification" },
       { href: "/team/questions/collections", label: "Question Collections", icon: "folder_special", permission: PERMISSIONS.QUESTION_READ, description: "Grouped question sets" },
+      { href: "/team/questions/ppt-export", label: "Question ID to PPT", icon: "slideshow", permission: PERMISSIONS.QUESTION_READ, description: "Generate classroom PowerPoint presentations from Question IDs" },
       { href: "/team/questions/ai-generated", label: "AI Generated Questions", icon: "psychology", permission: PERMISSIONS.QUESTION_CREATE, description: "Generative AI question authoring" },
       { href: "/team/question-extract", label: "Question Extract", icon: "document_scanner", permission: PERMISSIONS.QUESTION_CREATE, description: "OCR and PDF extraction pipeline" },
       { href: "/team/pyq-library", label: "PYQ Library", icon: "history_edu", permission: PERMISSIONS.QUESTION_READ, description: "Previous Year Questions for NEET & JEE" },

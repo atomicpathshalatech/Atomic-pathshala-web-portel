@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { QuestionReviewItem } from "@/lib/test-engine/analysis-engine";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
+import { SolutionSpeechPlayer } from "@/components/solutions/SolutionSpeechPlayer";
 
 export function QuestionReviewSection({
   questions,
@@ -304,9 +305,12 @@ export function QuestionReviewSection({
               )}
               {allOpen !== openSolutions.has(q.questionId) && solution && (
                 <div className="p-5 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300 font-bold uppercase tracking-wider font-mono text-[11px]">
-                    <span className="material-symbols-outlined text-sm">lightbulb</span>
-                    <span>Step-by-Step Solution &amp; Conceptual Analysis</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300 font-bold uppercase tracking-wider font-mono text-[11px]">
+                      <span className="material-symbols-outlined text-sm">lightbulb</span>
+                      <span>Step-by-Step Solution &amp; Conceptual Analysis</span>
+                    </div>
+                    <SolutionSpeechPlayer text={solution} language={lang} />
                   </div>
                   <FormulaText
                     text={solution}

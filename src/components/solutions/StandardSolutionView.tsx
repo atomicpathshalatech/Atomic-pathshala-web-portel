@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { MathText } from "@/components/ai-chat/MathText";
+import { SolutionSpeechPlayer } from "@/components/solutions/SolutionSpeechPlayer";
 import {
   StandardSolution,
   parseStandardSolution,
@@ -132,16 +133,22 @@ export function StandardSolutionView({
 
       {/* SECTION 3: STEP-BY-STEP SOLUTION */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-sm space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold text-xs tracking-wider uppercase">
             <span className="material-symbols-outlined text-base text-blue-600 dark:text-blue-400">
               format_list_numbered
             </span>
             <h4>{isHindi ? "3. चरण-दर-चरण हल (Step-by-Step Solution)" : "3. Step-by-Step Solution"}</h4>
           </div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-            Verified Derivation
-          </span>
+          <div className="flex items-center gap-2">
+            <SolutionSpeechPlayer
+              text={[parsedSol.conceptUsed, parsedSol.stepByStep].filter(Boolean).join(". ")}
+              language={lang}
+            />
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+              Verified Derivation
+            </span>
+          </div>
         </div>
 
         {/* Embedded Diagram / Chemical Structure if available */}

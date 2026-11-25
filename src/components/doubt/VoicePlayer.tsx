@@ -24,48 +24,98 @@ export function VoicePlayer({
 }: VoicePlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number>(durationSec || 0);
   const [playbackRate, setPlaybackRate] = useState(1);
 
+  const validUrl = url?.trim() || "";
+
   useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setErrorMsg(validUrl ? null : "Audio explanation is not available.");
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !validUrl) return;
 
     const onLoadedMetadata = () => {
       if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
         setDuration(Math.round(audio.duration));
       }
+      setIsLoading(false);
+      setErrorMsg(null);
     };
 
-    const onTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
+    const onWaiting = () => setIsLoading(true);
+    const onCanPlay = () => setIsLoading(false);
+    const onPlay = () => {
+      setIsPlaying(true);
+      setIsLoading(false);
+      setErrorMsg(null);
     };
-
+    const onPause = () => setIsPlaying(false);
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     const onEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
     };
+    const onError = () => {
+      setIsPlaying(false);
+      setIsLoading(false);
+      setErrorMsg("Unable to load audio. The file may be missing, expired, or unsupported on this browser.");
+    };
 
     audio.addEventListener("loadedmetadata", onLoadedMetadata);
+    audio.addEventListener("waiting", onWaiting);
+    audio.addEventListener("canplay", onCanPlay);
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
 
     return () => {
       audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("waiting", onWaiting);
+      audio.removeEventListener("canplay", onCanPlay);
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
     };
-  }, [url]);
+  }, [validUrl]);
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !validUrl) {
+      setErrorMsg("Audio explanation is not available.");
+      return;
+    }
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
-    } else {
-      audio.play().then(() => setIsPlaying(true)).catch((err) => console.error("Audio playback error:", err));
+      return;
+    }
+    try {
+      setErrorMsg(null);
+      setIsLoading(true);
+      if (audio.error) {
+        audio.load();
+      }
+      await audio.play();
+      setIsPlaying(true);
+    } catch (err) {
+      setIsPlaying(false);
+      const name = err instanceof Error ? err.name : "";
+      setErrorMsg(
+        name === "NotAllowedError"
+          ? "Playback blocked by browser. Tap Play again to listen."
+          : "Could not play audio explanation."
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -92,7 +142,7 @@ export function VoicePlayer({
     <div
       className={`rounded-2xl border border-blue-500/20 bg-blue-950/20 dark:bg-slate-900/80 p-3.5 sm:p-4 backdrop-blur-xs transition-all shadow-sm ${className}`}
     >
-      <audio ref={audioRef} src={url} preload="metadata" />
+      {validUrl && <audio ref={audioRef} src={validUrl} preload="metadata" playsInline />}
 
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -104,7 +154,7 @@ export function VoicePlayer({
               {title}
             </p>
             <p className="text-[10px] text-slate-500 dark:text-slate-400">
-              Audio Answer • {formatTime(duration)}
+              {isLoading ? "Loading audio…" : `Audio Answer • ${formatTime(duration)}`}
             </p>
           </div>
         </div>
@@ -113,12 +163,19 @@ export function VoicePlayer({
         <button
           type="button"
           onClick={cycleSpeed}
-          className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition"
+          disabled={!validUrl}
+          className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition disabled:opacity-40"
           title="Playback speed"
         >
           {playbackRate}x
         </button>
       </div>
+
+      {errorMsg && (
+        <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-[11px] font-medium text-red-700 dark:text-red-300">
+          {errorMsg}
+        </div>
+      )}
 
       {/* Controls & Waveform Progress */}
       <div className="flex items-center gap-3">
@@ -126,12 +183,17 @@ export function VoicePlayer({
         <button
           type="button"
           onClick={togglePlay}
-          className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-md transition-transform active:scale-95 shrink-0"
+          disabled={!validUrl || isLoading}
+          className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-md transition-transform active:scale-95 shrink-0 disabled:opacity-50"
           title={isPlaying ? "Pause" : "Play Voice Answer"}
         >
-          <span className="material-symbols-outlined text-2xl">
-            {isPlaying ? "pause" : "play_arrow"}
-          </span>
+          {isLoading ? (
+            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <span className="material-symbols-outlined text-2xl">
+              {isPlaying ? "pause" : "play_arrow"}
+            </span>
+          )}
         </button>
 
         {/* Scrubber and Time */}
