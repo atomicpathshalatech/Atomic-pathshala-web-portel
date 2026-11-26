@@ -20,11 +20,36 @@ export interface PptQuestionItem {
   topic: string | null;
   type: string;
   difficulty: string;
+  sourceLabel: string | null;
   imageUrl: string | null;
   camDrawData: unknown;
   english: PptQuestionTranslation | null;
   hindi: PptQuestionTranslation | null;
   warnings: string[];
+}
+
+function buildSourceLabel(q: {
+  pyqExam: string | null;
+  pyqYear: number | null;
+  pyqSource: string | null;
+  ncertBook: string | null;
+  category: string | null;
+}): string | null {
+  const exam = q.pyqExam?.trim();
+  const year = q.pyqYear;
+  const source = q.pyqSource?.trim();
+  const ncert = q.ncertBook?.trim();
+  const category = q.category?.trim();
+
+  if (exam && year) {
+    const hasPyq = /pyq/i.test(exam);
+    return hasPyq ? `${exam} – ${year}` : `${exam} PYQ – ${year}`;
+  }
+  if (source) return source;
+  if (exam) return exam;
+  if (ncert) return /ncert/i.test(ncert) ? ncert : `NCERT (${ncert})`;
+  if (category && /^(ncert|pyq|exemplar|jee|neet|aiims)/i.test(category)) return category;
+  return null;
 }
 
 function isReferenceImageUrl(url?: string | null): boolean {
@@ -243,6 +268,7 @@ export async function POST(req: NextRequest) {
         topic: q.topic,
         type: q.type,
         difficulty: q.difficulty,
+        sourceLabel: buildSourceLabel(q),
         imageUrl,
         camDrawData: q.camDrawData ?? null,
         english,

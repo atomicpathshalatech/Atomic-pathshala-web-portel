@@ -5,19 +5,25 @@ import type { PptQuestionItem } from "@/app/api/team/questions/export-ppt/lookup
 import {
   buildSlidePlan,
   DEFAULT_PPT_SETTINGS,
+  validateSlidesBeforeExport,
   type PptExportSettings,
   type PptFontMode,
   type PptLanguageMode,
+  type PlannedOption,
   type PlannedSlide,
+  type SlideValidationResult,
 } from "./question-ppt-plan";
 
 export {
   buildSlidePlan,
   DEFAULT_PPT_SETTINGS,
+  validateSlidesBeforeExport,
   type PptExportSettings,
   type PptFontMode,
   type PptLanguageMode,
+  type PlannedOption,
   type PlannedSlide,
+  type SlideValidationResult,
 };
 
 async function renderCamDrawToPngDataUrl(camDrawData: unknown): Promise<string | null> {

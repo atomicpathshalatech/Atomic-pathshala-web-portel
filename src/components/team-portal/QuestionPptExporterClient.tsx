@@ -9,6 +9,7 @@ import {
   buildSlidePlan,
   DEFAULT_PPT_SETTINGS,
   generateQuestionsPptx,
+  validateSlidesBeforeExport,
   type PptExportSettings,
   type PptFontMode,
   type PptLanguageMode,
@@ -66,6 +67,11 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
   const slides = useMemo(
     () => buildSlidePlan(activeQuestions, settings),
     [activeQuestions, settings]
+  );
+
+  const validation = useMemo(
+    () => validateSlidesBeforeExport(slides),
+    [slides]
   );
 
   useEffect(() => {
@@ -458,7 +464,7 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
           {/* Export Settings */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-sm text-xs">
             <h3 className="font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 text-[11px]">
-              PPT Export Settings (16:9 Widescreen)
+              PPT Export Settings (16:9 Black &amp; Orange)
             </h3>
 
             <div className="grid grid-cols-2 gap-2.5">
@@ -489,16 +495,6 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1">Header Subtitle</label>
-              <input
-                type="text"
-                value={settings.headerSubtitle}
-                onChange={(e) => setSettings({ ...settings, headerSubtitle: e.target.value })}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-medium"
-              />
-            </div>
-
-            <div>
               <label className="block text-[11px] font-bold text-slate-500 mb-1">PPT Filename</label>
               <input
                 type="text"
@@ -508,50 +504,26 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+            <div className="space-y-2 pt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settings.includeBranding}
-                  onChange={(e) => setSettings({ ...settings, includeBranding: e.target.checked })}
+                  checked={settings.includeSourceBadge}
+                  onChange={(e) => setSettings({ ...settings, includeSourceBadge: e.target.checked })}
                 />
-                <span>Branding (ON)</span>
+                <span>Show Question Source Badge (only if saved in DB)</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.includeQuestionNumber}
-                  onChange={(e) => setSettings({ ...settings, includeQuestionNumber: e.target.checked })}
-                />
-                <span>Question No.</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.includeQuestionId}
-                  onChange={(e) => setSettings({ ...settings, includeQuestionId: e.target.checked })}
-                />
-                <span>Question ID</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.includeCorrectAnswer}
-                  onChange={(e) => setSettings({ ...settings, includeCorrectAnswer: e.target.checked })}
-                />
-                <span>Correct Answer</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer col-span-2">
                 <input
                   type="checkbox"
                   checked={settings.splitLongQuestions}
                   onChange={(e) => setSettings({ ...settings, splitLongQuestions: e.target.checked })}
                 />
-                <span>Auto-split very long questions across 2 slides</span>
+                <span>Auto-split very long questions to preserve solution space</span>
               </label>
             </div>
             <p className="text-[10px] text-slate-400">
-              Solutions are excluded from classroom PPT slides (kept in Review Questions only).
+              Pure Black (#000000) + Orange (#F97316) editable PPTX with blank lower area for live pen-tab solutions.
             </p>
           </div>
         </div>
@@ -590,7 +562,7 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
                     type="button"
                     onClick={() => setZoomPercent(z)}
                     className={`px-2 py-1 rounded-lg cursor-pointer ${
-                      zoomPercent === z ? "bg-white dark:bg-slate-700 shadow-2xs text-blue-600" : "text-slate-500"
+                      zoomPercent === z ? "bg-white dark:bg-slate-700 shadow-2xs text-orange-600" : "text-slate-500"
                     }`}
                   >
                     {z}%
@@ -608,16 +580,16 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
             </div>
           </div>
 
-          {/* 16:9 Slide Canvas */}
+          {/* 16:9 Pure Black + Orange Slide Canvas */}
           <div className="bg-slate-200/70 dark:bg-slate-950 rounded-2xl p-3 sm:p-6 border border-slate-300 dark:border-slate-800 overflow-x-auto flex justify-center">
             {!currentSlide ? (
-              <div className="w-full aspect-video bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center text-center p-8 space-y-2">
-                <span className="material-symbols-outlined text-4xl text-slate-400">slideshow</span>
-                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+              <div className="w-full aspect-video bg-black rounded-xl border border-dashed border-zinc-700 flex flex-col items-center justify-center text-center p-8 space-y-2">
+                <span className="material-symbols-outlined text-4xl text-orange-500">slideshow</span>
+                <p className="text-sm font-bold text-white">
                   No Slide Preview Yet
                 </p>
-                <p className="text-xs text-slate-500 max-w-md">
-                  Paste Question IDs on the left and click &ldquo;Fetch &amp; Preview Slides&rdquo; to inspect the exact 16:9 classroom slides before downloading.
+                <p className="text-xs text-zinc-400 max-w-md">
+                  Paste Question IDs on the left and click &ldquo;Fetch &amp; Preview Slides&rdquo; to inspect the exact 16:9 Atomic Pathshala Black &amp; Orange slides.
                 </p>
               </div>
             ) : (
@@ -625,83 +597,67 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
                 style={{ width: `${zoomPercent}%`, maxWidth: "100%" }}
                 className="transition-all"
               >
-                <div className="w-full aspect-video bg-white text-slate-900 rounded-xl shadow-xl border border-slate-300 flex flex-col justify-between overflow-hidden relative">
-                  {/* Top Blue Accent Bar */}
-                  <div className="h-1.5 w-full bg-[#0050cb] shrink-0" />
-
-                  {/* Slide Header */}
-                  <div className="px-6 pt-2.5 pb-2 border-b border-slate-200 flex items-center justify-between gap-4 shrink-0">
-                    <div className="text-xs font-bold truncate">
-                      {settings.includeBranding && (
-                        <span className="text-[#0050cb] font-black mr-2">ATOMIC PATHSHALA</span>
-                      )}
-                      <span className="text-slate-500">
-                        {settings.includeBranding ? "| " : ""}
-                        {settings.includeSubjectHeader && currentSlide.question.subject
-                          ? `${currentSlide.question.subject.toUpperCase()} • ${settings.headerSubtitle}`
-                          : settings.headerSubtitle}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {currentSlide.isSplit && (
-                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
-                          Split Slide ({currentSlide.kind === "STATEMENT_ONLY" ? "Part 1/2" : "Part 2/2"})
-                        </span>
-                      )}
-                      {settings.includeQuestionId && (
-                        <span className="text-[11px] font-mono font-bold text-slate-600">
-                          ID: {currentSlide.question.questionCode || currentSlide.question.id}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Slide Main Body */}
-                  <div className="flex-1 px-6 py-3 overflow-y-auto space-y-3">
-                    {settings.includeQuestionNumber && (
-                      <div className="text-sm sm:text-base font-black text-[#0050cb]">
-                        Q. {String(currentSlide.questionIndex + 1).padStart(2, "0")}
-                        {currentSlide.kind === "OPTIONS_ONLY" ? " (Contd.)" : ""}
+                <div className="w-full aspect-video bg-black text-white rounded-xl shadow-2xl border border-zinc-800 p-4 sm:p-6 flex flex-col justify-between overflow-hidden relative">
+                  {/* UPPER PORTION: Header + Logo + Question + Source Badge + Options */}
+                  <div className="space-y-2.5">
+                    {/* Top Row: Orange Pill Header (Left) + Original Atomic Pathshala Logo (Right) */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="inline-flex items-center px-4 py-1 rounded-full bg-orange-500 text-black font-extrabold text-xs sm:text-sm tracking-tight shrink-0">
+                        {currentSlide.headerTitle}
                       </div>
-                    )}
 
-                    {/* Statement + Media */}
+                      <img
+                        src="/brand/logo.png"
+                        alt="Atomic Pathshala Logo"
+                        className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0"
+                      />
+                    </div>
+
+                    {/* Question Statement + Right-side Diagram */}
                     {currentSlide.kind !== "OPTIONS_ONLY" && (
                       <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <div className="flex-1 min-w-0 space-y-2 text-xs sm:text-sm text-slate-900 leading-relaxed">
+                        <div className="flex-1 min-w-0 space-y-1.5 text-xs sm:text-sm text-white leading-snug">
                           {currentSlide.statementEn && (
-                            <FormulaText text={currentSlide.statementEn} className="block" />
+                            <FormulaText text={currentSlide.statementEn} className="block text-white" />
                           )}
                           {currentSlide.statementHi && (
-                            <FormulaText text={currentSlide.statementHi} className="block text-slate-700 pt-1 border-t border-slate-100" />
+                            <FormulaText text={currentSlide.statementHi} className="block text-zinc-100 pt-1" />
                           )}
                         </div>
 
                         {currentSlide.question.camDrawData ? (
-                          <div className="w-full sm:w-56 shrink-0 p-2 rounded-lg border border-slate-200 bg-slate-50 flex justify-center">
+                          <div className="w-full sm:w-48 shrink-0 p-1.5 rounded bg-white flex justify-center">
                             <CamDrawRenderer
                               document={currentSlide.question.camDrawData as Parameters<typeof CamDrawRenderer>[0]["document"]}
                               theme="light"
-                              maxWidth={220}
+                              maxWidth={190}
                               className="w-full max-w-full"
                             />
                           </div>
                         ) : currentSlide.question.imageUrl ? (
-                          <div className="w-full sm:w-56 shrink-0 p-2 rounded-lg border border-slate-200 bg-white flex justify-center">
+                          <div className="w-full sm:w-48 shrink-0 flex justify-center">
                             <img
                               src={currentSlide.question.imageUrl}
                               alt="Question Diagram"
-                              className="max-h-40 max-w-full object-contain"
+                              className="max-h-32 max-w-full object-contain"
                             />
                           </div>
                         ) : null}
                       </div>
                     )}
 
-                    {/* Options */}
+                    {/* Dynamic Source Badge (Yellow text, thin yellow outline, black bg; hidden if unavailable) */}
+                    {currentSlide.sourceLabel && (
+                      <div>
+                        <span className="inline-block px-3 py-0.5 rounded-full bg-black border border-yellow-400 text-yellow-400 text-[10px] sm:text-[11px] font-bold">
+                          {currentSlide.sourceLabel}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Options: Vertically aligned 1, 2, 3, 4 with orange circle markers & white text (no boxes/borders) */}
                     {currentSlide.kind !== "STATEMENT_ONLY" && (
-                      <div className="space-y-1.5 pt-1">
+                      <div className="space-y-1.5 pt-0.5">
                         {(currentSlide.optionsEn.length > 0
                           ? currentSlide.optionsEn
                           : currentSlide.optionsHi
@@ -709,16 +665,15 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
                           const hiText =
                             settings.language === "BILINGUAL" ? currentSlide.optionsHi[idx]?.text : null;
                           return (
-                            <div
-                              key={opt.key}
-                              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 flex items-start gap-2 text-xs text-slate-900"
-                            >
-                              <span className="font-black text-[#0050cb] shrink-0">{opt.key}.</span>
-                              <div className="flex-1 min-w-0">
-                                <FormulaText text={opt.text} className="inline" />
+                            <div key={opt.marker} className="flex items-start gap-2.5 text-xs sm:text-sm text-white">
+                              <span className="w-5 h-5 rounded-full bg-orange-500 text-black font-extrabold text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                                {opt.marker}
+                              </span>
+                              <div className="flex-1 min-w-0 leading-snug">
+                                <FormulaText text={opt.text} className="inline text-white" />
                                 {hiText && (
-                                  <span className="text-slate-600 ml-2">
-                                    | <FormulaText text={hiText} className="inline" />
+                                  <span className="text-zinc-300 ml-2">
+                                    | <FormulaText text={hiText} className="inline text-zinc-200" />
                                   </span>
                                 )}
                               </div>
@@ -729,27 +684,36 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
                     )}
                   </div>
 
-                  {/* Slide Footer */}
-                  <div className="px-6 py-2 border-t border-slate-200 flex items-center justify-between text-xs shrink-0 bg-slate-50/50">
-                    <div>
-                      {settings.includeCorrectAnswer && currentSlide.kind !== "STATEMENT_ONLY" && (
-                        <span
-                          className={`font-black ${
-                            currentSlide.correctAnswerLabel ? "text-emerald-700" : "text-red-600"
-                          }`}
-                        >
-                          Correct Answer: {currentSlide.correctAnswerLabel ?? "Not Available"}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[11px] font-bold text-slate-500">
-                      Slide {currentSlide.slideNumber} / {slides.length}
-                    </span>
-                  </div>
+                  {/* LOWER PORTION: Pure Blank Black Area for Live Pen-Tab / Whiteboard Solution */}
+                  <div className="flex-1 min-h-[28%]" />
                 </div>
               </div>
             )}
           </div>
+
+          {/* Automatic Pre-Export Validation Checklist */}
+          {slides.length > 0 && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-2 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                  Pre-Export Validation
+                </h4>
+                <span className={`text-[11px] font-bold ${validation.valid ? "text-emerald-600" : "text-red-600"}`}>
+                  {validation.valid ? "All checks passed" : "Action required"}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
+                {validation.checks.map((chk) => (
+                  <div key={chk.label} className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                    <span className={chk.passed ? "text-emerald-600 font-bold" : "text-red-600 font-bold"}>
+                      {chk.passed ? "✓" : "✗"}
+                    </span>
+                    <span>{chk.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Preview Confirmation & Download Bar */}
           {slides.length > 0 && (
@@ -759,7 +723,7 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
                   type="checkbox"
                   checked={previewConfirmed}
                   onChange={(e) => setPreviewConfirmed(e.target.checked)}
-                  className="w-4 h-4 accent-blue-600"
+                  className="w-4 h-4 accent-orange-500"
                 />
                 <span>
                   I have verified the slide preview ({activeQuestions.length} questions, {slides.length} slides)
@@ -768,12 +732,12 @@ export function QuestionPptExporterClient({ userName }: { userName: string }) {
 
               <button
                 type="button"
-                disabled={exporting || !previewConfirmed || activeQuestions.length === 0}
+                disabled={exporting || !previewConfirmed || !validation.valid || activeQuestions.length === 0}
                 onClick={() => void handleDownloadPpt()}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 text-black text-xs font-black shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-2"
               >
                 <span className="material-symbols-outlined text-base">download</span>
-                <span>{exporting ? "Generating .pptx..." : "Download PowerPoint (.pptx)"}</span>
+                <span>{exporting ? "Generating Editable .pptx..." : "Download Editable PPTX"}</span>
               </button>
             </div>
           )}

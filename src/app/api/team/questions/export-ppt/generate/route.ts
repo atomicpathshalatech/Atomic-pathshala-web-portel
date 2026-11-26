@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import PptxGenJS from "pptxgenjs";
@@ -6,7 +8,16 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiError, handleApiError } from "@/lib/api/response";
 import type { PptQuestionItem } from "@/app/api/team/questions/export-ppt/lookup/route";
-import { buildSlidePlan, type PptExportSettings } from "@/lib/questions/question-ppt-plan";
+import {
+  buildSlidePlan,
+  validateSlidesBeforeExport,
+  type PptExportSettings,
+} from "@/lib/questions/question-ppt-plan";
+
+const BRAND_ORANGE = "F97316";
+const PURE_BLACK = "000000";
+const PURE_WHITE = "FFFFFF";
+const BADGE_YELLOW = "FACC15";
 
 const LATEX_SYMBOLS: Array<[RegExp, string]> = [
   [/\\rightleftharpoons/g, " ⇌ "],
@@ -92,11 +103,17 @@ function normalizeLatexToText(raw: string): string {
   return out;
 }
 
+function containsDevanagari(text: string): boolean {
+  return /[\u0900-\u097F]/.test(text);
+}
+
 function toPptxRichRuns(
   rawText: string,
-  baseOpts: { fontSize: number; color: string; bold?: boolean; fontFace?: string }
+  baseOpts: { fontSize: number; color: string; bold?: boolean }
 ): PptxGenJS.TextProps[] {
   const normalized = normalizeLatexToText(rawText);
+  // Nirmala UI renders both crisp Devanagari (Hindi) and Latin/scientific Unicode cleanly
+  const fontFace = containsDevanagari(normalized) ? "Nirmala UI" : "Calibri";
   const runs: PptxGenJS.TextProps[] = [];
   const tokenRegex = /(\^\{[^}]+\}|_\{[^}]+\}|\^[A-Za-z0-9+\-]|_[A-Za-z0-9+\-])/g;
   let lastIndex = 0;
@@ -110,7 +127,7 @@ function toPptxRichRuns(
           fontSize: baseOpts.fontSize,
           color: baseOpts.color,
           bold: baseOpts.bold,
-          fontFace: baseOpts.fontFace ?? "Calibri",
+          fontFace,
         },
       });
     }
@@ -123,7 +140,7 @@ function toPptxRichRuns(
         fontSize: baseOpts.fontSize,
         color: baseOpts.color,
         bold: baseOpts.bold,
-        fontFace: baseOpts.fontFace ?? "Calibri",
+        fontFace,
         superscript: isSup,
         subscript: !isSup,
       },
@@ -138,7 +155,7 @@ function toPptxRichRuns(
         fontSize: baseOpts.fontSize,
         color: baseOpts.color,
         bold: baseOpts.bold,
-        fontFace: baseOpts.fontFace ?? "Calibri",
+        fontFace,
       },
     });
   }
@@ -150,7 +167,7 @@ function toPptxRichRuns(
         fontSize: baseOpts.fontSize,
         color: baseOpts.color,
         bold: baseOpts.bold,
-        fontFace: baseOpts.fontFace ?? "Calibri",
+        fontFace,
       },
     });
   }
@@ -192,6 +209,19 @@ async function fetchImageDataUrlServer(imageUrl: string): Promise<string | null>
   }
 }
 
+let cachedBrandLogoDataUrl: string | null = null;
+async function getBrandLogoDataUrl(): Promise<string | null> {
+  if (cachedBrandLogoDataUrl) return cachedBrandLogoDataUrl;
+  try {
+    const logoPath = path.join(process.cwd(), "public", "brand", "logo.png");
+    const buf = await fs.readFile(logoPath);
+    cachedBrandLogoDataUrl = `data:image/png;base64,${buf.toString("base64")}`;
+    return cachedBrandLogoDataUrl;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -218,15 +248,20 @@ export async function POST(req: NextRequest) {
       return apiError("Questions and export settings are required.", 400);
     }
 
+    const slides = buildSlidePlan(questions, settings);
+    const validation = validateSlidesBeforeExport(slides);
+    if (!validation.valid) {
+      return apiError("Slide validation failed before export.", 422);
+    }
+
     const pptx = new PptxGenJS();
     pptx.layout = "LAYOUT_16x9";
     pptx.author = "Atomic Pathshala";
     pptx.company = "Atomic Pathshala";
-    pptx.title = settings.headerSubtitle || "Classroom Question Practice";
+    pptx.title = "Atomic Pathshala — Question Practice";
 
-    const slides = buildSlidePlan(questions, settings);
+    const [logoDataUrl] = await Promise.all([getBrandLogoDataUrl()]);
 
-    // Pre-resolve media data URLs (prefer pre-rendered CamDraw PNG, else fetch diagram URL)
     const mediaCache = new Map<string, string | null>();
     await Promise.all(
       questions.map(async (q) => {
@@ -242,94 +277,53 @@ export async function POST(req: NextRequest) {
 
     for (const planned of slides) {
       const slide = pptx.addSlide();
-      slide.background = { color: "FFFFFF" };
+      // 1. Pure Black (#000000) background
+      slide.background = { color: PURE_BLACK };
 
       const q = planned.question;
-      const qNumLabel = `Q. ${String(planned.questionIndex + 1).padStart(2, "0")}${
-        planned.kind === "OPTIONS_ONLY" ? " (Contd.)" : ""
-      }`;
 
-      slide.addShape(pptx.ShapeType.rect, {
-        x: 0,
-        y: 0,
-        w: 13.333,
-        h: 0.1,
-        fill: { color: "0050CB" },
-        line: { color: "0050CB", width: 0 },
+      // 2. Top-left rounded Orange pill: "Questions No – 1" (black bold text on orange)
+      slide.addShape(pptx.ShapeType.roundRect, {
+        x: 0.45,
+        y: 0.3,
+        w: 2.65,
+        h: 0.46,
+        fill: { color: BRAND_ORANGE },
+        line: { color: BRAND_ORANGE, width: 0 },
+        rectRadius: 0.23,
+      });
+      slide.addText(planned.headerTitle, {
+        x: 0.45,
+        y: 0.3,
+        w: 2.65,
+        h: 0.46,
+        align: "center",
+        valign: "middle",
+        fontSize: 15,
+        bold: true,
+        color: PURE_BLACK,
+        fontFace: "Calibri",
+        margin: 0,
       });
 
-      if (settings.includeBranding) {
-        slide.addText(
-          [
-            { text: "ATOMIC PATHSHALA", options: { bold: true, color: "0050CB", fontSize: 13, fontFace: "Calibri" } },
-            {
-              text: `   |   ${
-                settings.includeSubjectHeader && q.subject
-                  ? `${q.subject.toUpperCase()} • ${settings.headerSubtitle}`
-                  : settings.headerSubtitle
-              }`,
-              options: { bold: true, color: "64748B", fontSize: 10.5, fontFace: "Calibri" },
-            },
-          ],
-          { x: 0.55, y: 0.18, w: 9.0, h: 0.35, margin: 0 }
-        );
-      } else if (settings.includeSubjectHeader && q.subject) {
-        slide.addText(q.subject.toUpperCase(), {
-          x: 0.55,
-          y: 0.18,
-          w: 8.5,
-          h: 0.35,
-          fontSize: 11,
-          bold: true,
-          color: "64748B",
-          margin: 0,
+      // 3. Top-right original Atomic Pathshala logo (independent image object, aspect preserved)
+      if (logoDataUrl) {
+        slide.addImage({
+          data: logoDataUrl,
+          x: 12.15,
+          y: 0.25,
+          w: 0.72,
+          h: 0.72,
+          sizing: { type: "contain", w: 0.72, h: 0.72 },
         });
-      }
-
-      if (settings.includeQuestionId) {
-        const code = q.questionCode || q.id;
-        slide.addText(`ID: ${code}`, {
-          x: 9.6,
-          y: 0.18,
-          w: 3.2,
-          h: 0.32,
-          align: "right",
-          fontSize: 10,
-          bold: true,
-          color: "475569",
-          fontFace: "Consolas",
-          margin: 0,
-        });
-      }
-
-      slide.addShape(pptx.ShapeType.line, {
-        x: 0.55,
-        y: 0.58,
-        w: 12.23,
-        h: 0,
-        line: { color: "E2E8F0", width: 1 },
-      });
-
-      let cursorY = 0.72;
-      if (settings.includeQuestionNumber) {
-        slide.addText(qNumLabel, {
-          x: 0.55,
-          y: cursorY,
-          w: 3.0,
-          h: 0.38,
-          fontSize: 16,
-          bold: true,
-          color: "0050CB",
-          fontFace: "Calibri",
-          margin: 0,
-        });
-        cursorY += 0.42;
       }
 
       const mediaDataUrl = planned.kind !== "OPTIONS_ONLY" ? mediaCache.get(q.id) ?? null : null;
-      const hasSideMedia = Boolean(mediaDataUrl) && planned.kind === "FULL";
-      const statementW = hasSideMedia ? 7.9 : 12.23;
+      const hasRightDiagram = Boolean(mediaDataUrl);
+      const contentW = hasRightDiagram ? 8.15 : 11.45;
+      let cursorY = 0.94;
 
+      // 4. Question statement (left-aligned, compact, white text on black, exact original wording)
       if (planned.kind !== "OPTIONS_ONLY") {
         const combinedStmt = [planned.statementEn, planned.statementHi].filter(Boolean).join("\n\n");
         const tableData = extractFirstTable(combinedStmt);
@@ -338,21 +332,18 @@ export async function POST(req: NextRequest) {
           const beforeText = normalizeLatexToText(tableData.textBefore);
           if (beforeText) {
             slide.addText(
-              toPptxRichRuns(beforeText, {
-                fontSize: planned.estimatedFontPt,
-                color: "0F172A",
-              }),
+              toPptxRichRuns(beforeText, { fontSize: planned.estimatedFontPt, color: PURE_WHITE }),
               {
-                x: 0.55,
+                x: 0.45,
                 y: cursorY,
-                w: statementW,
-                h: 1.0,
+                w: contentW,
+                h: 0.75,
                 valign: "top",
                 margin: 0,
                 wrap: true,
               }
             );
-            cursorY += 1.05;
+            cursorY += 0.78;
           }
 
           const pptRows: PptxGenJS.TableRow[] = tableData.rows.map((r, rIdx) =>
@@ -361,40 +352,37 @@ export async function POST(req: NextRequest) {
               options: {
                 fontSize: Math.max(11, planned.estimatedFontPt - 2),
                 bold: rIdx === 0,
-                fill: { color: rIdx === 0 ? "EFF6FF" : "FFFFFF" },
-                color: "0F172A",
-                border: { pt: 1, color: "CBD5E1" },
+                fill: { color: rIdx === 0 ? "18181B" : PURE_BLACK },
+                color: PURE_WHITE,
+                border: { pt: 1, color: "52525B" },
                 valign: "middle",
               },
             }))
           );
-          const tableH = Math.min(2.2, pptRows.length * 0.42);
+          const tableH = Math.min(1.65, pptRows.length * 0.36);
           slide.addTable(pptRows, {
-            x: 0.55,
+            x: 0.45,
             y: cursorY,
-            w: statementW,
+            w: contentW,
             h: tableH,
           });
-          cursorY += tableH + 0.15;
+          cursorY += tableH + 0.12;
 
           const afterText = normalizeLatexToText(tableData.textAfter);
           if (afterText) {
             slide.addText(
-              toPptxRichRuns(afterText, {
-                fontSize: planned.estimatedFontPt,
-                color: "0F172A",
-              }),
+              toPptxRichRuns(afterText, { fontSize: planned.estimatedFontPt, color: PURE_WHITE }),
               {
-                x: 0.55,
+                x: 0.45,
                 y: cursorY,
-                w: statementW,
-                h: 0.8,
+                w: contentW,
+                h: 0.55,
                 valign: "top",
                 margin: 0,
                 wrap: true,
               }
             );
-            cursorY += 0.85;
+            cursorY += 0.58;
           }
         } else {
           const stmtRuns: PptxGenJS.TextProps[] = [];
@@ -402,58 +390,93 @@ export async function POST(req: NextRequest) {
             stmtRuns.push(
               ...toPptxRichRuns(planned.statementEn, {
                 fontSize: planned.estimatedFontPt,
-                color: "0F172A",
+                color: PURE_WHITE,
               })
             );
           }
           if (planned.statementHi) {
             if (stmtRuns.length > 0) {
-              stmtRuns.push({ text: "\n\n", options: { fontSize: planned.estimatedFontPt } });
+              stmtRuns.push({ text: "\n", options: { fontSize: planned.estimatedFontPt } });
             }
             stmtRuns.push(
               ...toPptxRichRuns(planned.statementHi, {
-                fontSize: Math.max(13, planned.estimatedFontPt - 1),
-                color: "1E293B",
+                fontSize: Math.max(13, planned.estimatedFontPt - 0.5),
+                color: PURE_WHITE,
               })
             );
           }
 
-          const stmtBoxH = planned.kind === "STATEMENT_ONLY" ? (mediaDataUrl ? 3.2 : 5.4) : mediaDataUrl ? 2.5 : 2.35;
+          const plainLen = normalizeLatexToText(combinedStmt).length;
+          const approxLines = Math.max(
+            2,
+            Math.ceil(plainLen / (hasRightDiagram ? 68 : 96)) +
+              (combinedStmt.match(/\n/g)?.length ?? 0)
+          );
+          const stmtBoxH =
+            planned.kind === "STATEMENT_ONLY"
+              ? Math.min(3.8, Math.max(1.8, approxLines * 0.34))
+              : Math.min(2.15, Math.max(0.72, approxLines * 0.3));
+
           slide.addText(stmtRuns, {
-            x: 0.55,
+            x: 0.45,
             y: cursorY,
-            w: statementW,
+            w: contentW,
             h: stmtBoxH,
             valign: "top",
             margin: 0,
             wrap: true,
-            lineSpacingMultiple: 1.18,
+            lineSpacingMultiple: 1.15,
           });
+          cursorY += stmtBoxH + 0.12;
+        }
 
-          if (mediaDataUrl) {
-            const boxX = hasSideMedia ? 8.7 : 2.5;
-            const boxY = hasSideMedia ? 1.15 : cursorY + stmtBoxH + 0.1;
-            const boxW = hasSideMedia ? 4.05 : 8.3;
-            const boxH = hasSideMedia ? 2.65 : 2.2;
-            slide.addImage({
-              data: mediaDataUrl,
-              x: boxX,
-              y: boxY,
-              w: boxW,
-              h: boxH,
-              sizing: { type: "contain", w: boxW, h: boxH },
-            });
-          }
-
-          cursorY += stmtBoxH + 0.15;
+        // Right-side diagram / chemical structure (independent image object, aspect ratio preserved)
+        if (mediaDataUrl) {
+          slide.addImage({
+            data: mediaDataUrl,
+            x: 8.85,
+            y: 1.1,
+            w: 3.95,
+            h: 2.35,
+            sizing: { type: "contain", w: 3.95, h: 2.35 },
+          });
         }
       }
 
+      // 5. Dynamic Source Label badge (ONLY if metadata exists — yellow text, thin yellow outline, black bg)
+      if (planned.sourceLabel) {
+        const badgeW = Math.min(3.6, Math.max(1.75, planned.sourceLabel.length * 0.115 + 0.45));
+        slide.addShape(pptx.ShapeType.roundRect, {
+          x: 0.45,
+          y: cursorY,
+          w: badgeW,
+          h: 0.34,
+          fill: { color: PURE_BLACK },
+          line: { color: BADGE_YELLOW, width: 1 },
+          rectRadius: 0.17,
+        });
+        slide.addText(planned.sourceLabel, {
+          x: 0.45,
+          y: cursorY,
+          w: badgeW,
+          h: 0.34,
+          align: "center",
+          valign: "middle",
+          fontSize: 11,
+          bold: true,
+          color: BADGE_YELLOW,
+          fontFace: "Calibri",
+          margin: 0,
+        });
+        cursorY += 0.44;
+      }
+
+      // 6. Options (vertically aligned 1, 2, 3, 4 with orange circle markers & white text; NO boxes/borders)
       if (planned.kind !== "STATEMENT_ONLY") {
         const displayOpts =
           planned.optionsEn.length > 0
             ? planned.optionsEn.map((o, i) => ({
-                key: o.key,
+                marker: o.marker,
                 text:
                   planned.optionsHi[i]?.text && settings.language === "BILINGUAL"
                     ? `${o.text}   |   ${planned.optionsHi[i]!.text}`
@@ -461,96 +484,61 @@ export async function POST(req: NextRequest) {
               }))
             : planned.optionsHi;
 
-        if (displayOpts.length > 0) {
-          const optStartY = planned.kind === "OPTIONS_ONLY" ? 1.3 : Math.max(cursorY, 3.75);
-          const availH = Math.max(1.8, 6.55 - optStartY);
-          const rowH = Math.min(0.68, availH / displayOpts.length);
-          const optFontPt = Math.max(12.5, planned.estimatedFontPt - 1.5);
+        const optStartY = planned.kind === "OPTIONS_ONLY" ? 1.05 : cursorY + 0.04;
+        const optRowH = 0.42;
+        const optFontPt = Math.max(13, planned.estimatedFontPt - 0.5);
 
-          displayOpts.forEach((opt, idx) => {
-            const y = optStartY + idx * rowH;
-            slide.addShape(pptx.ShapeType.roundRect, {
-              x: 0.55,
-              y,
-              w: 12.23,
-              h: rowH - 0.08,
-              fill: { color: "F8FAFC" },
-              line: { color: "CBD5E1", width: 1 },
-              rectRadius: 0.08,
-            });
-
-            slide.addText(
-              [
-                {
-                  text: `${opt.key}.  `,
-                  options: {
-                    fontSize: optFontPt,
-                    bold: true,
-                    color: "0050CB",
-                    fontFace: "Calibri",
-                  },
-                },
-                ...toPptxRichRuns(opt.text, {
-                  fontSize: optFontPt,
-                  color: "0F172A",
-                }),
-              ],
-              {
-                x: 0.72,
-                y: y + 0.04,
-                w: 11.9,
-                h: rowH - 0.16,
-                valign: "middle",
-                margin: 0,
-                wrap: true,
-              }
-            );
+        displayOpts.forEach((opt, idx) => {
+          const y = optStartY + idx * optRowH;
+          // Editable orange circle marker
+          slide.addShape(pptx.ShapeType.ellipse, {
+            x: 0.48,
+            y: y + 0.04,
+            w: 0.28,
+            h: 0.28,
+            fill: { color: BRAND_ORANGE },
+            line: { color: BRAND_ORANGE, width: 0 },
           });
-        }
-      }
+          slide.addText(opt.marker, {
+            x: 0.48,
+            y: y + 0.04,
+            w: 0.28,
+            h: 0.28,
+            align: "center",
+            valign: "middle",
+            fontSize: 11.5,
+            bold: true,
+            color: PURE_BLACK,
+            fontFace: "Calibri",
+            margin: 0,
+          });
 
-      slide.addShape(pptx.ShapeType.line, {
-        x: 0.55,
-        y: 6.78,
-        w: 12.23,
-        h: 0,
-        line: { color: "E2E8F0", width: 1 },
-      });
-
-      if (settings.includeCorrectAnswer && planned.kind !== "STATEMENT_ONLY") {
-        const answerText = planned.correctAnswerLabel
-          ? `Correct Answer: ${planned.correctAnswerLabel}`
-          : "Correct Answer: Not Available";
-        slide.addText(answerText, {
-          x: 0.55,
-          y: 6.88,
-          w: 8.0,
-          h: 0.42,
-          fontSize: 15,
-          bold: true,
-          color: planned.correctAnswerLabel ? "15803D" : "B91C1C",
-          fontFace: "Calibri",
-          margin: 0,
+          // Editable white option text (no card/outline)
+          slide.addText(
+            toPptxRichRuns(opt.text, {
+              fontSize: optFontPt,
+              color: PURE_WHITE,
+            }),
+            {
+              x: 0.88,
+              y,
+              w: hasRightDiagram && idx < 2 ? 7.75 : 11.8,
+              h: 0.36,
+              valign: "middle",
+              margin: 0,
+              wrap: true,
+            }
+          );
         });
       }
-
-      slide.addText(`Slide ${planned.slideNumber} / ${slides.length}`, {
-        x: 10.5,
-        y: 6.9,
-        w: 2.28,
-        h: 0.35,
-        align: "right",
-        fontSize: 10,
-        color: "64748B",
-        fontFace: "Calibri",
-        margin: 0,
-      });
+      // Lower portion of the slide remains pure blank black (#000000) for pen-tab solution writing.
     }
 
     const buffer = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;
-    const safeName = (body.filename || "Atomic_Pathshala_Questions.pptx")
-      .replace(/[^A-Za-z0-9._-]/g, "_")
-      .replace(/\.pptx$/i, "") + ".pptx";
+    const safeName =
+      (body.filename || "Atomic_Pathshala_Questions.pptx")
+        .replace(/[^A-Za-z0-9._-]/g, "_")
+        .replace(/\.pptx$/i, "") + ".pptx";
 
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,
