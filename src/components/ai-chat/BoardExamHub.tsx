@@ -203,7 +203,7 @@ function PaperView({ paper, onReset }: { paper: BoardPaper; onReset: () => void 
               <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
                 {question.sectionTitle}
               </span>
-              <span className="text-xs font-medium text-slate-400">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                 Question {question.questionNumber}
               </span>
             </div>
@@ -521,7 +521,7 @@ export function BoardExamHub({
             )}
           </button>
 
-          <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-400">
+          <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-600 dark:text-slate-300">
             <FileQuestion className="h-3.5 w-3.5" />
             Complete authentic pattern with MCQs, Assertion-Reason, Short & Long Answer with OR choice.
           </p>

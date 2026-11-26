@@ -107,35 +107,31 @@
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
   textarea {
     color-scheme: light;
-    color: #131b2e;
+    color: #0f172a;
   }
 
-  html:not(.dark) select:not([class*="bg-slate-800"]):not([class*="bg-slate-900"]):not([class*="bg-slate-950"]):not([class*="bg-black"]):not([class*="bg-gray-800"]):not([class*="bg-gray-900"]):not([class*="text-white"]):not([class*="text-slate-100"]) {
+  /*
+   * IMPORTANT: Never use `[class*="bg-slate-800"]` because it matches
+   * `dark:bg-slate-800` in light mode! Match only unprefixed dark background
+   * classes (`[class^="bg-..."]` or `[class*=" bg-..."]`).
+   */
+  html:not(.dark) select:not([class^="bg-slate-800"]):not([class*=" bg-slate-800"]):not([class^="bg-slate-900"]):not([class*=" bg-slate-900"]):not([class^="bg-slate-950"]):not([class*=" bg-slate-950"]):not([class^="bg-black"]):not([class*=" bg-black"]):not([class^="bg-gray-800"]):not([class*=" bg-gray-800"]):not([class^="bg-gray-900"]):not([class*=" bg-gray-900"]):not([class^="bg-zinc-900"]):not([class*=" bg-zinc-900"]):not([class^="bg-surface-dark"]):not([class*=" bg-surface-dark"]):not([class^="bg-atomic-navy"]):not([class*=" bg-atomic-navy"]):not([class^="bg-atomic-slate"]):not([class*=" bg-atomic-slate"]),
+  html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([class^="bg-slate-800"]):not([class*=" bg-slate-800"]):not([class^="bg-slate-900"]):not([class*=" bg-slate-900"]):not([class^="bg-slate-950"]):not([class*=" bg-slate-950"]):not([class^="bg-black"]):not([class*=" bg-black"]):not([class^="bg-gray-800"]):not([class*=" bg-gray-800"]):not([class^="bg-gray-900"]):not([class*=" bg-gray-900"]):not([class^="bg-zinc-900"]):not([class*=" bg-zinc-900"]):not([class^="bg-surface-dark"]):not([class*=" bg-surface-dark"]):not([class^="bg-atomic-navy"]):not([class*=" bg-atomic-navy"]):not([class^="bg-atomic-slate"]):not([class*=" bg-atomic-slate"]),
+  html:not(.dark) textarea:not([class^="bg-slate-800"]):not([class*=" bg-slate-800"]):not([class^="bg-slate-900"]):not([class*=" bg-slate-900"]):not([class^="bg-slate-950"]):not([class*=" bg-slate-950"]):not([class^="bg-black"]):not([class*=" bg-black"]):not([class^="bg-gray-800"]):not([class*=" bg-gray-800"]):not([class^="bg-gray-900"]):not([class*=" bg-gray-900"]):not([class^="bg-zinc-900"]):not([class*=" bg-zinc-900"]):not([class^="bg-surface-dark"]):not([class*=" bg-surface-dark"]):not([class^="bg-atomic-navy"]):not([class*=" bg-atomic-navy"]):not([class^="bg-atomic-slate"]):not([class*=" bg-atomic-slate"]) {
     color-scheme: light !important;
-    color: #131b2e !important;
+    color: #0f172a !important;
   }
 
   /* Base form controls: Dark mode defaults */
-  .dark select,
-  .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
-  .dark textarea {
+  .dark select:not([class^="bg-white"]):not([class*=" bg-white"]):not([class^="bg-slate-50"]):not([class*=" bg-slate-50"]),
+  .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([class^="bg-white"]):not([class*=" bg-white"]):not([class^="bg-slate-50"]):not([class*=" bg-slate-50"]),
+  .dark textarea:not([class^="bg-white"]):not([class*=" bg-white"]):not([class^="bg-slate-50"]):not([class*=" bg-slate-50"]) {
     color-scheme: dark !important;
     color: #f8fafc !important;
   }
 
-  /* Form controls with explicit dark background classes in light mode must force light text and dark color-scheme */
-  select[class*="bg-slate-800"],
-  select[class*="bg-slate-900"],
-  select[class*="bg-slate-950"],
-  select[class*="bg-gray-800"],
-  select[class*="bg-gray-900"],
-  select[class*="bg-gray-950"],
-  select[class*="bg-black"],
-  input[class*="bg-slate-800"],
-  input[class*="bg-slate-900"],
-  input[class*="bg-slate-950"],
-  textarea[class*="bg-slate-800"],
-  textarea[class*="bg-slate-900"] {
+  /* Form controls with explicit unprefixed dark background classes in light mode */
+  :is(select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]), textarea):is([class^="bg-slate-800"], [class*=" bg-slate-800"], [class^="bg-slate-900"], [class*=" bg-slate-900"], [class^="bg-slate-950"], [class*=" bg-slate-950"], [class^="bg-gray-800"], [class*=" bg-gray-800"], [class^="bg-gray-900"], [class*=" bg-gray-900"], [class^="bg-gray-950"], [class*=" bg-gray-950"], [class^="bg-zinc-900"], [class*=" bg-zinc-900"], [class^="bg-black"], [class*=" bg-black"], [class^="bg-surface-dark"], [class*=" bg-surface-dark"], [class^="bg-atomic-navy"], [class*=" bg-atomic-navy"], [class^="bg-atomic-slate"], [class*=" bg-atomic-slate"]) {
     color-scheme: dark !important;
     color: #f8fafc !important;
   }
@@ -149,34 +145,26 @@
   option,
   optgroup {
     background-color: #ffffff !important;
-    color: #131b2e !important;
+    color: #0f172a !important;
   }
 
-  /* In dark mode or inside dark-themed selects, options must have dark background and light text */
+  /* In dark mode or inside explicit unprefixed dark-themed selects */
   .dark option,
   .dark optgroup,
-  select[class*="bg-slate-800"] option,
-  select[class*="bg-slate-900"] option,
-  select[class*="bg-slate-950"] option,
-  select[class*="bg-gray-800"] option,
-  select[class*="bg-gray-900"] option,
-  select[class*="bg-gray-950"] option,
-  select[class*="bg-black"] option,
-  select[class*="dark:bg-slate-800"] option,
-  select[class*="dark:bg-slate-900"] option,
-  select[class*="dark:bg-slate-950"] option {
+  select:is([class^="bg-slate-800"], [class*=" bg-slate-800"], [class^="bg-slate-900"], [class*=" bg-slate-900"], [class^="bg-slate-950"], [class*=" bg-slate-950"], [class^="bg-gray-800"], [class*=" bg-gray-800"], [class^="bg-gray-900"], [class*=" bg-gray-900"], [class^="bg-gray-950"], [class*=" bg-gray-950"], [class^="bg-zinc-900"], [class*=" bg-zinc-900"], [class^="bg-black"], [class*=" bg-black"]) option {
     background-color: #1e293b !important;
     color: #f8fafc !important;
   }
 
-  /* Placeholders: readable subtle gray in both themes */
+  /* Placeholders: WCAG-compliant readable gray in both themes */
   ::placeholder {
-    color: #94a3b8;
-    opacity: 1;
+    color: #64748b !important;
+    opacity: 1 !important;
   }
-  .dark ::placeholder {
-    color: #64748b;
-    opacity: 1;
+  .dark ::placeholder,
+  :is(input, textarea):is([class^="bg-slate-800"], [class*=" bg-slate-800"], [class^="bg-slate-900"], [class*=" bg-slate-900"], [class^="bg-slate-950"], [class*=" bg-slate-950"], [class^="bg-black"], [class*=" bg-black"])::placeholder {
+    color: #94a3b8 !important;
+    opacity: 1 !important;
   }
 
   /* Prevent mobile Safari & Chrome from auto-zooming when tapping inputs */

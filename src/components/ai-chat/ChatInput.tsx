@@ -762,7 +762,7 @@ useEffect(() => {
           disabled={disabled}
           placeholder={placeholder ?? "Ask your doubt here..."}
           rows={1}
-          className="max-h-44 min-h-11 flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-atomic-orange focus:outline-none focus:ring-2 focus:ring-atomic-orange/20 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
+          className="max-h-44 min-h-11 flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-500 focus:border-atomic-orange focus:outline-none focus:ring-2 focus:ring-atomic-orange/20 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-400"
         />
 
         {isGenerating && onStop ? (
@@ -789,7 +789,7 @@ useEffect(() => {
         )}
       </div>
 
-      <p className="mt-2 hidden text-center text-xs text-slate-400 sm:block dark:text-slate-500">
+      <p className="mt-2 hidden text-center text-xs text-slate-600 sm:block dark:text-slate-400">
         Paste screenshots, drop images or PDFs, upload modules, or use the camera on mobile.
       </p>
     </div>

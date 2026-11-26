@@ -1349,7 +1349,7 @@ export function UnifiedChapterScheduleTimeline({
                   setShowAddLectureModal(false);
                   setEditingLecture(null);
                 }}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400"
+                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1481,8 +1481,8 @@ export function UnifiedChapterScheduleTimeline({
                     placeholder="https://youtube.com/live/… (the stream scheduled on YouTube for this class)"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-xs disabled:opacity-60"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Schedule the stream on YouTube (Unlisted is fine), paste its link here, and stream to it from OBS / the Teacher app. Every batch's class of this lecture uses it — the teacher only presses Start. Leave empty for an app-made stream.
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
+                    Schedule the stream on YouTube (Unlisted is fine), paste its link here, and stream to it from OBS / the Teacher app. Every batch&apos;s class of this lecture uses it — the teacher only presses Start. Leave empty for an app-made stream.
                   </p>
                 </div>
               )}
@@ -1499,8 +1499,8 @@ export function UnifiedChapterScheduleTimeline({
                   placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-xs"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Paste the unlisted YouTube link. Students can play it from the class's date and time; its length is read from the video.
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
+                  Paste the unlisted YouTube link. Students can play it from the class&apos;s date and time; its length is read from the video.
                 </p>
               </div>
               )}
@@ -1557,7 +1557,7 @@ export function UnifiedChapterScheduleTimeline({
               <button
                 type="button"
                 onClick={() => setNotesModalLecture(null)}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400"
+                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1650,7 +1650,7 @@ export function UnifiedChapterScheduleTimeline({
                   setShowAddDppModal(false);
                   setEditingDpp(null);
                 }}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400"
+                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1786,7 +1786,7 @@ export function UnifiedChapterScheduleTimeline({
                   setShowAddTestModal(false);
                   setEditingTest(null);
                 }}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400"
+                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2030,7 +2030,7 @@ export function UnifiedChapterScheduleTimeline({
               <button
                 type="button"
                 onClick={() => setShowAuditModal(false)}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400"
+                className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300"
               >
                 <X className="w-5 h-5" />
               </button>
