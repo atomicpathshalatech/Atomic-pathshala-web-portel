@@ -77,6 +77,12 @@ export const TEAM_NAV_CONFIG: TeamNavGroup[] = [
   {
     title: "Content Studio",
     items: [
+      { href: "/team/content-studio", label: "AI Content Studio", icon: "movie_edit", permission: PERMISSIONS.CONTENT_STUDIO_ACCESS, description: "Unified AI content creation, projects & workspace" },
+      { href: "/team/content-studio/research", label: "Trend & Competitor Research", icon: "trending_up", permission: PERMISSIONS.CONTENT_STUDIO_RESEARCH, description: "Source-based topic trends, competitor intelligence & opportunities" },
+      { href: "/team/content-studio/analytics", label: "YouTube Analytics AI", icon: "analytics", permission: PERMISSIONS.YOUTUBE_ANALYTICS_VIEW, description: "Channel performance intelligence & AI recommendations" },
+      { href: "/team/content-studio/assets", label: "Asset Library", icon: "perm_media", permission: PERMISSIONS.CONTENT_STUDIO_ASSETS, description: "Centralized images, audio, video, slides & scripts" },
+      { href: "/team/content-studio/compare", label: "Multi-AI Compare", icon: "compare_arrows", permission: PERMISSIONS.CONTENT_STUDIO_AI_GENERATE, description: "Side-by-side OpenAI, Gemini & Grok model comparison" },
+      { href: "/team/content-studio/providers", label: "AI Router & Budgets", icon: "tune", permission: PERMISSIONS.CONTENT_STUDIO_PROVIDER_MANAGE, description: "Task-based AI routing, fallbacks & cost budgets" },
       { href: "/team/modules/redesign", label: "Module Redesign Studio", icon: "auto_fix_high", permission: PERMISSIONS.MODULE_READ, description: "Visual module cover and typography studio" },
       { href: "/team/modules", label: "Module Studio", icon: "picture_as_pdf", permission: PERMISSIONS.MODULE_READ, description: "Printed booklets and printable modules" },
       { href: "/team/pyq-modules", label: "Question Modules (PYQ)", icon: "library_books", permission: PERMISSIONS.MODULE_READ, description: "Subject PYQ book modules" },

@@ -199,6 +199,11 @@ model User {
   pyqReviews             PyqReview[]             @relation("PyqReviewedBy")
   pyqReviewHistories     PyqReviewHistory[]      @relation("PyqReviewHistoryUser")
 
+  // Atomic AI Content Studio
+  ownedContentProjects   ContentProject[]        @relation("ContentProjectOwner")
+  managedContentProjects ContentProject[]        @relation("ContentProjectManager")
+  contentProjectMembers  ContentProjectMember[]  @relation("ContentProjectMemberUser")
+
   @@index([roleId])
   @@index([status])
   @@map("users")
@@ -7507,19 +7512,28 @@ model QcCorrection {
 // Every model call the QC system makes: what it cost and whether it worked.
 model AiUsageLog {
   id           String   @id @default(cuid())
-  feature      String // QC_EXPERT | QC_DIRECTOR_SOLVE | QC_DIRECTOR_AUDIT
+  feature      String // QC_EXPERT | QC_DIRECTOR_SOLVE | QC_DIRECTOR_AUDIT | CONTENT_STUDIO_*
   provider     String
   model        String
   questionId   String?
+  userId       String?
+  projectId    String?
+  jobId        String?
+  modality     String?  // TEXT | IMAGE | VOICE | MUSIC | VIDEO | SLIDE | RESEARCH
   inputTokens  Int?
   outputTokens Int?
   durationMs   Int?
+  costUsd      Float?
+  costInr      Float?
+  isFallback   Boolean  @default(false)
   ok           Boolean  @default(true)
   error        String?
   createdAt    DateTime @default(now())
 
   @@index([feature, createdAt])
   @@index([questionId])
+  @@index([userId, createdAt])
+  @@index([projectId, createdAt])
   @@map("ai_usage_logs")
 }
 
@@ -9670,5 +9684,940 @@ model FinanceLedgerEntry {
   @@index([category])
   @@index([referenceType, referenceId])
   @@map("finance_ledger_entries")
+}
+
+// ==========================================================================
+// ATOMIC AI CONTENT STUDIO
+// ==========================================================================
+
+enum ContentProjectType {
+  YOUTUBE_VIDEO
+  YOUTUBE_SHORT
+  INSTAGRAM_REEL
+  MOTIVATIONAL_VIDEO
+  BATCH_LAUNCH
+  LECTURE
+  THUMBNAIL
+  CINEMATIC_PROMO
+  SLIDE_DECK
+  SHORTS
+  COURSE_PROMO
+  BLOG_SEO
+}
+
+enum ContentProjectStatus {
+  IDEA
+  IDEATION
+  RESEARCHING
+  PLANNED
+  SCRIPTING
+  SCRIPT_READY
+  PRODUCTION
+  EDITING
+  REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ContentIdeaSource {
+  TREND_RESEARCH
+  COMPETITOR_GAP
+  MANUAL
+  AI_SUGGESTED
+}
+
+enum StudioAssetType {
+  IMAGE
+  THUMBNAIL
+  VIDEO_CLIP
+  VIDEO
+  AUDIO
+  VOICEOVER
+  MUSIC
+  SFX
+  SCRIPT
+  SLIDE
+  SLIDE_DECK
+  PDF
+  CAPTION
+  EXPORTED_VIDEO
+}
+
+enum AiModality {
+  TEXT
+  IMAGE
+  VOICE
+  MUSIC
+  VIDEO
+  SLIDE
+  RESEARCH
+}
+
+enum AiJobStatus {
+  QUEUED
+  PROCESSING
+  WAITING_WEBHOOK
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ContentEntityType {
+  PROJECT
+  IDEA
+  SCRIPT
+  STORYBOARD
+  THUMBNAIL
+  SEO
+}
+
+enum ContentMemberRole {
+  OWNER
+  EDITOR
+  REVIEWER
+  VIEWER
+}
+
+enum AiBudgetScope {
+  GLOBAL
+  ROLE
+  USER
+  PROJECT
+}
+
+model ContentProject {
+  id             String               @id @default(cuid())
+  title          String
+  slug           String               @unique
+  description    String?              @db.Text
+  type           ContentProjectType   @default(YOUTUBE_VIDEO)
+  status         ContentProjectStatus @default(IDEA)
+  topic          String?
+  subject        String?
+  chapter        String?
+  targetAudience String?
+  platform       String?              // YOUTUBE | INSTAGRAM | APP | WEB
+  objective      String?              @db.Text
+  ownerId        String
+  owner          User                 @relation("ContentProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  managerId      String?
+  manager        User?                @relation("ContentProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+  targetChannel  String?              // APP | MAIN | EXTERNAL
+  language       String               @default("en")
+  tags           String[]             @default([])
+  metadata       Json?
+  approvedAt     DateTime?
+  approvedById   String?
+  publishedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  members           ContentProjectMember[]
+  ideas             ContentIdea[]
+  plans             ContentPlan[]
+  scripts           ContentScript[]
+  storyboards       Storyboard[]
+  voiceovers        VoiceoverProject[]
+  audioMixes        AudioMixProject[]
+  editorProjects    VideoEditorProject[]
+  slideDecks        SlideDeckProject[]
+  assets            GeneratedAsset[]
+  musicGenerations  MusicGeneration[]
+  videoGenerations  VideoGeneration[]
+  thumbnailProjects ThumbnailProject[]
+  seoPackages       SeoPackage[]
+  jobs              AiGenerationJob[]
+  histories         ContentHistory[]
+
+  @@index([ownerId])
+  @@index([managerId])
+  @@index([status])
+  @@index([type])
+  @@map("content_projects")
+}
+
+model ContentProjectMember {
+  id         String            @id @default(cuid())
+  projectId  String
+  project    ContentProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User              @relation("ContentProjectMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  role       ContentMemberRole @default(EDITOR)
+  canApprove Boolean           @default(false)
+  canPublish Boolean           @default(false)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("content_project_members")
+}
+
+model ContentIdea {
+  id             String            @id @default(cuid())
+  projectId      String?
+  project        ContentProject?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  title          String
+  topic          String
+  source         ContentIdeaSource @default(MANUAL)
+  trendScore     Float?
+  competitorRefs Json?
+  brief          String?           @db.Text
+  status         String            @default("NEW") // NEW | SHORTLISTED | CONVERTED | DISCARDED
+  createdById    String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([projectId])
+  @@index([createdById])
+  @@index([status])
+  @@map("content_ideas")
+}
+
+model ContentScript {
+  id                   String         @id @default(cuid())
+  projectId            String
+  project              ContentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version              Int            @default(1)
+  title                String
+  hook                 String?        @db.Text
+  bodyMarkdown         String         @db.Text
+  sectionsJson         Json?          // Structured editable sections: HOOK, INTRO, MAIN, ENGAGEMENT, CTA, ENDING
+  cta                  String?        @db.Text
+  language             String         @default("en")
+  medium               String         @default("BILINGUAL") // HINDI_MEDIUM | ENGLISH_MEDIUM | BILINGUAL
+  style                String         @default("TEACHER_STYLE")
+  wordCount            Int            @default(0)
+  estimatedDurationSec Int            @default(0)
+  chemistryAudit       Json?          // { verifiedFacts, aiExplanations, unverifiedStatements, equationChecks, ncertNotes }
+  retentionReview      Json?          // { hookImprovements, patternChanges, visualChanges, curiosityLoops, transitions }
+  providerUsed         String?
+  modelUsed            String?
+  isActive             Boolean        @default(true)
+  createdById          String
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  storyboards Storyboard[]
+
+  @@index([projectId, version])
+  @@map("content_scripts")
+}
+
+model Storyboard {
+  id               String            @id @default(cuid())
+  projectId        String
+  project          ContentProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scriptId         String?
+  script           ContentScript?    @relation(fields: [scriptId], references: [id], onDelete: SetNull)
+  version          Int               @default(1)
+  aspectRatio      String            @default("16:9") // 16:9 | 9:16 | 1:1
+  totalDurationSec Int               @default(0)
+  createdById      String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  scenes StoryboardScene[]
+
+  @@index([projectId])
+  @@map("storyboards")
+}
+
+model StoryboardScene {
+  id                String     @id @default(cuid())
+  storyboardId      String
+  storyboard        Storyboard @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
+  orderIndex        Int
+  title             String
+  narrationText     String?    @db.Text
+  visualPrompt      String?    @db.Text
+  requiredImage     String?    @db.Text
+  requiredVideo     String?    @db.Text
+  diagramSpec       String?    @db.Text
+  animationNotes    String?    @db.Text
+  cameraDirection   String?
+  textOnScreen      String?    @db.Text
+  voiceInstructions String?    @db.Text
+  musicInstructions String?    @db.Text
+  lighting          String?
+  environment       String?
+  characterDesc     String?    @db.Text
+  mood              String?
+  motionLevel       String?
+  aspectRatio       String     @default("16:9")
+  referenceAssetIds Json?
+  durationSec       Int        @default(5)
+  voiceAssetId      String?
+  imageAssetId      String?
+  videoAssetId      String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@index([storyboardId, orderIndex])
+  @@map("storyboard_scenes")
+}
+
+model GeneratedAsset {
+  id          String          @id @default(cuid())
+  projectId   String?
+  project     ContentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  fileAssetId String?
+  storageKey  String?
+  publicUrl   String?
+  assetType   StudioAssetType
+  title       String?
+  prompt      String?         @db.Text
+  provider    String?
+  model       String?
+  seed        String?
+  durationMs  Int?
+  width       Int?
+  height      Int?
+  tags        String[]        @default([])
+  metadata    Json?
+  createdById String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([projectId])
+  @@index([assetType])
+  @@index([createdById])
+  @@map("generated_assets")
+}
+
+model VoiceProfile {
+  id                String   @id @default(cuid())
+  name              String
+  provider          String   // OPENAI | ELEVENLABS | SARVAM
+  externalVoiceId   String
+  language          String   @default("en")
+  accent            String?
+  gender            String?
+  style             String?
+  tone              String?
+  approvedUsage     String   @default("EDUCATIONAL_AND_PROMO")
+  sampleUrl         String?
+  isCloned          Boolean  @default(false)
+  ownerId           String?
+  consentStatus     String   @default("NONE") // NONE | SELF_CONSENT | AUTHORIZED_CONSENT
+  usageRestrictions String?  @db.Text
+  isActive          Boolean  @default(true)
+  allowedRoles      String[] @default([])
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([provider, externalVoiceId])
+  @@index([isActive])
+  @@map("voice_profiles")
+}
+
+model MusicGeneration {
+  id                String          @id @default(cuid())
+  projectId         String?
+  project           ContentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  jobId             String?
+  kind              String          @default("MUSIC") // MUSIC | SFX
+  prompt            String          @db.Text
+  preset            String?
+  genre             String?
+  mood              String?
+  style             String?
+  intensity         String?
+  energy            String?
+  structureNotes    String?         @db.Text
+  bpm               Int?
+  durationSec       Int             @default(20)
+  instrumental      Boolean         @default(true)
+  loopable          Boolean         @default(false)
+  variationIndex    Int             @default(1)
+  provider          String
+  model             String
+  status            String          @default("COMPLETED") // QUEUED | PROCESSING | COMPLETED | FAILED
+  errorMessage      String?
+  licenseType       String?         // e.g. "Provider Commercial Terms" | "CC-BY-NC-4.0" | "Unverified"
+  licenseTermsUrl   String?
+  commercialAllowed Boolean?
+  costUsd           Float?
+  assetId           String?
+  audioUrl          String?
+  createdById       String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([projectId])
+  @@index([jobId])
+  @@map("music_generations")
+}
+
+model VideoGeneration {
+  id                String          @id @default(cuid())
+  projectId         String?
+  project           ContentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  sceneId           String?
+  jobId             String?
+  mode              String          @default("TEXT_TO_VIDEO") // TEXT_TO_VIDEO | IMAGE_TO_VIDEO | REFERENCE_BASED | EXTEND | TIMELINE_RENDER
+  prompt            String          @db.Text
+  aspectRatio       String          @default("16:9")
+  resolution        String          @default("1080p")
+  durationSec       Int             @default(5)
+  provider          String
+  model             String
+  status            String          @default("QUEUED") // QUEUED | PROCESSING | COMPLETED | FAILED | CANCELLED
+  progress          Int             @default(0)
+  referenceImageUrl String?
+  cameraMovement    String?
+  lighting          String?
+  environment       String?
+  mood              String?
+  variationIndex    Int             @default(1)
+  costUsd           Float?
+  externalTaskId    String?
+  assetId           String?
+  videoUrl          String?
+  errorMessage      String?         @db.Text
+  createdById       String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([projectId])
+  @@index([jobId])
+  @@map("video_generations")
+}
+
+model ThumbnailProject {
+  id              String         @id @default(cuid())
+  projectId       String
+  project         ContentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title           String
+  projectType     String         @default("LECTURE")
+  platform        String         @default("YOUTUBE") // YOUTUBE | INSTAGRAM | SHORTS | COMMUNITY
+  width           Int            @default(1280)
+  height          Int            @default(720)
+  overlayText     String?
+  templateId      String?
+  brandProfileId  String?
+  creativeId      String?
+  concepts        Json?          // 5+ AI-generated thumbnail concepts
+  layers          Json?          // Editable layer stack
+  variants        Json?          // Array of { assetId, url, prompt, ctrNote }
+  selectedAssetId String?
+  createdById     String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([projectId])
+  @@map("thumbnail_projects")
+}
+
+model ThumbnailBrandProfile {
+  id             String   @id @default(cuid())
+  name           String
+  logoUrl        String   @default("/atomic-logo.png")
+  primaryColor   String   @default("#0050cb")
+  secondaryColor String   @default("#00ccf9")
+  accentColor    String   @default("#f97316")
+  fonts          Json?
+  glowPresets    Json?
+  isDefault      Boolean  @default(false)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("thumbnail_brand_profiles")
+}
+
+model ThumbnailTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  projectType String   @default("LECTURE")
+  width       Int      @default(1280)
+  height      Int      @default(720)
+  layers      Json
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("thumbnail_templates")
+}
+
+model SeoPackage {
+  id               String         @id @default(cuid())
+  projectId        String
+  project          ContentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  youtubeVideoId   String?
+  language         String         @default("hinglish")
+  videoType        String         @default("YOUTUBE_VIDEO")
+  channel          String         @default("MAIN")
+  titles           Json?          // Array of { title, type, clarity, searchRelevance, audienceRelevance, curiosity, misleadingRisk, reasoning }
+  description      String?        @db.Text
+  tags             String[]       @default([])
+  hashtags         String[]       @default([])
+  chapters         Json?          // Array of { timestamp, title }
+  targetKeywords   String[]       @default([])
+  pinnedComment    String?        @db.Text
+  communityPost    String?        @db.Text
+  instagramCaption String?        @db.Text
+  reelCaption      String?        @db.Text
+  whatsappMessage  String?        @db.Text
+  shortsPack       Json?          // Array of { idea, hook, script }
+  seoScore         Int?
+  providerUsed     String?
+  modelUsed        String?
+  createdById      String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([projectId])
+  @@map("seo_packages")
+}
+
+model AiGenerationJob {
+  id               String          @id @default(cuid())
+  projectId        String?
+  project          ContentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  userId           String
+  modality         AiModality
+  taskType         String
+  status           AiJobStatus     @default(QUEUED)
+  progress         Int             @default(0)
+  provider         String?
+  model            String?
+  externalJobId    String?
+  inputPayload     Json?
+  outputPayload    Json?
+  errorMessage     String?         @db.Text
+  attempts         Int             @default(0)
+  maxAttempts      Int             @default(3)
+  lockedUntil      DateTime?
+  retryAt          DateTime?
+  cancelRequested  Boolean         @default(false)
+  estimatedCostUsd Float?
+  actualCostUsd    Float?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([projectId])
+  @@index([userId, createdAt])
+  @@index([status, retryAt])
+  @@index([externalJobId])
+  @@map("ai_generation_jobs")
+}
+
+model AiProviderConfig {
+  id               String     @id @default(cuid())
+  provider         String     // GEMINI | OPENAI | XAI_GROK | ANTHROPIC | GROQ | ELEVENLABS | RUNWAY | SUNO
+  modality         AiModality
+  taskType         String     @default("GENERAL") // GENERAL | RESEARCH | TOPIC_ANALYSIS | SCRIPT_WRITING | SEO | CHEMISTRY_VERIFICATION | THUMBNAIL_PROMPT | CONTENT_PLANNING | SUMMARIZATION
+  modelId          String
+  displayName      String
+  envKeyRef        String     // Name of env var (e.g., OPENAI_API_KEY), never the secret itself
+  priority         Int        @default(100)
+  isEnabled        Boolean    @default(true)
+  isDefault        Boolean    @default(false)
+  fallbackConfigId String?
+  fallbackProvider String?
+  fallbackModelId  String?
+  timeoutMs        Int        @default(30000)
+  rateLimitRpm     Int?
+  inputCostPer1M   Float      @default(0)
+  outputCostPer1M  Float      @default(0)
+  unitCostUsd      Float      @default(0) // Per image / per audio min / per video sec
+  configJson       Json?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@unique([provider, modality, taskType, modelId])
+  @@index([modality, taskType, isEnabled, priority])
+  @@map("ai_provider_configs")
+}
+
+model AiBudgetLimit {
+  id              String        @id @default(cuid())
+  scopeType       AiBudgetScope
+  scopeId         String        // "GLOBAL", role name, userId, or projectId
+  dailyLimitUsd   Float         @default(10)
+  monthlyLimitUsd Float         @default(200)
+  hardStop        Boolean       @default(true)
+  isActive        Boolean       @default(true)
+  updatedById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([scopeType, scopeId])
+  @@index([scopeType, isActive])
+  @@map("ai_budget_limits")
+}
+
+model ContentHistory {
+  id            String            @id @default(cuid())
+  projectId     String
+  project       ContentProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entityType    ContentEntityType
+  entityId      String
+  version       Int               @default(1)
+  snapshot      Json
+  changeSummary String?
+  actorId       String
+  createdAt     DateTime          @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([entityType, entityId])
+  @@map("content_histories")
+}
+
+// ==========================================================================
+// PHASE 02: TREND RESEARCH, COMPETITOR INTELLIGENCE & OPPORTUNITY ENGINE
+// ==========================================================================
+
+enum CompetitorGroup {
+  NEET_CHEMISTRY
+  NEET_BIOLOGY
+  NEET_PHYSICS
+  HINDI_MEDIUM
+  ENGLISH_MEDIUM
+  MOTIVATION
+  GENERAL_EDTECH
+}
+
+enum ResearchCategory {
+  NEET
+  JEE
+  BOARDS
+  MOTIVATIONAL
+  EDUCATIONAL_NEWS
+}
+
+enum OpportunityType {
+  TRENDING_TOPIC
+  BREAKING_UPDATE
+  CONTENT_GAP
+  COMPETITOR_BREAKOUT
+  SEARCH_OPPORTUNITY
+  EVERGREEN_OPPORTUNITY
+  SEASONAL_OPPORTUNITY
+  SHORTS_OPPORTUNITY
+}
+
+model CompetitorChannel {
+  id            String           @id @default(cuid())
+  name          String
+  channelId     String           @unique
+  channelUrl    String
+  group         CompetitorGroup  @default(GENERAL_EDTECH)
+  category      ResearchCategory @default(NEET)
+  language      String           @default("hi")
+  description   String?          @db.Text
+  isActive      Boolean          @default(true)
+  lastScannedAt DateTime?
+  createdById   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  videos CompetitorVideo[]
+
+  @@index([group, isActive])
+  @@index([category, isActive])
+  @@map("competitor_channels")
+}
+
+model CompetitorVideo {
+  id                  String            @id @default(cuid())
+  competitorChannelId String
+  competitorChannel   CompetitorChannel @relation(fields: [competitorChannelId], references: [id], onDelete: Cascade)
+  videoId             String            @unique
+  title               String
+  url                 String
+  publishedAt         DateTime
+  durationSec         Int?
+  views               Int?
+  likes               Int?
+  comments            Int?
+  viewVelocity        Float?            // views per hour since publish (when views available)
+  engagementRate      Float?            // (likes + comments) / views (when available)
+  format              String            @default("LONG") // LONG | SHORTS | LIVE
+  thumbnailUrl        String?
+  topic               String?
+  category            ResearchCategory?
+  titlePattern        String?
+  fetchedAt           DateTime          @default(now())
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([competitorChannelId, publishedAt])
+  @@index([category, publishedAt])
+  @@map("competitor_videos")
+}
+
+model ContentOpportunity {
+  id                String           @id @default(cuid())
+  topic             String
+  category          ResearchCategory
+  opportunityType   OpportunityType
+  recommendedFormat String           // LONG_VIDEO | SHORTS | REEL | LIVE_SESSION | LECTURE
+  opportunityScore  Float            // 0..100 explainable composite score (not an official YouTube score)
+  scoreBreakdown    Json             // Individual factor scores & weights
+  whyThisTopic      String           @db.Text
+  researchSummary   String           @db.Text
+  suggestedAngle    String?          @db.Text
+  suggestedTitles   Json?            // string[]
+  audienceFit       String?
+  publishingTiming  String?
+  sources           Json             // Array<{ title, url, publishedAt, sourceType }>
+  competitorRefs    Json?            // Array<{ videoId, title, channelName, url, views, publishedAt }>
+  status            String           @default("NEW") // NEW | SAVED | PLANNED | CONVERTED | DISMISSED
+  savedIdeaId       String?
+  projectId         String?
+  researchedAt      DateTime         @default(now())
+  createdById       String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([category, researchedAt])
+  @@index([status, opportunityScore])
+  @@map("content_opportunities")
+}
+
+model ResearchAutomationConfig {
+  id             String   @id @default(cuid())
+  key            String   @unique @default("singleton")
+  isEnabled      Boolean  @default(false)
+  frequency      String   @default("DAILY") // DAILY | WEEKLY
+  scheduleCron   String   @default("0 6 * * *")
+  categories     String[] @default(["NEET", "JEE", "BOARDS", "MOTIVATIONAL", "EDUCATIONAL_NEWS"])
+  languages      String[] @default(["hi", "en"])
+  notifyUserIds  String[] @default([])
+  lastRunAt      DateTime?
+  lastRunStatus  String?
+  lastRunSummary String?  @db.Text
+  updatedById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("research_automation_configs")
+}
+
+// ==========================================================================
+// PHASE 03: AI CONTENT PLANNER
+// ==========================================================================
+
+model ContentPlan {
+  id                 String         @id @default(cuid())
+  projectId          String
+  project            ContentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version            Int            @default(1)
+  topic              String
+  subject            String?
+  chapter            String?
+  audience           String?
+  examTrack          String?        // NEET | JEE | BOARDS | GENERAL
+  classLevel         String?
+  language           String         @default("en")
+  medium             String         @default("BILINGUAL")
+  contentFormat      String         @default("LONG_FORM_YOUTUBE")
+  platform           String         @default("YOUTUBE")
+  targetDurationSec  Int            @default(600)
+  teacherName        String?
+  tone               String         @default("EDUCATIONAL")
+  objective          String?        @db.Text
+  referenceMaterials String?        @db.Text
+  competitorRefs     Json?
+  planData           Json           // 17-part structured production plan
+  providerUsed       String?
+  modelUsed          String?
+  createdById        String
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([projectId, version])
+  @@map("content_plans")
+}
+
+// ==========================================================================
+// PHASE 04: VOICE STUDIO
+// ==========================================================================
+
+model PronunciationRule {
+  id          String   @id @default(cuid())
+  term        String
+  phonetic    String
+  category    String   @default("GENERAL") // CHEMISTRY | BIOLOGY | PHYSICS | NEET | ENGLISH_IN_HINDI | GENERAL
+  language    String   @default("hi")
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([term, language])
+  @@index([category, isActive])
+  @@map("pronunciation_rules")
+}
+
+model VoiceoverProject {
+  id              String             @id @default(cuid())
+  projectId       String
+  project         ContentProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scriptId        String?
+  title           String
+  preset          String             @default("EDUCATIONAL")
+  provider        String             @default("OPENAI")
+  model           String             @default("tts-1")
+  voiceProfileId  String?
+  format          String             @default("mp3") // mp3 | wav
+  totalDurationMs Int                @default(0)
+  exportedAssetId String?
+  createdById     String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  segments VoiceoverSegment[]
+
+  @@index([projectId])
+  @@map("voiceover_projects")
+}
+
+model VoiceoverSegment {
+  id             String           @id @default(cuid())
+  voiceoverId    String
+  voiceover      VoiceoverProject @relation(fields: [voiceoverId], references: [id], onDelete: Cascade)
+  orderIndex     Int
+  text           String           @db.Text
+  normalizedText String?          @db.Text
+  pauseAfterMs   Int              @default(400)
+  speed          Float            @default(1.0)
+  volume         Float            @default(1.0)
+  fadeInMs       Int              @default(0)
+  fadeOutMs      Int              @default(0)
+  trimStartMs    Int              @default(0)
+  trimEndMs      Int?
+  durationMs     Int?
+  assetId        String?
+  audioUrl       String?
+  status         String           @default("DRAFT") // DRAFT | READY | FAILED
+  errorMessage   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([voiceoverId, orderIndex])
+  @@map("voiceover_segments")
+}
+
+// ==========================================================================
+// PHASE 05: MUSIC & SOUND EFFECTS MIXING
+// ==========================================================================
+
+model AudioMixProject {
+  id                      String         @id @default(cuid())
+  projectId               String
+  project                 ContentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title                   String
+  voiceAssetId            String?
+  musicAssetId            String?
+  sfxAssetIds             Json?          // Array<{ assetId, offsetMs, volume }>
+  voiceVolume             Float          @default(1.0)
+  musicVolumeDuringSpeech Float          @default(0.2)
+  musicVolumeDuringPause  Float          @default(0.75)
+  duckingFadeMs           Int            @default(250)
+  duckingRecoveryMs       Int            @default(600)
+  manualOverride          Boolean        @default(false)
+  trimStartMs             Int            @default(0)
+  trimEndMs               Int?
+  fadeInMs                Int            @default(500)
+  fadeOutMs               Int            @default(1000)
+  loopMusic               Boolean        @default(true)
+  exportedAssetId         String?
+  createdById             String
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  @@index([projectId])
+  @@map("audio_mix_projects")
+}
+
+// ==========================================================================
+// PHASE 08: VIDEO EDITOR & MULTI-TRACK TIMELINE
+// ==========================================================================
+
+model VideoEditorProject {
+  id              String         @id @default(cuid())
+  projectId       String
+  project         ContentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title           String         @default("Main Timeline")
+  aspectRatio     String         @default("16:9") // 16:9 | 9:16 | 1:1
+  resolution      String         @default("1080p") // 1080p | 720p
+  fps             Int            @default(30)
+  durationMs      Int            @default(15000)
+  timelineJson    Json           // Full editable multi-track clip state
+  exportedAssetId String?
+  renderJobId     String?
+  createdById     String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([projectId])
+  @@map("video_editor_projects")
+}
+
+// ==========================================================================
+// PHASE 10: YOUTUBE ANALYTICS INTELLIGENCE & HISTORICAL LEARNING
+// ==========================================================================
+
+model ChannelAnalyticsReport {
+  id                   String   @id @default(cuid())
+  channelKey           String   @default("MAIN") // MAIN | APP
+  dataSourcesAvailable Json     // { dataApi, analyticsApi, platformDb, limitations: string[] }
+  channelMetrics       Json     // Real available metrics only (null when unavailable)
+  videoSnapshots       Json     // Top, low, recent, format breakdowns
+  aiInsights           Json?    // Answers to 10 key questions + recommendations
+  createdById          String
+  createdAt            DateTime @default(now())
+
+  @@index([channelKey, createdAt])
+  @@map("channel_analytics_reports")
+}
+
+model VideoReviewReport {
+  id                      String   @id @default(cuid())
+  videoId                 String
+  channelKey              String   @default("MAIN")
+  videoTitle              String
+  metricsSnapshot         Json
+  performanceAnalysis     String   @db.Text
+  packagingAnalysis       String   @db.Text
+  topicAnalysis           String   @db.Text
+  improvements            Json     // string[]
+  nextVideoRecommendation String   @db.Text
+  actualFollowUpMetrics   Json?    // For historical learning comparison
+  createdById             String
+  createdAt               DateTime @default(now())
+
+  @@index([videoId])
+  @@map("video_review_reports")
+}
+
+model SlideDeckProject {
+  id              String          @id @default(cuid())
+  projectId       String
+  title           String
+  subject         String?
+  chapter         String?
+  contentType     String          @default("Chapter lecture")
+  language        String          @default("Hinglish")
+  medium          String          @default("English")
+  templateTheme   String          @default("ATOMIC_BLACK_ORANGE")
+  outlineJson     Json?
+  slidesJson      Json?
+  exportedAssetId String?
+  createdById     String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  project         ContentProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("slide_deck_projects")
 }
 

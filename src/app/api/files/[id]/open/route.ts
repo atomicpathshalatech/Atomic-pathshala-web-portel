@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiError, handleApiError } from "@/lib/api/response";
+import { hasPermission } from "@/lib/rbac/guard";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 
 /**
@@ -19,6 +21,22 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const fileAsset = await prisma.fileAsset.findUnique({ where: { id: params.id } });
     if (!fileAsset) return apiError("File not found", 404);
     if (fileAsset.status !== "ACTIVE") return apiError("File is not ready or has been deleted", 410);
+
+    if (
+      fileAsset.visibility === "PRIVATE" &&
+      fileAsset.ownerId !== session.user.id &&
+      !(await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS))
+    ) {
+      return apiError("Forbidden", 403);
+    }
+
+    if (
+      fileAsset.storageKey.startsWith("content-studio/") &&
+      fileAsset.ownerId !== session.user.id &&
+      !(await hasPermission(session.user.id, PERMISSIONS.CONTENT_STUDIO_ACCESS))
+    ) {
+      return apiError("Forbidden", 403);
+    }
 
     const url = await createPresignedDownloadUrl({
       key: fileAsset.storageKey,

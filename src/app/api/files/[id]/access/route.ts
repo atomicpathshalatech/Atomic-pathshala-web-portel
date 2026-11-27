@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { hasPermission } from "@/lib/rbac/guard";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 
 export async function GET(
@@ -38,6 +40,22 @@ export async function GET(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return apiError("Authentication required to access this file.", 401);
+    }
+
+    if (
+      fileAsset.visibility === "PRIVATE" &&
+      fileAsset.ownerId !== session.user.id &&
+      !(await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS))
+    ) {
+      return apiError("Forbidden", 403);
+    }
+
+    if (
+      fileAsset.storageKey.startsWith("content-studio/") &&
+      fileAsset.ownerId !== session.user.id &&
+      !(await hasPermission(session.user.id, PERMISSIONS.CONTENT_STUDIO_ACCESS))
+    ) {
+      return apiError("Forbidden", 403);
     }
 
     // Generate short-lived signed download URL (10 minutes)

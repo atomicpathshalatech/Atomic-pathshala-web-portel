@@ -21,7 +21,8 @@ export type R2FolderPrefix =
   | "whiteboard"
   | "slides"
   | "documents"
-  | "exports";
+  | "exports"
+  | "content-studio";
 
 /**
  * S3/R2 object metadata is sent as raw `x-amz-meta-*` HTTP headers — Node's
