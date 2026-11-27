@@ -7,7 +7,10 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api/response";
 import { applyPronunciationDictionary } from "@/lib/ai-studio/voice/pronunciation";
-import { synthesizeVoiceSegment } from "@/lib/ai-studio/voice/providers";
+import {
+  isVoiceProviderConfigured,
+  synthesizeVoiceSegment,
+} from "@/lib/ai-studio/voice/providers";
 import { DELIVERY_PRESETS } from "@/lib/ai-studio/voice/capabilities";
 import { persistGeneratedStudioAsset } from "@/lib/ai-studio/storage";
 
@@ -45,6 +48,33 @@ export async function POST(
       select: { term: true, phonetic: true },
     });
 
+    // Resolve effective provider (auto-fallback if selected provider key is missing)
+    const fallbackOrder = ["ELEVENLABS", "OPENAI", "SARVAM"];
+    const effectiveProvider = isVoiceProviderConfigured(vo.provider)
+      ? vo.provider
+      : fallbackOrder.find((p) => isVoiceProviderConfigured(p)) || vo.provider;
+
+    const effectiveModel =
+      effectiveProvider === vo.provider
+        ? vo.model
+        : effectiveProvider === "ELEVENLABS"
+        ? "eleven_multilingual_v2"
+        : effectiveProvider === "SARVAM"
+        ? "bulbul:v2"
+        : "tts-1";
+
+    const defaultVoiceForProvider =
+      effectiveProvider === "ELEVENLABS"
+        ? "21m00Tcm4TlvDq8ikWAM"
+        : effectiveProvider === "SARVAM"
+        ? "meera"
+        : "nova";
+
+    const effectiveVoiceId =
+      profile && profile.provider === effectiveProvider
+        ? profile.externalVoiceId
+        : defaultVoiceForProvider;
+
     const presetMeta = DELIVERY_PRESETS.find((p) => p.id === vo.preset);
     const targets = body.segmentId
       ? vo.segments.filter((s) => s.id === body.segmentId)
@@ -55,9 +85,9 @@ export async function POST(
       const normalized = applyPronunciationDictionary(seg.text, rules);
       try {
         const res = await synthesizeVoiceSegment({
-          provider: vo.provider,
-          model: vo.model,
-          voiceId: profile?.externalVoiceId || "nova",
+          provider: effectiveProvider,
+          model: effectiveModel,
+          voiceId: effectiveVoiceId,
           text: normalized,
           format: vo.format === "wav" ? "wav" : "mp3",
           speed: seg.speed || presetMeta?.speed || 1.0,

@@ -113,10 +113,30 @@ export function VoiceStudioTab({
     ]);
     const [pJson, vJson, rJson] = await Promise.all([pRes.json(), vRes.json(), rRes.json()]);
     if (pJson.success) {
-      setProfiles(pJson.data.profiles || []);
-      setProviders(pJson.data.providers || []);
-      if (!selectedProfileId && pJson.data.profiles?.[0]) {
-        setSelectedProfileId(pJson.data.profiles[0].id);
+      const loadedProfiles: VoiceProfileRow[] = pJson.data.profiles || [];
+      const loadedProviders: ProviderWithStatus[] = pJson.data.providers || [];
+      setProfiles(loadedProfiles);
+      setProviders(loadedProviders);
+
+      // Auto-select first configured provider (e.g. ELEVENLABS or OPENAI)
+      const preferred =
+        loadedProviders.find((pr) => pr.provider === selectedProvider && pr.configured) ||
+        loadedProviders.find((pr) => pr.configured) ||
+        loadedProviders[0];
+      if (preferred && preferred.provider !== selectedProvider) {
+        setSelectedProvider(preferred.provider);
+        if (preferred.models[0]) setSelectedModel(preferred.models[0].id);
+        if (preferred.formats[0]) setFormat(preferred.formats[0]);
+      }
+
+      const activeProv = preferred?.provider || selectedProvider;
+      const matchingProfile = loadedProfiles.find(
+        (pr) => pr.isActive && pr.provider === activeProv
+      );
+      if (matchingProfile) {
+        setSelectedProfileId(matchingProfile.id);
+      } else if (!selectedProfileId && loadedProfiles[0]) {
+        setSelectedProfileId(loadedProfiles[0].id);
       }
     }
     if (vJson.success) setVoiceovers(vJson.data.voiceovers || []);
@@ -158,6 +178,62 @@ export function VoiceStudioTab({
       await loadAll();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to create voiceover");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleOneClickVoiceover = async () => {
+    const textToUse = (rawText || activeScriptText || "").trim();
+    if (!textToUse) {
+      setErr("Please enter or load script text first.");
+      return;
+    }
+    if (!rawText.trim()) setRawText(textToUse);
+    setBusy("oneclick");
+    setErr(null);
+    setMsg(null);
+    try {
+      const createRes = await fetch(`/api/team/content-studio/projects/${projectId}/voice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: voTitle || "Quick Voiceover",
+          scriptId: activeScriptId,
+          preset,
+          provider: selectedProvider,
+          model: selectedModel,
+          voiceProfileId: selectedProfileId || undefined,
+          format,
+          rawText: textToUse,
+        }),
+      });
+      const createJson = await createRes.json();
+      if (!createRes.ok || !createJson.success) {
+        throw new Error(createJson.error || "Failed to create voiceover");
+      }
+      const createdId = createJson.data?.voiceover?.id as string | undefined;
+      if (!createdId) throw new Error("Voiceover created without ID");
+
+      const genRes = await fetch(`/api/team/content-studio/projects/${projectId}/voice/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voiceoverId: createdId,
+          ...(activeCap?.supportsStability ? { stability } : {}),
+          ...(activeCap?.supportsStyleExaggeration ? { styleExaggeration } : {}),
+          ...(activeCap?.supportsPitch ? { pitch } : {}),
+        }),
+      });
+      const genJson = await genRes.json();
+      if (!genRes.ok || !genJson.success) {
+        await loadAll();
+        throw new Error(genJson.error || "Voice generation failed");
+      }
+      setMsg("1-Click Voiceover generated! Play or download below.");
+      await loadAll();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "1-Click voiceover failed");
     } finally {
       setBusy(null);
     }
@@ -351,9 +427,20 @@ export function VoiceStudioTab({
           className="w-full rounded-lg border border-outline-variant bg-surface-container-low p-3 text-sm"
         />
 
-        <button type="submit" disabled={Boolean(busy)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary disabled:opacity-50">
-          <Plus className="h-4 w-4" /> Create Segmented Voiceover
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleOneClickVoiceover}
+            disabled={Boolean(busy)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-500 disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4" />
+            {busy === "oneclick" ? "Generating Audio..." : "1-Click Generate Voiceover"}
+          </button>
+          <button type="submit" disabled={Boolean(busy)} className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface px-4 py-2 text-sm font-semibold text-on-surface hover:bg-surface-container-high disabled:opacity-50">
+            <Plus className="h-4 w-4" /> Split into Segments Only
+          </button>
+        </div>
       </form>
 
       {/* Active Voiceover Timeline & Segments */}

@@ -280,6 +280,83 @@ export function ThumbnailStudioTab({
     }
   };
 
+  const handleOneClickThumbnail = async () => {
+    if (!topic.trim()) return;
+    setBusy("oneclick");
+    setErr(null);
+    setMsg(null);
+    try {
+      const teacher = teachers.find((t) => t.id === teacherId);
+      const res = await fetch(`/api/team/content-studio/projects/${projectId}/thumbnails`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "GENERATE_CONCEPTS",
+          title: `${topic} Thumbnail`,
+          topic,
+          subject: defaultSubject || undefined,
+          projectType,
+          thumbnailText: thumbnailText || undefined,
+          platform: dim.id,
+          width: dim.width,
+          height: dim.height,
+          teacherImageUrl: teacher?.imageUrl || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Thumbnail concept generation failed");
+
+      const createdProj = json.data.thumbnailProject as ThumbnailProjectRow;
+      const firstConcept = (json.data.concepts as ThumbnailConcept[] | undefined)?.[0];
+      const bgPrompt =
+        firstConcept?.backgroundPrompt ||
+        `High-contrast YouTube educational thumbnail background for ${topic}, dramatic lighting, Atomic Pathshala orange and dark slate aesthetic, no text`;
+
+      // Automatically generate the AI background image in the same click
+      const imgRes = await fetch(`/api/team/content-studio/projects/${projectId}/thumbnails`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "GENERATE_IMAGE",
+          thumbnailProjectId: createdProj.id,
+          prompt: bgPrompt,
+          width: dim.width,
+          height: dim.height,
+        }),
+      });
+      const imgJson = await imgRes.json();
+      if (!imgRes.ok || !imgJson.success) {
+        await loadAll();
+        throw new Error(imgJson.error || "Concepts created, but AI image generation failed");
+      }
+
+      const assetUrl = imgJson.data.asset?.publicUrl as string | undefined;
+      const baseLayers = Array.isArray(createdProj.layers) ? createdProj.layers : [];
+      const updatedLayers = assetUrl
+        ? baseLayers.map((l) => (l.type === "BACKGROUND" ? { ...l, imageUrl: assetUrl } : l))
+        : baseLayers;
+
+      if (assetUrl && createdProj.id) {
+        await fetch(`/api/team/content-studio/projects/${projectId}/thumbnails`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            thumbnailProjectId: createdProj.id,
+            layers: updatedLayers,
+            changeSummary: "1-Click AI Thumbnail + Background",
+          }),
+        });
+      }
+
+      setMsg("1-Click Thumbnail ready! You can download PNG now or tweak any layer below.");
+      await loadAll();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "1-Click thumbnail failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const handleGenerateAiBackground = async (prompt: string) => {
     setBusy("image");
     setErr(null);
@@ -438,8 +515,16 @@ export function ThumbnailStudioTab({
         </div>
         <div className="flex flex-wrap gap-3">
           <input type="text" value={thumbnailText} onChange={(e) => setThumbnailText(e.target.value)} placeholder="Short headline text override (2-5 words)" className="flex-1 min-w-[200px] rounded-lg border border-outline-variant bg-surface px-3 py-1.5 text-xs" />
-          <button type="submit" disabled={Boolean(busy)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-on-primary">
-            <Sparkles className="h-3.5 w-3.5" /> {busy === "concepts" ? "Generating 5 Concepts..." : "Generate 5 Thumbnail Concepts"}
+          <button
+            type="button"
+            onClick={handleOneClickThumbnail}
+            disabled={Boolean(busy)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-orange-500 disabled:opacity-50"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> {busy === "oneclick" ? "Creating Thumbnail + AI Image..." : "1-Click Generate Thumbnail"}
+          </button>
+          <button type="submit" disabled={Boolean(busy)} className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface px-3 py-1.5 text-xs font-semibold text-on-surface hover:bg-surface-container-high disabled:opacity-50">
+            <Sparkles className="h-3.5 w-3.5" /> {busy === "concepts" ? "Generating..." : "Concepts Only"}
           </button>
         </div>
       </form>

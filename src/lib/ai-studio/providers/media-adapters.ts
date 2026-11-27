@@ -21,9 +21,92 @@ export async function invokeImageProvider(params: {
   const { provider, modelId, envKeyRef, request } = params;
   const start = Date.now();
 
+  if (provider === "GEMINI") {
+    const apiKey = cleanEnvKey(envKeyRef) || cleanEnvKey("GEMINI_API_KEY");
+    if (!apiKey) {
+      throw new StudioProviderError(`Missing key (${envKeyRef})`, "NOT_CONFIGURED", provider, true);
+    }
+
+    // Try Imagen 3 predict endpoint first, then Gemini native image generation
+    const aspectRatio =
+      request.size === "1792x1024" ? "16:9" : request.size === "1024x1792" ? "9:16" : "1:1";
+
+    const imagenRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        modelId || "imagen-3.0-generate-002"
+      )}:predict?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [{ prompt: request.prompt }],
+          parameters: { sampleCount: 1, aspectRatio },
+        }),
+        signal: AbortSignal.timeout(45000),
+      }
+    );
+
+    if (imagenRes.ok) {
+      const json = (await imagenRes.json()) as {
+        predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>;
+      };
+      const b64 = json.predictions?.[0]?.bytesBase64Encoded;
+      if (b64) {
+        return {
+          buffer: Buffer.from(b64, "base64"),
+          mimeType: json.predictions?.[0]?.mimeType || "image/png",
+          durationMs: Date.now() - start,
+        };
+      }
+    }
+
+    // Fallback to Gemini 2.0 Flash image generation
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${encodeURIComponent(
+        apiKey
+      )}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: request.prompt }] }],
+          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+        }),
+        signal: AbortSignal.timeout(45000),
+      }
+    );
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text().catch(() => "");
+      throw new StudioProviderError(
+        `Gemini image generation failed (${geminiRes.status}): ${errText.slice(0, 200)}`,
+        "PROVIDER_UNAVAILABLE",
+        provider,
+        true
+      );
+    }
+
+    const gJson = (await geminiRes.json()) as {
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }>;
+        };
+      }>;
+    };
+    const inline = gJson.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
+    if (!inline?.data) {
+      throw new StudioProviderError("Gemini image generation returned empty payload", "PROVIDER_UNAVAILABLE", provider, true);
+    }
+    return {
+      buffer: Buffer.from(inline.data, "base64"),
+      mimeType: inline.mimeType || "image/png",
+      durationMs: Date.now() - start,
+    };
+  }
+
   if (provider !== "OPENAI") {
     throw new StudioProviderError(
-      `Image provider ${provider} adapter not yet enabled. Configure OPENAI or add adapter in Phase 03.`,
+      `Image provider ${provider} adapter not yet enabled. Configure OPENAI or GEMINI.`,
       "NOT_CONFIGURED",
       provider,
       true
